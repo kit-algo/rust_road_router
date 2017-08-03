@@ -1,11 +1,15 @@
+extern crate bmw_routing_engine;
+
+use bmw_routing_engine::*;
+
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::usize;
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 struct State {
-    cost: usize,
-    position: usize,
+    cost: Weight,
+    position: NodeId,
 }
 
 // The priority queue depends on `Ord`.
@@ -30,8 +34,8 @@ impl PartialOrd for State {
 
 // Each node is represented as an `usize`, for a shorter implementation.
 struct Edge {
-    node: usize,
-    cost: usize,
+    node: NodeId,
+    cost: Weight,
 }
 
 // Dijkstra's shortest path algorithm.
@@ -40,14 +44,14 @@ struct Edge {
 // to each node. This implementation isn't memory-efficient as it may leave duplicate
 // nodes in the queue. It also uses `usize::MAX` as a sentinel value,
 // for a simpler implementation.
-fn shortest_path(adj_list: &Vec<Vec<Edge>>, start: usize, goal: usize) -> Option<usize> {
+fn shortest_path(adj_list: &Vec<Vec<Edge>>, start: NodeId, goal: NodeId) -> Option<Weight> {
     // dist[node] = current shortest distance from `start` to `node`
-    let mut dist: Vec<_> = (0..adj_list.len()).map(|_| usize::MAX).collect();
+    let mut dist: Vec<_> = (0..adj_list.len()).map(|_| INFINITY).collect();
 
     let mut heap = BinaryHeap::new();
 
     // We're at `start`, with a zero cost
-    dist[start] = 0;
+    dist[start as usize] = 0;
     heap.push(State { cost: 0, position: start });
 
     // Examine the frontier with lower cost nodes first (min-heap)
@@ -56,18 +60,18 @@ fn shortest_path(adj_list: &Vec<Vec<Edge>>, start: usize, goal: usize) -> Option
         if position == goal { return Some(cost); }
 
         // Important as we may have already found a better way
-        if cost > dist[position] { continue; }
+        if cost > dist[position as usize] { continue; }
 
         // For each node we can reach, see if we can find a way with
         // a lower cost going through this node
-        for edge in &adj_list[position] {
+        for edge in &adj_list[position as usize] {
             let next = State { cost: cost + edge.cost, position: edge.node };
 
             // If so, add it to the frontier and continue
-            if next.cost < dist[next.position] {
+            if next.cost < dist[next.position as usize] {
                 heap.push(next);
                 // Relaxation, we have now found a better way
-                dist[next.position] = next.cost;
+                dist[next.position as usize] = next.cost;
             }
         }
     }
