@@ -32,21 +32,15 @@ impl PartialOrd for State {
     }
 }
 
-// Each node is represented as an `usize`, for a shorter implementation.
-struct Edge {
-    node: NodeId,
-    cost: Weight,
-}
-
 // Dijkstra's shortest path algorithm.
 
 // Start at `start` and use `dist` to track the current shortest distance
 // to each node. This implementation isn't memory-efficient as it may leave duplicate
 // nodes in the queue. It also uses `usize::MAX` as a sentinel value,
 // for a simpler implementation.
-fn shortest_path(adj_list: &Vec<Vec<Edge>>, start: NodeId, goal: NodeId) -> Option<Weight> {
+fn shortest_path(graph: &Graph, start: NodeId, goal: NodeId) -> Option<Weight> {
     // dist[node] = current shortest distance from `start` to `node`
-    let mut dist: Vec<_> = (0..adj_list.len()).map(|_| INFINITY).collect();
+    let mut dist: Vec<_> = (0..graph.num_nodes()).map(|_| INFINITY).collect();
 
     let mut heap = BinaryHeap::new();
 
@@ -64,7 +58,7 @@ fn shortest_path(adj_list: &Vec<Vec<Edge>>, start: NodeId, goal: NodeId) -> Opti
 
         // For each node we can reach, see if we can find a way with
         // a lower cost going through this node
-        for edge in &adj_list[position as usize] {
+        for edge in graph.neighbor_iter(position) {
             let next = State { cost: cost + edge.cost, position: edge.node };
 
             // If so, add it to the frontier and continue
@@ -102,21 +96,25 @@ fn main() {
     // The graph is represented as an adjacency list where each index,
     // corresponding to a node value, has a list of outgoing edges.
     // Chosen for its efficiency.
-    let graph = vec![
-        // Node 0
-        vec![Edge { node: 2, cost: 10 },
-             Edge { node: 1, cost: 1 }],
-        // Node 1
-        vec![Edge { node: 3, cost: 2 }],
-        // Node 2
-        vec![Edge { node: 1, cost: 1 },
-             Edge { node: 3, cost: 3 },
-             Edge { node: 4, cost: 1 }],
-        // Node 3
-        vec![Edge { node: 0, cost: 7 },
-             Edge { node: 4, cost: 2 }],
-        // Node 4
-        vec![]];
+    let graph = Graph::new(
+        vec![0, 2, 3, 6, 8, 8, 8],
+        vec![2, 1,  3,  1, 3, 4,  0, 4],
+        vec![10, 1,  2,  1, 3, 1,  7, 2]);
+    // let graph = vec![
+    //     // Node 0
+    //     vec![Edge { node: 2, cost: 10 },
+    //          Edge { node: 1, cost: 1 }],
+    //     // Node 1
+    //     vec![Edge { node: 3, cost: 2 }],
+    //     // Node 2
+    //     vec![Edge { node: 1, cost: 1 },
+    //          Edge { node: 3, cost: 3 },
+    //          Edge { node: 4, cost: 1 }],
+    //     // Node 3
+    //     vec![Edge { node: 0, cost: 7 },
+    //          Edge { node: 4, cost: 2 }],
+    //     // Node 4
+    //     vec![]];
 
     println!("{:?}", shortest_path(&graph, 0, 1));
     assert_eq!(shortest_path(&graph, 0, 1), Some(1));
