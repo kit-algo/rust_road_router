@@ -97,8 +97,8 @@ fn main() {
     // corresponding to a node value, has a list of outgoing edges.
     // Chosen for its efficiency.
     let graph = Graph::new(
-        vec![0, 2, 3, 6, 8, 8, 8],
-        vec![2, 1,  3,  1, 3, 4,  0, 4],
+        vec![0,      2,  3,        6,    8, 8, 8],
+        vec![2,  1,  3,  1, 3, 4,  0, 4],
         vec![10, 1,  2,  1, 3, 1,  7, 2]);
     // let graph = vec![
     //     // Node 0
