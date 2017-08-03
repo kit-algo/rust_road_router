@@ -1,0 +1,6 @@
+[package]
+name = "bmw_routing_engine"
+version = "0.1.0"
+authors = ["Tim \"S.D.Eagle\" Zeitz <dev.tim.zeitz@gmail.com>"]
+
+[dependencies]
