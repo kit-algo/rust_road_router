@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
-use super::*;
+use super::graph::*;
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 struct State {
