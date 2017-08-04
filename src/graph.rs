@@ -41,4 +41,63 @@ impl Graph {
     pub fn num_nodes(&self) -> usize {
         self.first_out.len() - 1
     }
+
+    fn reverse(&self) -> Graph {
+        // vector of adjacency lists for the reverse graph
+        let mut reversed: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new() ).collect();
+
+        // iterate over all edges and insert them in the reversed structure
+        for node in 0..(self.num_nodes() as NodeId) {
+            for Link { node: neighbor, cost } in self.neighbor_iter(node) {
+                reversed[neighbor as usize].push(Link { node, cost });
+            }
+        }
+
+        // create first_out array for reversed by doing a prefix sum over the adjancecy list sizes
+        let first_out = std::iter::once(0).chain(reversed.iter().scan(0, |state, incoming_links| {
+            *state = *state + incoming_links.len() as u32;
+            Some(*state)
+        })).collect();
+
+        // append all adjancecy list and split the pairs into two seperate vectors
+        let (head, weight) = reversed.into_iter().flat_map(|neighbors| neighbors.into_iter().map(|Link { node, cost }| (node, cost) ) ).unzip();
+
+        Graph::new(first_out, head, weight)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_reversal() {
+        let graph = Graph::new(
+            vec![0,      2,  3,        6,    8, 8, 8],
+            vec![2,  1,  3,  1, 3, 4,  0, 4],
+            vec![10, 1,  2,  1, 3, 1,  7, 2]);
+
+        //
+        //                  7
+        //          +-----------------+
+        //          |                 |
+        //          v   1        2    |  2
+        //          0 -----> 1 -----> 3 ---> 4
+        //          |        ^        ^      ^
+        //          |        | 1      |      |
+        //          |        |        | 3    | 1
+        //          +------> 2 -------+      |
+        //           10      |               |
+        //                   +---------------+
+        //
+        let expected = Graph::new(
+            vec![0,  1,     3,   4,     6,     8,8],
+            vec![3,  0, 2,  0,   1, 2,  2, 3],
+            vec![7,  1, 1,  10,  2, 3,  1, 2]);
+        let reversed = graph.reverse();
+
+        assert_eq!(reversed.first_out, expected.first_out);
+        assert_eq!(reversed.head, expected.head);
+        assert_eq!(reversed.weight, expected.weight);
+    }
 }
