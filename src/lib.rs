@@ -6,8 +6,11 @@ mod shortest_path;
 
 #[derive(Debug)]
 pub struct Graph {
+    // index of first edge of each node +1 entry in the end
     first_out: Vec<u32>,
+    // the node ids to which each edge points
     head: Vec<NodeId>,
+    // the weight of each edge
     weight: Vec<Weight>
 }
 
@@ -18,6 +21,10 @@ pub struct Link {
 
 impl Graph {
     pub fn new(first_out: Vec<u32>, head: Vec<NodeId>, weight: Vec<Weight>) -> Graph {
+        assert_eq!(*first_out.first().unwrap(), 0);
+        assert_eq!(*first_out.last().unwrap() as usize, head.len());
+        assert_eq!(weight.len(), head.len());
+
         Graph {
             first_out, head, weight
         }
@@ -60,13 +67,13 @@ mod tests {
         //           10      |               |
         //                   +---------------+
         //
-        // The graph is represented as an adjacency list where each index,
-        // corresponding to a node value, has a list of outgoing edges.
-        // Chosen for its efficiency.
         let graph = Graph::new(
             vec![0,      2,  3,        6,    8, 8, 8],
             vec![2,  1,  3,  1, 3, 4,  0, 4],
             vec![10, 1,  2,  1, 3, 1,  7, 2]);
+        // The graph is represented as an adjacency list where each index,
+        // corresponding to a node value, has a list of outgoing edges.
+        // Chosen for its efficiency.
         // let graph = vec![
         //     // Node 0
         //     vec![Edge { node: 2, cost: 10 },
