@@ -1,5 +1,6 @@
 use std::env;
 use std::path::Path;
+use std::time::Instant;
 
 extern crate bmw_routing_engine;
 
@@ -27,11 +28,13 @@ fn main() {
     let graph = Graph::new(first_out, head, travel_time);
     let mut server = ShortestPathServer::new(graph);
 
-    for ((&from, &to), &ground_truth) in from.iter().zip(to.iter()).zip(ground_truth.iter()) {
+    for ((&from, &to), &ground_truth) in from.iter().zip(to.iter()).zip(ground_truth.iter()).take(100) {
         let ground_truth = match ground_truth {
             INFINITY => None,
             val => Some(val),
         };
+        let now = Instant::now();
         assert_eq!(server.distance(from, to), ground_truth);
+        println!("{:?}", now.elapsed());
     }
 }

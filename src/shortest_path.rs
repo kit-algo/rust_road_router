@@ -84,7 +84,6 @@ impl ShortestPathServer {
                     self.distances[next.position as usize] = next.cost;
                     self.last_update[next.position as usize] = self.run;
                     self.heap.push(next);
-
                 }
             }
         }
