@@ -42,7 +42,7 @@ impl Graph {
         self.first_out.len() - 1
     }
 
-    fn reverse(&self) -> Graph {
+    pub fn reverse(&self) -> Graph {
         // vector of adjacency lists for the reverse graph
         let mut reversed: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new() ).collect();
 
