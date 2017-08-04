@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use super::graph::*;
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 struct State {
     cost: Weight,
     position: NodeId,
@@ -28,44 +28,67 @@ impl PartialOrd for State {
     }
 }
 
-// Dijkstra's shortest path algorithm.
+#[derive(Debug)]
+pub struct ShortestPathServer {
+    graph: Graph,
+    distances: Vec<Weight>,
+    run: u32,
+    last_update: Vec<u32>,
+    heap: BinaryHeap<State>
+}
 
-// Start at `start` and use `dist` to track the current shortest distance
-// to each node. This implementation isn't memory-efficient as it may leave duplicate
-// nodes in the queue. It also uses `usize::MAX` as a sentinel value,
-// for a simpler implementation.
-pub fn shortest_path(graph: &Graph, start: NodeId, goal: NodeId) -> Option<Weight> {
-    // dist[node] = current shortest distance from `start` to `node`
-    let mut dist: Vec<_> = (0..graph.num_nodes()).map(|_| INFINITY).collect();
+impl ShortestPathServer {
+    pub fn new(graph: Graph) -> ShortestPathServer {
+        let n = graph.num_nodes();
 
-    let mut heap = BinaryHeap::new();
-
-    // We're at `start`, with a zero cost
-    dist[start as usize] = 0;
-    heap.push(State { cost: 0, position: start });
-
-    // Examine the frontier with lower cost nodes first (min-heap)
-    while let Some(State { cost, position }) = heap.pop() {
-        // Alternatively we could have continued to find all shortest paths
-        if position == goal { return Some(cost); }
-
-        // Important as we may have already found a better way
-        if cost > dist[position as usize] { continue; }
-
-        // For each node we can reach, see if we can find a way with
-        // a lower cost going through this node
-        for edge in graph.neighbor_iter(position) {
-            let next = State { cost: cost + edge.cost, position: edge.node };
-
-            // If so, add it to the frontier and continue
-            if next.cost < dist[next.position as usize] {
-                heap.push(next);
-                // Relaxation, we have now found a better way
-                dist[next.position as usize] = next.cost;
-            }
+        ShortestPathServer {
+            graph,
+            // initialize tentative distances to INFINITY
+            distances: (0..n).map(|_| INFINITY).collect(),
+            // initialize run counter to 0
+            // will be incremented on every query
+            run: 0,
+            // vector containing a timestamp (by the run counter)to indicate
+            // whether the tentative distance is valid in the current query
+            last_update: (0..n).map(|_| 0).collect(),
+            heap: BinaryHeap::new()
         }
     }
 
-    // Goal not reachable
-    None
+    pub fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
+        // initialize
+        self.run += 1;
+        self.heap.clear();
+
+        // Starte with origin
+        self.distances[from as usize] = 0;
+        self.last_update[from as usize] = self.run;
+        self.heap.push(State { cost: 0, position: from });
+
+        // Examine the frontier with lower cost nodes first (min-heap)
+        while let Some(State { cost, position }) = self.heap.pop() {
+            // Alternatively we could have continued to find all shortest paths
+            if position == to { return Some(cost); }
+
+            // Important as we may have already found a better way
+            if self.last_update[position as usize] == self.run && cost > self.distances[position as usize] { continue; }
+
+            // For each node we can reach, see if we can find a way with
+            // a lower cost going through this node
+            for edge in self.graph.neighbor_iter(position) {
+                let next = State { cost: cost + edge.cost, position: edge.node };
+
+                // If so, add it to the frontier and continue
+                if self.last_update[next.position as usize] != self.run || next.cost < self.distances[next.position as usize] {
+                    // Relaxation, we have now found a better way
+                    self.distances[next.position as usize] = next.cost;
+                    self.last_update[next.position as usize] = self.run;
+                    self.heap.push(next);
+
+                }
+            }
+        }
+
+        None
+    }
 }
