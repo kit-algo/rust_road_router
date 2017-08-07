@@ -4,7 +4,7 @@ pub type NodeId = u32;
 pub type Weight = u32;
 pub const INFINITY: u32 = std::u32::MAX / 2;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Graph {
     // index of first edge of each node +1 entry in the end
     first_out: Vec<u32>,

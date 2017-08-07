@@ -1,12 +1,13 @@
 use std::env;
 use std::path::Path;
-use std::time::Instant;
 
 extern crate bmw_routing_engine;
 
+extern crate time;
+
 use bmw_routing_engine::graph::Graph;
 use bmw_routing_engine::graph::INFINITY;
-use bmw_routing_engine::shortest_path::ShortestPathServerBiDirDijk;
+use bmw_routing_engine::shortest_path::*;
 use bmw_routing_engine::io::read_into_vector;
 
 
@@ -26,15 +27,26 @@ fn main() {
     let ground_truth = read_into_vector(path.join("test/travel_time_length").to_str().unwrap()).expect("could not read travel_time_length");
 
     let graph = Graph::new(first_out, head, travel_time);
-    let mut server = ShortestPathServerBiDirDijk::new(graph);
+    let mut simple_server = ShortestPathServer::new(graph.clone());
+    let mut bi_dir_server = ShortestPathServerBiDirDijk::new(graph.clone());
+    let async_server = AsyncShortestPathServerContainer::new(graph);
 
     for ((&from, &to), &ground_truth) in from.iter().zip(to.iter()).zip(ground_truth.iter()).take(100) {
         let ground_truth = match ground_truth {
             INFINITY => None,
             val => Some(val),
         };
-        let now = Instant::now();
-        assert_eq!(server.distance(from, to), ground_truth);
-        println!("{:?}", now.elapsed());
+
+        let start = time::now();
+        assert_eq!(simple_server.distance(from, to), ground_truth);
+        println!("simple took {}ms", (time::now() - start).num_milliseconds());
+
+        let start = time::now();
+        assert_eq!(bi_dir_server.distance(from, to), ground_truth);
+        println!("bidir took {}ms", (time::now() - start).num_milliseconds());
+
+        let start = time::now();
+        assert_eq!(async_server.distance(from, to), ground_truth);
+        println!("async took {}ms", (time::now() - start).num_milliseconds());
     }
 }
