@@ -1,7 +1,7 @@
 extern crate bmw_routing_engine;
 
 use bmw_routing_engine::*;
-use shortest_path::ShortestPathServerBiDirDijk;
+use shortest_path::AsyncShortestPathServerContainer;
 use graph::Graph;
 
 #[test]
@@ -29,7 +29,7 @@ fn it_calculates_correct_shortest_paths() {
         vec![2,  1,  3,  1, 3, 4,  0, 4],
         vec![10, 1,  2,  1, 3, 1,  7, 2]);
 
-    let mut server = ShortestPathServerBiDirDijk::new(graph);
+    let server = AsyncShortestPathServerContainer::new(graph);
 
     assert_eq!(server.distance(0, 1), Some(1));
     assert_eq!(server.distance(0, 3), Some(3));

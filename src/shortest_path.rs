@@ -242,3 +242,141 @@ impl ShortestPathServerBiDirDijk {
         }
     }
 }
+
+#[derive(Debug)]
+struct Query {
+    from: NodeId,
+    to: NodeId,
+    run: u32
+}
+
+#[derive(Debug)]
+enum ServerControl {
+    Query(Query),
+    Shutdown
+}
+
+#[derive(Debug)]
+enum QueryProgress {
+    Progress(State),
+    Done(Option<Weight>),
+}
+
+#[derive(Debug)]
+pub struct AsyncShortestPathServer {
+    graph: Graph,
+    distances: Vec<Weight>,
+    run: u32,
+    last_update: Vec<u32>,
+    heap: BinaryHeap<State>,
+    progress_sender: Sender<QueryProgress>
+}
+
+impl AsyncShortestPathServer {
+    fn new(graph: Graph, progress_sender: Sender<QueryProgress>) -> AsyncShortestPathServer {
+        let n = graph.num_nodes();
+
+        AsyncShortestPathServer {
+            graph,
+            // initialize tentative distances to INFINITY
+            distances: (0..n).map(|_| INFINITY).collect(),
+            // initialize run counter to 0
+            // will be incremented on every query
+            run: 0,
+            // vector containing a timestamp (by the run counter)to indicate
+            // whether the tentative distance is valid in the current query
+            last_update: (0..n).map(|_| 0).collect(),
+            heap: BinaryHeap::new(),
+            progress_sender
+        }
+    }
+
+    fn distance(&mut self, from: NodeId, to: NodeId, _run: u32) {
+        // initialize
+        self.run += 1;
+        self.heap.clear();
+
+        // Starte with origin
+        self.distances[from as usize] = 0;
+        self.last_update[from as usize] = self.run;
+        self.heap.push(State { cost: 0, position: from });
+
+        // Examine the frontier with lower cost nodes first (min-heap)
+        while let Some(State { cost, position }) = self.heap.pop() {
+            // Alternatively we could have continued to find all shortest paths
+            if position == to { self.progress_sender.send(QueryProgress::Done(Some(cost))).unwrap(); return; }
+
+            // Important as we may have already found a better way
+            if self.last_update[position as usize] == self.run && cost > self.distances[position as usize] { continue; }
+
+            // For each node we can reach, see if we can find a way with
+            // a lower cost going through this node
+            for edge in self.graph.neighbor_iter(position) {
+                let next = State { cost: cost + edge.cost, position: edge.node };
+
+                // If so, add it to the frontier and continue
+                if self.last_update[next.position as usize] != self.run || next.cost < self.distances[next.position as usize] {
+                    // Relaxation, we have now found a better way
+                    self.distances[next.position as usize] = next.cost;
+                    self.last_update[next.position as usize] = self.run;
+                    self.heap.push(next);
+                }
+            }
+
+            self.progress_sender.send(QueryProgress::Progress(State { cost, position })).unwrap();
+        }
+
+        self.progress_sender.send(QueryProgress::Done(None)).unwrap();
+    }
+}
+
+use std::sync::mpsc::{channel, Sender, Receiver};
+use std::thread;
+
+#[derive(Debug)]
+pub struct AsyncShortestPathServerContainer {
+    query_sender: Sender<ServerControl>,
+    progress_receiver: Receiver<QueryProgress>
+}
+
+impl AsyncShortestPathServerContainer {
+    pub fn new(graph: Graph) -> AsyncShortestPathServerContainer {
+        let (query_sender, query_receiver) = channel();
+        let (progress_sender, progress_receiver) = channel();
+
+        thread::spawn(move || {
+            let mut server = AsyncShortestPathServer::new(graph, progress_sender);
+
+            loop {
+                match query_receiver.recv() {
+                    Ok(ServerControl::Query(Query { from, to, run })) => {
+                        server.distance(from, to, run);
+                    },
+                    Ok(ServerControl::Shutdown) | Err(_) => break
+                }
+            }
+        });
+
+        AsyncShortestPathServerContainer {
+            query_sender,
+            progress_receiver
+        }
+    }
+
+    pub fn distance(&self, from: NodeId, to: NodeId) -> Option<Weight> {
+        self.query_sender.send(ServerControl::Query(Query { from, to, run: 0 })).unwrap();
+        loop {
+            match self.progress_receiver.recv() {
+                Ok(QueryProgress::Done(result)) => return result,
+                Ok(QueryProgress::Progress(_)) => continue,
+                Err(e) => panic!("{:?}", e)
+            }
+        }
+    }
+}
+
+impl Drop for AsyncShortestPathServerContainer {
+    fn drop(&mut self) {
+        self.query_sender.send(ServerControl::Shutdown).unwrap();
+    }
+}
