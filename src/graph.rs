@@ -52,15 +52,39 @@ impl Graph {
                 reversed[neighbor as usize].push(Link { node, weight });
             }
         }
+        Graph::adjancecy_lists_to_graph(reversed)
+    }
 
+    pub fn ch_split(self, node_ranks: &Vec<u32>) -> (Graph, Graph) {
+        let mut up: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new() ).collect();
+        let mut down: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new() ).collect();
+
+        // iterate over all edges and insert them in the reversed structure
+        for node in 0..(self.num_nodes() as NodeId) {
+            for Link { node: neighbor, weight } in self.neighbor_iter(node) {
+                if node_ranks[node as usize] < node_ranks[neighbor as usize] {
+                    up[node as usize].push(Link { node: neighbor, weight });
+                } else {
+                    down[neighbor as usize].push(Link { node, weight });
+                }
+            }
+        }
+
+        (Graph::adjancecy_lists_to_graph(up), Graph::adjancecy_lists_to_graph(down))
+    }
+
+    fn adjancecy_lists_to_graph(adjancecy_lists: Vec<Vec<Link>>) -> Graph {
         // create first_out array for reversed by doing a prefix sum over the adjancecy list sizes
-        let first_out = std::iter::once(0).chain(reversed.iter().scan(0, |state, incoming_links| {
+        let first_out = std::iter::once(0).chain(adjancecy_lists.iter().scan(0, |state, incoming_links| {
             *state = *state + incoming_links.len() as u32;
             Some(*state)
         })).collect();
 
         // append all adjancecy list and split the pairs into two seperate vectors
-        let (head, weight) = reversed.into_iter().flat_map(|neighbors| neighbors.into_iter().map(|Link { node, weight }| (node, weight) ) ).unzip();
+        let (head, weight) = adjancecy_lists
+            .into_iter()
+            .flat_map(|neighbors| neighbors.into_iter().map(|Link { node, weight }| (node, weight) ) )
+            .unzip();
 
         Graph::new(first_out, head, weight)
     }
@@ -99,5 +123,10 @@ mod tests {
         assert_eq!(reversed.first_out, expected.first_out);
         assert_eq!(reversed.head, expected.head);
         assert_eq!(reversed.weight, expected.weight);
+    }
+
+    #[test]
+    fn test_ch_split() {
+        unimplemented!();
     }
 }

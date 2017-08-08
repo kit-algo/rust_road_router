@@ -12,6 +12,7 @@ use shortest_path::server::dijkstra::Server as DijkServer;
 use shortest_path::server::bidirectional_dijkstra::Server as BiDijkServer;
 use shortest_path::server::async::dijkstra::Server as AsyncDijkServer;
 use shortest_path::server::async::bidirectional_dijkstra::Server as AsyncBiDijkServer;
+use shortest_path::server::contraction_hierarchy::Server as CHServer;
 use io::read_into_vector;
 
 
@@ -36,6 +37,16 @@ fn main() {
     let async_server = AsyncDijkServer::new(graph.clone());
     let mut async_bi_dir_server = AsyncBiDijkServer::new(graph);
 
+    let ch_first_out = read_into_vector(path.join("travel_time_ch/first_out").to_str().unwrap()).expect("could not read travel_time_ch/first_out");
+    let ch_head = read_into_vector(path.join("travel_time_ch/head").to_str().unwrap()).expect("could not read travel_time_ch/head");
+    let ch_weight = read_into_vector(path.join("travel_time_ch/weight").to_str().unwrap()).expect("could not read travel_time_ch/weight");
+    let ch_order = read_into_vector(path.join("travel_time_ch/order").to_str().unwrap()).expect("could not read travel_time_ch/order");
+    let mut inverted_order = vec![0; ch_order.len()];
+    for (i, node) in ch_order.into_iter().enumerate() {
+        inverted_order[node as usize] = i as u32;
+    }
+    let mut ch_server = CHServer::new(Graph::new(ch_first_out, ch_head, ch_weight), &inverted_order);
+
     for ((&from, &to), &ground_truth) in from.iter().zip(to.iter()).zip(ground_truth.iter()).take(100) {
         let ground_truth = match ground_truth {
             INFINITY => None,
@@ -57,5 +68,9 @@ fn main() {
         let start = time::now();
         assert_eq!(async_bi_dir_server.distance(from, to), ground_truth);
         println!("async bidir took {}ms", (time::now() - start).num_milliseconds());
+
+        let start = time::now();
+        assert_eq!(ch_server.distance(from, to), ground_truth);
+        println!("ch took {}ms", (time::now() - start).num_milliseconds());
     }
 }
