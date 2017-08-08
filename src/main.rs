@@ -29,7 +29,7 @@ fn main() {
     let graph = Graph::new(first_out, head, travel_time);
     let mut simple_server = ShortestPathServer::new(graph.clone());
     let mut bi_dir_server = ShortestPathServerBiDirDijk::new(graph.clone());
-    let async_server = AsyncShortestPathServerContainer::new(graph);
+    let async_server = AsyncShortestPathServer::new(graph);
 
     for ((&from, &to), &ground_truth) in from.iter().zip(to.iter()).zip(ground_truth.iter()).take(100) {
         let ground_truth = match ground_truth {
