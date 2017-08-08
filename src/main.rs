@@ -5,10 +5,14 @@ extern crate bmw_routing_engine;
 
 extern crate time;
 
-use bmw_routing_engine::graph::Graph;
-use bmw_routing_engine::graph::INFINITY;
-use bmw_routing_engine::shortest_path::*;
-use bmw_routing_engine::io::read_into_vector;
+use bmw_routing_engine::*;
+use graph::Graph;
+use graph::INFINITY;
+use shortest_path::server::dijkstra::Server as DijkServer;
+use shortest_path::server::bidirectional_dijkstra::Server as BiDijkServer;
+use shortest_path::server::async::dijkstra::Server as AsyncDijkServer;
+use shortest_path::server::async::bidirectional_dijkstra::Server as AsyncBiDijkServer;
+use io::read_into_vector;
 
 
 fn main() {
@@ -27,10 +31,10 @@ fn main() {
     let ground_truth = read_into_vector(path.join("test/travel_time_length").to_str().unwrap()).expect("could not read travel_time_length");
 
     let graph = Graph::new(first_out, head, travel_time);
-    let mut simple_server = ShortestPathServer::new(graph.clone());
-    let mut bi_dir_server = ShortestPathServerBiDirDijk::new(graph.clone());
-    let async_server = AsyncShortestPathServer::new(graph.clone());
-    let mut async_bi_dir_server = AsyncShortestPathServerBiDirDijk::new(graph);
+    let mut simple_server = DijkServer::new(graph.clone());
+    let mut bi_dir_server = BiDijkServer::new(graph.clone());
+    let async_server = AsyncDijkServer::new(graph.clone());
+    let mut async_bi_dir_server = AsyncBiDijkServer::new(graph);
 
     for ((&from, &to), &ground_truth) in from.iter().zip(to.iter()).zip(ground_truth.iter()).take(100) {
         let ground_truth = match ground_truth {

@@ -1,7 +1,10 @@
 extern crate bmw_routing_engine;
 
 use bmw_routing_engine::*;
-use shortest_path::*;
+use shortest_path::server::dijkstra::Server as DijkServer;
+use shortest_path::server::bidirectional_dijkstra::Server as BiDijkServer;
+use shortest_path::server::async::dijkstra::Server as AsyncDijkServer;
+use shortest_path::server::async::bidirectional_dijkstra::Server as AsyncBiDijkServer;
 use graph::Graph;
 
 fn graph() -> Graph {
@@ -31,7 +34,7 @@ fn graph() -> Graph {
 
 #[test]
 fn simple_dijkstra_correct_distances() {
-    let mut server = ShortestPathServer::new(graph());
+    let mut server = DijkServer::new(graph());
 
     assert_eq!(server.distance(0, 1), Some(1));
     assert_eq!(server.distance(0, 3), Some(3));
@@ -42,7 +45,7 @@ fn simple_dijkstra_correct_distances() {
 
 #[test]
 fn bidir_dijkstra_correct_distances() {
-    let mut server = ShortestPathServerBiDirDijk::new(graph());
+    let mut server = BiDijkServer::new(graph());
 
     assert_eq!(server.distance(0, 1), Some(1));
     assert_eq!(server.distance(0, 3), Some(3));
@@ -53,7 +56,7 @@ fn bidir_dijkstra_correct_distances() {
 
 #[test]
 fn async_dijkstra_correct_distances() {
-    let server = AsyncShortestPathServer::new(graph());
+    let server = AsyncDijkServer::new(graph());
 
     assert_eq!(server.distance(0, 1), Some(1));
     assert_eq!(server.distance(0, 3), Some(3));
@@ -64,7 +67,7 @@ fn async_dijkstra_correct_distances() {
 
 #[test]
 fn async_bidijkstra_correct_distances() {
-    let mut server = AsyncShortestPathServerBiDirDijk::new(graph());
+    let mut server = AsyncBiDijkServer::new(graph());
 
     assert_eq!(server.distance(0, 1), Some(1));
     assert_eq!(server.distance(0, 3), Some(3));

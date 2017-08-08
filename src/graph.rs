@@ -17,7 +17,7 @@ pub struct Graph {
 #[derive(Debug)]
 pub struct Link {
     pub node: NodeId,
-    pub cost: Weight
+    pub weight: Weight
 }
 
 impl Graph {
@@ -35,7 +35,7 @@ impl Graph {
         let range = (self.first_out[node as usize] as usize)..(self.first_out[(node + 1) as usize] as usize);
         self.head[range.clone()].iter()
             .zip(self.weight[range].iter())
-            .map( |(&neighbor, &weight)| Link { node: neighbor, cost: weight } )
+            .map( |(&neighbor, &weight)| Link { node: neighbor, weight: weight } )
     }
 
     pub fn num_nodes(&self) -> usize {
@@ -48,8 +48,8 @@ impl Graph {
 
         // iterate over all edges and insert them in the reversed structure
         for node in 0..(self.num_nodes() as NodeId) {
-            for Link { node: neighbor, cost } in self.neighbor_iter(node) {
-                reversed[neighbor as usize].push(Link { node, cost });
+            for Link { node: neighbor, weight } in self.neighbor_iter(node) {
+                reversed[neighbor as usize].push(Link { node, weight });
             }
         }
 
@@ -60,7 +60,7 @@ impl Graph {
         })).collect();
 
         // append all adjancecy list and split the pairs into two seperate vectors
-        let (head, weight) = reversed.into_iter().flat_map(|neighbors| neighbors.into_iter().map(|Link { node, cost }| (node, cost) ) ).unzip();
+        let (head, weight) = reversed.into_iter().flat_map(|neighbors| neighbors.into_iter().map(|Link { node, weight }| (node, weight) ) ).unzip();
 
         Graph::new(first_out, head, weight)
     }
