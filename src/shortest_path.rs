@@ -167,6 +167,10 @@ impl SteppedDijkstra {
             QueryProgress::Done(None)
         }
     }
+
+    fn tentative_distance(&self, node: NodeId) -> Weight {
+        self.distances[node as usize]
+    }
 }
 
 #[derive(Debug)]
@@ -197,37 +201,26 @@ impl ShortestPathServer {
 pub struct ShortestPathServerBiDirDijk {
     forward_dijkstra: SteppedDijkstra,
     backward_dijkstra: SteppedDijkstra,
-    forward_distances: TimestampedVector<Weight>,
-    backward_distances: TimestampedVector<Weight>,
     tentative_distance: Weight
 }
 
 impl ShortestPathServerBiDirDijk {
     pub fn new(graph: Graph) -> ShortestPathServerBiDirDijk {
-        let n = graph.num_nodes();
         let reversed = graph.reverse();
 
         ShortestPathServerBiDirDijk {
             forward_dijkstra: SteppedDijkstra::new(graph),
             backward_dijkstra: SteppedDijkstra::new(reversed),
-            forward_distances: TimestampedVector::new(n, INFINITY),
-            backward_distances: TimestampedVector::new(n, INFINITY),
             tentative_distance: INFINITY
         }
     }
 
     pub fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
         // initialize
-        self.forward_distances.reset();
-        self.backward_distances.reset();
         self.tentative_distance = INFINITY;
 
         self.forward_dijkstra.initialize_query(Query { from, to });
         self.backward_dijkstra.initialize_query(Query { from: to, to: from });
-
-        // Starte with origin
-        self.forward_distances.set(from as usize, 0);
-        self.backward_distances.set(to as usize, 0);
 
         let mut forward_progress = 0;
         let mut backward_progress = 0;
@@ -237,8 +230,7 @@ impl ShortestPathServerBiDirDijk {
                 match self.forward_dijkstra.next_step() {
                     QueryProgress::Progress(State { cost, position }) => {
                         forward_progress = cost;
-                        self.forward_distances.set(position as usize, cost);
-                        self.tentative_distance = min(cost + self.backward_distances[position as usize], self.tentative_distance);
+                        self.tentative_distance = min(cost + self.backward_dijkstra.tentative_distance(position), self.tentative_distance);
                     },
                     QueryProgress::Done(result) => return result
                 }
@@ -246,8 +238,7 @@ impl ShortestPathServerBiDirDijk {
                 match self.backward_dijkstra.next_step() {
                     QueryProgress::Progress(State { cost, position }) => {
                         backward_progress = cost;
-                        self.backward_distances.set(position as usize, cost);
-                        self.tentative_distance = min(cost + self.forward_distances[position as usize], self.tentative_distance);
+                        self.tentative_distance = min(cost + self.forward_dijkstra.tentative_distance(position), self.tentative_distance);
                     },
                     QueryProgress::Done(result) => return result
                 }
