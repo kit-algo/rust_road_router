@@ -3,6 +3,7 @@ use std::collections::BinaryHeap;
 use std::cmp::min;
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::thread;
+use std::ops::{Index};
 use super::graph::*;
 
 #[derive(Debug)]
@@ -46,11 +47,50 @@ impl PartialOrd for State {
 }
 
 #[derive(Debug)]
+struct TimestampedVector<T: Copy> {
+    data: Vec<T>,
+    // choose something small, as overflows are not a problem
+    current: u8,
+    timestamps: Vec<u8>,
+    default: T
+}
+
+impl<T: Copy> TimestampedVector<T> {
+    fn new(size: usize, default: T) -> TimestampedVector<T> {
+        TimestampedVector {
+            data: vec![default; size],
+            current: 0,
+            timestamps: vec![0; size],
+            default: default
+        }
+    }
+
+    fn reset(&mut self) {
+        self.current += 1;
+    }
+
+    fn set(&mut self, index: usize, value: T) {
+        self.timestamps[index] = self.current;
+        self.data[index] = value;
+    }
+}
+
+impl<T: Copy> Index<usize> for TimestampedVector<T> {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &T {
+        if self.timestamps[index] == self.current {
+            &self.data[index]
+        } else {
+            &self.default
+        }
+    }
+}
+
+#[derive(Debug)]
 struct SteppedDijkstra {
     graph: Graph,
-    distances: Vec<Weight>,
-    run: u32,
-    last_update: Vec<u32>,
+    distances: TimestampedVector<Weight>,
     heap: BinaryHeap<State>,
     query: Option<Query>,
     result: Option<Option<Weight>>
@@ -63,13 +103,7 @@ impl SteppedDijkstra {
         SteppedDijkstra {
             graph,
             // initialize tentative distances to INFINITY
-            distances: (0..n).map(|_| INFINITY).collect(),
-            // initialize run counter to 0
-            // will be incremented on every query
-            run: 0,
-            // vector containing a timestamp (by the run counter)to indicate
-            // whether the tentative distance is valid in the current query
-            last_update: (0..n).map(|_| 0).collect(),
+            distances: TimestampedVector::new(n, INFINITY),
             // priority queue
             heap: BinaryHeap::new(),
             // the current query
@@ -84,12 +118,11 @@ impl SteppedDijkstra {
         // initialize
         self.query = Some(query);
         self.result = None;
-        self.run += 1;
         self.heap.clear();
+        self.distances.reset();
 
         // Starte with origin
-        self.distances[from as usize] = 0;
-        self.last_update[from as usize] = self.run;
+        self.distances.set(from as usize, 0);
         self.heap.push(State { cost: 0, position: from });
     }
 
@@ -114,17 +147,16 @@ impl SteppedDijkstra {
             }
 
             // Important as we may have already found a better way
-            if self.last_update[position as usize] != self.run || cost <= self.distances[position as usize] {
+            if cost <= self.distances[position as usize] {
                 // For each node we can reach, see if we can find a way with
                 // a lower cost going through this node
                 for edge in self.graph.neighbor_iter(position) {
                     let next = State { cost: cost + edge.cost, position: edge.node };
 
                     // If so, add it to the frontier and continue
-                    if self.last_update[next.position as usize] != self.run || next.cost < self.distances[next.position as usize] {
+                    if next.cost < self.distances[next.position as usize] {
                         // Relaxation, we have now found a better way
-                        self.distances[next.position as usize] = next.cost;
-                        self.last_update[next.position as usize] = self.run;
+                        self.distances.set(next.position as usize, next.cost);
                         self.heap.push(next);
                     }
                 }
@@ -166,11 +198,8 @@ impl ShortestPathServer {
 pub struct ShortestPathServerBiDirDijk {
     forward_dijkstra: SteppedDijkstra,
     backward_dijkstra: SteppedDijkstra,
-    forward_distances: Vec<Weight>,
-    backward_distances: Vec<Weight>,
-    run: u32,
-    forward_last_update: Vec<u32>,
-    backward_last_update: Vec<u32>,
+    forward_distances: TimestampedVector<Weight>,
+    backward_distances: TimestampedVector<Weight>,
     tentative_distance: Weight
 }
 
@@ -182,28 +211,24 @@ impl ShortestPathServerBiDirDijk {
         ShortestPathServerBiDirDijk {
             forward_dijkstra: SteppedDijkstra::new(graph),
             backward_dijkstra: SteppedDijkstra::new(reversed),
-            forward_distances: (0..n).map(|_| INFINITY).collect(),
-            backward_distances: (0..n).map(|_| INFINITY).collect(),
-            run: 0,
-            forward_last_update: (0..n).map(|_| 0).collect(),
-            backward_last_update: (0..n).map(|_| 0).collect(),
+            forward_distances: TimestampedVector::new(n, INFINITY),
+            backward_distances: TimestampedVector::new(n, INFINITY),
             tentative_distance: INFINITY
         }
     }
 
     pub fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
         // initialize
-        self.run += 1;
+        self.forward_distances.reset();
+        self.backward_distances.reset();
         self.tentative_distance = INFINITY;
 
         self.forward_dijkstra.initialize_query(Query { from, to, run: 0 });
         self.backward_dijkstra.initialize_query(Query { from: to, to: from, run: 0 });
 
         // Starte with origin
-        self.forward_distances[from as usize] = 0;
-        self.backward_distances[to as usize] = 0;
-        self.forward_last_update[from as usize] = self.run;
-        self.backward_last_update[to as usize] = self.run;
+        self.forward_distances.set(from as usize, 0);
+        self.backward_distances.set(to as usize, 0);
 
         let mut forward_progress = 0;
         let mut backward_progress = 0;
@@ -215,11 +240,8 @@ impl ShortestPathServerBiDirDijk {
                 match self.forward_dijkstra.next_step() {
                     QueryProgress::Progress(State { cost, position }) => {
                         forward_progress = cost;
-                        self.forward_distances[position as usize] = cost;
-                        self.forward_last_update[position as usize] = self.run;
-                        if self.backward_last_update[position as usize] == self.run {
-                            self.tentative_distance = min(cost + self.backward_distances[position as usize], self.tentative_distance);
-                        }
+                        self.forward_distances.set(position as usize, cost);
+                        self.tentative_distance = min(cost + self.backward_distances[position as usize], self.tentative_distance);
                     },
                     QueryProgress::Done(result) => {
                         forward_done = true;
@@ -235,11 +257,8 @@ impl ShortestPathServerBiDirDijk {
                 match self.backward_dijkstra.next_step() {
                     QueryProgress::Progress(State { cost, position }) => {
                         backward_progress = cost;
-                        self.backward_distances[position as usize] = cost;
-                        self.backward_last_update[position as usize] = self.run;
-                        if self.forward_last_update[position as usize] == self.run {
-                            self.tentative_distance = min(cost + self.forward_distances[position as usize], self.tentative_distance);
-                        }
+                        self.backward_distances.set(position as usize, cost);
+                        self.tentative_distance = min(cost + self.forward_distances[position as usize], self.tentative_distance);
                     },
                     QueryProgress::Done(result) => {
                         backward_done = true;
