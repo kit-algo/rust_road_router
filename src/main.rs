@@ -29,7 +29,8 @@ fn main() {
     let graph = Graph::new(first_out, head, travel_time);
     let mut simple_server = ShortestPathServer::new(graph.clone());
     let mut bi_dir_server = ShortestPathServerBiDirDijk::new(graph.clone());
-    let async_server = AsyncShortestPathServer::new(graph);
+    let async_server = AsyncShortestPathServer::new(graph.clone());
+    let mut async_bi_dir_server = AsyncShortestPathServerBiDirDijk::new(graph);
 
     for ((&from, &to), &ground_truth) in from.iter().zip(to.iter()).zip(ground_truth.iter()).take(100) {
         let ground_truth = match ground_truth {
@@ -48,5 +49,9 @@ fn main() {
         let start = time::now();
         assert_eq!(async_server.distance(from, to), ground_truth);
         println!("async took {}ms", (time::now() - start).num_milliseconds());
+
+        let start = time::now();
+        assert_eq!(async_bi_dir_server.distance(from, to), ground_truth);
+        println!("async bidir took {}ms", (time::now() - start).num_milliseconds());
     }
 }

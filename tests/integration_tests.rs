@@ -61,3 +61,14 @@ fn async_dijkstra_correct_distances() {
     assert_eq!(server.distance(0, 4), Some(5));
     assert_eq!(server.distance(4, 0), None);
 }
+
+#[test]
+fn async_bidijkstra_correct_distances() {
+    let mut server = AsyncShortestPathServerBiDirDijk::new(graph());
+
+    assert_eq!(server.distance(0, 1), Some(1));
+    assert_eq!(server.distance(0, 3), Some(3));
+    assert_eq!(server.distance(3, 0), Some(7));
+    assert_eq!(server.distance(0, 4), Some(5));
+    assert_eq!(server.distance(4, 0), None);
+}
