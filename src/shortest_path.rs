@@ -432,6 +432,9 @@ impl AsyncShortestPathServerBiDirDijk {
         let mut backward_progress = 0;
 
         while self.tentative_distance > forward_progress + backward_progress {
+            // some sort of select would be nice to avoid waiting on one direction while there is data available from the other one
+            // there is a select! macro, but the API is marked as unstable, so I'm not going to use it here
+            // https://github.com/rust-lang/rust/issues/27800
             match self.forward_progress_receiver.recv() {
                 Ok((_, query_id)) if query_id != self.active_query_id => (),
                 Ok((QueryProgress::Done(result), _)) => {
