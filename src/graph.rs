@@ -124,9 +124,4 @@ mod tests {
         assert_eq!(reversed.head, expected.head);
         assert_eq!(reversed.weight, expected.weight);
     }
-
-    #[test]
-    fn test_ch_split() {
-        unimplemented!();
-    }
 }

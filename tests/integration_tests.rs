@@ -1,10 +1,10 @@
 extern crate bmw_routing_engine;
 
 use bmw_routing_engine::*;
-use shortest_path::server::dijkstra::Server as DijkServer;
-use shortest_path::server::bidirectional_dijkstra::Server as BiDijkServer;
-use shortest_path::server::async::dijkstra::Server as AsyncDijkServer;
-use shortest_path::server::async::bidirectional_dijkstra::Server as AsyncBiDijkServer;
+use shortest_path::query::dijkstra::Server as DijkServer;
+use shortest_path::query::bidirectional_dijkstra::Server as BiDijkServer;
+use shortest_path::query::async::dijkstra::Server as AsyncDijkServer;
+use shortest_path::query::async::bidirectional_dijkstra::Server as AsyncBiDijkServer;
 use graph::Graph;
 
 fn graph() -> Graph {

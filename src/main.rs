@@ -8,11 +8,11 @@ extern crate time;
 use bmw_routing_engine::*;
 use graph::Graph;
 use graph::INFINITY;
-use shortest_path::server::dijkstra::Server as DijkServer;
-use shortest_path::server::bidirectional_dijkstra::Server as BiDijkServer;
-use shortest_path::server::async::dijkstra::Server as AsyncDijkServer;
-use shortest_path::server::async::bidirectional_dijkstra::Server as AsyncBiDijkServer;
-use shortest_path::server::contraction_hierarchy::Server as CHServer;
+use shortest_path::query::dijkstra::Server as DijkServer;
+use shortest_path::query::bidirectional_dijkstra::Server as BiDijkServer;
+use shortest_path::query::async::dijkstra::Server as AsyncDijkServer;
+use shortest_path::query::async::bidirectional_dijkstra::Server as AsyncBiDijkServer;
+use shortest_path::query::contraction_hierarchy::Server as CHServer;
 use io::read_into_vector;
 
 
