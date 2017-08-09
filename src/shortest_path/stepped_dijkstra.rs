@@ -3,6 +3,7 @@ use std::collections::BinaryHeap;
 
 use super::Query;
 use ::graph::*;
+use graph::first_out_graph::FirstOutGraph as Graph;
 use super::timestamped_vector::TimestampedVector;
 
 #[derive(Debug, Clone)]

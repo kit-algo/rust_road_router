@@ -1,11 +1,7 @@
-use std;
-
-pub type NodeId = u32;
-pub type Weight = u32;
-pub const INFINITY: u32 = std::u32::MAX / 2;
+use super::*;
 
 #[derive(Debug, Clone)]
-pub struct Graph {
+pub struct FirstOutGraph {
     // index of first edge of each node +1 entry in the end
     first_out: Vec<u32>,
     // the node ids to which each edge points
@@ -14,19 +10,13 @@ pub struct Graph {
     weight: Vec<Weight>
 }
 
-#[derive(Debug)]
-pub struct Link {
-    pub node: NodeId,
-    pub weight: Weight
-}
-
-impl Graph {
-    pub fn new(first_out: Vec<u32>, head: Vec<NodeId>, weight: Vec<Weight>) -> Graph {
+impl FirstOutGraph {
+    pub fn new(first_out: Vec<u32>, head: Vec<NodeId>, weight: Vec<Weight>) -> FirstOutGraph {
         assert_eq!(*first_out.first().unwrap(), 0);
         assert_eq!(*first_out.last().unwrap() as usize, head.len());
         assert_eq!(weight.len(), head.len());
 
-        Graph {
+        FirstOutGraph {
             first_out, head, weight
         }
     }
@@ -42,7 +32,7 @@ impl Graph {
         self.first_out.len() - 1
     }
 
-    pub fn reverse(&self) -> Graph {
+    pub fn reverse(&self) -> FirstOutGraph {
         // vector of adjacency lists for the reverse graph
         let mut reversed: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new() ).collect();
 
@@ -52,10 +42,10 @@ impl Graph {
                 reversed[neighbor as usize].push(Link { node, weight });
             }
         }
-        Graph::adjancecy_lists_to_graph(reversed)
+        FirstOutGraph::adjancecy_lists_to_graph(reversed)
     }
 
-    pub fn ch_split(self, node_ranks: &Vec<u32>) -> (Graph, Graph) {
+    pub fn ch_split(self, node_ranks: &Vec<u32>) -> (FirstOutGraph, FirstOutGraph) {
         let mut up: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new() ).collect();
         let mut down: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new() ).collect();
 
@@ -70,10 +60,10 @@ impl Graph {
             }
         }
 
-        (Graph::adjancecy_lists_to_graph(up), Graph::adjancecy_lists_to_graph(down))
+        (FirstOutGraph::adjancecy_lists_to_graph(up), FirstOutGraph::adjancecy_lists_to_graph(down))
     }
 
-    fn adjancecy_lists_to_graph(adjancecy_lists: Vec<Vec<Link>>) -> Graph {
+    fn adjancecy_lists_to_graph(adjancecy_lists: Vec<Vec<Link>>) -> FirstOutGraph {
         // create first_out array for reversed by doing a prefix sum over the adjancecy list sizes
         let first_out = std::iter::once(0).chain(adjancecy_lists.iter().scan(0, |state, incoming_links| {
             *state = *state + incoming_links.len() as u32;
@@ -86,7 +76,7 @@ impl Graph {
             .flat_map(|neighbors| neighbors.into_iter().map(|Link { node, weight }| (node, weight) ) )
             .unzip();
 
-        Graph::new(first_out, head, weight)
+        FirstOutGraph::new(first_out, head, weight)
     }
 }
 
@@ -96,7 +86,7 @@ mod tests {
 
     #[test]
     fn test_reversal() {
-        let graph = Graph::new(
+        let graph = FirstOutGraph::new(
             vec![0,      2,  3,        6,    8, 8, 8],
             vec![2,  1,  3,  1, 3, 4,  0, 4],
             vec![10, 1,  2,  1, 3, 1,  7, 2]);
@@ -114,7 +104,7 @@ mod tests {
         //           10      |               |
         //                   +---------------+
         //
-        let expected = Graph::new(
+        let expected = FirstOutGraph::new(
             vec![0,  1,     3,   4,     6,     8,8],
             vec![3,  0, 2,  0,   1, 2,  2, 3],
             vec![7,  1, 1,  10,  2, 3,  1, 2]);
