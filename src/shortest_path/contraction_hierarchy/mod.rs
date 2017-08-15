@@ -113,9 +113,9 @@ struct PartialContractionGraph<'a> {
 }
 
 impl<'a> PartialContractionGraph<'a> {
-    fn remove_lowest(self) -> Option<(&'a Node, PartialContractionGraph<'a>)> {
+    fn remove_lowest(&'a mut self) -> Option<(&'a Node, PartialContractionGraph<'a>)> {
         if let Some((node, other_nodes)) = self.nodes.split_first_mut() {
-            let subgraph = PartialContractionGraph { nodes: other_nodes, id_offset: self.id_offset + 1 };
+            let mut subgraph = PartialContractionGraph { nodes: other_nodes, id_offset: self.id_offset + 1 };
             subgraph.remove_edges_to_removed(&node);
             Some((node, subgraph))
         } else {
@@ -140,8 +140,8 @@ impl<'a> PartialContractionGraph<'a> {
         out_result
     }
 
-    fn contract(&mut self) {
-        if let Some((node, subgraph)) = self.remove_lowest() {
+    fn contract(&'a mut self) {
+        if let Some((node, mut subgraph)) = self.remove_lowest() {
             for &Link { node: from, weight: from_weight } in node.incoming.iter() {
                 for &Link { node: to, weight: to_weight } in node.outgoing.iter() {
                     subgraph.insert_or_decrease(from, to, from_weight + to_weight);
@@ -153,10 +153,9 @@ impl<'a> PartialContractionGraph<'a> {
     }
 }
 
-pub fn contract(graph: FirstOutGraph, node_order: Vec<NodeId>) -> FirstOutGraph {
+pub fn contract(graph: FirstOutGraph, node_order: Vec<NodeId>) -> () {
     let mut graph = ContractionGraph::new(graph, node_order);
     graph.partial_graph().contract();
-
-    graph.asFirstOutGraph()
+    // graph.as_first_out_graph()
 }
 
