@@ -1,9 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
-use super::Query;
-use ::graph::*;
-use graph::first_out_graph::DijkstrableGraph;
+use super::*;
 use super::timestamped_vector::TimestampedVector;
 
 #[derive(Debug, Clone)]
@@ -97,6 +95,8 @@ impl<Graph: DijkstrableGraph> SteppedDijkstra<Graph> {
                 return QueryProgress::Done(Some(distance));
             }
 
+            // these are necessary because otherwise the borrow checker could not figure out
+            // that we're only borrowing parts of self
             let heap = &mut self.heap;
             let distances = &mut self.distances;
 

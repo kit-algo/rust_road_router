@@ -1,7 +1,7 @@
 use std;
+use shortest_path::DijkstrableGraph;
 
 pub mod first_out_graph;
-pub mod adjacency_lists_graph;
 
 pub type NodeId = u32;
 pub type Weight = u32;

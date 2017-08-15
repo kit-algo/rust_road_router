@@ -1,10 +1,5 @@
 use super::*;
 
-pub trait DijkstrableGraph {
-    fn num_nodes(&self) -> usize;
-    fn for_each_neighbor(&self, node: NodeId, f: &mut FnMut(Link));
-}
-
 #[derive(Debug, Clone)]
 pub struct FirstOutGraph {
     // index of first edge of each node +1 entry in the end
