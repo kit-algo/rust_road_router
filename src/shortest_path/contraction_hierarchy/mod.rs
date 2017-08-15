@@ -144,11 +144,28 @@ impl<'a> PartialContractionGraph<'a> {
         if let Some((node, mut subgraph)) = self.remove_lowest() {
             for &Link { node: from, weight: from_weight } in node.incoming.iter() {
                 for &Link { node: to, weight: to_weight } in node.outgoing.iter() {
-                    subgraph.insert_or_decrease(from, to, from_weight + to_weight);
+                    if subgraph.shortcut_required(from, to, from_weight + to_weight) {
+                        subgraph.insert_or_decrease(from, to, from_weight + to_weight);
+                    }
                 }
             }
 
             subgraph.contract();
+        }
+    }
+
+    fn shortcut_required(&self, from: NodeId, to: NodeId, shortcut_weight: Weight) -> bool {
+        let mut server = ::shortest_path::query::bidirectional_dijkstra::Server {
+            forward_dijkstra: SteppedDijkstra::new(ForwardWrapper { graph: &self }),
+            backward_dijkstra: SteppedDijkstra::new(BackwardWrapper { graph: &self }),
+            tentative_distance: INFINITY,
+            maximum_distance: shortcut_weight
+        };
+
+        match server.distance(from, to) {
+            Some(length) if length < shortcut_weight => false,
+            Some(_) => true,
+            None => true,
         }
     }
 }
@@ -159,3 +176,36 @@ pub fn contract(graph: FirstOutGraph, node_order: Vec<NodeId>) -> () {
     // graph.as_first_out_graph()
 }
 
+#[derive(Debug)]
+struct ForwardWrapper<'a> {
+    graph: &'a PartialContractionGraph<'a>
+}
+
+impl<'a> DijkstrableGraph for ForwardWrapper<'a> {
+    fn num_nodes(&self) -> usize {
+        self.graph.nodes.len()
+    }
+
+    fn for_each_neighbor(&self, node: NodeId, f: &mut FnMut(Link)) {
+        for &Link { node: target, weight } in self.graph.nodes[node as usize].outgoing.iter() {
+            f(Link { node: target - self.graph.id_offset, weight });
+        }
+    }
+}
+
+#[derive(Debug)]
+struct BackwardWrapper<'a> {
+    graph: &'a PartialContractionGraph<'a>
+}
+
+impl<'a> DijkstrableGraph for BackwardWrapper<'a> {
+    fn num_nodes(&self) -> usize {
+        self.graph.nodes.len()
+    }
+
+    fn for_each_neighbor(&self, node: NodeId, f: &mut FnMut(Link)) {
+        for &Link { node: target, weight } in self.graph.nodes[node as usize].incoming.iter() {
+            f(Link { node: target - self.graph.id_offset, weight });
+        }
+    }
+}

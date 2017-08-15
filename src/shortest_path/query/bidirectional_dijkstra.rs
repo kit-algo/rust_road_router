@@ -2,20 +2,22 @@ use std::cmp::min;
 use super::*;
 
 #[derive(Debug)]
-pub struct Server {
-    forward_dijkstra: SteppedDijkstra<Graph>,
-    backward_dijkstra: SteppedDijkstra<Graph>,
-    tentative_distance: Weight
+pub struct Server<G: DijkstrableGraph, H: DijkstrableGraph> {
+    pub forward_dijkstra: SteppedDijkstra<G>,
+    pub backward_dijkstra: SteppedDijkstra<H>,
+    pub tentative_distance: Weight,
+    pub maximum_distance: Weight
 }
 
-impl Server {
-    pub fn new(graph: Graph) -> Server {
+impl<G: DijkstrableGraph, H: DijkstrableGraph> Server<G, H> {
+    pub fn new(graph: Graph) -> Server<Graph, Graph> {
         let reversed = graph.reverse();
 
         Server {
             forward_dijkstra: SteppedDijkstra::new(graph),
             backward_dijkstra: SteppedDijkstra::new(reversed),
-            tentative_distance: INFINITY
+            tentative_distance: INFINITY,
+            maximum_distance: INFINITY
         }
     }
 
@@ -29,7 +31,8 @@ impl Server {
         let mut forward_progress = 0;
         let mut backward_progress = 0;
 
-        while self.tentative_distance > forward_progress + backward_progress {
+        while forward_progress + backward_progress < self.tentative_distance &&
+            forward_progress + backward_progress < self.maximum_distance {
             if forward_progress <= backward_progress {
                 match self.forward_dijkstra.next_step() {
                     QueryProgress::Progress(State { distance, node }) => {
