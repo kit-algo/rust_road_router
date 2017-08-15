@@ -9,9 +9,7 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn new(graph: Graph, node_ranks: &Vec<u32>) -> Server {
-        let (up, down) = graph.ch_split(node_ranks);
-
+    pub fn new((up, down): (Graph, Graph)) -> Server {
         Server {
             forward_dijkstra: SteppedDijkstra::new(up),
             backward_dijkstra: SteppedDijkstra::new(down),

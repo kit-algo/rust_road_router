@@ -1,6 +1,5 @@
 use super::*;
 use self::first_out_graph::FirstOutGraph;
-use std;
 
 #[derive(Debug, PartialEq)]
 enum ShortcutResult {
@@ -16,13 +15,6 @@ struct Node {
 }
 
 impl Node {
-    fn new() -> Node {
-        Node {
-            outgoing: Vec::new(),
-            incoming: Vec::new()
-        }
-    }
-
     fn insert_or_decrease_outgoing(&mut self, to: NodeId, weight: Weight) -> ShortcutResult {
         Node::insert_or_decrease(&mut self.outgoing, to, weight)
     }
@@ -83,19 +75,6 @@ impl ContractionGraph {
             nodes,
             node_order
         }
-    }
-
-    fn num_nodes(&self) -> usize {
-        self.nodes.len()
-    }
-
-
-    fn outgoing_iter(&self, node: NodeId) -> std::slice::Iter<Link> {
-        self.nodes[node as usize].outgoing.iter()
-    }
-
-    fn incmoing_iter(&self, node: NodeId) -> std::slice::Iter<Link> {
-        self.nodes[node as usize].incoming.iter()
     }
 
     fn partial_graph(&mut self) -> PartialContractionGraph {
@@ -170,10 +149,15 @@ impl<'a> PartialContractionGraph<'a> {
     }
 }
 
-pub fn contract(graph: FirstOutGraph, node_order: Vec<NodeId>) -> () {
+pub fn contract(graph: FirstOutGraph, node_order: Vec<NodeId>) -> (FirstOutGraph, FirstOutGraph) {
     let mut graph = ContractionGraph::new(graph, node_order);
     graph.partial_graph().contract();
-    // graph.as_first_out_graph()
+
+    let (outgoing, incoming) = graph.nodes.into_iter()
+        .map(|node| { (node.outgoing, node.incoming) })
+        .unzip();
+
+    (FirstOutGraph::from_adjancecy_lists(outgoing), FirstOutGraph::from_adjancecy_lists(incoming))
 }
 
 #[derive(Debug)]

@@ -21,6 +21,22 @@ impl FirstOutGraph {
         }
     }
 
+    pub fn from_adjancecy_lists(adjancecy_lists: Vec<Vec<Link>>) -> FirstOutGraph {
+        // create first_out array for reversed by doing a prefix sum over the adjancecy list sizes
+        let first_out = std::iter::once(0).chain(adjancecy_lists.iter().scan(0, |state, incoming_links| {
+            *state = *state + incoming_links.len() as u32;
+            Some(*state)
+        })).collect();
+
+        // append all adjancecy list and split the pairs into two seperate vectors
+        let (head, weight) = adjancecy_lists
+            .into_iter()
+            .flat_map(|neighbors| neighbors.into_iter().map(|Link { node, weight }| (node, weight) ) )
+            .unzip();
+
+        FirstOutGraph::new(first_out, head, weight)
+    }
+
     pub fn neighbor_iter(&self, node: NodeId) -> std::iter::Map<std::iter::Zip<std::slice::Iter<NodeId>, std::slice::Iter<Weight>>, fn((&NodeId, &Weight))->Link> {
         let range = (self.first_out[node as usize] as usize)..(self.first_out[(node + 1) as usize] as usize);
         self.head[range.clone()].iter()
@@ -38,7 +54,7 @@ impl FirstOutGraph {
                 reversed[neighbor as usize].push(Link { node, weight });
             }
         }
-        FirstOutGraph::adjancecy_lists_to_graph(reversed)
+        FirstOutGraph::from_adjancecy_lists(reversed)
     }
 
     pub fn ch_split(self, node_ranks: &Vec<u32>) -> (FirstOutGraph, FirstOutGraph) {
@@ -56,23 +72,7 @@ impl FirstOutGraph {
             }
         }
 
-        (FirstOutGraph::adjancecy_lists_to_graph(up), FirstOutGraph::adjancecy_lists_to_graph(down))
-    }
-
-    fn adjancecy_lists_to_graph(adjancecy_lists: Vec<Vec<Link>>) -> FirstOutGraph {
-        // create first_out array for reversed by doing a prefix sum over the adjancecy list sizes
-        let first_out = std::iter::once(0).chain(adjancecy_lists.iter().scan(0, |state, incoming_links| {
-            *state = *state + incoming_links.len() as u32;
-            Some(*state)
-        })).collect();
-
-        // append all adjancecy list and split the pairs into two seperate vectors
-        let (head, weight) = adjancecy_lists
-            .into_iter()
-            .flat_map(|neighbors| neighbors.into_iter().map(|Link { node, weight }| (node, weight) ) )
-            .unzip();
-
-        FirstOutGraph::new(first_out, head, weight)
+        (FirstOutGraph::from_adjancecy_lists(up), FirstOutGraph::from_adjancecy_lists(down))
     }
 }
 
