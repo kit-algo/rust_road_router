@@ -1,5 +1,10 @@
 use super::*;
 
+pub trait DijkstrableGraph {
+    fn num_nodes(&self) -> usize;
+    fn for_each_neighbor(&self, node: NodeId, f: &mut FnMut(Link));
+}
+
 #[derive(Debug, Clone)]
 pub struct FirstOutGraph {
     // index of first edge of each node +1 entry in the end
@@ -26,10 +31,6 @@ impl FirstOutGraph {
         self.head[range.clone()].iter()
             .zip(self.weight[range].iter())
             .map( |(&neighbor, &weight)| Link { node: neighbor, weight: weight } )
-    }
-
-    pub fn num_nodes(&self) -> usize {
-        self.first_out.len() - 1
     }
 
     pub fn reverse(&self) -> FirstOutGraph {
@@ -77,6 +78,18 @@ impl FirstOutGraph {
             .unzip();
 
         FirstOutGraph::new(first_out, head, weight)
+    }
+}
+
+impl DijkstrableGraph for FirstOutGraph {
+    fn num_nodes(&self) -> usize {
+        self.first_out.len() - 1
+    }
+
+    fn for_each_neighbor(&self, node: NodeId, f: &mut FnMut(Link)) {
+        for link in self.neighbor_iter(node) {
+            f(link);
+        }
     }
 }
 

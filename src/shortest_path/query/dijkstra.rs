@@ -2,7 +2,7 @@ use super::*;
 
 #[derive(Debug)]
 pub struct Server {
-    dijkstra: SteppedDijkstra,
+    dijkstra: SteppedDijkstra<Graph>,
 }
 
 impl Server {

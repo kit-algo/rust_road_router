@@ -5,7 +5,7 @@ use shortest_path::query::dijkstra::Server as DijkServer;
 use shortest_path::query::bidirectional_dijkstra::Server as BiDijkServer;
 use shortest_path::query::async::dijkstra::Server as AsyncDijkServer;
 use shortest_path::query::async::bidirectional_dijkstra::Server as AsyncBiDijkServer;
-use graph::Graph;
+use graph::first_out_graph::FirstOutGraph as Graph;
 
 fn graph() -> Graph {
     // This is the directed graph we're going to use.

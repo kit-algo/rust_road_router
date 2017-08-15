@@ -1,5 +1,5 @@
 use super::*;
-use self::first_out_graph::FirstOutGraph;
+use self::first_out_graph::{FirstOutGraph, DijkstrableGraph};
 use std;
 
 #[derive(Debug, PartialEq)]

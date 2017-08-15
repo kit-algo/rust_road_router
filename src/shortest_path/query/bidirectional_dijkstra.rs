@@ -3,8 +3,8 @@ use super::*;
 
 #[derive(Debug)]
 pub struct Server {
-    forward_dijkstra: SteppedDijkstra,
-    backward_dijkstra: SteppedDijkstra,
+    forward_dijkstra: SteppedDijkstra<Graph>,
+    backward_dijkstra: SteppedDijkstra<Graph>,
     tentative_distance: Weight
 }
 

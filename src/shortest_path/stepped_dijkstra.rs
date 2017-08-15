@@ -3,7 +3,7 @@ use std::collections::BinaryHeap;
 
 use super::Query;
 use ::graph::*;
-use graph::first_out_graph::FirstOutGraph as Graph;
+use graph::first_out_graph::DijkstrableGraph;
 use super::timestamped_vector::TimestampedVector;
 
 #[derive(Debug, Clone)]
@@ -39,7 +39,7 @@ impl PartialOrd for State {
 }
 
 #[derive(Debug)]
-pub struct SteppedDijkstra {
+pub struct SteppedDijkstra<Graph: DijkstrableGraph> {
     graph: Graph,
     distances: TimestampedVector<Weight>,
     heap: BinaryHeap<State>,
@@ -47,8 +47,8 @@ pub struct SteppedDijkstra {
     result: Option<Option<Weight>>
 }
 
-impl SteppedDijkstra {
-    pub fn new(graph: Graph) -> SteppedDijkstra {
+impl<Graph: DijkstrableGraph> SteppedDijkstra<Graph> {
+    pub fn new(graph: Graph) -> SteppedDijkstra<Graph> {
         let n = graph.num_nodes();
 
         SteppedDijkstra {
@@ -97,20 +97,23 @@ impl SteppedDijkstra {
                 return QueryProgress::Done(Some(distance));
             }
 
+            let heap = &mut self.heap;
+            let distances = &mut self.distances;
+
             // Important as we may have already found a better way
-            if distance <= self.distances[node as usize] {
+            if distance <= distances[node as usize] {
                 // For each node we can reach, see if we can find a way with
                 // a lower distance going through this node
-                for edge in self.graph.neighbor_iter(node) {
+                self.graph.for_each_neighbor(node, &mut |edge: Link| {
                     let next = State { distance: distance + edge.weight, node: edge.node };
 
                     // If so, add it to the frontier and continue
-                    if next.distance < self.distances[next.node as usize] {
+                    if next.distance < distances[next.node as usize] {
                         // Relaxation, we have now found a better way
-                        self.distances.set(next.node as usize, next.distance);
-                        self.heap.push(next);
+                        distances.set(next.node as usize, next.distance);
+                        heap.push(next);
                     }
-                }
+                });
             }
 
             QueryProgress::Progress(State { distance, node })
