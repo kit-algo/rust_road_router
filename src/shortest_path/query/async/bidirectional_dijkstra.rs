@@ -1,7 +1,15 @@
 use super::*;
 use std::cmp::min;
+use std::ptr;
+use std::sync::{Arc, Barrier};
 
 use shortest_path::timestamped_vector::TimestampedVector;
+
+#[derive(Debug)]
+struct DistancesPointerWrapper {
+    pointer: *mut *const TimestampedVector<Weight>
+}
+unsafe impl Send for DistancesPointerWrapper {}
 
 #[derive(Debug)]
 pub struct Server {
@@ -10,8 +18,8 @@ pub struct Server {
     forward_progress_receiver: Receiver<(QueryProgress, u32)>,
     backward_progress_receiver: Receiver<(QueryProgress, u32)>,
 
-    forward_distances: TimestampedVector<Weight>,
-    backward_distances: TimestampedVector<Weight>,
+    forward_distances_box: Box<*const TimestampedVector<Weight>>,
+    backward_distances_box: Box<*const TimestampedVector<Weight>>,
     tentative_distance: Weight,
 
     active_query_id: u32
@@ -24,16 +32,33 @@ impl Server {
         let (backward_query_sender, backward_query_receiver) = channel();
         let (backward_progress_sender, backward_progress_receiver) = channel();
 
-        let n = graph.num_nodes();
+        let forward_distances_box = Box::new(ptr::null() as *const TimestampedVector<Weight>);
+        let forward_distances_pointer = DistancesPointerWrapper { pointer: Box::into_raw(forward_distances_box) };
+        let forward_distances_box = unsafe { Box::from_raw(forward_distances_pointer.pointer) };
+
+        let backward_distances_box = Box::new(ptr::null() as *const TimestampedVector<Weight>);
+        let backward_distances_pointer = DistancesPointerWrapper { pointer: Box::into_raw(backward_distances_box) };
+        let backward_distances_box = unsafe { Box::from_raw(backward_distances_pointer.pointer) };
+
         let reversed = graph.reverse();
+
+        let forward_query_barrier = Arc::new(Barrier::new(2));
+        let backward_query_barrier = forward_query_barrier.clone();
 
         thread::spawn(move || {
             let mut dijkstra = SteppedDijkstra::new(graph);
+
+            unsafe {
+                *forward_distances_pointer.pointer = dijkstra.distances_pointer();
+                asm!("" ::: "memory" : "volatile");
+            }
 
             loop {
                 match forward_query_receiver.recv() {
                     Ok((ServerControl::Query(query), active_query_id)) => {
                         dijkstra.initialize_query(query);
+
+                        forward_query_barrier.wait();
 
                         loop {
                             match forward_query_receiver.try_recv() {
@@ -56,10 +81,17 @@ impl Server {
         thread::spawn(move || {
             let mut dijkstra = SteppedDijkstra::new(reversed);
 
+            unsafe {
+                *backward_distances_pointer.pointer = dijkstra.distances_pointer();
+                asm!("" ::: "memory" : "volatile");
+            };
+
             loop {
                 match backward_query_receiver.recv() {
                     Ok((ServerControl::Query(query), active_query_id)) => {
                         dijkstra.initialize_query(query);
+
+                        backward_query_barrier.wait();
 
                         loop {
                             match backward_query_receiver.try_recv() {
@@ -85,8 +117,8 @@ impl Server {
             forward_progress_receiver,
             backward_progress_receiver,
 
-            forward_distances: TimestampedVector::new(n, INFINITY),
-            backward_distances: TimestampedVector::new(n, INFINITY),
+            forward_distances_box,
+            backward_distances_box,
             tentative_distance: INFINITY,
 
             active_query_id: 0
@@ -95,22 +127,16 @@ impl Server {
 
     pub fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
         // initialize
-        self.forward_distances.reset();
-        self.backward_distances.reset();
         self.tentative_distance = INFINITY;
         self.active_query_id += 1;
 
         self.forward_query_sender.send((ServerControl::Query(Query { from, to }), self.active_query_id)).unwrap();
         self.backward_query_sender.send((ServerControl::Query(Query { from: to, to: from }), self.active_query_id)).unwrap();
 
-        // Starte with origin
-        self.forward_distances.set(from as usize, 0);
-        self.backward_distances.set(to as usize, 0);
-
         let mut forward_progress = 0;
         let mut backward_progress = 0;
 
-        while self.tentative_distance > forward_progress + backward_progress {
+        while self.tentative_distance >= forward_progress + backward_progress {
             // some sort of select would be nice to avoid waiting on one direction while there is data available from the other one
             // there is a select! macro, but the API is marked as unstable, so I'm not going to use it here
             // https://github.com/rust-lang/rust/issues/27800
@@ -122,8 +148,8 @@ impl Server {
                 },
                 Ok((QueryProgress::Progress(State { distance, node }), _)) => {
                     forward_progress = distance;
-                    self.forward_distances.set(node as usize, distance);
-                    self.tentative_distance = min(distance + self.backward_distances[node as usize], self.tentative_distance);
+                    let other_distance = unsafe { (**self.backward_distances_box)[node as usize] };
+                    self.tentative_distance = min(distance + other_distance, self.tentative_distance);
                 },
                 Err(e) => panic!("{:?}", e)
             }
@@ -135,8 +161,8 @@ impl Server {
                 },
                 Ok((QueryProgress::Progress(State { distance, node }), _)) => {
                     backward_progress = distance;
-                    self.backward_distances.set(node as usize, distance);
-                    self.tentative_distance = min(distance + self.forward_distances[node as usize], self.tentative_distance);
+                    let other_distance = unsafe { (**self.forward_distances_box)[node as usize] };
+                    self.tentative_distance = min(distance + other_distance, self.tentative_distance);
                 },
                 Err(e) => panic!("{:?}", e)
             }

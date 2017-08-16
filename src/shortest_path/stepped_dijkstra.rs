@@ -126,4 +126,8 @@ impl<Graph: DijkstrableGraph> SteppedDijkstra<Graph> {
     pub fn tentative_distance(&self, node: NodeId) -> Weight {
         self.distances[node as usize]
     }
+
+    pub fn distances_pointer(&self) -> *const TimestampedVector<Weight> {
+        &self.distances
+    }
 }

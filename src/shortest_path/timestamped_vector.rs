@@ -33,6 +33,11 @@ impl<T: Copy> TimestampedVector<T> {
 
     pub fn set(&mut self, index: usize, value: T) {
         self.data[index] = value;
+        // we are going to access this container from two different threads
+        // unsyncrhnoized and with one thread modifying it - completely unsafe
+        // but fine for this case, we only need to make sure, that the timestamp
+        // is always modified after the value - which is the cause for this memory fence
+        unsafe { asm!("" ::: "memory" : "volatile") };
         self.timestamps[index] = self.current;
     }
 }

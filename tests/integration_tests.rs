@@ -45,7 +45,7 @@ fn simple_dijkstra_correct_distances() {
 
 #[test]
 fn bidir_dijkstra_correct_distances() {
-    let mut server = BiDijkServer::new(graph());
+    let mut server = BiDijkServer::<Graph, Graph>::new(graph());
 
     assert_eq!(server.distance(0, 1), Some(1));
     assert_eq!(server.distance(0, 3), Some(3));
