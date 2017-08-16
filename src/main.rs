@@ -76,7 +76,7 @@ fn main() {
         println!("ch took {}ms", (time::now() - start).num_milliseconds());
 
         let start = time::now();
-        assert_eq!(ch_server_with_own_ch.distance(from, to), ground_truth);
+        assert_eq!(ch_server_with_own_ch.distance(inverted_order[from as usize], inverted_order[to as usize]), ground_truth);
         println!("own ch took {}ms", (time::now() - start).num_milliseconds());
     }
 }

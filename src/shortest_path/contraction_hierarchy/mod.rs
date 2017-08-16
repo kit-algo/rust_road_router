@@ -99,6 +99,17 @@ impl ContractionGraph {
             id_offset: 0
         }
     }
+
+    fn as_first_out_graohs(self) -> (FirstOutGraph, FirstOutGraph) {
+        let (outgoing, incoming) = self.nodes.into_iter()
+            .map(|node| { (node.outgoing, node.incoming) })
+            .unzip();
+
+        // currently we stick to the reordered graph and also translate the query node ids.
+        // TODO make more explicit
+
+        (FirstOutGraph::from_adjancecy_lists(outgoing), FirstOutGraph::from_adjancecy_lists(incoming))
+    }
 }
 
 #[derive(Debug)]
@@ -154,12 +165,7 @@ impl<'a> PartialContractionGraph<'a> {
 pub fn contract(graph: FirstOutGraph, node_order: Vec<NodeId>) -> (FirstOutGraph, FirstOutGraph) {
     let mut graph = ContractionGraph::new(graph, node_order);
     graph.contract();
-
-    let (outgoing, incoming) = graph.nodes.into_iter()
-        .map(|node| { (node.outgoing, node.incoming) })
-        .unzip();
-
-    (FirstOutGraph::from_adjancecy_lists(outgoing), FirstOutGraph::from_adjancecy_lists(incoming))
+    graph.as_first_out_graohs()
 }
 
 #[derive(Debug)]
