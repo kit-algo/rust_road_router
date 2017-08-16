@@ -4,8 +4,8 @@ use std::ops::Index;
 pub struct TimestampedVector<T: Copy> {
     data: Vec<T>,
     // choose something small, as overflows are not a problem
-    current: u8,
-    timestamps: Vec<u8>,
+    current: u16,
+    timestamps: Vec<u16>,
     default: T
 }
 
@@ -20,7 +20,15 @@ impl<T: Copy> TimestampedVector<T> {
     }
 
     pub fn reset(&mut self) {
+        let old = self.current;
         self.current += 1;
+
+        if old > self.current {
+            // overflow, need to reinit
+            for element in self.data.iter_mut() {
+                *element = self.default;
+            }
+        }
     }
 
     pub fn set(&mut self, index: usize, value: T) {
