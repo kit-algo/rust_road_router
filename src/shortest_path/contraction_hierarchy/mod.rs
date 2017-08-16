@@ -141,7 +141,7 @@ impl<'a> PartialContractionGraph<'a> {
             maximum_distance: shortcut_weight
         };
 
-        match server.distance(from, to) {
+        match server.distance(from - self.id_offset, to - self.id_offset) {
             Some(length) if length < shortcut_weight => false,
             Some(_) => true,
             None => true,
