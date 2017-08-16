@@ -26,15 +26,22 @@ impl Server {
 
         let mut forward_progress = 0;
         let mut backward_progress = 0;
+        let mut forward_done = false;
+        let mut backward_done = false;
 
-        while self.tentative_distance > forward_progress && self.tentative_distance > backward_progress {
-            if forward_progress <= backward_progress {
+        while self.tentative_distance > forward_progress && self.tentative_distance > backward_progress && !(forward_done && backward_done) {
+            if backward_done || (forward_progress <= backward_progress && !forward_done) {
                 match self.forward_dijkstra.next_step() {
                     QueryProgress::Progress(State { distance, node }) => {
                         forward_progress = distance;
                         self.tentative_distance = min(distance + self.backward_dijkstra.tentative_distance(node), self.tentative_distance);
                     },
-                    QueryProgress::Done(result) => return result
+                    QueryProgress::Done(Some(distance)) => {
+                        forward_done = true;
+                        forward_progress = distance;
+                        self.tentative_distance = min(distance, self.tentative_distance);
+                    },
+                    QueryProgress::Done(None) => forward_done = true
                 }
             } else {
                 match self.backward_dijkstra.next_step() {
@@ -42,7 +49,12 @@ impl Server {
                         backward_progress = distance;
                         self.tentative_distance = min(distance + self.forward_dijkstra.tentative_distance(node), self.tentative_distance);
                     },
-                    QueryProgress::Done(result) => return result
+                    QueryProgress::Done(Some(distance)) => {
+                        backward_done = true;
+                        backward_progress = distance;
+                        self.tentative_distance = min(distance, self.tentative_distance);
+                    },
+                    QueryProgress::Done(None) => backward_done = true
                 }
             }
         }
