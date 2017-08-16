@@ -77,6 +77,22 @@ impl ContractionGraph {
         }
     }
 
+    fn contract(&mut self) {
+        let mut graph = self.partial_graph();
+
+        while let Some((node, mut subgraph)) = graph.remove_lowest() {
+            for &Link { node: from, weight: from_weight } in node.incoming.iter() {
+                for &Link { node: to, weight: to_weight } in node.outgoing.iter() {
+                    if subgraph.shortcut_required(from, to, from_weight + to_weight) {
+                        subgraph.insert_or_decrease(from, to, from_weight + to_weight);
+                    }
+                }
+            }
+
+            graph = subgraph;
+        }
+    }
+
     fn partial_graph(&mut self) -> PartialContractionGraph {
         PartialContractionGraph {
             nodes: &mut self.nodes[..],
@@ -92,7 +108,7 @@ struct PartialContractionGraph<'a> {
 }
 
 impl<'a> PartialContractionGraph<'a> {
-    fn remove_lowest(&'a mut self) -> Option<(&'a Node, PartialContractionGraph<'a>)> {
+    fn remove_lowest(self) -> Option<(&'a Node, PartialContractionGraph<'a>)> {
         if let Some((node, other_nodes)) = self.nodes.split_first_mut() {
             let mut subgraph = PartialContractionGraph { nodes: other_nodes, id_offset: self.id_offset + 1 };
             subgraph.remove_edges_to_removed(&node);
@@ -119,20 +135,6 @@ impl<'a> PartialContractionGraph<'a> {
         out_result
     }
 
-    fn contract(&'a mut self) {
-        if let Some((node, mut subgraph)) = self.remove_lowest() {
-            for &Link { node: from, weight: from_weight } in node.incoming.iter() {
-                for &Link { node: to, weight: to_weight } in node.outgoing.iter() {
-                    if subgraph.shortcut_required(from, to, from_weight + to_weight) {
-                        subgraph.insert_or_decrease(from, to, from_weight + to_weight);
-                    }
-                }
-            }
-
-            subgraph.contract();
-        }
-    }
-
     fn shortcut_required(&self, from: NodeId, to: NodeId, shortcut_weight: Weight) -> bool {
         let mut server = ::shortest_path::query::bidirectional_dijkstra::Server {
             forward_dijkstra: SteppedDijkstra::new(ForwardWrapper { graph: &self }),
@@ -151,7 +153,7 @@ impl<'a> PartialContractionGraph<'a> {
 
 pub fn contract(graph: FirstOutGraph, node_order: Vec<NodeId>) -> (FirstOutGraph, FirstOutGraph) {
     let mut graph = ContractionGraph::new(graph, node_order);
-    graph.partial_graph().contract();
+    graph.contract();
 
     let (outgoing, incoming) = graph.nodes.into_iter()
         .map(|node| { (node.outgoing, node.incoming) })
