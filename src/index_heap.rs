@@ -99,8 +99,7 @@ impl<T: Ord + Indexing> IndexdMinHeap<T> {
         while position != 0 {
             let parent = (position - 1) / TREE_ARITY;
             if self.data[parent] > self.data[position] {
-                self.data.swap(position, parent);
-                self.positions.swap(self.data[position].as_index(), self.data[parent].as_index());
+                self.swap(parent, position);
             }
             position = parent;
         }
@@ -110,27 +109,27 @@ impl<T: Ord + Indexing> IndexdMinHeap<T> {
         let mut position = position;
 
         loop {
-            let first_child = TREE_ARITY * position + 1;
-            if first_child >= self.len() {
-                return; // no children
-            }
-
-            let mut smallest_child = first_child;
-            for child in (first_child + 1)..min(TREE_ARITY * position + TREE_ARITY + 1, self.len()) {
-                if self.data[smallest_child] > self.data[child] {
-                    smallest_child = child;
+            if let Some(smallest_child) = self.children_index_range(position).min_by_key(|&child_index| &self.data[child_index]) {
+                if self.data[smallest_child] >= self.data[position] {
+                    return; // no child is smaller
                 }
+
+                self.swap(smallest_child, position);
+                position = smallest_child;
+            } else {
+                return; // no children at all
             }
-
-            if self.data[smallest_child] >= self.data[position] {
-                return; // no child is smaller
-            }
-
-
-            self.data.swap(position, smallest_child);
-            self.positions.swap(self.data[position].as_index(), self.data[smallest_child].as_index());
-            position = smallest_child;
         }
+    }
 
+    fn swap(&mut self, first_index: usize, second_index: usize) {
+        self.data.swap(first_index, second_index);
+        self.positions.swap(self.data[first_index].as_index(), self.data[second_index].as_index());
+    }
+
+    fn children_index_range(&self, parent_index: usize) -> std::ops::Range<usize> {
+        let first_child = TREE_ARITY * parent_index + 1;
+        let last_child = min(TREE_ARITY * parent_index + TREE_ARITY + 1, self.len());
+        first_child..last_child
     }
 }
