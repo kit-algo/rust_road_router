@@ -20,7 +20,7 @@ const INVALID_POSITION: usize = std::usize::MAX;
 impl<T: Ord + Indexing> IndexdMinHeap<T> {
     pub fn new(max_id: usize) -> IndexdMinHeap<T> {
         IndexdMinHeap {
-            positions: vec![INVALID_POSITION, max_id],
+            positions: vec![INVALID_POSITION; max_id],
             data: Vec::new()
         }
     }
@@ -33,7 +33,7 @@ impl<T: Ord + Indexing> IndexdMinHeap<T> {
         self.len() == 0
     }
 
-    fn contains_index(&self, id: usize) -> bool {
+    pub fn contains_index(&self, id: usize) -> bool {
         self.positions[id] != INVALID_POSITION
     }
 
