@@ -44,6 +44,7 @@ impl<T: Ord + Indexing> IndexdMinHeap<T> {
         self.data.clear();
     }
 
+    #[allow(dead_code)]
     pub fn peek(&self) -> Option<&T> {
         self.data.first()
     }
@@ -62,7 +63,6 @@ impl<T: Ord + Indexing> IndexdMinHeap<T> {
     }
 
     pub fn push(&mut self, element: T) {
-        assert!(element.as_index() < self.positions.len());
         assert!(!self.contains_index(element.as_index()));
         let insert_position = self.len();
         self.positions[element.as_index()] = insert_position;
@@ -74,10 +74,7 @@ impl<T: Ord + Indexing> IndexdMinHeap<T> {
     // Does nothing if the new key is larger.
     // Undefined if the element is not part of the queue.
     pub fn decrease_key(&mut self, element: T) {
-        assert!(element.as_index() < self.positions.len());
         let position = self.positions[element.as_index()];
-        assert!(element < self.data[position]);
-
         self.data[position] = element;
         self.move_up_in_tree(position);
     }
@@ -85,11 +82,9 @@ impl<T: Ord + Indexing> IndexdMinHeap<T> {
     // Updates the key of an element if the new key is larger than the old key.
     // Does nothing if the new key is smaller.
     // Undefined if the element is not part of the queue.
+    #[allow(dead_code)]
     pub fn increase_key(&mut self, element: T) {
-        assert!(element.as_index() < self.positions.len());
         let position = self.positions[element.as_index()];
-        assert!(element > self.data[position]);
-
         self.data[position] = element;
         self.move_down_in_tree(position);
     }
