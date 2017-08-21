@@ -1,7 +1,5 @@
-use std::cmp::Ordering;
-use std::collections::BinaryHeap;
-
 use super::*;
+use index_heap::{IndexdMinHeap, Indexing};
 use super::timestamped_vector::TimestampedVector;
 
 #[derive(Debug, Clone)]
@@ -10,29 +8,15 @@ pub enum QueryProgress {
     Done(Option<Weight>),
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Ord, PartialOrd)]
 pub struct State {
     pub distance: Weight,
     pub node: NodeId,
 }
 
-// The priority queue depends on `Ord`.
-// Explicitly implement the trait so the queue becomes a min-heap
-// instead of a max-heap.
-impl Ord for State {
-    fn cmp(&self, other: &State) -> Ordering {
-        // Notice that the we flip the ordering on distances.
-        // In case of a tie we compare nodes - this step is necessary
-        // to make implementations of `PartialEq` and `Ord` consistent.
-        other.distance.cmp(&self.distance)
-            .then_with(|| self.node.cmp(&other.node))
-    }
-}
-
-// `PartialOrd` needs to be implemented as well.
-impl PartialOrd for State {
-    fn partial_cmp(&self, other: &State) -> Option<Ordering> {
-        Some(self.cmp(other))
+impl Indexing for State {
+    fn as_index(&self) -> usize {
+        self.node as usize
     }
 }
 
@@ -40,7 +24,7 @@ impl PartialOrd for State {
 pub struct SteppedDijkstra<Graph: DijkstrableGraph> {
     graph: Graph,
     distances: TimestampedVector<Weight>,
-    heap: BinaryHeap<State>,
+    heap: IndexdMinHeap<State>,
     query: Option<Query>,
     result: Option<Option<Weight>>
 }
@@ -54,7 +38,7 @@ impl<Graph: DijkstrableGraph> SteppedDijkstra<Graph> {
             // initialize tentative distances to INFINITY
             distances: TimestampedVector::new(n, INFINITY),
             // priority queue
-            heap: BinaryHeap::new(),
+            heap: IndexdMinHeap::new(n),
             // the current query
             query: None,
             // the progress of the current query
@@ -100,21 +84,22 @@ impl<Graph: DijkstrableGraph> SteppedDijkstra<Graph> {
             let heap = &mut self.heap;
             let distances = &mut self.distances;
 
-            // Important as we may have already found a better way
-            if distance <= distances[node as usize] {
-                // For each node we can reach, see if we can find a way with
-                // a lower distance going through this node
-                self.graph.for_each_neighbor(node, &mut |edge: Link| {
-                    let next = State { distance: distance + edge.weight, node: edge.node };
+            // For each node we can reach, see if we can find a way with
+            // a lower distance going through this node
+            self.graph.for_each_neighbor(node, &mut |edge: Link| {
+                let next = State { distance: distance + edge.weight, node: edge.node };
 
-                    // If so, add it to the frontier and continue
-                    if next.distance < distances[next.node as usize] {
-                        // Relaxation, we have now found a better way
-                        distances.set(next.node as usize, next.distance);
+                // If so, add it to the frontier and continue
+                if next.distance < distances[next.node as usize] {
+                    // Relaxation, we have now found a better way
+                    distances.set(next.node as usize, next.distance);
+                    if heap.contains_index(next.as_index()) {
+                        heap.decrease_key(next);
+                    } else {
                         heap.push(next);
                     }
-                });
-            }
+                }
+            });
 
             QueryProgress::Progress(State { distance, node })
         } else {
