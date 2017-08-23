@@ -24,8 +24,10 @@ impl Indexing for State {
 pub struct SteppedDijkstra<Graph: DijkstrableGraph> {
     graph: Graph,
     distances: TimestampedVector<Weight>,
-    heap: IndexdMinHeap<State>,
+    closest_node_priority_queue: IndexdMinHeap<State>,
+    // the current query
     query: Option<Query>,
+    // first option: algorithm finished? second option: final result of algorithm
     result: Option<Option<Weight>>
 }
 
@@ -37,11 +39,8 @@ impl<Graph: DijkstrableGraph> SteppedDijkstra<Graph> {
             graph,
             // initialize tentative distances to INFINITY
             distances: TimestampedVector::new(n, INFINITY),
-            // priority queue
-            heap: IndexdMinHeap::new(n),
-            // the current query
+            closest_node_priority_queue: IndexdMinHeap::new(n),
             query: None,
-            // the progress of the current query
             result: None
         }
     }
@@ -51,12 +50,12 @@ impl<Graph: DijkstrableGraph> SteppedDijkstra<Graph> {
         // initialize
         self.query = Some(query);
         self.result = None;
-        self.heap.clear();
+        self.closest_node_priority_queue.clear();
         self.distances.reset();
 
         // Starte with origin
         self.distances.set(from as usize, 0);
-        self.heap.push(State { distance: 0, node: from });
+        self.closest_node_priority_queue.push(State { distance: 0, node: from });
     }
 
     pub fn next_step(&mut self) -> QueryProgress {
@@ -72,7 +71,7 @@ impl<Graph: DijkstrableGraph> SteppedDijkstra<Graph> {
         let to = self.query.as_ref().expect("query was not initialized properly").to;
 
         // Examine the frontier with lower distance nodes first (min-heap)
-        if let Some(State { distance, node }) = self.heap.pop() {
+        if let Some(State { distance, node }) = self.closest_node_priority_queue.pop() {
             // Alternatively we could have continued to find all shortest paths
             if node == to {
                 self.result = Some(Some(distance));
@@ -81,7 +80,7 @@ impl<Graph: DijkstrableGraph> SteppedDijkstra<Graph> {
 
             // these are necessary because otherwise the borrow checker could not figure out
             // that we're only borrowing parts of self
-            let heap = &mut self.heap;
+            let closest_node_priority_queue = &mut self.closest_node_priority_queue;
             let distances = &mut self.distances;
 
             // For each node we can reach, see if we can find a way with
@@ -93,10 +92,10 @@ impl<Graph: DijkstrableGraph> SteppedDijkstra<Graph> {
                 if next.distance < distances[next.node as usize] {
                     // Relaxation, we have now found a better way
                     distances.set(next.node as usize, next.distance);
-                    if heap.contains_index(next.as_index()) {
-                        heap.decrease_key(next);
+                    if closest_node_priority_queue.contains_index(next.as_index()) {
+                        closest_node_priority_queue.decrease_key(next);
                     } else {
-                        heap.push(next);
+                        closest_node_priority_queue.push(next);
                     }
                 }
             });
