@@ -1,6 +1,8 @@
 use super::*;
 use self::first_out_graph::FirstOutGraph;
 
+pub mod ch_graph;
+
 #[derive(Debug, PartialEq)]
 enum ShortcutResult {
     NewShortcut,

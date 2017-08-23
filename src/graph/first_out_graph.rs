@@ -44,6 +44,11 @@ impl FirstOutGraph {
             .map( |(&neighbor, &weight)| Link { node: neighbor, weight: weight } )
     }
 
+    pub fn neighbor_iter_mut(&mut self, node: NodeId) -> std::iter::Zip<std::slice::IterMut<NodeId>, std::slice::IterMut<Weight>> {
+        let range = (self.first_out[node as usize] as usize)..(self.first_out[(node + 1) as usize] as usize);
+        self.head[range.clone()].iter_mut().zip(self.weight[range].iter_mut())
+    }
+
     pub fn reverse(&self) -> FirstOutGraph {
         // vector of adjacency lists for the reverse graph
         let mut reversed: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new() ).collect();
