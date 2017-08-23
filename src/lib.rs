@@ -1,4 +1,4 @@
-#![feature(asm)]
+#![feature(compiler_fences)]
 
 pub mod shortest_path;
 pub mod graph;
