@@ -41,9 +41,17 @@ impl RankSelectMap {
         self.contained_keys_flags[range].iter().filter(|x| **x).count()
     }
 
-    pub fn get(&self, key: usize) -> usize {
+    pub fn at(&self, key: usize) -> usize {
         assert!(self.contained_keys_flags[key]);
         self.prefix_sum[key / BITS_PER_PREFIX] + self.bit_count_partial_range(key)
+    }
+
+    pub fn get(&self, key: usize) -> Option<usize> {
+        if self.contained_keys_flags[key] {
+            Some(self.prefix_sum[key / BITS_PER_PREFIX] + self.bit_count_partial_range(key))
+        } else {
+            None
+        }
     }
 
     fn bit_count_partial_range(&self, key: usize) -> usize {
@@ -67,12 +75,13 @@ mod tests {
         map.insert(149);
         map.compile();
 
-        assert_eq!(map.get(0), 0);
-        assert_eq!(map.get(2), 1);
-        assert_eq!(map.get(31), 2);
-        assert_eq!(map.get(52), 3);
-        assert_eq!(map.get(130), 4);
-        assert_eq!(map.get(149), 5);
+        assert_eq!(map.at(0), 0);
+        assert_eq!(map.at(2), 1);
+        assert_eq!(map.get(31), Some(2));
+        assert_eq!(map.get(32), None);
+        assert_eq!(map.at(52), 3);
+        assert_eq!(map.at(130), 4);
+        assert_eq!(map.at(149), 5);
 
         assert_eq!(map.len(), 6);
     }
