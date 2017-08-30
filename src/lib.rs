@@ -2,6 +2,8 @@
 #![feature(const_fn)]
 #![feature(allocator_api)]
 
+extern crate nav_types;
+
 pub mod shortest_path;
 pub mod graph;
 pub mod io;
