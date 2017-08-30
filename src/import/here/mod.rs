@@ -53,9 +53,11 @@ trait RdfDataSource {
 }
 
 fn read_graph(source: &RdfDataSource) -> FirstOutGraph {
+    // start with all nav links
     let mut nav_links: Vec<RdfNavLink> = source.nav_link_iter().collect();
-    nav_links.sort_by_key(|nav_link| nav_link.link_id );
+    nav_links.sort_by_key(|nav_link| nav_link.link_id);
 
+    // local ids for links
     let mut link_indexes = RankSelectMap::new(nav_links.last().unwrap().link_id as usize);
     for nav_link in nav_links.iter() {
         link_indexes.insert(nav_link.link_id as usize);
@@ -64,34 +66,35 @@ fn read_graph(source: &RdfDataSource) -> FirstOutGraph {
 
 
     // a data structure to do the global to local node ids mapping
-    let mut id_mapping = RankSelectMap::new(source.maximum_node_id() as usize);
+    let mut node_id_mapping = RankSelectMap::new(source.maximum_node_id() as usize);
 
-    // insert all global ids we encounter in links
+    // insert all global node ids we encounter in links
     for link in source.link_iter() {
         match link_indexes.get(link.link_id as usize) {
             Some(_) => {
-                id_mapping.insert(link.ref_node_id as usize);
-                id_mapping.insert(link.nonref_node_id as usize);
+                node_id_mapping.insert(link.ref_node_id as usize);
+                node_id_mapping.insert(link.nonref_node_id as usize);
             },
             None => (),
         }
     }
-    id_mapping.compile();
+    node_id_mapping.compile();
 
     // now we know the number of nodes
-    let n = id_mapping.len();
+    let n = node_id_mapping.len();
     // vector to store degrees which will then be turned into the first_out array
     let mut degrees: Vec<u32> = vec![0; n + 1];
 
+    // iterate over all links and count degrees for nodes
     for link in source.link_iter() {
         match link_indexes.get(link.link_id as usize) {
             Some(link_index) => {
                 match nav_links[link_index].travel_direction {
-                    RdfLinkDirection::FromRef => degrees[id_mapping.at(link.ref_node_id as usize)] += 1,
-                    RdfLinkDirection::ToRef => degrees[id_mapping.at(link.nonref_node_id as usize)] += 1,
+                    RdfLinkDirection::FromRef => degrees[node_id_mapping.at(link.ref_node_id as usize)] += 1,
+                    RdfLinkDirection::ToRef => degrees[node_id_mapping.at(link.nonref_node_id as usize)] += 1,
                     RdfLinkDirection::Both => {
-                        degrees[id_mapping.at(link.ref_node_id as usize)] += 1;
-                        degrees[id_mapping.at(link.nonref_node_id as usize)] += 1;
+                        degrees[node_id_mapping.at(link.ref_node_id as usize)] += 1;
+                        degrees[node_id_mapping.at(link.nonref_node_id as usize)] += 1;
                     }
                 }
             },
@@ -99,39 +102,45 @@ fn read_graph(source: &RdfDataSource) -> FirstOutGraph {
         }
     }
 
+    // do prefix sum over degrees which yields first_out
+    // doing in place mutation and afterwards move into new var here
+    // if we'd use into_iter the compiler might figure out to do this as well, but I dont know
     let m = degrees.iter_mut().fold(0, |prefix, degree| {
         let sum = prefix + *degree;
         *degree = prefix;
         sum
     });
-    let mut first_out = degrees;
+    let mut first_out = degrees; // move
 
+    // init other graph arrays
     let mut head = vec![0; m as usize];
     let mut weights = vec![0; m as usize];
 
+    // iterate over all links and insert head and weight
+    // increment the first_out values along the way
     for link in source.link_iter() {
         match link_indexes.get(link.link_id as usize) {
             Some(link_index) => {
                 let nav_link = &nav_links[link_index];
                 match nav_link.travel_direction {
                     RdfLinkDirection::FromRef => {
-                        head[first_out[id_mapping.at(link.ref_node_id as usize)] as usize] = id_mapping.at(link.nonref_node_id as usize);
-                        weights[first_out[id_mapping.at(link.ref_node_id as usize)] as usize] = 0; // TODO actual calculation
-                        first_out[id_mapping.at(link.ref_node_id as usize)] += 1;
+                        head[first_out[node_id_mapping.at(link.ref_node_id as usize)] as usize] = node_id_mapping.at(link.nonref_node_id as usize);
+                        weights[first_out[node_id_mapping.at(link.ref_node_id as usize)] as usize] = 0; // TODO actual calculation
+                        first_out[node_id_mapping.at(link.ref_node_id as usize)] += 1;
                     },
                     RdfLinkDirection::ToRef => {
-                        head[first_out[id_mapping.at(link.nonref_node_id as usize)] as usize] = id_mapping.at(link.ref_node_id as usize);
-                        weights[first_out[id_mapping.at(link.nonref_node_id as usize)] as usize] = 0; // TODO actual calculation
-                        first_out[id_mapping.at(link.nonref_node_id as usize)] += 1;
+                        head[first_out[node_id_mapping.at(link.nonref_node_id as usize)] as usize] = node_id_mapping.at(link.ref_node_id as usize);
+                        weights[first_out[node_id_mapping.at(link.nonref_node_id as usize)] as usize] = 0; // TODO actual calculation
+                        first_out[node_id_mapping.at(link.nonref_node_id as usize)] += 1;
                     },
                     RdfLinkDirection::Both => {
-                        head[first_out[id_mapping.at(link.ref_node_id as usize)] as usize] = id_mapping.at(link.nonref_node_id as usize);
-                        weights[first_out[id_mapping.at(link.ref_node_id as usize)] as usize] = 0; // TODO actual calculation
-                        first_out[id_mapping.at(link.ref_node_id as usize)] += 1;
+                        head[first_out[node_id_mapping.at(link.ref_node_id as usize)] as usize] = node_id_mapping.at(link.nonref_node_id as usize);
+                        weights[first_out[node_id_mapping.at(link.ref_node_id as usize)] as usize] = 0; // TODO actual calculation
+                        first_out[node_id_mapping.at(link.ref_node_id as usize)] += 1;
 
-                        head[first_out[id_mapping.at(link.nonref_node_id as usize)] as usize] = id_mapping.at(link.ref_node_id as usize);
-                        weights[first_out[id_mapping.at(link.nonref_node_id as usize)] as usize] = 0; // TODO actual calculation
-                        first_out[id_mapping.at(link.nonref_node_id as usize)] += 1;
+                        head[first_out[node_id_mapping.at(link.nonref_node_id as usize)] as usize] = node_id_mapping.at(link.ref_node_id as usize);
+                        weights[first_out[node_id_mapping.at(link.nonref_node_id as usize)] as usize] = 0; // TODO actual calculation
+                        first_out[node_id_mapping.at(link.nonref_node_id as usize)] += 1;
                     }
                 }
             },
@@ -139,7 +148,10 @@ fn read_graph(source: &RdfDataSource) -> FirstOutGraph {
         }
     }
 
+    // first out values got basically incremented to the value of their successor node
+    // pop the last one (wasn't changed)
     first_out.pop().unwrap();
+    // insert a zero at the beginning - this will shift all values one to the right
     first_out.insert(0, 0);
 
     unimplemented!();
