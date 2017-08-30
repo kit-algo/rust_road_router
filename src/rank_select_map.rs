@@ -1,19 +1,58 @@
 use std::mem::size_of;
-use std::cmp::min;
+use std::cmp::{min, max};
+
+use std::heap::{Heap, Alloc, Layout};
+
+const CACHE_LINE_WIDTH: usize = 64; // bytes
+
+const STORAGE_BITS: usize = size_of::<u64>() * 8;
+
+#[derive(Debug)]
+struct BitVec {
+    data: Vec<u64>,
+    size: usize
+}
+
+impl BitVec {
+    fn new(size: usize) -> BitVec {
+        let num_ints = (size + STORAGE_BITS - 1) / STORAGE_BITS;
+        let data = unsafe {
+            let pointer = Heap.alloc_zeroed(Layout::from_size_align(num_ints * size_of::<usize>(), CACHE_LINE_WIDTH).unwrap()).unwrap();
+            Vec::from_raw_parts(pointer as *mut u64, num_ints, num_ints)
+        };
+
+        BitVec { data, size }
+    }
+
+    fn get(&self, index: usize) -> bool {
+        assert!(index < self.size);
+        self.data[index / STORAGE_BITS] & (1 << (index % STORAGE_BITS)) != 0
+    }
+
+    fn set(&mut self, index: usize, value: bool) {
+        assert!(index < self.size);
+        if value {
+            self.data[index / STORAGE_BITS] |= 1 << (index % STORAGE_BITS);
+        } else {
+            self.data[index / STORAGE_BITS] &= !(1 << (index % STORAGE_BITS));
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct RankSelectMap {
-    contained_keys_flags: Vec<bool>,
+    contained_keys_flags: BitVec,
     prefix_sum: Vec<usize>
 }
-// 64 byte
-const BITS_PER_PREFIX: usize = size_of::<usize>() * 8;
+
+const BITS_PER_PREFIX: usize = CACHE_LINE_WIDTH * 8;
+const INTS_PER_PREFIX: usize = BITS_PER_PREFIX / STORAGE_BITS;
 
 impl RankSelectMap {
     pub fn new(max_key: usize) -> RankSelectMap {
         RankSelectMap {
-            contained_keys_flags: vec![false; max_key],
-            prefix_sum: vec![0; max_key / BITS_PER_PREFIX + 2]
+            contained_keys_flags: BitVec::new(max_key),
+            prefix_sum: vec![0; (max_key + BITS_PER_PREFIX - 1) / BITS_PER_PREFIX + 1]
         }
     }
 
@@ -25,7 +64,7 @@ impl RankSelectMap {
     }
 
     pub fn insert(&mut self, key: usize) {
-        self.contained_keys_flags[key] = true;
+        self.contained_keys_flags.set(key, true);
     }
 
     pub fn compile(&mut self) {
@@ -37,17 +76,17 @@ impl RankSelectMap {
     }
 
     fn bit_count_entire_range(&self, range_index: usize) -> usize {
-        let range = (range_index * BITS_PER_PREFIX)..min(self.contained_keys_flags.len(), (range_index + 1) * BITS_PER_PREFIX);
-        self.contained_keys_flags[range].iter().filter(|x| **x).count()
+        let range = (range_index * INTS_PER_PREFIX)..min((range_index + 1) * INTS_PER_PREFIX, self.contained_keys_flags.data.len());
+        self.contained_keys_flags.data[range].iter().map(|num| num.count_ones() as usize).sum()
     }
 
     pub fn at(&self, key: usize) -> usize {
-        assert!(self.contained_keys_flags[key]);
+        assert!(self.contained_keys_flags.get(key));
         self.prefix_sum[key / BITS_PER_PREFIX] + self.bit_count_partial_range(key)
     }
 
     pub fn get(&self, key: usize) -> Option<usize> {
-        if self.contained_keys_flags[key] {
+        if self.contained_keys_flags.get(key) {
             Some(self.prefix_sum[key / BITS_PER_PREFIX] + self.bit_count_partial_range(key))
         } else {
             None
@@ -55,8 +94,11 @@ impl RankSelectMap {
     }
 
     fn bit_count_partial_range(&self, key: usize) -> usize {
-        let range = ((key / BITS_PER_PREFIX) * BITS_PER_PREFIX)..key;
-        self.contained_keys_flags[range].iter().filter(|x| **x).count()
+        let int = key / STORAGE_BITS;
+        let range = ((int / INTS_PER_PREFIX) * INTS_PER_PREFIX)..(max(int, 1) - 1);
+        let sum: usize = self.contained_keys_flags.data[range].iter().map(|num| num.count_ones() as usize).sum();
+        let num = (self.contained_keys_flags.data[int] % (1 << (key % STORAGE_BITS))).count_ones() as usize;
+        sum + num
     }
 }
 

@@ -1,5 +1,6 @@
 #![feature(compiler_fences)]
 #![feature(const_fn)]
+#![feature(allocator_api)]
 
 pub mod shortest_path;
 pub mod graph;
