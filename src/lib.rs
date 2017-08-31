@@ -3,6 +3,7 @@
 #![feature(allocator_api)]
 
 extern crate nav_types;
+extern crate postgres;
 
 pub mod shortest_path;
 pub mod graph;

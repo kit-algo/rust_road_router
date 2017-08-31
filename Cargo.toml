@@ -6,3 +6,4 @@ authors = ["Tim \"S.D.Eagle\" Zeitz <dev.tim.zeitz@gmail.com>"]
 [dependencies]
 time = "0.1.38"
 nav-types = "0.3.0"
+postgres = "0.15"

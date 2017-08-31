@@ -5,6 +5,8 @@ use std::iter;
 
 use nav_types::WGS84;
 
+mod postgres_source;
+
 #[derive(Debug)]
 pub enum RdfLinkDirection {
     FromRef,
