@@ -64,4 +64,9 @@ impl Server {
             dist => Some(dist)
         }
     }
+
+    pub fn is_edge_in_searchspace(&self, from: NodeId, to: NodeId) -> bool {
+        (self.forward_dijkstra.tentative_distance(from) < INFINITY && self.forward_dijkstra.tentative_distance(to) < INFINITY)
+            || (self.backward_dijkstra.tentative_distance(from) < INFINITY && self.backward_dijkstra.tentative_distance(to) < INFINITY)
+    }
 }
