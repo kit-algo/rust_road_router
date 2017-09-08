@@ -43,13 +43,13 @@ impl BitVec {
     }
 
     fn get(&self, index: usize) -> bool {
-        assert!(index < self.size);
+        assert!(index < self.size, "index: {} size: {}", index, self.size);
         // shifting a 1 bit to the right place and masking
         self.data[index / STORAGE_BITS] & (1 << (index % STORAGE_BITS)) != 0
     }
 
     fn set(&mut self, index: usize, value: bool) {
-        assert!(index < self.size);
+        assert!(index < self.size, "index: {} size: {}", index, self.size);
         // shifting a 1 bit to the right place and then eighter set through | or negate and unset with &
         if value {
             self.data[index / STORAGE_BITS] |= 1 << (index % STORAGE_BITS);
@@ -129,7 +129,7 @@ impl RankSelectMap {
 
     pub fn get(&self, key: usize) -> Option<usize> {
         debug_assert!(self.compiled);
-        if self.contained_keys_flags.get(key) {
+        if key < self.contained_keys_flags.size && self.contained_keys_flags.get(key) {
             Some(self.prefix_sum[key / BITS_PER_PREFIX] + self.bit_count_partial_range(key))
         } else {
             None
@@ -138,9 +138,13 @@ impl RankSelectMap {
 
     fn bit_count_partial_range(&self, key: usize) -> usize {
         let index = key / STORAGE_BITS; // the index of the number containing the bit
-        let range = ((index / INTS_PER_PREFIX) * INTS_PER_PREFIX)..(max(index, 1) - 1); // the range over the numbers before our number
-        let sum: usize = self.contained_keys_flags.data[range].iter().map(|num| num.count_ones() as usize).sum(); // num ones in that range
         let num = (self.contained_keys_flags.data[index] % (1 << (key % STORAGE_BITS))).count_ones() as usize; // num ones in the number
+
+        let range = ((index / INTS_PER_PREFIX) * INTS_PER_PREFIX)..(max(index, 1) - 1); // the range over the numbers before our number
+        if range.len() == 0 {
+            return num;
+        }
+        let sum: usize = self.contained_keys_flags.data[range].iter().map(|num| num.count_ones() as usize).sum(); // num ones in that range
         sum + num
     }
 }

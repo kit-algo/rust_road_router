@@ -5,7 +5,7 @@ use std::iter;
 
 use nav_types::WGS84;
 
-mod postgres_source;
+pub mod postgres_source;
 
 #[derive(Debug)]
 pub enum RdfLinkDirection {
@@ -83,22 +83,21 @@ pub trait RdfDataSource {
 }
 
 pub fn read_graph(source: &RdfDataSource) -> FirstOutGraph {
-    let links = source.links();
-
     // start with all nav links
     let mut nav_links: Vec<RdfNavLink> = source.nav_links();
     nav_links.sort_by_key(|nav_link| nav_link.link_id);
 
     // local ids for links
-    let mut link_indexes = RankSelectMap::new(nav_links.last().unwrap().link_id as usize);
+    let mut link_indexes = RankSelectMap::new(nav_links.last().unwrap().link_id as usize + 1);
     for nav_link in nav_links.iter() {
         link_indexes.insert(nav_link.link_id as usize);
     }
     link_indexes.compile();
 
-
     // a data structure to do the global to local node ids mapping
-    let mut node_id_mapping = RankSelectMap::new(source.maximum_node_id() as usize);
+    let mut node_id_mapping = RankSelectMap::new(source.maximum_node_id() as usize + 1);
+
+    let links = source.links();
 
     // insert all global node ids we encounter in links
     for link in links.iter() {

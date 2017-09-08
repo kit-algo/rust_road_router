@@ -3,12 +3,12 @@ use std::cmp::max;
 use super::*;
 
 #[derive(Debug)]
-struct PostgresSource {
+pub struct PostgresSource {
     connection: Connection
 }
 
 impl PostgresSource {
-    fn new(db_url: &str) -> Result<PostgresSource> {
+    pub fn new(db_url: &str) -> Result<PostgresSource> {
         let connection = Connection::connect(db_url, TlsMode::None)?;
         Ok(PostgresSource { connection })
     }
@@ -53,17 +53,17 @@ impl RdfDataSource for PostgresSource {
     }
 
     fn maximum_node_id(&self) -> i64 {
-        let results = self.connection.query("select max(ref_node_id), max(nonref_node_id) from rdf_nav_link", &[]).unwrap();
+        let results = self.connection.query("select max(ref_node_id), max(nonref_node_id) from rdf_link", &[]).unwrap();
         let row = results.get(0);
         max(row.get(0), row.get(1))
     }
 }
 
-fn sql_to_link_direction(chararacter: i8) -> RdfLinkDirection {
-    match chararacter {
-        66 => RdfLinkDirection::Both, // 'B'
-        70 => RdfLinkDirection::FromRef, // 'F'
-        84 => RdfLinkDirection::ToRef, // 'T'
+fn sql_to_link_direction(chararacters: String) -> RdfLinkDirection {
+    match chararacters.chars().next().unwrap() {
+        'B' => RdfLinkDirection::Both, // 'B'
+        'F' => RdfLinkDirection::FromRef, // 'F'
+        'T' => RdfLinkDirection::ToRef, // 'T'
         _ => panic!("invalid link direction")
     }
 }
