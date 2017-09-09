@@ -126,4 +126,8 @@ impl<Graph: DijkstrableGraph> SteppedDijkstra<Graph> {
     pub fn query(&self) -> Query {
         self.query.unwrap()
     }
+
+    pub fn graph(&self) -> &Graph {
+        &self.graph
+    }
 }

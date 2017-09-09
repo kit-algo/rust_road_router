@@ -44,6 +44,11 @@ impl FirstOutGraph {
             .map( |(&neighbor, &weight)| Link { node: neighbor, weight: weight } )
     }
 
+    pub fn edge_index(&self, from: NodeId, to: NodeId) -> Option<usize> {
+        let first_out = self.first_out[from as usize] as usize;
+        self.neighbor_iter(from).enumerate().find(|&(_, Link { node, .. })| node == to).map(|(i, _)| first_out + i )
+    }
+
     pub fn reverse(&self) -> FirstOutGraph {
         // vector of adjacency lists for the reverse graph
         let mut reversed: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new() ).collect();

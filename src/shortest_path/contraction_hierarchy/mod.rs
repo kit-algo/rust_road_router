@@ -110,18 +110,21 @@ impl ContractionGraph {
         }
     }
 
-    fn as_first_out_graohs(self) -> (FirstOutGraph, FirstOutGraph) {
-        let (outgoing, incoming) = self.nodes.into_iter()
+    fn as_first_out_graphs(self) -> ((FirstOutGraph, FirstOutGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
+        let (outgoing, incoming): (Vec<(Vec<Link>, Vec<NodeId>)>, Vec<(Vec<Link>, Vec<NodeId>)>) = self.nodes.into_iter()
             .map(|node| {
-                let (outgoing, _) = node.outgoing.into_iter().unzip::<Link, NodeId, Vec<Link>, Vec<NodeId>>();
-                let (incoming, _) = node.incoming.into_iter().unzip::<Link, NodeId, Vec<Link>, Vec<NodeId>>();
-                (outgoing, incoming)
+                (node.outgoing.into_iter().unzip(), node.incoming.into_iter().unzip())
             }).unzip();
+
+        let (outgoing, forward_shortcut_middles): (Vec<Vec<Link>>, Vec<Vec<NodeId>>) = outgoing.into_iter().unzip();
+        let (incoming, backward_shortcut_middles): (Vec<Vec<Link>>, Vec<Vec<NodeId>>) = incoming.into_iter().unzip();
+        let forward_shortcut_middles = forward_shortcut_middles.into_iter().flat_map(|data| data.into_iter() ).collect();
+        let backward_shortcut_middles = backward_shortcut_middles.into_iter().flat_map(|data| data.into_iter() ).collect();
 
         // currently we stick to the reordered graph and also translate the query node ids.
         // TODO make more explicit
 
-        (FirstOutGraph::from_adjancecy_lists(outgoing), FirstOutGraph::from_adjancecy_lists(incoming))
+        ((FirstOutGraph::from_adjancecy_lists(outgoing), FirstOutGraph::from_adjancecy_lists(incoming)), Some((forward_shortcut_middles, backward_shortcut_middles)))
     }
 }
 
@@ -175,10 +178,10 @@ impl<'a> PartialContractionGraph<'a> {
     }
 }
 
-pub fn contract(graph: FirstOutGraph, node_order: Vec<NodeId>) -> (FirstOutGraph, FirstOutGraph) {
+pub fn contract(graph: FirstOutGraph, node_order: Vec<NodeId>) -> ((FirstOutGraph, FirstOutGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
     let mut graph = ContractionGraph::new(graph, node_order);
     graph.contract();
-    graph.as_first_out_graohs()
+    graph.as_first_out_graphs()
 }
 
 #[derive(Debug)]
