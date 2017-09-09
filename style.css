@@ -2,3 +2,11 @@ line.edge {
   stroke: black;
   stroke-width: 0.00003;
 }
+
+link.edge.searchspace {
+  stroke-width: 0.00006;
+}
+
+link.edge.searchspace.shortest_path {
+  stroke: red;
+}
