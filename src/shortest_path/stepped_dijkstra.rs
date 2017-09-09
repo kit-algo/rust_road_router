@@ -123,7 +123,7 @@ impl<Graph: DijkstrableGraph> SteppedDijkstra<Graph> {
         self.predecessors[node as usize]
     }
 
-    pub fn query(&self) -> &Query {
-        &self.query.unwrap()
+    pub fn query(&self) -> Query {
+        self.query.unwrap()
     }
 }

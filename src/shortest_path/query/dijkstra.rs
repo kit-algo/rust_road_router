@@ -25,9 +25,8 @@ impl Server {
         }
     }
 
-    pub fn is_edge_in_searchspace(&self, from: NodeId, to: NodeId) -> bool {
-        self.dijkstra.tentative_distance(from) < INFINITY
-            && self.dijkstra.tentative_distance(to) < INFINITY
+    pub fn is_in_searchspace(&self, node: NodeId) -> bool {
+        self.dijkstra.tentative_distance(node) < INFINITY
     }
 
     pub fn path(&self) -> LinkedList<NodeId> {
