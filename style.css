@@ -5,10 +5,10 @@ line.edge {
 
 line.searchspace {
   stroke: black;
-  stroke-width: 0.0001;
+  stroke-width: 0.00015;
 }
 
 line.shortest_path {
   stroke: red;
-  stroke-width: 0.0001;
+  stroke-width: 0.0003;
 }
