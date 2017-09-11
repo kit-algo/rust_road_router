@@ -1,11 +1,15 @@
+#![feature(slice_patterns)]
+
 extern crate bmw_routing_engine;
 extern crate svg;
 extern crate rand;
+extern crate getopts;
 
 use std::process::Command;
 use std::env;
 use std::path::Path;
 use std::cmp::max;
+use std::cmp::Ordering;
 
 use bmw_routing_engine::*;
 use graph::first_out_graph::FirstOutGraph as Graph;
@@ -17,7 +21,7 @@ use io::read_into_vector;
 use svg::Document;
 use svg::node::element::Line;
 
-use std::cmp::Ordering;
+use getopts::Options;
 
 #[derive(PartialEq,PartialOrd)]
 struct NonNan(f32);
@@ -40,12 +44,37 @@ impl Ord for NonNan {
     }
 }
 
-fn main() {
-    let mut args = env::args();
-    args.next();
+fn print_usage(program: &str, opts: Options) {
+    let brief = format!("Usage: {} GRAPH_DIR [options]", program);
+    print!("{}", opts.usage(&brief));
+}
 
-    let arg = &args.next().expect("No directory arg given");
-    let path = Path::new(arg);
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    let program = args[0].clone();
+
+    let mut opts = Options::new();
+    opts.optopt("o", "output", "set output file name", "NAME");
+    opts.optopt("s", "source", "source node position", "LAT,LNG");
+    opts.optopt("t", "target", "target node position", "LAT,LNG");
+    opts.optflag("h", "help", "print this help menu");
+
+    let matches = match opts.parse(&args[1..]) {
+        Ok(m) => { m }
+        Err(f) => { panic!(f.to_string()) }
+    };
+
+    if matches.opt_present("h") {
+        print_usage(&program, opts);
+        return;
+    }
+    let path = if !matches.free.is_empty() {
+        Path::new(&matches.free[0])
+    } else {
+        print_usage(&program, opts);
+        return;
+    };
+    let output = matches.opt_str("o").unwrap_or("image.svg".to_owned());
 
     let first_out = read_into_vector(path.join("first_out").to_str().unwrap()).expect("could not read first_out");
     let lat: Vec<f32> = read_into_vector(path.join("latitude").to_str().unwrap()).expect("could not read first_out");
@@ -54,11 +83,30 @@ fn main() {
     let travel_time = read_into_vector(path.join("travel_time").to_str().unwrap()).expect("could not read travel_time");
     // let _ch_order = read_into_vector(path.join("travel_time_ch/order").to_str().unwrap()).expect("could not read travel_time_ch/order");
 
-    let mut document = Document::new();
     let graph = Graph::new(first_out, head, travel_time);
 
-    let s = rand::random::<NodeId>() % (graph.num_nodes() as NodeId);
-    let t = rand::random::<NodeId>() % (graph.num_nodes() as NodeId);
+    let find_closest = |(p_lat, p_lon): (f32, f32)| -> NodeId {
+        lat.iter().zip(lon.iter()).enumerate().min_by_key(|&(_, (lat, lon))| {
+            NonNan::new(((lat - p_lat) * (lat - p_lat) + (lon - p_lon) * (lon - p_lon)).sqrt())
+        }).map(|(id, _)| id).unwrap() as NodeId
+    };
+
+    let select_node = |arg: Option<String>| -> NodeId {
+        match arg {
+            Some(coord) => {
+                let coords: Vec<f32> = coord.split(",").map(|val| val.parse::<f32>().expect(&format!("could not parse {}", val))).collect();
+                match coords.as_slice() {
+                    &[lat, lon] => find_closest((lat, lon)),
+                    _ => panic!("wrong number of dimensions in {}", coord),
+                }
+
+            },
+            None => rand::random::<NodeId>() % (graph.num_nodes() as NodeId),
+        }
+    };
+
+    let s = select_node(matches.opt_str("s"));
+    let t = select_node(matches.opt_str("t"));
     let mut query_server = DijkServer::new(graph.clone());
     query_server.distance(s, t);
 
@@ -73,6 +121,8 @@ fn main() {
     let delta_lon = max_lon - min_lon;
     min_lon -= max(NonNan::new(delta_lon * 0.1), NonNan::new(0.001)).unwrap().0;
     max_lon += max(NonNan::new(delta_lon * 0.1), NonNan::new(0.001)).unwrap().0;
+
+    let mut document = Document::new();
 
     for node in 0..graph.num_nodes() {
         let node_in_searchspace = query_server.is_in_searchspace(node as NodeId);
@@ -118,8 +168,7 @@ fn main() {
         .set("viewBox", (min_lon, min_lat, max_lon - min_lon, max_lat - min_lat))
         .set("transform", "scale(1,-1)");
 
-    let output = &args.next().unwrap_or("image.svg".to_owned());
-    svg::save(output, &document).unwrap();
+    svg::save(&output, &document).unwrap();
 
     Command::new("sh")
         .arg("-c")
