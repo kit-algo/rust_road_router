@@ -1,4 +1,4 @@
-use std::cmp::min;
+use std::collections::LinkedList;
 use super::*;
 
 #[derive(Debug)]
@@ -6,7 +6,8 @@ pub struct Server<G: DijkstrableGraph, H: DijkstrableGraph> {
     pub forward_dijkstra: SteppedDijkstra<G>,
     pub backward_dijkstra: SteppedDijkstra<H>,
     pub tentative_distance: Weight,
-    pub maximum_distance: Weight
+    pub maximum_distance: Weight,
+    pub meeting_node: NodeId
 }
 
 impl<G: DijkstrableGraph, H: DijkstrableGraph> Server<G, H> {
@@ -17,7 +18,8 @@ impl<G: DijkstrableGraph, H: DijkstrableGraph> Server<G, H> {
             forward_dijkstra: SteppedDijkstra::new(graph),
             backward_dijkstra: SteppedDijkstra::new(reversed),
             tentative_distance: INFINITY,
-            maximum_distance: INFINITY
+            maximum_distance: INFINITY,
+            meeting_node: 0
         }
     }
 
@@ -37,17 +39,29 @@ impl<G: DijkstrableGraph, H: DijkstrableGraph> Server<G, H> {
                 match self.forward_dijkstra.next_step() {
                     QueryProgress::Progress(State { distance, node }) => {
                         forward_progress = distance;
-                        self.tentative_distance = min(distance + self.backward_dijkstra.tentative_distance(node), self.tentative_distance);
+                        if distance + self.backward_dijkstra.tentative_distance(node) < self.tentative_distance {
+                            self.tentative_distance = distance + self.backward_dijkstra.tentative_distance(node);
+                            self.meeting_node = node;
+                        }
                     },
-                    QueryProgress::Done(result) => return result
+                    QueryProgress::Done(result) => {
+                        self.meeting_node = to;
+                        return result
+                    }
                 }
             } else {
                 match self.backward_dijkstra.next_step() {
                     QueryProgress::Progress(State { distance, node }) => {
                         backward_progress = distance;
-                        self.tentative_distance = min(distance + self.forward_dijkstra.tentative_distance(node), self.tentative_distance);
+                        if distance + self.forward_dijkstra.tentative_distance(node) < self.tentative_distance {
+                            self.tentative_distance = distance + self.forward_dijkstra.tentative_distance(node);
+                            self.meeting_node = node;
+                        }
                     },
-                    QueryProgress::Done(result) => return result
+                    QueryProgress::Done(result) => {
+                        self.meeting_node = from;
+                        return result
+                    }
                 }
             }
         }
@@ -56,5 +70,32 @@ impl<G: DijkstrableGraph, H: DijkstrableGraph> Server<G, H> {
             INFINITY => None,
             dist => Some(dist)
         }
+    }
+
+    pub fn is_in_searchspace(&self, node: NodeId) -> bool {
+        self.forward_dijkstra.tentative_distance(node) < INFINITY
+            || self.backward_dijkstra.tentative_distance(node) < INFINITY
+    }
+
+    pub fn path(&self) -> LinkedList<NodeId> {
+        let mut forwad_path = LinkedList::new();
+        forwad_path.push_front(self.meeting_node);
+
+        while *forwad_path.front().unwrap() != self.forward_dijkstra.query().from {
+            let next = self.forward_dijkstra.predecessor(*forwad_path.front().unwrap());
+            forwad_path.push_front(next);
+        }
+
+        let mut backward_path = LinkedList::new();
+        backward_path.push_back(self.meeting_node);
+
+        while *backward_path.back().unwrap() != self.backward_dijkstra.query().from {
+            let next = self.backward_dijkstra.predecessor(*backward_path.back().unwrap());
+            backward_path.push_back(next);
+        }
+
+        forwad_path.pop_back();
+        forwad_path.append(&mut backward_path);
+        forwad_path
     }
 }

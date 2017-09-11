@@ -167,7 +167,8 @@ impl<'a> PartialContractionGraph<'a> {
             forward_dijkstra: SteppedDijkstra::new(ForwardWrapper { graph: &self }),
             backward_dijkstra: SteppedDijkstra::new(BackwardWrapper { graph: &self }),
             tentative_distance: INFINITY,
-            maximum_distance: shortcut_weight
+            maximum_distance: shortcut_weight,
+            meeting_node: 0
         };
 
         match server.distance(from - self.id_offset, to - self.id_offset) {
