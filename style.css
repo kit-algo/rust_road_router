@@ -12,3 +12,16 @@ line.shortest_path {
   stroke: red;
   stroke-width: 0.0003;
 }
+
+circle.marker {
+  stroke-width: 0.0005;
+  fill: none;
+}
+
+.source {
+  stroke: red;
+}
+
+.target {
+  stroke: blue;
+}

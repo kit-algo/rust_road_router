@@ -19,7 +19,7 @@ use shortest_path::query::bidirectional_dijkstra::Server as DijkServer;
 use io::read_into_vector;
 
 use svg::Document;
-use svg::node::element::Line;
+use svg::node::element::{Line, Circle};
 
 use getopts::Options;
 
@@ -162,6 +162,19 @@ fn main() {
         }
         prev = Some(node);
     }
+
+    let source_circle = Circle::new()
+        .set("cx", lon[s as usize])
+        .set("cy", lat[s as usize])
+        .set("r", 0.0007)
+        .set("class", "marker source");
+    document = document.add(source_circle);
+    let target_circle = Circle::new()
+        .set("cx", lon[t as usize])
+        .set("cy", lat[t as usize])
+        .set("r", 0.0007)
+        .set("class", "marker target");
+    document = document.add(target_circle);
 
     document = document
         .set("viewBox", (min_lon, min_lat, max_lon - min_lon, max_lat - min_lat))
