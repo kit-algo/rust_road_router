@@ -3,10 +3,12 @@ line.edge {
   stroke-width: 0.00003;
 }
 
-link.edge.searchspace {
-  stroke-width: 0.00006;
+line.searchspace {
+  stroke: black;
+  stroke-width: 0.0001;
 }
 
-link.edge.searchspace.shortest_path {
+line.shortest_path {
   stroke: red;
+  stroke-width: 0.0001;
 }

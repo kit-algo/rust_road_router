@@ -138,7 +138,7 @@ fn main() {
                     .set("class", "edge");
 
                 if node_in_searchspace && query_server.is_in_searchspace(neighbor) {
-                    line = line.set("class", "edge searchspace");
+                    line = line.set("class", "searchspace");
                 }
 
                 document = document.add(line);
@@ -155,7 +155,7 @@ fn main() {
                     .set("y1", format!("{}", lat[node as usize]))
                     .set("x2", format!("{}", lon[prev_node as usize]))
                     .set("y2", format!("{}", lat[prev_node as usize]))
-                    .set("class", "edge searchspace shortest_path");
+                    .set("class", "shortest_path");
 
                 document = document.add(line);
             },
