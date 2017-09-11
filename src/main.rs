@@ -15,7 +15,7 @@ use bmw_routing_engine::*;
 use graph::first_out_graph::FirstOutGraph as Graph;
 use graph::*;
 use shortest_path::DijkstrableGraph;
-use shortest_path::query::dijkstra::Server as DijkServer;
+use shortest_path::query::bidirectional_dijkstra::Server as DijkServer;
 use io::read_into_vector;
 
 use svg::Document;
@@ -81,9 +81,9 @@ fn main() {
     let lon: Vec<f32> = read_into_vector(path.join("longitude").to_str().unwrap()).expect("could not read first_out");
     let head = read_into_vector(path.join("head").to_str().unwrap()).expect("could not read head");
     let travel_time = read_into_vector(path.join("travel_time").to_str().unwrap()).expect("could not read travel_time");
-    // let _ch_order = read_into_vector(path.join("travel_time_ch/order").to_str().unwrap()).expect("could not read travel_time_ch/order");
 
     let graph = Graph::new(first_out, head, travel_time);
+    let mut query_server = DijkServer::<Graph, Graph>::new(graph.clone());
 
     let find_closest = |(p_lat, p_lon): (f32, f32)| -> NodeId {
         lat.iter().zip(lon.iter()).enumerate().min_by_key(|&(_, (lat, lon))| {
@@ -107,7 +107,6 @@ fn main() {
 
     let s = select_node(matches.opt_str("s"));
     let t = select_node(matches.opt_str("t"));
-    let mut query_server = DijkServer::new(graph.clone());
     query_server.distance(s, t);
 
     let mut min_lat = lat.iter().enumerate().filter(|&(i, _)| query_server.is_in_searchspace(i as NodeId) ).map(|(_, &num)| num).min_by_key(|&num| NonNan::new(num)).unwrap();
