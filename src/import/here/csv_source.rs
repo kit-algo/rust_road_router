@@ -1,5 +1,5 @@
 use super::*;
-use csv::Reader;
+use csv::ReaderBuilder;
 use glob::glob;
 use std::path::Path;
 use std::fs::File;
@@ -23,7 +23,10 @@ impl<'a> RdfDataSource for CSVSource<'a> {
             match entry {
                 Ok(path) => {
                     let file = File::open(path.clone()).unwrap();
-                    let mut reader = Reader::from_reader(file);
+                    let mut reader = ReaderBuilder::new()
+                        .has_headers(false)
+                        .delimiter(b'\t')
+                        .from_reader(file);
 
                     for (i, line) in reader.records().enumerate() {
                         let record = line.unwrap();
@@ -49,7 +52,10 @@ impl<'a> RdfDataSource for CSVSource<'a> {
             match entry {
                 Ok(path) => {
                     let file = File::open(path.clone()).unwrap();
-                    let mut reader = Reader::from_reader(file);
+                    let mut reader = ReaderBuilder::new()
+                        .has_headers(false)
+                        .delimiter(b'\t')
+                        .from_reader(file);
 
                     for (i, line) in reader.records().enumerate() {
                         let record = line.unwrap();
@@ -76,7 +82,10 @@ impl<'a> RdfDataSource for CSVSource<'a> {
             match entry {
                 Ok(path) => {
                     let file = File::open(path.clone()).unwrap();
-                    let mut reader = Reader::from_reader(file);
+                    let mut reader = ReaderBuilder::new()
+                        .has_headers(false)
+                        .delimiter(b'\t')
+                        .from_reader(file);
 
                     for (i, line) in reader.records().enumerate() {
                         let record = line.unwrap();
@@ -103,7 +112,10 @@ impl<'a> RdfDataSource for CSVSource<'a> {
             match entry {
                 Ok(path) => {
                     let file = File::open(path.clone()).unwrap();
-                    let mut reader = Reader::from_reader(file);
+                    let mut reader = ReaderBuilder::new()
+                        .has_headers(false)
+                        .delimiter(b'\t')
+                        .from_reader(file);
 
                     for (i, line) in reader.records().enumerate() {
                         let record = line.unwrap();
