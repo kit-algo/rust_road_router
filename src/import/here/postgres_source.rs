@@ -29,7 +29,7 @@ impl RdfDataSource for PostgresSource {
             .query("select link_id, travel_direction, speed_category from rdf_nav_link", &[])
             .unwrap()
             .into_iter()
-            .map(|row| { RdfNavLink { link_id: row.get(0), travel_direction: sql_to_link_direction(row.get(1)), speed_category: row.get(2) } })
+            .map(|row| { RdfNavLink { link_id: row.get(0), travel_direction: row.get::<usize, String>(1).parse().unwrap(), speed_category: row.get(2) } })
             .collect()
     }
 
@@ -56,14 +56,5 @@ impl RdfDataSource for PostgresSource {
         let results = self.connection.query("select max(ref_node_id), max(nonref_node_id) from rdf_link", &[]).unwrap();
         let row = results.get(0);
         max(row.get(0), row.get(1))
-    }
-}
-
-fn sql_to_link_direction(chararacters: String) -> RdfLinkDirection {
-    match chararacters.chars().next().unwrap() {
-        'B' => RdfLinkDirection::Both, // 'B'
-        'F' => RdfLinkDirection::FromRef, // 'F'
-        'T' => RdfLinkDirection::ToRef, // 'T'
-        _ => panic!("invalid link direction")
     }
 }

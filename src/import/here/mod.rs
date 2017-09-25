@@ -2,16 +2,48 @@ use ::graph::*;
 use ::graph::first_out_graph::FirstOutGraph;
 use ::rank_select_map::RankSelectMap;
 use std::iter;
+use std::str::FromStr;
+use std::error::Error;
+use std::fmt;
 
 use nav_types::WGS84;
 
 pub mod postgres_source;
+pub mod csv_source;
+
+#[derive(Debug)]
+struct DirectionParseError;
+
+impl fmt::Display for DirectionParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Here direction could not be parsed!")
+    }
+}
+
+impl Error for DirectionParseError {
+    fn description(&self) -> &str {
+        "Here direction could not be parsed!"
+    }
+}
 
 #[derive(Debug)]
 pub enum RdfLinkDirection {
     FromRef,
     ToRef,
     Both
+}
+
+impl FromStr for RdfLinkDirection {
+    type Err = DirectionParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.chars().next() {
+            Some('B') => Ok(RdfLinkDirection::Both),
+            Some('F') => Ok(RdfLinkDirection::FromRef),
+            Some('T') => Ok(RdfLinkDirection::ToRef),
+            _ => Err(DirectionParseError)
+        }
+    }
 }
 
 #[derive(Debug)]

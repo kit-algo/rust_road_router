@@ -4,6 +4,8 @@
 
 extern crate nav_types;
 extern crate postgres;
+extern crate csv;
+extern crate glob;
 
 pub mod shortest_path;
 pub mod graph;
