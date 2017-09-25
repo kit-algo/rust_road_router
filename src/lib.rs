@@ -1,6 +1,7 @@
 #![feature(compiler_fences)]
 #![feature(const_fn)]
 #![feature(allocator_api)]
+#![feature(const_size_of)]
 
 extern crate nav_types;
 extern crate postgres;

@@ -5,7 +5,7 @@ use std::path::Path;
 use std::fs::File;
 
 #[derive(Debug)]
-struct CSVSource<'a> {
+pub struct CSVSource<'a> {
     directory: &'a Path
 }
 
@@ -17,12 +17,12 @@ impl<'a> CSVSource<'a> {
 
 impl<'a> RdfDataSource for CSVSource<'a> {
     fn links(&self) -> Vec<RdfLink> {
-        let elements = vec![];
+        let mut elements = vec![];
 
         for entry in glob(self.directory.join("rdf_link.txt*").to_str().unwrap()).unwrap() {
             match entry {
                 Ok(path) => {
-                    let file = File::open(path).unwrap();
+                    let file = File::open(path.clone()).unwrap();
                     let mut reader = Reader::from_reader(file);
 
                     for (i, line) in reader.records().enumerate() {
@@ -43,12 +43,12 @@ impl<'a> RdfDataSource for CSVSource<'a> {
     }
 
     fn nav_links(&self) -> Vec<RdfNavLink> {
-        let elements = vec![];
+        let mut elements = vec![];
 
         for entry in glob(self.directory.join("rdf_nav_link.txt*").to_str().unwrap()).unwrap() {
             match entry {
                 Ok(path) => {
-                    let file = File::open(path).unwrap();
+                    let file = File::open(path.clone()).unwrap();
                     let mut reader = Reader::from_reader(file);
 
                     for (i, line) in reader.records().enumerate() {
@@ -70,12 +70,12 @@ impl<'a> RdfDataSource for CSVSource<'a> {
 
 
     fn nodes(&self) -> Vec<RdfNode> {
-        let elements = vec![];
+        let mut elements = vec![];
 
         for entry in glob(self.directory.join("rdf_node.txt*").to_str().unwrap()).unwrap() {
             match entry {
                 Ok(path) => {
-                    let file = File::open(path).unwrap();
+                    let file = File::open(path.clone()).unwrap();
                     let mut reader = Reader::from_reader(file);
 
                     for (i, line) in reader.records().enumerate() {
@@ -97,12 +97,12 @@ impl<'a> RdfDataSource for CSVSource<'a> {
     }
 
     fn link_geometries(&self) -> Vec<RdfLinkGeometry> {
-        let elements = vec![];
+        let mut elements = vec![];
 
         for entry in glob(self.directory.join("rdf_link_geometry.txt*").to_str().unwrap()).unwrap() {
             match entry {
                 Ok(path) => {
-                    let file = File::open(path).unwrap();
+                    let file = File::open(path.clone()).unwrap();
                     let mut reader = Reader::from_reader(file);
 
                     for (i, line) in reader.records().enumerate() {

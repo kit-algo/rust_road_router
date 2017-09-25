@@ -12,7 +12,7 @@ pub mod postgres_source;
 pub mod csv_source;
 
 #[derive(Debug)]
-struct DirectionParseError;
+pub struct DirectionParseError;
 
 impl fmt::Display for DirectionParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
