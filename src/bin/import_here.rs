@@ -12,8 +12,9 @@ fn main() {
     let mut args = env::args();
     args.next();
 
-    let dir = &args.next().expect("No input directory given");
-    let source = CSVSource::new(Path::new(dir));
+    let in_dir = &args.next().expect("No input directory given");
+    let source = CSVSource::new(Path::new(in_dir));
     let graph = here::read_graph(&source);
-    println!("{:?}", graph);
+    let out_dir = &args.next().expect("No output directory given");
+    graph.write_to_dir(out_dir).expect("writing graph failed");
 }

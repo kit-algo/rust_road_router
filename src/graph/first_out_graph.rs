@@ -1,4 +1,7 @@
 use super::*;
+use ::io;
+use std::io::Result;
+use std::path::Path;
 
 #[derive(Debug, Clone)]
 pub struct FirstOutGraph {
@@ -78,6 +81,14 @@ impl FirstOutGraph {
         }
 
         (FirstOutGraph::from_adjancecy_lists(up), FirstOutGraph::from_adjancecy_lists(down))
+    }
+
+    pub fn write_to_dir(&self, dir: &str) -> Result<()> {
+        let path = Path::new(dir);
+        let res1 = io::write_vector_to_file(path.join("first_out").to_str().unwrap(), &self.first_out);
+        let res2 = io::write_vector_to_file(path.join("head").to_str().unwrap(), &self.head);
+        let res3 = io::write_vector_to_file(path.join("weights").to_str().unwrap(), &self.weight);
+        res1.and(res2).and(res3)
     }
 }
 

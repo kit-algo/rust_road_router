@@ -1,5 +1,4 @@
 use postgres::{Connection, TlsMode, Result};
-use std::cmp::max;
 use super::*;
 
 #[derive(Debug)]

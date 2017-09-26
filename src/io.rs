@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::io::Result;
 use std::mem;
+use std::slice;
 
 pub fn read_into_vector<T>(filename: &str) -> Result<Vec<T>> {
     let metadata = fs::metadata(filename)?;
@@ -20,4 +21,14 @@ pub fn read_into_vector<T>(filename: &str) -> Result<Vec<T>> {
     };
 
     Ok(buffer)
+}
+
+pub fn write_vector_to_file<T>(filename: &str, vector: &Vec<T>) -> Result<()> {
+    let mut buffer = File::create(filename)?;
+    let num_bytes = vector.len() * mem::size_of::<T>();
+
+    unsafe {
+        let slice = slice::from_raw_parts(vector.as_ptr() as *const u8, num_bytes);
+        buffer.write_all(slice)
+    }
 }
