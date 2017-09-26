@@ -116,18 +116,16 @@ pub trait RdfDataSource {
     fn nav_links(&self) -> Vec<RdfNavLink>;
     fn nodes(&self) -> Vec<RdfNode>;
     fn link_geometries(&self) -> Vec<RdfLinkGeometry>;
-
-    fn maximum_node_id(&self) -> i64 {
-        // iterate over all edges and take the maximum id.
-        self.links().into_iter().flat_map(|link| iter::once(link.ref_node_id).chain(iter::once(link.nonref_node_id)) ).max().unwrap()
-    }
 }
 
 pub fn read_graph(source: &RdfDataSource) -> FirstOutGraph {
+    println!("read nav links");
     // start with all nav links
     let mut nav_links: Vec<RdfNavLink> = source.nav_links();
+    println!("sort nav links");
     nav_links.sort_by_key(|nav_link| nav_link.link_id);
 
+    println!("build link indices");
     // local ids for links
     let mut link_indexes = RankSelectMap::new(nav_links.last().unwrap().link_id as usize + 1);
     for nav_link in nav_links.iter() {
@@ -135,11 +133,15 @@ pub fn read_graph(source: &RdfDataSource) -> FirstOutGraph {
     }
     link_indexes.compile();
 
-    // a data structure to do the global to local node ids mapping
-    let mut node_id_mapping = RankSelectMap::new(source.maximum_node_id() as usize + 1);
-
+    println!("read links");
     let links = source.links();
+    let maximum_node_id = links.iter().flat_map(|link| iter::once(link.ref_node_id).chain(iter::once(link.nonref_node_id)) ).max().unwrap();
 
+    // a data structure to do the global to local node ids mapping
+    let mut node_id_mapping = RankSelectMap::new(maximum_node_id as usize + 1);
+
+
+    println!("build node id mapping");
     // insert all global node ids we encounter in links
     for link in links.iter() {
         match link_indexes.get(link.link_id as usize) {
@@ -152,6 +154,7 @@ pub fn read_graph(source: &RdfDataSource) -> FirstOutGraph {
     }
     node_id_mapping.compile();
 
+    println!("build up degrees");
     // now we know the number of nodes
     let n = node_id_mapping.len();
     // vector to store degrees which will then be turned into the first_out array
@@ -184,6 +187,7 @@ pub fn read_graph(source: &RdfDataSource) -> FirstOutGraph {
     });
     let mut first_out = degrees; // move
 
+    println!("read link geometry");
     // fetch links geometry
     let mut link_geometries = vec![Vec::new(); link_indexes.len()];
     for geometry in source.link_geometries().into_iter() {
@@ -196,6 +200,7 @@ pub fn read_graph(source: &RdfDataSource) -> FirstOutGraph {
         geometries.sort_by_key(|geometry| geometry.seq_num);
     }
 
+    println!("read nodes");
     let mut nodes: Vec<RdfNode> = vec![RdfNode { node_id: 0, lat: 0, lon: 0, z_coord: None }; n];
     for node in source.nodes().into_iter() {
         match node_id_mapping.get(node.node_id as usize) {
@@ -208,6 +213,7 @@ pub fn read_graph(source: &RdfDataSource) -> FirstOutGraph {
     let mut head: Vec<NodeId> = vec![0; m as usize];
     let mut weights: Vec<Weight> = vec![0; m as usize];
 
+    println!("calculate weights");
     // iterate over all links and insert head and weight
     // increment the first_out values along the way
     for link in links.iter() {

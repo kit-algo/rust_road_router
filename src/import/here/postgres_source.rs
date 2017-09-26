@@ -51,10 +51,4 @@ impl RdfDataSource for PostgresSource {
             .map(|row| { RdfLinkGeometry { link_id: row.get(0), seq_num: row.get(1), lat: row.get(2), lon: row.get(3), z_coord: row.get(4) } })
             .collect()
     }
-
-    fn maximum_node_id(&self) -> i64 {
-        let results = self.connection.query("select max(ref_node_id), max(nonref_node_id) from rdf_link", &[]).unwrap();
-        let row = results.get(0);
-        max(row.get(0), row.get(1))
-    }
 }
