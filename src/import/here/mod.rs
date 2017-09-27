@@ -57,12 +57,14 @@ pub struct RdfLink {
 pub struct RdfNavLink {
     link_id: i64,
     travel_direction: RdfLinkDirection,
-    speed_category: i32
+    speed_category: i32,
+    from_ref_speed_limit: Option<i32>,
+    to_ref_speed_limit: Option<i32>
 }
 
 impl RdfNavLink {
-    fn speed_in_m_per_s(&self) -> f64 {
-        match self.speed_category {
+    fn speed_in_m_per_s(&self, direction: RdfLinkDirection) -> f64 {
+        let link_speed = match self.speed_category {
             1 => 36.11,
             2 => 31.94,
             3 => 26.388,
@@ -72,7 +74,17 @@ impl RdfNavLink {
             7 => 5.55,
             8 => 1.38,
             _ => panic!("unknown speed category")
-        }
+        };
+
+        let limit = match direction {
+            RdfLinkDirection::FromRef => self.from_ref_speed_limit,
+            RdfLinkDirection::ToRef => self.to_ref_speed_limit,
+            _ => panic!("invalid argument")
+        };
+
+        let limit = limit.unwrap_or(999) as f64 / 3.6;
+
+        if limit < link_speed { limit } else { link_speed }
     }
 }
 
@@ -227,26 +239,27 @@ pub fn read_graph(source: &RdfDataSource) -> FirstOutGraph {
                 } else {
                     calculate_length_in_m(&link_geometries[link_index])
                 };
-                let weight = (length / nav_link.speed_in_m_per_s()).round() as Weight;
+                let from_weight = (1000. * length / nav_link.speed_in_m_per_s(RdfLinkDirection::FromRef)).round() as Weight;
+                let to_weight = (1000. * length / nav_link.speed_in_m_per_s(RdfLinkDirection::ToRef)).round() as Weight;
 
                 match nav_link.travel_direction {
                     RdfLinkDirection::FromRef => {
                         head[first_out[node_id_mapping.at(link.ref_node_id as usize)] as usize] = node_id_mapping.at(link.nonref_node_id as usize) as NodeId;
-                        weights[first_out[node_id_mapping.at(link.ref_node_id as usize)] as usize] = weight;
+                        weights[first_out[node_id_mapping.at(link.ref_node_id as usize)] as usize] = from_weight;
                         first_out[node_id_mapping.at(link.ref_node_id as usize)] += 1;
                     },
                     RdfLinkDirection::ToRef => {
                         head[first_out[node_id_mapping.at(link.nonref_node_id as usize)] as usize] = node_id_mapping.at(link.ref_node_id as usize) as NodeId;
-                        weights[first_out[node_id_mapping.at(link.nonref_node_id as usize)] as usize] = weight;
+                        weights[first_out[node_id_mapping.at(link.nonref_node_id as usize)] as usize] = to_weight;
                         first_out[node_id_mapping.at(link.nonref_node_id as usize)] += 1;
                     },
                     RdfLinkDirection::Both => {
                         head[first_out[node_id_mapping.at(link.ref_node_id as usize)] as usize] = node_id_mapping.at(link.nonref_node_id as usize) as NodeId;
-                        weights[first_out[node_id_mapping.at(link.ref_node_id as usize)] as usize] = weight;
+                        weights[first_out[node_id_mapping.at(link.ref_node_id as usize)] as usize] = from_weight;
                         first_out[node_id_mapping.at(link.ref_node_id as usize)] += 1;
 
                         head[first_out[node_id_mapping.at(link.nonref_node_id as usize)] as usize] = node_id_mapping.at(link.ref_node_id as usize) as NodeId;
-                        weights[first_out[node_id_mapping.at(link.nonref_node_id as usize)] as usize] = weight;
+                        weights[first_out[node_id_mapping.at(link.nonref_node_id as usize)] as usize] = to_weight;
                         first_out[node_id_mapping.at(link.nonref_node_id as usize)] += 1;
                     }
                 }

@@ -25,10 +25,10 @@ impl RdfDataSource for PostgresSource {
 
     fn nav_links(&self) -> Vec<RdfNavLink> {
         self.connection
-            .query("select link_id, travel_direction, speed_category from rdf_nav_link", &[])
+            .query("select link_id, travel_direction, speed_category, from_ref_speed_limit, to_ref_speed_limit from rdf_nav_link", &[])
             .unwrap()
             .into_iter()
-            .map(|row| { RdfNavLink { link_id: row.get(0), travel_direction: row.get::<usize, String>(1).parse().unwrap(), speed_category: row.get(2) } })
+            .map(|row| { RdfNavLink { link_id: row.get(0), travel_direction: row.get::<usize, String>(1).parse().unwrap(), speed_category: row.get(2), from_ref_speed_limit: row.get(3), to_ref_speed_limit: row.get(4), } })
             .collect()
     }
 

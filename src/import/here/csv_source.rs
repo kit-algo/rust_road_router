@@ -69,7 +69,9 @@ impl<'a> RdfDataSource for CSVSource<'a> {
                         elements.push(RdfNavLink {
                             link_id: record[0].parse().unwrap_or_else(|_| panic!("could not parse {:?} as link_id in line {} of {:?}", &record[0], i, path)),
                             travel_direction: record[6].parse().unwrap_or_else(|_| panic!("could not parse {:?} as travel_direction in line {} of {:?}", &record[6], i, path)),
-                            speed_category: record[19].parse().unwrap_or_else(|_| panic!("could not parse {:?} as speed_category in line {} of {:?}", &record[19], i, path))
+                            speed_category: record[19].parse().unwrap_or_else(|_| panic!("could not parse {:?} as speed_category in line {} of {:?}", &record[19], i, path)),
+                            from_ref_speed_limit: record[25].parse().ok(),
+                            to_ref_speed_limit: record[26].parse().ok()
                         });
                     }
                 },
