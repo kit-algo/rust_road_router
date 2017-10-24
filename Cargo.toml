@@ -1,0 +1,9 @@
+[package]
+name = "bmw_routing_server"
+version = "0.1.0"
+authors = ["Tim \"S.D.Eagle\" Zeitz <dev.tim.zeitz@gmail.com>"]
+
+[dependencies]
+bmw_routing_engine = { path = "../bmw_routing_engine" }
+rocket = "^0.3.3"
+rocket_codegen = "^0.3.3"
