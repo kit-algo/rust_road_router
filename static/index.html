@@ -18,10 +18,21 @@
 <script type="text/javascript">
 var routing_from = null;
 var routing_to = null;
+var map = null;
+var current_path = null;
 
 function route() {
   if (routing_from !== null && routing_to !== null) {
     console.log(`from ${routing_from.getLatLng()} to ${routing_to.getLatLng()}`);
+    fetch(`/query?from_lat=${routing_from.getLatLng().lat}&from_lng=${routing_from.getLatLng().lng}&to_lat=${routing_to.getLatLng().lat}&to_lng=${routing_to.getLatLng().lng}`).then((response) => {
+      response.json().then(({ _distance, path }) => {
+        if (current_path !== null) {
+          map.removeLayer(current_path);
+        }
+        current_path = L.polyline(path);
+        map.addLayer(current_path);
+      })
+    });
   }
 }
 
@@ -45,7 +56,7 @@ function set_to({ latlng }) {
   }
 }
 
-var map = L.map('map', {
+map = L.map('map', {
   contextmenu: true,
   contextmenuWidth: 140,
   contextmenuItems: [{
