@@ -18,12 +18,13 @@
 <script type="text/javascript">
 var routing_from = null;
 var routing_to = null;
+var request_pending = false;
 var map = null;
 var current_path = null;
 
 function route() {
-  if (routing_from !== null && routing_to !== null) {
-    console.log(`from ${routing_from.getLatLng()} to ${routing_to.getLatLng()}`);
+  if (routing_from !== null && routing_to !== null && !request_pending) {
+    request_pending = true;
     fetch(`/query?from_lat=${routing_from.getLatLng().lat}&from_lng=${routing_from.getLatLng().lng}&to_lat=${routing_to.getLatLng().lat}&to_lng=${routing_to.getLatLng().lng}`).then((response) => {
       response.json().then(({ _distance, path }) => {
         if (current_path !== null) {
@@ -31,6 +32,7 @@ function route() {
         }
         current_path = L.polyline(path);
         map.addLayer(current_path);
+        request_pending = false;
       })
     });
   }
