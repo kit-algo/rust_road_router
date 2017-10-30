@@ -1,0 +1,27 @@
+line.edge {
+  stroke: black;
+  stroke-width: 0.00003;
+}
+
+line.searchspace {
+  stroke: black;
+  stroke-width: 0.00015;
+}
+
+line.shortest_path {
+  stroke: red;
+  stroke-width: 0.0003;
+}
+
+circle.marker {
+  stroke-width: 0.0005;
+  fill: none;
+}
+
+.source {
+  stroke: red;
+}
+
+.target {
+  stroke: blue;
+}
