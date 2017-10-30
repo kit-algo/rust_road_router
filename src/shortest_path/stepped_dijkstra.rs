@@ -24,6 +24,7 @@ impl Indexing for State {
 pub struct SteppedDijkstra<Graph: DijkstrableGraph> {
     graph: Graph,
     distances: TimestampedVector<Weight>,
+    predecessors: Vec<NodeId>,
     closest_node_priority_queue: IndexdMinHeap<State>,
     // the current query
     query: Option<Query>,
@@ -39,6 +40,7 @@ impl<Graph: DijkstrableGraph> SteppedDijkstra<Graph> {
             graph,
             // initialize tentative distances to INFINITY
             distances: TimestampedVector::new(n, INFINITY),
+            predecessors: vec![n as NodeId; n],
             closest_node_priority_queue: IndexdMinHeap::new(n),
             query: None,
             result: None
@@ -82,6 +84,7 @@ impl<Graph: DijkstrableGraph> SteppedDijkstra<Graph> {
             // that we're only borrowing parts of self
             let closest_node_priority_queue = &mut self.closest_node_priority_queue;
             let distances = &mut self.distances;
+            let predecessors = &mut self.predecessors;
 
             // For each node we can reach, see if we can find a way with
             // a lower distance going through this node
@@ -92,6 +95,7 @@ impl<Graph: DijkstrableGraph> SteppedDijkstra<Graph> {
                 if next.distance < distances[next.node as usize] {
                     // Relaxation, we have now found a better way
                     distances.set(next.node as usize, next.distance);
+                    predecessors[next.node as usize] = node;
                     if closest_node_priority_queue.contains_index(next.as_index()) {
                         closest_node_priority_queue.decrease_key(next);
                     } else {
@@ -113,5 +117,17 @@ impl<Graph: DijkstrableGraph> SteppedDijkstra<Graph> {
 
     pub fn distances_pointer(&self) -> *const TimestampedVector<Weight> {
         &self.distances
+    }
+
+    pub fn predecessor(&self, node: NodeId) -> NodeId {
+        self.predecessors[node as usize]
+    }
+
+    pub fn query(&self) -> Query {
+        self.query.unwrap()
+    }
+
+    pub fn graph(&self) -> &Graph {
+        &self.graph
     }
 }

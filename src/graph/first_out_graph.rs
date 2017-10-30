@@ -1,4 +1,7 @@
 use super::*;
+use ::io;
+use std::io::Result;
+use std::path::Path;
 
 #[derive(Debug, Clone)]
 pub struct FirstOutGraph {
@@ -49,6 +52,11 @@ impl FirstOutGraph {
         self.head[range.clone()].iter_mut().zip(self.weight[range].iter_mut())
     }
 
+    pub fn edge_index(&self, from: NodeId, to: NodeId) -> Option<usize> {
+        let first_out = self.first_out[from as usize] as usize;
+        self.neighbor_iter(from).enumerate().find(|&(_, Link { node, .. })| node == to).map(|(i, _)| first_out + i )
+    }
+
     pub fn reverse(&self) -> FirstOutGraph {
         // vector of adjacency lists for the reverse graph
         let mut reversed: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new() ).collect();
@@ -78,6 +86,14 @@ impl FirstOutGraph {
         }
 
         (FirstOutGraph::from_adjancecy_lists(up), FirstOutGraph::from_adjancecy_lists(down))
+    }
+
+    pub fn write_to_dir(&self, dir: &str) -> Result<()> {
+        let path = Path::new(dir);
+        let res1 = io::write_vector_to_file(path.join("first_out").to_str().unwrap(), &self.first_out);
+        let res2 = io::write_vector_to_file(path.join("head").to_str().unwrap(), &self.head);
+        let res3 = io::write_vector_to_file(path.join("weights").to_str().unwrap(), &self.weight);
+        res1.and(res2).and(res3)
     }
 }
 

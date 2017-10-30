@@ -2,6 +2,8 @@ use super::*;
 use std::cmp::min;
 use std::ptr;
 use std::sync::{Arc, Barrier};
+use std::sync::atomic::compiler_fence;
+use std::sync::atomic::Ordering::SeqCst;
 
 use shortest_path::timestamped_vector::TimestampedVector;
 
@@ -48,10 +50,8 @@ impl Server {
         thread::spawn(move || {
             let mut dijkstra = SteppedDijkstra::new(graph);
 
-            unsafe {
-                *forward_distances_pointer.pointer = dijkstra.distances_pointer();
-                asm!("" ::: "memory" : "volatile");
-            }
+            unsafe { *forward_distances_pointer.pointer = dijkstra.distances_pointer() };
+            compiler_fence(SeqCst);
 
             loop {
                 match forward_query_receiver.recv() {
@@ -81,10 +81,8 @@ impl Server {
         thread::spawn(move || {
             let mut dijkstra = SteppedDijkstra::new(reversed);
 
-            unsafe {
-                *backward_distances_pointer.pointer = dijkstra.distances_pointer();
-                asm!("" ::: "memory" : "volatile");
-            };
+            unsafe { *backward_distances_pointer.pointer = dijkstra.distances_pointer() };
+            compiler_fence(SeqCst);
 
             loop {
                 match backward_query_receiver.recv() {

@@ -6,7 +6,7 @@ mod stepped_dijkstra;
 pub mod contraction_hierarchy;
 pub mod query;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Query {
     from: NodeId,
     to: NodeId
