@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html style="height: 100%;">
+<head>
+  <meta charset="UTF-8">
+  <title>BMW-KIT Routing Engine</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.2.0/dist/leaflet.css"
+     integrity="sha512-M2wvCLH6DSRazYeZRIm1JnYyh22purTM+FDB5CsyxtQJYeKq83arPe5wgbNmcFXGqiSH2XR8dT/fJISVA1r/zQ=="
+     crossorigin=""/>
+  <link rel="stylesheet" type="text/css" href="leaflet.contextmenu.min.css">
+  <script src="https://unpkg.com/leaflet@1.2.0/dist/leaflet.js"
+     integrity="sha512-lInM/apFSqyy1o6s89K4iQUKg6ppXEgsVxT35HbzUupEVRh2Eu9Wdl4tHj7dZO0s1uvplcYGmt3498TtHq+log=="
+     crossorigin=""></script>
+  <script src="leaflet.contextmenu.min.js"></script>
+  <script src="lodash.js"></script>
+</head>
+<body style="height: 100%; margin: 0;">
+<div id="map" style="width: 100%; height: 100%;"></div>
+
+<script type="text/javascript">
+var routing_from = null;
+var routing_to = null;
+var map = null;
+var current_path = null;
+
+function route() {
+  if (routing_from !== null && routing_to !== null) {
+    fetch(`/query?from_lat=${routing_from.getLatLng().lat}&from_lng=${routing_from.getLatLng().lng}&to_lat=${routing_to.getLatLng().lat}&to_lng=${routing_to.getLatLng().lng}`).then((response) => {
+      response.json().then(({ _distance, path }) => {
+        if (current_path !== null) {
+          map.removeLayer(current_path);
+        }
+        current_path = L.polyline(path);
+        map.addLayer(current_path);
+      })
+    });
+  }
+}
+
+let debounced_route = _.debounce(route, 20);
+
+function set_from({ latlng }) {
+  if (routing_from !== null) {
+    routing_from.setLatLng(latlng);
+  } else {
+    routing_from = L.marker(latlng, { 'draggable': true }).addTo(map);
+    routing_from.on('move', debounced_route);
+    debounced_route();
+  }
+}
+
+function set_to({ latlng }) {
+  if (routing_to !== null) {
+    routing_to.setLatLng(latlng);
+  } else {
+    routing_to = L.marker(latlng, { 'draggable': true }).addTo(map);
+    routing_to.on('move', debounced_route);
+    debounced_route();
+  }
+}
+
+map = L.map('map', {
+  contextmenu: true,
+  contextmenuWidth: 140,
+  contextmenuItems: [{
+    text: 'From here',
+    callback: set_from
+  }, {
+    text: 'To here',
+    callback: set_to
+  }]
+}).setView([49.009, 8.405], 13);
+
+L.tileLayer('http://{s}.tile.osm.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
+}).addTo(map);
+</script>
+</body>
+</html>
