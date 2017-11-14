@@ -1,5 +1,7 @@
 use super::*;
 
+use std::ops::Deref;
+
 #[derive(Debug)]
 pub struct Server {
     query_sender: Sender<ServerControl>,
@@ -7,7 +9,7 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn new(graph: Graph) -> Server {
+    pub fn new<C: 'static + Send + Deref<Target = Graph>>(graph: C) -> Server {
         let (query_sender, query_receiver) = channel();
         let (progress_sender, progress_receiver) = channel();
 

@@ -3,8 +3,8 @@ use super::*;
 
 #[derive(Debug)]
 pub struct Server {
-    forward_dijkstra: SteppedDijkstra<Graph>,
-    backward_dijkstra: SteppedDijkstra<Graph>,
+    forward_dijkstra: SteppedDijkstra<Graph, Box<Graph>>,
+    backward_dijkstra: SteppedDijkstra<Graph, Box<Graph>>,
     tentative_distance: Weight,
     meeting_node: NodeId,
     shortcut_middle_nodes: Option<(Vec<NodeId>, Vec<NodeId>)>
@@ -13,8 +13,8 @@ pub struct Server {
 impl Server {
     pub fn new(((up, down), shortcut_middle_nodes): ((Graph, Graph), Option<(Vec<NodeId>, Vec<NodeId>)>)) -> Server {
         Server {
-            forward_dijkstra: SteppedDijkstra::new(up),
-            backward_dijkstra: SteppedDijkstra::new(down),
+            forward_dijkstra: SteppedDijkstra::new(Box::new(up)),
+            backward_dijkstra: SteppedDijkstra::new(Box::new(down)),
             tentative_distance: INFINITY,
             meeting_node: 0,
             shortcut_middle_nodes

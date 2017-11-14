@@ -1,28 +1,32 @@
 use std::collections::LinkedList;
+use std::ops::Deref;
+
 use super::*;
 
 #[derive(Debug)]
-pub struct Server<G: DijkstrableGraph, H: DijkstrableGraph> {
-    pub forward_dijkstra: SteppedDijkstra<G>,
-    pub backward_dijkstra: SteppedDijkstra<H>,
+pub struct Server<G: DijkstrableGraph, H: DijkstrableGraph, C: Deref<Target = G>> {
+    pub forward_dijkstra: SteppedDijkstra<G, C>,
+    pub backward_dijkstra: SteppedDijkstra<H, Box<H>>,
     pub tentative_distance: Weight,
     pub maximum_distance: Weight,
     pub meeting_node: NodeId
 }
 
-impl<G: DijkstrableGraph, H: DijkstrableGraph> Server<G, H> {
-    pub fn new(graph: Graph) -> Server<Graph, Graph> {
+impl<C: Deref<Target = Graph>> Server<Graph, Graph, C> {
+    pub fn new(graph: C) -> Server<Graph, Graph, C> {
         let reversed = graph.reverse();
 
         Server {
             forward_dijkstra: SteppedDijkstra::new(graph),
-            backward_dijkstra: SteppedDijkstra::new(reversed),
+            backward_dijkstra: SteppedDijkstra::new(Box::new(reversed)),
             tentative_distance: INFINITY,
             maximum_distance: INFINITY,
             meeting_node: 0
         }
     }
+}
 
+impl<G: DijkstrableGraph, H: DijkstrableGraph, C: Deref<Target = G>> Server<G, H, C> {
     pub fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
         // initialize
         self.tentative_distance = INFINITY;

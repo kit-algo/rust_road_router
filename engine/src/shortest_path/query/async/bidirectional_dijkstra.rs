@@ -4,6 +4,7 @@ use std::ptr;
 use std::sync::{Arc, Barrier};
 use std::sync::atomic::compiler_fence;
 use std::sync::atomic::Ordering::SeqCst;
+use std::ops::Deref;
 
 use shortest_path::timestamped_vector::TimestampedVector;
 
@@ -28,7 +29,7 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn new(graph: Graph) -> Server {
+    pub fn new<C: 'static + Send + Deref<Target = Graph>>(graph: C) -> Server {
         let (forward_query_sender, forward_query_receiver) = channel();
         let (forward_progress_sender, forward_progress_receiver) = channel();
         let (backward_query_sender, backward_query_receiver) = channel();
@@ -79,7 +80,7 @@ impl Server {
         });
 
         thread::spawn(move || {
-            let mut dijkstra = SteppedDijkstra::new(reversed);
+            let mut dijkstra = SteppedDijkstra::new(Box::new(reversed));
 
             unsafe { *backward_distances_pointer.pointer = dijkstra.distances_pointer() };
             compiler_fence(SeqCst);

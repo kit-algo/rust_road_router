@@ -58,7 +58,7 @@ struct ContractionGraph {
 }
 
 impl ContractionGraph {
-    fn new(graph: FirstOutGraph, node_order: Vec<NodeId>) -> ContractionGraph {
+    fn new(graph: &FirstOutGraph, node_order: Vec<NodeId>) -> ContractionGraph {
         let n = graph.num_nodes();
         let mut node_ranks = vec![0; n];
         for (i, &node) in node_order.iter().enumerate() {
@@ -164,8 +164,8 @@ impl<'a> PartialContractionGraph<'a> {
 
     fn shortcut_required(&self, from: NodeId, to: NodeId, shortcut_weight: Weight) -> bool {
         let mut server = ::shortest_path::query::bidirectional_dijkstra::Server {
-            forward_dijkstra: SteppedDijkstra::new(ForwardWrapper { graph: &self }),
-            backward_dijkstra: SteppedDijkstra::new(BackwardWrapper { graph: &self }),
+            forward_dijkstra: SteppedDijkstra::new(Box::new(ForwardWrapper { graph: &self })),
+            backward_dijkstra: SteppedDijkstra::new(Box::new(BackwardWrapper { graph: &self })),
             tentative_distance: INFINITY,
             maximum_distance: shortcut_weight,
             meeting_node: 0
@@ -179,7 +179,7 @@ impl<'a> PartialContractionGraph<'a> {
     }
 }
 
-pub fn contract(graph: FirstOutGraph, node_order: Vec<NodeId>) -> ((FirstOutGraph, FirstOutGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
+pub fn contract(graph: &FirstOutGraph, node_order: Vec<NodeId>) -> ((FirstOutGraph, FirstOutGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
     let mut graph = ContractionGraph::new(graph, node_order);
     graph.contract();
     graph.as_first_out_graphs()
