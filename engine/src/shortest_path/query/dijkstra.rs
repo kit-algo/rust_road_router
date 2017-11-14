@@ -1,14 +1,15 @@
 use super::*;
 
+use std::ops::Deref;
 use std::collections::LinkedList;
 
 #[derive(Debug)]
-pub struct Server {
-    dijkstra: SteppedDijkstra<Graph>,
+pub struct Server<C: Deref<Target = Graph>> {
+    dijkstra: SteppedDijkstra<Graph, C>,
 }
 
-impl Server {
-    pub fn new(graph: Graph) -> Server {
+impl<C: Deref<Target = Graph>> Server<C> {
+    pub fn new(graph: C) -> Server<C> {
         Server {
             dijkstra: SteppedDijkstra::new(graph)
         }

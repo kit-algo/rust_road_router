@@ -45,7 +45,7 @@ impl Ord for NonNan {
 
 #[derive(Debug)]
 struct RoutingWrapper {
-    server: shortest_path::query::bidirectional_dijkstra::Server<Graph, Graph>,
+    server: shortest_path::query::bidirectional_dijkstra::Server<Graph, Graph, Box<Graph>>,
     lat: Vec<f32>,
     lng: Vec<f32>
 }
@@ -118,7 +118,7 @@ fn main() {
     let lng = read_into_vector(path.join("longitude").to_str().unwrap()).expect("could not read first_out");
 
     let wrapper = RoutingWrapper {
-        server: shortest_path::query::bidirectional_dijkstra::Server::<Graph, Graph>::new(graph), lat, lng
+        server: shortest_path::query::bidirectional_dijkstra::Server::new(Box::new(graph)), lat, lng
     };
 
     let config = rocket::config::Config::build(rocket::config::Environment::Staging)

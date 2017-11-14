@@ -1,4 +1,5 @@
 use super::*;
+use std::ops::Deref;
 use index_heap::{IndexdMinHeap, Indexing};
 use super::timestamped_vector::TimestampedVector;
 
@@ -21,8 +22,8 @@ impl Indexing for State {
 }
 
 #[derive(Debug)]
-pub struct SteppedDijkstra<Graph: DijkstrableGraph> {
-    graph: Graph,
+pub struct SteppedDijkstra<Graph: DijkstrableGraph, C: Deref<Target = Graph>> {
+    graph: C,
     distances: TimestampedVector<Weight>,
     predecessors: Vec<NodeId>,
     closest_node_priority_queue: IndexdMinHeap<State>,
@@ -32,8 +33,8 @@ pub struct SteppedDijkstra<Graph: DijkstrableGraph> {
     result: Option<Option<Weight>>
 }
 
-impl<Graph: DijkstrableGraph> SteppedDijkstra<Graph> {
-    pub fn new(graph: Graph) -> SteppedDijkstra<Graph> {
+impl<Graph: DijkstrableGraph, C: Deref<Target = Graph>> SteppedDijkstra<Graph, C> {
+    pub fn new(graph: C) -> SteppedDijkstra<Graph, C> {
         let n = graph.num_nodes();
 
         SteppedDijkstra {

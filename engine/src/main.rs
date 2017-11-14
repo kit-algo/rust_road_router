@@ -1,5 +1,6 @@
 use std::env;
 use std::path::Path;
+use std::sync::Arc;
 
 extern crate bmw_routing_engine;
 
@@ -32,9 +33,9 @@ fn main() {
     let to = read_into_vector(path.join("test/target").to_str().unwrap()).expect("could not read target");
     let ground_truth = read_into_vector(path.join("test/travel_time_length").to_str().unwrap()).expect("could not read travel_time_length");
 
-    let graph = Graph::new(first_out, head, travel_time);
+    let graph = Arc::new(Graph::new(first_out, head, travel_time));
     let mut simple_server = DijkServer::new(graph.clone());
-    let mut bi_dir_server = BiDijkServer::<Graph, Graph>::new(graph.clone());
+    let mut bi_dir_server = BiDijkServer::new(graph.clone());
     let async_server = AsyncDijkServer::new(graph.clone());
     let mut async_bi_dir_server = AsyncBiDijkServer::new(graph.clone());
 
@@ -47,7 +48,7 @@ fn main() {
         inverted_order[node as usize] = i as u32;
     }
     let mut ch_server = CHServer::new((Graph::new(ch_first_out, ch_head, ch_weight).ch_split(&inverted_order), None));
-    let mut ch_server_with_own_ch = CHServer::new(contraction_hierarchy::contract(graph, ch_order));
+    let mut ch_server_with_own_ch = CHServer::new(contraction_hierarchy::contract(&graph, ch_order));
 
     for ((&from, &to), &ground_truth) in from.iter().zip(to.iter()).zip(ground_truth.iter()).take(100) {
         let ground_truth = match ground_truth {

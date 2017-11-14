@@ -10,6 +10,7 @@ use std::env;
 use std::path::Path;
 use std::cmp::max;
 use std::cmp::Ordering;
+use std::rc::Rc;
 
 use bmw_routing_engine::*;
 use graph::first_out_graph::FirstOutGraph as Graph;
@@ -82,8 +83,8 @@ fn main() {
     let head = read_into_vector(path.join("head").to_str().unwrap()).expect("could not read head");
     let travel_time = read_into_vector(path.join("travel_time").to_str().unwrap()).expect("could not read travel_time");
 
-    let graph = Graph::new(first_out, head, travel_time);
-    let mut query_server = DijkServer::<Graph, Graph>::new(graph.clone());
+    let graph = Rc::new(Graph::new(first_out, head, travel_time));
+    let mut query_server = DijkServer::new(graph.clone());
 
     let find_closest = |(p_lat, p_lon): (f32, f32)| -> NodeId {
         lat.iter().zip(lon.iter()).enumerate().min_by_key(|&(_, (lat, lon))| {
