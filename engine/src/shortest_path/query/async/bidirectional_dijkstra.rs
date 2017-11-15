@@ -1,17 +1,26 @@
 use super::*;
 use std::cmp::min;
 use std::ptr;
-use std::sync::{Arc, Barrier};
-use std::sync::atomic::compiler_fence;
-use std::sync::atomic::Ordering::SeqCst;
+use std::sync::{Arc, Barrier, RwLock};
+use std::ops::Deref;
 
 use shortest_path::timestamped_vector::TimestampedVector;
 
 #[derive(Debug)]
 struct DistancesPointerWrapper {
-    pointer: *mut *const TimestampedVector<Weight>
+    pointer: *const TimestampedVector<Weight>
 }
+
 unsafe impl Send for DistancesPointerWrapper {}
+unsafe impl Sync for DistancesPointerWrapper {}
+
+impl Deref for DistancesPointerWrapper {
+    type Target = TimestampedVector<Weight>;
+
+    fn deref(&self) -> &TimestampedVector<Weight> {
+        unsafe { self.pointer.as_ref().unwrap() }
+    }
+}
 
 #[derive(Debug)]
 pub struct Server {
@@ -20,8 +29,8 @@ pub struct Server {
     forward_progress_receiver: Receiver<(QueryProgress, u32)>,
     backward_progress_receiver: Receiver<(QueryProgress, u32)>,
 
-    forward_distances_box: Box<*const TimestampedVector<Weight>>,
-    backward_distances_box: Box<*const TimestampedVector<Weight>>,
+    forward_distances_pointer: Arc<RwLock<DistancesPointerWrapper>>,
+    backward_distances_pointer: Arc<RwLock<DistancesPointerWrapper>>,
     tentative_distance: Weight,
 
     active_query_id: u32
@@ -34,42 +43,68 @@ impl Server {
         let (backward_query_sender, backward_query_receiver) = channel();
         let (backward_progress_sender, backward_progress_receiver) = channel();
 
-        let forward_distances_box = Box::new(ptr::null() as *const TimestampedVector<Weight>);
-        let forward_distances_pointer = DistancesPointerWrapper { pointer: Box::into_raw(forward_distances_box) };
-        let forward_distances_box = unsafe { Box::from_raw(forward_distances_pointer.pointer) };
+        let forward_distances_pointer = Arc::new(RwLock::new(DistancesPointerWrapper { pointer: ptr::null() }));
+        let forward_thread_forward_distances_pointer = forward_distances_pointer.clone();
+        let backward_thread_forward_distances_pointer = forward_distances_pointer.clone();
 
-        let backward_distances_box = Box::new(ptr::null() as *const TimestampedVector<Weight>);
-        let backward_distances_pointer = DistancesPointerWrapper { pointer: Box::into_raw(backward_distances_box) };
-        let backward_distances_box = unsafe { Box::from_raw(backward_distances_pointer.pointer) };
+        let backward_distances_pointer = Arc::new(RwLock::new(DistancesPointerWrapper { pointer: ptr::null() }));
+        let forward_thread_backward_distances_pointer = backward_distances_pointer.clone();
+        let backward_thread_backward_distances_pointer = backward_distances_pointer.clone();
 
         let reversed = graph.reverse();
 
         let forward_query_barrier = Arc::new(Barrier::new(2));
         let backward_query_barrier = forward_query_barrier.clone();
 
+        let init_barrier = Arc::new(Barrier::new(3));
+        let forward_thread_init_barrier = init_barrier.clone();
+        let backward_thread_init_barrier = init_barrier.clone();
+
         thread::spawn(move || {
             let mut dijkstra = SteppedDijkstra::new(graph);
 
-            unsafe { *forward_distances_pointer.pointer = dijkstra.distances_pointer() };
-            compiler_fence(SeqCst);
+            {
+                let mut p = forward_thread_forward_distances_pointer.write().unwrap();
+                p.pointer = dijkstra.distances_pointer();
+            }
+
+            forward_thread_init_barrier.wait();
+
+            let backward_distances_pointer = forward_thread_backward_distances_pointer.read().unwrap();
 
             loop {
                 match forward_query_receiver.recv() {
                     Ok((ServerControl::Query(query), active_query_id)) => {
                         dijkstra.initialize_query(query);
+                        let mut tentative_distance = INFINITY;
 
                         forward_query_barrier.wait();
 
+                        let mut i = 0;
                         loop {
-                            match forward_query_receiver.try_recv() {
-                                Ok((ServerControl::Break, query_id)) if active_query_id == query_id => break,
-                                Ok((ServerControl::Query(_), query_id)) => panic!("forward received new query {} while still processing {}", query_id, active_query_id),
-                                _ => ()
+                            i += 1;
+                            if i % 1024 == 0 {
+                                match forward_query_receiver.try_recv() {
+                                    Ok((ServerControl::Break, query_id)) if active_query_id == query_id => break,
+                                    Ok((ServerControl::Query(_), query_id)) => panic!("forward received new query {} while still processing {}", query_id, active_query_id),
+                                    _ => ()
+                                }
                             }
 
                             let progress = dijkstra.next_step();
-                            forward_progress_sender.send((progress.clone(), active_query_id)).unwrap();
-                            if let QueryProgress::Done(_) = progress { break }
+                            match progress {
+                                QueryProgress::Progress(State { distance, node }) => {
+                                    let backward_distance = backward_distances_pointer[node as usize];
+                                    if distance + backward_distance < tentative_distance {
+                                        forward_progress_sender.send((progress.clone(), active_query_id)).unwrap();
+                                        tentative_distance = distance + backward_distance;
+                                    }
+                                },
+                                QueryProgress::Done(_) => {
+                                    forward_progress_sender.send((progress.clone(), active_query_id)).unwrap();
+                                    break;
+                                }
+                            }
                         }
                     },
                     Ok((ServerControl::Break, _)) => (),
@@ -81,26 +116,48 @@ impl Server {
         thread::spawn(move || {
             let mut dijkstra = SteppedDijkstra::new(reversed);
 
-            unsafe { *backward_distances_pointer.pointer = dijkstra.distances_pointer() };
-            compiler_fence(SeqCst);
+            {
+                let mut p = backward_thread_backward_distances_pointer.write().unwrap();
+                p.pointer = dijkstra.distances_pointer();
+            }
+
+            backward_thread_init_barrier.wait();
+
+            let forward_distances_pointer = backward_thread_forward_distances_pointer.read().unwrap();
 
             loop {
                 match backward_query_receiver.recv() {
                     Ok((ServerControl::Query(query), active_query_id)) => {
                         dijkstra.initialize_query(query);
+                        let mut tentative_distance = INFINITY;
 
                         backward_query_barrier.wait();
 
+                        let mut i = 0;
                         loop {
-                            match backward_query_receiver.try_recv() {
-                                Ok((ServerControl::Break, query_id)) if active_query_id == query_id => break,
-                                Ok((ServerControl::Query(_), query_id)) => panic!("backward received new query {} while still processing {}", query_id, active_query_id),
-                                _ => ()
+                            i += 1;
+                            if i % 1024 == 0 {
+                                match backward_query_receiver.try_recv() {
+                                    Ok((ServerControl::Break, query_id)) if active_query_id == query_id => break,
+                                    Ok((ServerControl::Query(_), query_id)) => panic!("backward received new query {} while still processing {}", query_id, active_query_id),
+                                    _ => ()
+                                }
                             }
 
                             let progress = dijkstra.next_step();
-                            backward_progress_sender.send((progress.clone(), active_query_id)).unwrap();
-                            if let QueryProgress::Done(_) = progress { break }
+                            match progress {
+                                QueryProgress::Progress(State { distance, node }) => {
+                                    let forward_distance = forward_distances_pointer[node as usize];
+                                    if distance + forward_distance < tentative_distance {
+                                        backward_progress_sender.send((progress.clone(), active_query_id)).unwrap();
+                                        tentative_distance = distance + forward_distance;
+                                    }
+                                },
+                                QueryProgress::Done(_) => {
+                                    backward_progress_sender.send((progress.clone(), active_query_id)).unwrap();
+                                    break;
+                                }
+                            }
                         }
                     },
                     Ok((ServerControl::Break, _)) => (),
@@ -109,14 +166,16 @@ impl Server {
             }
         });
 
+        init_barrier.wait();
+
         Server {
             forward_query_sender,
             backward_query_sender,
             forward_progress_receiver,
             backward_progress_receiver,
 
-            forward_distances_box,
-            backward_distances_box,
+            forward_distances_pointer,
+            backward_distances_pointer,
             tentative_distance: INFINITY,
 
             active_query_id: 0
@@ -134,6 +193,9 @@ impl Server {
         let mut forward_progress = 0;
         let mut backward_progress = 0;
 
+        let forward_distances_pointer = self.forward_distances_pointer.read().unwrap();
+        let backward_distances_pointer = self.backward_distances_pointer.read().unwrap();
+
         while self.tentative_distance >= forward_progress + backward_progress {
             // some sort of select would be nice to avoid waiting on one direction while there is data available from the other one
             // there is a select! macro, but the API is marked as unstable, so I'm not going to use it here
@@ -146,7 +208,7 @@ impl Server {
                 },
                 Ok((QueryProgress::Progress(State { distance, node }), _)) => {
                     forward_progress = distance;
-                    let other_distance = unsafe { (**self.backward_distances_box)[node as usize] };
+                    let other_distance = backward_distances_pointer[node as usize];
                     self.tentative_distance = min(distance + other_distance, self.tentative_distance);
                 },
                 Err(e) => panic!("{:?}", e)
@@ -159,7 +221,7 @@ impl Server {
                 },
                 Ok((QueryProgress::Progress(State { distance, node }), _)) => {
                     backward_progress = distance;
-                    let other_distance = unsafe { (**self.forward_distances_box)[node as usize] };
+                    let other_distance = forward_distances_pointer[node as usize];
                     self.tentative_distance = min(distance + other_distance, self.tentative_distance);
                 },
                 Err(e) => panic!("{:?}", e)
