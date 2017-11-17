@@ -196,35 +196,43 @@ impl Server {
         let forward_distances_pointer = self.forward_distances_pointer.read().unwrap();
         let backward_distances_pointer = self.backward_distances_pointer.read().unwrap();
 
+        let forward_receiver = &self.forward_progress_receiver;
+        let backward_receiver = &self.backward_progress_receiver;
+
         while self.tentative_distance >= forward_progress + backward_progress {
-            // some sort of select would be nice to avoid waiting on one direction while there is data available from the other one
-            // there is a select! macro, but the API is marked as unstable, so I'm not going to use it here
-            // https://github.com/rust-lang/rust/issues/27800
-            match self.forward_progress_receiver.recv() {
-                Ok((_, query_id)) if query_id != self.active_query_id => (),
-                Ok((QueryProgress::Done(result), _)) => {
-                    self.backward_query_sender.send((ServerControl::Break, self.active_query_id)).unwrap();
-                    return result
+            // this is an unstable API which will likely be removed at some point, so we gotta get rid of it
+            // one possibility could be crossbeam-channel https://github.com/crossbeam-rs/rfcs/pull/22
+            select! {
+                forward_message = forward_receiver.recv() => {
+                    match forward_message {
+                        Ok((_, query_id)) if query_id != self.active_query_id => (),
+                        Ok((QueryProgress::Done(result), _)) => {
+                            self.backward_query_sender.send((ServerControl::Break, self.active_query_id)).unwrap();
+                            return result
+                        },
+                        Ok((QueryProgress::Progress(State { distance, node }), _)) => {
+                            forward_progress = distance;
+                            let other_distance = backward_distances_pointer[node as usize];
+                            self.tentative_distance = min(distance + other_distance, self.tentative_distance);
+                        },
+                        Err(e) => panic!("{:?}", e)
+                    }
                 },
-                Ok((QueryProgress::Progress(State { distance, node }), _)) => {
-                    forward_progress = distance;
-                    let other_distance = backward_distances_pointer[node as usize];
-                    self.tentative_distance = min(distance + other_distance, self.tentative_distance);
-                },
-                Err(e) => panic!("{:?}", e)
-            }
-            match self.backward_progress_receiver.recv() {
-                Ok((_, query_id)) if query_id != self.active_query_id => (),
-                Ok((QueryProgress::Done(result), _)) => {
-                    self.forward_query_sender.send((ServerControl::Break, self.active_query_id)).unwrap();
-                    return result
-                },
-                Ok((QueryProgress::Progress(State { distance, node }), _)) => {
-                    backward_progress = distance;
-                    let other_distance = forward_distances_pointer[node as usize];
-                    self.tentative_distance = min(distance + other_distance, self.tentative_distance);
-                },
-                Err(e) => panic!("{:?}", e)
+                backward_message = backward_receiver.recv() => {
+                    match backward_message {
+                        Ok((_, query_id)) if query_id != self.active_query_id => (),
+                        Ok((QueryProgress::Done(result), _)) => {
+                            self.forward_query_sender.send((ServerControl::Break, self.active_query_id)).unwrap();
+                            return result
+                        },
+                        Ok((QueryProgress::Progress(State { distance, node }), _)) => {
+                            backward_progress = distance;
+                            let other_distance = forward_distances_pointer[node as usize];
+                            self.tentative_distance = min(distance + other_distance, self.tentative_distance);
+                        },
+                        Err(e) => panic!("{:?}", e)
+                    }
+                }
             }
         }
 
