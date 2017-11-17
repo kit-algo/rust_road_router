@@ -95,7 +95,7 @@ impl Server {
                             match progress {
                                 QueryProgress::Progress(State { distance, node }) => {
                                     let backward_distance = backward_distances_pointer[node as usize];
-                                    if distance + backward_distance < tentative_distance {
+                                    if distance + backward_distance <= tentative_distance {
                                         forward_progress_sender.send((progress.clone(), active_query_id)).unwrap();
                                         tentative_distance = distance + backward_distance;
                                     }
@@ -148,7 +148,7 @@ impl Server {
                             match progress {
                                 QueryProgress::Progress(State { distance, node }) => {
                                     let forward_distance = forward_distances_pointer[node as usize];
-                                    if distance + forward_distance < tentative_distance {
+                                    if distance + forward_distance <= tentative_distance {
                                         backward_progress_sender.send((progress.clone(), active_query_id)).unwrap();
                                         tentative_distance = distance + forward_distance;
                                     }
