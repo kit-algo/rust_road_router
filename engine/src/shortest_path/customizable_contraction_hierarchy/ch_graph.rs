@@ -6,7 +6,9 @@ use shortest_path::DijkstrableGraph;
 struct CHGraph {
     upward: FirstOutGraph,
     downward: FirstOutGraph,
-    node_order: Vec<u32>
+    node_order: Vec<u32>,
+    ranks: Vec<NodeId>,
+    weight_mapping: Vec<u64>
 }
 
 impl CHGraph {
