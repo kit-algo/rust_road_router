@@ -1,3 +1,4 @@
+use std;
 use super::*;
 use self::first_out_graph::FirstOutGraph;
 
@@ -103,21 +104,30 @@ impl ContractionGraph {
     }
 
     fn as_first_out_graphs(self) -> ((FirstOutGraph, FirstOutGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
-        // let (outgoing, incoming): (Vec<(Vec<Link>, Vec<NodeId>)>, Vec<(Vec<Link>, Vec<NodeId>)>) = self.nodes.into_iter()
-        //     .map(|node| {
-        //         (node.outgoing.into_iter().unzip(), node.incoming.into_iter().unzip())
-        //     }).unzip();
+        let (outgoing, incoming) = self.nodes.into_iter().map(|node| {
+            (node.outgoing, node.incoming)
+        }).unzip();
 
-        // let (outgoing, forward_shortcut_middles): (Vec<Vec<Link>>, Vec<Vec<NodeId>>) = outgoing.into_iter().unzip();
-        // let (incoming, backward_shortcut_middles): (Vec<Vec<Link>>, Vec<Vec<NodeId>>) = incoming.into_iter().unzip();
-        // let forward_shortcut_middles = forward_shortcut_middles.into_iter().flat_map(|data| data.into_iter() ).collect();
-        // let backward_shortcut_middles = backward_shortcut_middles.into_iter().flat_map(|data| data.into_iter() ).collect();
+        ((Self::adjancecy_lists_to_first_out_graph(outgoing), Self::adjancecy_lists_to_first_out_graph(incoming)), None)
+    }
 
-        // // currently we stick to the reordered graph and also translate the query node ids.
-        // // TODO make more explicit
+    pub fn adjancecy_lists_to_first_out_graph(adjancecy_lists: Vec<Vec<NodeId>>) -> FirstOutGraph {
+        let n = adjancecy_lists.len();
+        // create first_out array by doing a prefix sum over the adjancecy list sizes
+        let first_out: Vec<u32> = std::iter::once(0).chain(adjancecy_lists.iter().scan(0, |state, incoming_links| {
+            *state = *state + incoming_links.len() as u32;
+            Some(*state)
+        })).collect();
+        debug_assert!(first_out.len() == n + 1);
 
-        // ((FirstOutGraph::from_adjancecy_lists(outgoing), FirstOutGraph::from_adjancecy_lists(incoming)), None)
-        unimplemented!()
+        // append all adjancecy list and split the pairs into two seperate vectors
+        let head: Vec<NodeId> = adjancecy_lists
+            .into_iter()
+            .flat_map(|neighbors| neighbors.into_iter())
+            .collect();
+
+        let m = head.len();
+        FirstOutGraph::new(first_out, head, vec![INFINITY; m])
     }
 }
 

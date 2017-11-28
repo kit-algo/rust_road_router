@@ -8,7 +8,8 @@ struct CHGraph {
     downward: FirstOutGraph,
     node_order: Vec<u32>,
     ranks: Vec<NodeId>,
-    weight_mapping: Vec<u64>
+    weight_mapping: Vec<u64>,
+    elimination_tree: Vec<NodeId>
 }
 
 impl CHGraph {

@@ -2,6 +2,7 @@ use super::*;
 use ::io;
 use std::io::Result;
 use std::path::Path;
+use std::mem::swap;
 
 #[derive(Debug, Clone)]
 pub struct FirstOutGraph {
@@ -25,7 +26,7 @@ impl FirstOutGraph {
     }
 
     pub fn from_adjancecy_lists(adjancecy_lists: Vec<Vec<Link>>) -> FirstOutGraph {
-        // create first_out array for reversed by doing a prefix sum over the adjancecy list sizes
+        // create first_out array by doing a prefix sum over the adjancecy list sizes
         let first_out = std::iter::once(0).chain(adjancecy_lists.iter().scan(0, |state, incoming_links| {
             *state = *state + incoming_links.len() as u32;
             Some(*state)
@@ -94,6 +95,11 @@ impl FirstOutGraph {
         let res2 = io::write_vector_to_file(path.join("head").to_str().unwrap(), &self.head);
         let res3 = io::write_vector_to_file(path.join("weights").to_str().unwrap(), &self.weight);
         res1.and(res2).and(res3)
+    }
+
+    pub fn swap_weights(&mut self, mut new_weights: &mut Vec<Weight>) {
+        assert!(new_weights.len() == self.weight.len());
+        swap(&mut self.weight, &mut new_weights);
     }
 }
 
