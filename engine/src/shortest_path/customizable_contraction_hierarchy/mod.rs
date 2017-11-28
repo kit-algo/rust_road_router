@@ -1,6 +1,7 @@
 use std;
 use super::*;
-use self::first_out_graph::FirstOutGraph;
+use super::first_out_graph::FirstOutGraph;
+use shortest_path::node_order::NodeOrder;
 
 pub mod ch_graph;
 
@@ -50,27 +51,23 @@ impl Node {
 #[derive(Debug)]
 struct ContractionGraph {
     nodes: Vec<Node>,
-    node_order: Vec<NodeId>
+    node_order: NodeOrder
 }
 
 impl ContractionGraph {
-    fn new(graph: FirstOutGraph, node_order: Vec<NodeId>) -> ContractionGraph {
-        let n = graph.num_nodes();
-        let mut node_ranks = vec![0; n];
-        for (i, &node) in node_order.iter().enumerate() {
-            node_ranks[node as usize] = i as u32;
-        }
+    fn new(graph: FirstOutGraph, node_order: NodeOrder) -> ContractionGraph {
+        let n = graph.num_nodes() as NodeId;
 
         let nodes = {
             let outs = (0..n).map(|node|
-                graph.neighbor_iter(node_order[node])
-                    .map(|Link { node, .. }| node_ranks[node as usize])
+                graph.neighbor_iter(node_order.node(node))
+                    .map(|Link { node, .. }| node_order.rank(node))
                     .collect()
             );
             let reversed = graph.reverse();
             let ins = (0..n).map(|node|
-                reversed.neighbor_iter(node_order[node])
-                    .map(|Link { node, .. }| node_ranks[node as usize])
+                reversed.neighbor_iter(node_order.node(node))
+                    .map(|Link { node, .. }| node_order.rank(node))
                     .collect()
             );
             outs.zip(ins).map(|(outgoing, incoming)| Node { outgoing, incoming } ).collect()
@@ -166,7 +163,7 @@ impl<'a> PartialContractionGraph<'a> {
     }
 }
 
-pub fn contract(graph: FirstOutGraph, node_order: Vec<NodeId>) -> ((FirstOutGraph, FirstOutGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
+pub fn contract(graph: FirstOutGraph, node_order: NodeOrder) -> ((FirstOutGraph, FirstOutGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
     let mut graph = ContractionGraph::new(graph, node_order);
     graph.contract();
     graph.as_first_out_graphs()

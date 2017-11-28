@@ -1,4 +1,5 @@
 use super::*;
+use shortest_path::node_order::NodeOrder;
 use shortest_path::DijkstrableGraph;
 
 #[derive(Debug)]
@@ -6,8 +7,7 @@ use shortest_path::DijkstrableGraph;
 struct CHGraph {
     upward: FirstOutGraph,
     downward: FirstOutGraph,
-    node_order: Vec<u32>,
-    ranks: Vec<NodeId>,
+    node_order: NodeOrder,
     weight_mapping: Vec<u64>,
     elimination_tree: Vec<NodeId>
 }
