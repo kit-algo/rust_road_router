@@ -108,7 +108,7 @@ impl ContractionGraph {
         ((Self::adjancecy_lists_to_first_out_graph(outgoing), Self::adjancecy_lists_to_first_out_graph(incoming)), None)
     }
 
-    pub fn adjancecy_lists_to_first_out_graph(adjancecy_lists: Vec<Vec<NodeId>>) -> FirstOutGraph {
+    fn adjancecy_lists_to_first_out_graph(adjancecy_lists: Vec<Vec<NodeId>>) -> FirstOutGraph {
         let n = adjancecy_lists.len();
         // create first_out array by doing a prefix sum over the adjancecy list sizes
         let first_out: Vec<u32> = std::iter::once(0).chain(adjancecy_lists.iter().scan(0, |state, incoming_links| {
@@ -125,6 +125,22 @@ impl ContractionGraph {
 
         let m = head.len();
         FirstOutGraph::new(first_out, head, vec![INFINITY; m])
+    }
+
+    fn elimination_trees(&self) -> (Vec<NodeId>, Vec<NodeId>) {
+        let n = self.nodes.len();
+
+        let mut upward_elimination_tree = vec![n as NodeId; n];
+        let mut downward_elimination_tree = vec![n as NodeId; n];
+
+        for (rank, node) in self.nodes.iter().enumerate() {
+            upward_elimination_tree[rank] = *node.outgoing.iter().min().unwrap();
+            debug_assert!(upward_elimination_tree[rank] as usize > rank);
+            downward_elimination_tree[rank] = *node.incoming.iter().min().unwrap();
+            debug_assert!(downward_elimination_tree[rank] as usize > rank);
+        }
+
+        (upward_elimination_tree, downward_elimination_tree)
     }
 }
 
