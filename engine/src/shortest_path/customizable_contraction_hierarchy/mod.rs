@@ -115,7 +115,7 @@ impl ContractionGraph {
             *state = *state + incoming_links.len() as u32;
             Some(*state)
         })).collect();
-        debug_assert!(first_out.len() == n + 1);
+        debug_assert_eq!(first_out.len(), n + 1);
 
         // append all adjancecy list and split the pairs into two seperate vectors
         let head: Vec<NodeId> = adjancecy_lists
@@ -170,7 +170,7 @@ impl<'a> PartialContractionGraph<'a> {
         let out_result = self.nodes[(from - self.id_offset) as usize].insert_outgoing(to);
         let in_result = self.nodes[(to - self.id_offset) as usize].insert_incoming(from);
 
-        assert!(out_result == in_result);
+        assert_eq!(out_result, in_result);
         out_result
     }
 }
