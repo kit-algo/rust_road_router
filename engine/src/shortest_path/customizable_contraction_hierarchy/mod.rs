@@ -2,6 +2,7 @@ use std;
 use super::*;
 use super::first_out_graph::FirstOutGraph;
 use shortest_path::node_order::NodeOrder;
+use ::inrange_option::InrangeOption;
 
 pub mod ch_graph;
 
@@ -127,13 +128,13 @@ impl ContractionGraph {
         FirstOutGraph::new(first_out, head, vec![INFINITY; m])
     }
 
-    fn elimination_trees(&self) -> Vec<NodeId> {
+    fn elimination_trees(&self) -> Vec<InrangeOption<NodeId>> {
         let n = self.nodes.len();
-        let mut elimination_tree = vec![n as NodeId; n];
+        let mut elimination_tree = vec![InrangeOption::new(None); n];
 
         for (rank, node) in self.nodes.iter().enumerate() {
-            elimination_tree[rank] = *node.outgoing.iter().chain(node.incoming.iter()).min().unwrap();
-            debug_assert!(elimination_tree[rank] as usize > rank);
+            elimination_tree[rank] = InrangeOption::new(node.outgoing.iter().chain(node.incoming.iter()).min().cloned());
+            debug_assert!(elimination_tree[rank].value().unwrap_or(n as NodeId) as usize > rank);
         }
 
         elimination_tree

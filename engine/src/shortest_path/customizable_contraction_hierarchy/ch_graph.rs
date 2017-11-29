@@ -1,6 +1,7 @@
 use super::*;
 use shortest_path::node_order::NodeOrder;
 use shortest_path::DijkstrableGraph;
+use ::inrange_option::InrangeOption;
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -9,7 +10,7 @@ struct CHGraph {
     downward: FirstOutGraph,
     node_order: NodeOrder,
     weight_mapping: Vec<u64>,
-    elimination_tree: Vec<NodeId>
+    elimination_tree: Vec<InrangeOption<NodeId>>
 }
 
 impl CHGraph {

@@ -13,6 +13,7 @@ pub mod shortest_path;
 pub mod graph;
 pub mod io;
 mod index_heap;
+mod inrange_option;
 pub mod rank_select_map;
 pub mod import;
 
