@@ -127,20 +127,16 @@ impl ContractionGraph {
         FirstOutGraph::new(first_out, head, vec![INFINITY; m])
     }
 
-    fn elimination_trees(&self) -> (Vec<NodeId>, Vec<NodeId>) {
+    fn elimination_trees(&self) -> Vec<NodeId> {
         let n = self.nodes.len();
-
-        let mut upward_elimination_tree = vec![n as NodeId; n];
-        let mut downward_elimination_tree = vec![n as NodeId; n];
+        let mut elimination_tree = vec![n as NodeId; n];
 
         for (rank, node) in self.nodes.iter().enumerate() {
-            upward_elimination_tree[rank] = *node.outgoing.iter().min().unwrap();
-            debug_assert!(upward_elimination_tree[rank] as usize > rank);
-            downward_elimination_tree[rank] = *node.incoming.iter().min().unwrap();
-            debug_assert!(downward_elimination_tree[rank] as usize > rank);
+            elimination_tree[rank] = *node.outgoing.iter().chain(node.incoming.iter()).min().unwrap();
+            debug_assert!(elimination_tree[rank] as usize > rank);
         }
 
-        (upward_elimination_tree, downward_elimination_tree)
+        elimination_tree
     }
 }
 
