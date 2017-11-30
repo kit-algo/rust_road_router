@@ -49,12 +49,9 @@ impl CCHGraph {
             .unzip();
 
         for (ch_edge_index, original_edge_id) in original_edge_ids.into_iter().enumerate() {
-            match original_edge_id.value() {
-                Some(original_edge_id) => {
-                    debug_assert_eq!(original_edge_to_ch_edge[original_edge_id as usize].value(), None);
-                    original_edge_to_ch_edge[original_edge_id as usize] = InrangeOption::new(Some(ch_edge_index as EdgeId));
-                },
-                None => (),
+            if let Some(original_edge_id) = original_edge_id.value() {
+                debug_assert_eq!(original_edge_to_ch_edge[original_edge_id as usize].value(), None);
+                original_edge_to_ch_edge[original_edge_id as usize] = InrangeOption::new(Some(ch_edge_index as EdgeId));
             }
         }
 
@@ -62,39 +59,60 @@ impl CCHGraph {
         FirstOutGraph::new(first_out, head, vec![INFINITY; m])
     }
 
-    pub fn customize(&mut self) {
-        let n = self.upward.num_nodes();
-        let mut outgoing_weights = vec![INFINITY; n];
-        let mut incoming_weights = vec![INFINITY; n];
+    pub fn customize(&mut self, metric: &FirstOutGraph) {
+        let n = self.upward.num_nodes() as NodeId;
+
+        {
+            let mut upward_weights = vec![INFINITY; self.upward.num_arcs()];
+            let mut downward_weights = vec![INFINITY; self.downward.num_arcs()];
+
+            for node in 0..n {
+                for (edge_id, Link { node: neighbor, weight }) in metric.neighbor_edge_indices(node).zip(metric.neighbor_iter(node)) {
+                    if let Some(ch_edge_id) = self.original_edge_to_ch_edge[edge_id as usize].value() {
+                        if self.node_order.rank(node) < self.node_order.rank(neighbor) {
+                            upward_weights[ch_edge_id as usize] = weight;
+                        } else {
+                            downward_weights[ch_edge_id as usize] = weight;
+                        }
+                    }
+                }
+            }
+
+            self.upward.swap_weights(&mut upward_weights);
+            self.downward.swap_weights(&mut downward_weights);
+        }
+
+        let mut node_outgoing_weights = vec![INFINITY; n as usize];
+        let mut node_incoming_weights = vec![INFINITY; n as usize];
 
         for current_node in 0..n {
-            for Link { node, weight } in self.downward.neighbor_iter(current_node as NodeId) {
-                incoming_weights[node as usize] = weight;
+            for Link { node, weight } in self.downward.neighbor_iter(current_node) {
+                node_incoming_weights[node as usize] = weight;
             }
-            for Link { node, weight } in self.upward.neighbor_iter(current_node as NodeId) {
-                outgoing_weights[node as usize] = weight;
+            for Link { node, weight } in self.upward.neighbor_iter(current_node) {
+                node_outgoing_weights[node as usize] = weight;
             }
 
-            for Link { node, weight } in self.downward.neighbor_iter(current_node as NodeId) {
+            for Link { node, weight } in self.downward.neighbor_iter(current_node) {
                 for (&mut target, shortcut_weight) in self.upward.neighbor_iter_mut(node) {
-                    if weight + outgoing_weights[target as usize] < *shortcut_weight {
-                        *shortcut_weight = weight + outgoing_weights[target as usize];
+                    if weight + node_outgoing_weights[target as usize] < *shortcut_weight {
+                        *shortcut_weight = weight + node_outgoing_weights[target as usize];
                     }
                 }
             }
-            for Link { node, weight } in self.upward.neighbor_iter(current_node as NodeId) {
+            for Link { node, weight } in self.upward.neighbor_iter(current_node) {
                 for (&mut target, shortcut_weight) in self.downward.neighbor_iter_mut(node) {
-                    if weight + incoming_weights[target as usize] < *shortcut_weight {
-                        *shortcut_weight = weight + incoming_weights[target as usize];
+                    if weight + node_incoming_weights[target as usize] < *shortcut_weight {
+                        *shortcut_weight = weight + node_incoming_weights[target as usize];
                     }
                 }
             }
 
-            for Link { node, .. } in self.downward.neighbor_iter(current_node as NodeId) {
-                incoming_weights[node as usize] = INFINITY;
+            for Link { node, .. } in self.downward.neighbor_iter(current_node) {
+                node_incoming_weights[node as usize] = INFINITY;
             }
-            for Link { node, .. } in self.upward.neighbor_iter(current_node as NodeId) {
-                outgoing_weights[node as usize] = INFINITY;
+            for Link { node, .. } in self.upward.neighbor_iter(current_node) {
+                node_outgoing_weights[node as usize] = INFINITY;
             }
         }
     }
