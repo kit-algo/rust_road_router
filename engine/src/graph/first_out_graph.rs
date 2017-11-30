@@ -44,6 +44,10 @@ impl FirstOutGraph {
         FirstOutGraph::new(first_out, head, weight)
     }
 
+    pub fn num_arcs(&self) -> usize {
+        self.head.len()
+    }
+
     pub fn neighbor_iter(&self, node: NodeId) -> std::iter::Map<std::iter::Zip<std::slice::Iter<NodeId>, std::slice::Iter<Weight>>, fn((&NodeId, &Weight))->Link> {
         let range = self.neighbor_edge_indices_usize(node);
         self.head[range.clone()].iter()

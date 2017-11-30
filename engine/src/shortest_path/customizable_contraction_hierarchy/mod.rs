@@ -4,7 +4,9 @@ use super::first_out_graph::FirstOutGraph;
 use shortest_path::node_order::NodeOrder;
 use ::inrange_option::InrangeOption;
 
-pub mod ch_graph;
+mod cch_graph;
+
+use self::cch_graph::CCHGraph;
 
 #[derive(Debug, PartialEq)]
 enum ShortcutResult {
@@ -50,13 +52,14 @@ impl Node {
 }
 
 #[derive(Debug)]
-struct ContractionGraph {
+struct ContractionGraph<'a> {
     nodes: Vec<Node>,
-    node_order: NodeOrder
+    node_order: NodeOrder,
+    original_graph: &'a FirstOutGraph
 }
 
-impl ContractionGraph {
-    fn new(graph: FirstOutGraph, node_order: NodeOrder) -> ContractionGraph {
+impl<'a> ContractionGraph<'a> {
+    fn new(graph: &FirstOutGraph, node_order: NodeOrder) -> ContractionGraph {
         let n = graph.num_nodes() as NodeId;
 
         let nodes = {
@@ -79,22 +82,27 @@ impl ContractionGraph {
 
         ContractionGraph {
             nodes,
-            node_order
+            node_order,
+            original_graph: graph
         }
     }
 
-    fn contract(&mut self) {
-        let mut graph = self.partial_graph();
+    fn contract(mut self) -> ContractedGraph<'a> {
+        {
+            let mut graph = self.partial_graph();
 
-        while let Some((node, mut subgraph)) = graph.remove_lowest() {
-            for &(from, _) in node.incoming.iter() {
-                for &(to, _) in node.outgoing.iter() {
-                    subgraph.insert(from, to);
+            while let Some((node, mut subgraph)) = graph.remove_lowest() {
+                for &(from, _) in node.incoming.iter() {
+                    for &(to, _) in node.outgoing.iter() {
+                        subgraph.insert(from, to);
+                    }
                 }
-            }
 
-            graph = subgraph;
+                graph = subgraph;
+            }
         }
+
+        ContractedGraph(self)
     }
 
     fn partial_graph(&mut self) -> PartialContractionGraph {
@@ -102,57 +110,6 @@ impl ContractionGraph {
             nodes: &mut self.nodes[..],
             id_offset: 0
         }
-    }
-
-    fn as_first_out_graphs(self) -> ((FirstOutGraph, FirstOutGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
-        let (outgoing, incoming) = self.nodes.into_iter().map(|node| {
-            (node.outgoing, node.incoming)
-        }).unzip();
-
-        let mut original_edge_to_ch_edge = vec![InrangeOption::<EdgeId>::new(None); 0]; // TODO original m
-        ((Self::adjancecy_lists_to_first_out_graph(outgoing, &mut original_edge_to_ch_edge), Self::adjancecy_lists_to_first_out_graph(incoming, &mut original_edge_to_ch_edge)), None)
-    }
-
-    fn adjancecy_lists_to_first_out_graph(adjancecy_lists: Vec<Vec<(NodeId, InrangeOption<EdgeId>)>>, original_edge_to_ch_edge: &mut Vec<InrangeOption<EdgeId>>) -> FirstOutGraph {
-        let n = adjancecy_lists.len();
-        // create first_out array by doing a prefix sum over the adjancecy list sizes
-        let first_out: Vec<u32> = std::iter::once(0).chain(adjancecy_lists.iter().scan(0, |state, incoming_links| {
-            *state = *state + incoming_links.len() as u32;
-            Some(*state)
-        })).collect();
-        debug_assert_eq!(first_out.len(), n + 1);
-
-        // append all adjancecy list and split the pairs into two seperate vectors
-        let (head, original_edge_ids): (Vec<NodeId>, Vec<InrangeOption<EdgeId>>) = adjancecy_lists
-            .into_iter()
-            .flat_map(|neighbors| neighbors.into_iter())
-            .unzip();
-
-
-        for (ch_edge_index, original_edge_id) in original_edge_ids.into_iter().enumerate() {
-            match original_edge_id.value() {
-                Some(original_edge_id) => {
-                    debug_assert_eq!(original_edge_to_ch_edge[original_edge_id as usize].value(), None);
-                    original_edge_to_ch_edge[original_edge_id as usize] = InrangeOption::new(Some(ch_edge_index as EdgeId));
-                },
-                None => (),
-            }
-        }
-
-        let m = head.len();
-        FirstOutGraph::new(first_out, head, vec![INFINITY; m])
-    }
-
-    fn elimination_trees(&self) -> Vec<InrangeOption<NodeId>> {
-        let n = self.nodes.len();
-        let mut elimination_tree = vec![InrangeOption::new(None); n];
-
-        for (rank, node) in self.nodes.iter().enumerate() {
-            elimination_tree[rank] = InrangeOption::new(node.outgoing.iter().chain(node.incoming.iter()).map(|&(node, _)| node).min());
-            debug_assert!(elimination_tree[rank].value().unwrap_or(n as NodeId) as usize > rank);
-        }
-
-        elimination_tree
     }
 }
 
@@ -191,8 +148,23 @@ impl<'a> PartialContractionGraph<'a> {
     }
 }
 
-pub fn contract(graph: FirstOutGraph, node_order: NodeOrder) -> ((FirstOutGraph, FirstOutGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
-    let mut graph = ContractionGraph::new(graph, node_order);
-    graph.contract();
-    graph.as_first_out_graphs()
+#[derive(Debug)]
+pub struct ContractedGraph<'a>(ContractionGraph<'a>);
+
+impl<'a> ContractedGraph<'a> {
+    fn elimination_trees(&self) -> Vec<InrangeOption<NodeId>> {
+        let n = self.0.original_graph.num_nodes();
+        let mut elimination_tree = vec![InrangeOption::new(None); n];
+
+        for (rank, node) in self.0.nodes.iter().enumerate() {
+            elimination_tree[rank] = InrangeOption::new(node.outgoing.iter().chain(node.incoming.iter()).map(|&(node, _)| node).min());
+            debug_assert!(elimination_tree[rank].value().unwrap_or(n as NodeId) as usize > rank);
+        }
+
+        elimination_tree
+    }
+}
+
+pub fn contract(graph: &FirstOutGraph, node_order: NodeOrder) -> CCHGraph {
+    CCHGraph::new(ContractionGraph::new(graph, node_order).contract())
 }
