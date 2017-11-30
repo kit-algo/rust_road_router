@@ -9,7 +9,7 @@ pub struct CCHGraph {
     upward: FirstOutGraph,
     downward: FirstOutGraph,
     node_order: NodeOrder,
-    // weight_mapping: Vec<u64>,
+    original_edge_to_ch_edge: Vec<InrangeOption<EdgeId>>,
     elimination_tree: Vec<InrangeOption<NodeId>>
 }
 
@@ -23,31 +23,30 @@ impl CCHGraph {
             (node.outgoing, node.incoming)
         }).unzip();
 
-        let mut original_edge_to_ch_edge = vec![InrangeOption::<EdgeId>::new(None); contracted_graph.original_graph.num_arcs()]; // TODO original m
+        let mut original_edge_to_ch_edge = vec![InrangeOption::<EdgeId>::new(None); contracted_graph.original_graph.num_arcs()];
 
         CCHGraph {
             upward: Self::adjancecy_lists_to_first_out_graph(outgoing, &mut original_edge_to_ch_edge),
             downward: Self::adjancecy_lists_to_first_out_graph(incoming, &mut original_edge_to_ch_edge),
             node_order,
+            original_edge_to_ch_edge,
             elimination_tree
         }
     }
 
     fn adjancecy_lists_to_first_out_graph(adjancecy_lists: Vec<Vec<(NodeId, InrangeOption<EdgeId>)>>, original_edge_to_ch_edge: &mut Vec<InrangeOption<EdgeId>>) -> FirstOutGraph {
         let n = adjancecy_lists.len();
-        // create first_out array by doing a prefix sum over the adjancecy list sizes
+
         let first_out: Vec<EdgeId> = {
             let degrees = adjancecy_lists.iter().map(|neighbors| neighbors.len() as EdgeId);
             FirstOutGraph::degrees_to_first_out(degrees).collect()
         };
         debug_assert_eq!(first_out.len(), n + 1);
 
-        // append all adjancecy list and split the pairs into two seperate vectors
         let (head, original_edge_ids): (Vec<NodeId>, Vec<InrangeOption<EdgeId>>) = adjancecy_lists
             .into_iter()
             .flat_map(|neighbors| neighbors.into_iter())
             .unzip();
-
 
         for (ch_edge_index, original_edge_id) in original_edge_ids.into_iter().enumerate() {
             match original_edge_id.value() {
@@ -63,7 +62,6 @@ impl CCHGraph {
         FirstOutGraph::new(first_out, head, vec![INFINITY; m])
     }
 
-    #[allow(dead_code)]
     pub fn customize(&mut self) {
         let n = self.upward.num_nodes();
         let mut outgoing_weights = vec![INFINITY; n];
