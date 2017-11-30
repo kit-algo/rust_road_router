@@ -30,10 +30,10 @@ impl FirstOutGraph {
 
     pub fn from_adjancecy_lists(adjancecy_lists: Vec<Vec<Link>>) -> FirstOutGraph {
         // create first_out array by doing a prefix sum over the adjancecy list sizes
-        let first_out = std::iter::once(0).chain(adjancecy_lists.iter().scan(0, |state, incoming_links| {
-            *state = *state + incoming_links.len() as EdgeId;
-            Some(*state)
-        })).collect();
+        let first_out = {
+            let degrees = adjancecy_lists.iter().map(|neighbors| neighbors.len() as EdgeId);
+            Self::degrees_to_first_out(degrees).collect()
+        };
 
         // append all adjancecy list and split the pairs into two seperate vectors
         let (head, weight) = adjancecy_lists
@@ -116,6 +116,13 @@ impl FirstOutGraph {
     pub fn swap_weights(&mut self, mut new_weights: &mut Vec<Weight>) {
         assert!(new_weights.len() == self.weight.len());
         swap(&mut self.weight, &mut new_weights);
+    }
+
+    pub fn degrees_to_first_out<I: Iterator<Item = EdgeId>>(degrees: I) -> impl Iterator<Item = EdgeId> {
+        std::iter::once(0).chain(degrees.scan(0, |state, degree| {
+            *state = *state + degree as EdgeId;
+            Some(*state)
+        }))
     }
 }
 

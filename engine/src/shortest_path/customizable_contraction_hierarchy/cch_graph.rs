@@ -36,10 +36,10 @@ impl CCHGraph {
     fn adjancecy_lists_to_first_out_graph(adjancecy_lists: Vec<Vec<(NodeId, InrangeOption<EdgeId>)>>, original_edge_to_ch_edge: &mut Vec<InrangeOption<EdgeId>>) -> FirstOutGraph {
         let n = adjancecy_lists.len();
         // create first_out array by doing a prefix sum over the adjancecy list sizes
-        let first_out: Vec<u32> = std::iter::once(0).chain(adjancecy_lists.iter().scan(0, |state, incoming_links| {
-            *state = *state + incoming_links.len() as u32;
-            Some(*state)
-        })).collect();
+        let first_out: Vec<EdgeId> = {
+            let degrees = adjancecy_lists.iter().map(|neighbors| neighbors.len() as EdgeId);
+            FirstOutGraph::degrees_to_first_out(degrees).collect()
+        };
         debug_assert_eq!(first_out.len(), n + 1);
 
         // append all adjancecy list and split the pairs into two seperate vectors
