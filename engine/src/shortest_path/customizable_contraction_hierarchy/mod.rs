@@ -106,13 +106,14 @@ impl ContractionGraph {
 
     fn as_first_out_graphs(self) -> ((FirstOutGraph, FirstOutGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
         let (outgoing, incoming) = self.nodes.into_iter().map(|node| {
-            (node.outgoing.into_iter().map(|(node, _)| node).collect(), node.incoming.into_iter().map(|(node, _)| node).collect())
+            (node.outgoing, node.incoming)
         }).unzip();
 
-        ((Self::adjancecy_lists_to_first_out_graph(outgoing), Self::adjancecy_lists_to_first_out_graph(incoming)), None)
+        let mut original_edge_to_ch_edge = vec![InrangeOption::<EdgeId>::new(None); 0]; // TODO original m
+        ((Self::adjancecy_lists_to_first_out_graph(outgoing, &mut original_edge_to_ch_edge), Self::adjancecy_lists_to_first_out_graph(incoming, &mut original_edge_to_ch_edge)), None)
     }
 
-    fn adjancecy_lists_to_first_out_graph(adjancecy_lists: Vec<Vec<NodeId>>) -> FirstOutGraph {
+    fn adjancecy_lists_to_first_out_graph(adjancecy_lists: Vec<Vec<(NodeId, InrangeOption<EdgeId>)>>, original_edge_to_ch_edge: &mut Vec<InrangeOption<EdgeId>>) -> FirstOutGraph {
         let n = adjancecy_lists.len();
         // create first_out array by doing a prefix sum over the adjancecy list sizes
         let first_out: Vec<u32> = std::iter::once(0).chain(adjancecy_lists.iter().scan(0, |state, incoming_links| {
@@ -122,10 +123,21 @@ impl ContractionGraph {
         debug_assert_eq!(first_out.len(), n + 1);
 
         // append all adjancecy list and split the pairs into two seperate vectors
-        let head: Vec<NodeId> = adjancecy_lists
+        let (head, original_edge_ids): (Vec<NodeId>, Vec<InrangeOption<EdgeId>>) = adjancecy_lists
             .into_iter()
             .flat_map(|neighbors| neighbors.into_iter())
-            .collect();
+            .unzip();
+
+
+        for (ch_edge_index, original_edge_id) in original_edge_ids.into_iter().enumerate() {
+            match original_edge_id.value() {
+                Some(original_edge_id) => {
+                    debug_assert_eq!(original_edge_to_ch_edge[original_edge_id as usize].value(), None);
+                    original_edge_to_ch_edge[original_edge_id as usize] = InrangeOption::new(Some(ch_edge_index as EdgeId));
+                },
+                None => (),
+            }
+        }
 
         let m = head.len();
         FirstOutGraph::new(first_out, head, vec![INFINITY; m])
