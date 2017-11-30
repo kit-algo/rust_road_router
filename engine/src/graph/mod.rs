@@ -4,6 +4,7 @@ use shortest_path::DijkstrableGraph;
 pub mod first_out_graph;
 
 pub type NodeId = u32;
+pub type EdgeId = u32;
 pub type Weight = u32;
 pub const INFINITY: u32 = std::u32::MAX / 2;
 

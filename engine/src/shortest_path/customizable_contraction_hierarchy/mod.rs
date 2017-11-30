@@ -14,8 +14,8 @@ enum ShortcutResult {
 
 #[derive(Debug)]
 struct Node {
-    outgoing: Vec<NodeId>,
-    incoming: Vec<NodeId>
+    outgoing: Vec<(NodeId, InrangeOption<EdgeId>)>,
+    incoming: Vec<(NodeId, InrangeOption<EdgeId>)>
 }
 
 impl Node {
@@ -27,24 +27,24 @@ impl Node {
         Node::insert(&mut self.incoming, from)
     }
 
-    fn insert(links: &mut Vec<NodeId>, node: NodeId) -> ShortcutResult {
-        for &other in links.iter() {
+    fn insert(links: &mut Vec<(NodeId, InrangeOption<EdgeId>)>, node: NodeId) -> ShortcutResult {
+        for &(other, _) in links.iter() {
             if node == other {
                 return ShortcutResult::Existed
             }
         }
 
-        links.push(node);
+        links.push((node, InrangeOption::new(None)));
         ShortcutResult::NewShortcut
     }
 
     fn remove_outgoing(&mut self, to: NodeId) {
-        let pos = self.outgoing.iter().position(|&node| to == node).unwrap();
+        let pos = self.outgoing.iter().position(|&(node, _)| to == node).unwrap();
         self.outgoing.swap_remove(pos);
     }
 
     fn remove_incmoing(&mut self, from: NodeId) {
-        let pos = self.incoming.iter().position(|&node| from == node).unwrap();
+        let pos = self.incoming.iter().position(|&(node, _)| from == node).unwrap();
         self.incoming.swap_remove(pos);
     }
 }
@@ -60,18 +60,21 @@ impl ContractionGraph {
         let n = graph.num_nodes() as NodeId;
 
         let nodes = {
-            let outs = (0..n).map(|node|
+            let outs: Vec<Vec<(NodeId, InrangeOption<EdgeId>)>> = (0..n).map(|node|
                 graph.neighbor_iter(node_order.node(node))
                     .map(|Link { node, .. }| node_order.rank(node))
+                    .zip(graph.neighbor_edge_indices(node).map(|edge_id| InrangeOption::new(Some(edge_id))))
                     .collect()
-            );
-            let reversed = graph.reverse();
-            let ins = (0..n).map(|node|
-                reversed.neighbor_iter(node_order.node(node))
-                    .map(|Link { node, .. }| node_order.rank(node))
-                    .collect()
-            );
-            outs.zip(ins).map(|(outgoing, incoming)| Node { outgoing, incoming } ).collect()
+            ).collect();
+
+            let mut ins = vec![vec![]; n as usize];
+            for node in 0..n {
+                for &(neighbor, edge_id) in outs[node as usize].iter() {
+                    ins[neighbor as usize].push((node, edge_id));
+                }
+            }
+
+            outs.into_iter().zip(ins.into_iter()).map(|(outgoing, incoming)| Node { outgoing, incoming } ).collect()
         };
 
         ContractionGraph {
@@ -84,8 +87,8 @@ impl ContractionGraph {
         let mut graph = self.partial_graph();
 
         while let Some((node, mut subgraph)) = graph.remove_lowest() {
-            for &from in node.incoming.iter() {
-                for &to in node.outgoing.iter() {
+            for &(from, _) in node.incoming.iter() {
+                for &(to, _) in node.outgoing.iter() {
                     subgraph.insert(from, to);
                 }
             }
@@ -103,7 +106,7 @@ impl ContractionGraph {
 
     fn as_first_out_graphs(self) -> ((FirstOutGraph, FirstOutGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
         let (outgoing, incoming) = self.nodes.into_iter().map(|node| {
-            (node.outgoing, node.incoming)
+            (node.outgoing.into_iter().map(|(node, _)| node).collect(), node.incoming.into_iter().map(|(node, _)| node).collect())
         }).unzip();
 
         ((Self::adjancecy_lists_to_first_out_graph(outgoing), Self::adjancecy_lists_to_first_out_graph(incoming)), None)
@@ -133,7 +136,7 @@ impl ContractionGraph {
         let mut elimination_tree = vec![InrangeOption::new(None); n];
 
         for (rank, node) in self.nodes.iter().enumerate() {
-            elimination_tree[rank] = InrangeOption::new(node.outgoing.iter().chain(node.incoming.iter()).min().cloned());
+            elimination_tree[rank] = InrangeOption::new(node.outgoing.iter().chain(node.incoming.iter()).map(|&(node, _)| node).min());
             debug_assert!(elimination_tree[rank].value().unwrap_or(n as NodeId) as usize > rank);
         }
 
@@ -159,10 +162,10 @@ impl<'a> PartialContractionGraph<'a> {
     }
 
     fn remove_edges_to_removed(&mut self, node: &Node) {
-        for &from in node.incoming.iter() {
+        for &(from, _) in node.incoming.iter() {
             self.nodes[(from - self.id_offset) as usize].remove_outgoing(self.id_offset - 1);
         }
-        for &to in node.outgoing.iter() {
+        for &(to, _) in node.outgoing.iter() {
             self.nodes[(to - self.id_offset) as usize].remove_incmoing(self.id_offset - 1);
         }
     }

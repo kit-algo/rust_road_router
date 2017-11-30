@@ -3,11 +3,12 @@ use ::io;
 use std::io::Result;
 use std::path::Path;
 use std::mem::swap;
+use std::ops::Range;
 
 #[derive(Debug, Clone)]
 pub struct FirstOutGraph {
     // index of first edge of each node +1 entry in the end
-    first_out: Vec<u32>,
+    first_out: Vec<EdgeId>,
     // the node ids to which each edge points
     head: Vec<NodeId>,
     // the weight of each edge
@@ -15,7 +16,9 @@ pub struct FirstOutGraph {
 }
 
 impl FirstOutGraph {
-    pub fn new(first_out: Vec<u32>, head: Vec<NodeId>, weight: Vec<Weight>) -> FirstOutGraph {
+    pub fn new(first_out: Vec<EdgeId>, head: Vec<NodeId>, weight: Vec<Weight>) -> FirstOutGraph {
+        assert!(first_out.len() < <NodeId>::max_value() as usize);
+        assert!(head.len() < <EdgeId>::max_value() as usize);
         assert_eq!(*first_out.first().unwrap(), 0);
         assert_eq!(*first_out.last().unwrap() as usize, head.len());
         assert_eq!(weight.len(), head.len());
@@ -28,7 +31,7 @@ impl FirstOutGraph {
     pub fn from_adjancecy_lists(adjancecy_lists: Vec<Vec<Link>>) -> FirstOutGraph {
         // create first_out array by doing a prefix sum over the adjancecy list sizes
         let first_out = std::iter::once(0).chain(adjancecy_lists.iter().scan(0, |state, incoming_links| {
-            *state = *state + incoming_links.len() as u32;
+            *state = *state + incoming_links.len() as EdgeId;
             Some(*state)
         })).collect();
 
@@ -42,15 +45,24 @@ impl FirstOutGraph {
     }
 
     pub fn neighbor_iter(&self, node: NodeId) -> std::iter::Map<std::iter::Zip<std::slice::Iter<NodeId>, std::slice::Iter<Weight>>, fn((&NodeId, &Weight))->Link> {
-        let range = (self.first_out[node as usize] as usize)..(self.first_out[(node + 1) as usize] as usize);
+        let range = self.neighbor_edge_indices_usize(node);
         self.head[range.clone()].iter()
             .zip(self.weight[range].iter())
             .map( |(&neighbor, &weight)| Link { node: neighbor, weight: weight } )
     }
 
     pub fn neighbor_iter_mut(&mut self, node: NodeId) -> std::iter::Zip<std::slice::IterMut<NodeId>, std::slice::IterMut<Weight>> {
-        let range = (self.first_out[node as usize] as usize)..(self.first_out[(node + 1) as usize] as usize);
+        let range = self.neighbor_edge_indices_usize(node);
         self.head[range.clone()].iter_mut().zip(self.weight[range].iter_mut())
+    }
+
+    pub fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {
+        (self.first_out[node as usize] as EdgeId)..(self.first_out[(node + 1) as usize] as EdgeId)
+    }
+
+    fn neighbor_edge_indices_usize(&self, node: NodeId) -> Range<usize> {
+        let range = self.neighbor_edge_indices(node);
+        Range { start: range.start as usize, end: range.end as usize }
     }
 
     pub fn edge_index(&self, from: NodeId, to: NodeId) -> Option<usize> {
