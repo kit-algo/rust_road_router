@@ -28,9 +28,9 @@ fn main() {
     // let ground_truth = read_into_vector(path.join("test/travel_time_length").to_str().unwrap()).expect("could not read travel_time_length");
 
     let graph = Graph::new(first_out, head, travel_time);
-    let cch_ranks = read_into_vector(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm");
+    let cch_order = read_into_vector(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm");
 
-    let mut cch = customizable_contraction_hierarchy::contract(&graph, NodeOrder::from_ranks(cch_ranks));
+    let mut cch = customizable_contraction_hierarchy::contract(&graph, NodeOrder::from_node_order(cch_order));
     cch.customize(&graph);
 
     // for ((&from, &to), &ground_truth) in from.iter().zip(to.iter()).zip(ground_truth.iter()).take(100) {
