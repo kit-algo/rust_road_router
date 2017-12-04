@@ -9,12 +9,14 @@ extern crate nav_types;
 extern crate postgres;
 extern crate csv;
 extern crate glob;
+extern crate time;
 
 pub mod shortest_path;
 pub mod graph;
 pub mod io;
 mod index_heap;
 mod inrange_option;
+pub mod benchmark;
 pub mod rank_select_map;
 pub mod import;
 

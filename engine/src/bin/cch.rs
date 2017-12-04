@@ -3,8 +3,6 @@ use std::path::Path;
 
 extern crate bmw_routing_engine;
 
-extern crate time;
-
 use bmw_routing_engine::*;
 use graph::first_out_graph::FirstOutGraph as Graph;
 // use graph::INFINITY;

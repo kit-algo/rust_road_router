@@ -2,6 +2,7 @@ use super::*;
 use super::first_out_graph::FirstOutGraph;
 use shortest_path::node_order::NodeOrder;
 use ::inrange_option::InrangeOption;
+use ::benchmark::measure;
 
 mod cch_graph;
 
@@ -90,7 +91,7 @@ impl<'a> ContractionGraph<'a> {
     }
 
     fn contract(mut self) -> ContractedGraph<'a> {
-        {
+        measure("CCH Contraction", || {
             let mut num_shortcut_arcs = 0;
             let mut graph = self.partial_graph();
 
@@ -110,7 +111,7 @@ impl<'a> ContractionGraph<'a> {
             }
 
             println!("Number of arcs inserted during contraction: {:?}", num_shortcut_arcs);
-        }
+        });
 
 
         ContractedGraph(self)

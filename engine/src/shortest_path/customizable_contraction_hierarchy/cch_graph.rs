@@ -2,6 +2,7 @@ use super::*;
 use shortest_path::node_order::NodeOrder;
 use shortest_path::DijkstrableGraph;
 use ::inrange_option::InrangeOption;
+use ::benchmark::measure;
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -62,7 +63,7 @@ impl CCHGraph {
     pub fn customize(&mut self, metric: &FirstOutGraph) {
         let n = self.upward.num_nodes() as NodeId;
 
-        {
+        measure("CCH apply weights", || {
             let mut upward_weights = vec![INFINITY; self.upward.num_arcs()];
             let mut downward_weights = vec![INFINITY; self.downward.num_arcs()];
 
@@ -80,40 +81,43 @@ impl CCHGraph {
 
             self.upward.swap_weights(&mut upward_weights);
             self.downward.swap_weights(&mut downward_weights);
-        }
+        });
 
-        let mut node_outgoing_weights = vec![INFINITY; n as usize];
-        let mut node_incoming_weights = vec![INFINITY; n as usize];
+        measure("CCH Customization", || {
+            let mut node_outgoing_weights = vec![INFINITY; n as usize];
+            let mut node_incoming_weights = vec![INFINITY; n as usize];
 
-        for current_node in 0..n {
-            for Link { node, weight } in self.downward.neighbor_iter(current_node) {
-                node_incoming_weights[node as usize] = weight;
-            }
-            for Link { node, weight } in self.upward.neighbor_iter(current_node) {
-                node_outgoing_weights[node as usize] = weight;
-            }
+            for current_node in 0..n {
+                for Link { node, weight } in self.downward.neighbor_iter(current_node) {
+                    node_incoming_weights[node as usize] = weight;
+                }
+                for Link { node, weight } in self.upward.neighbor_iter(current_node) {
+                    node_outgoing_weights[node as usize] = weight;
+                }
 
-            for Link { node, weight } in self.downward.neighbor_iter(current_node) {
-                for (&mut target, shortcut_weight) in self.upward.neighbor_iter_mut(node) {
-                    if weight + node_outgoing_weights[target as usize] < *shortcut_weight {
-                        *shortcut_weight = weight + node_outgoing_weights[target as usize];
+                for Link { node, weight } in self.downward.neighbor_iter(current_node) {
+                    for (&mut target, shortcut_weight) in self.upward.neighbor_iter_mut(node) {
+                        if weight + node_outgoing_weights[target as usize] < *shortcut_weight {
+                            *shortcut_weight = weight + node_outgoing_weights[target as usize];
+                        }
                     }
                 }
-            }
-            for Link { node, weight } in self.upward.neighbor_iter(current_node) {
-                for (&mut target, shortcut_weight) in self.downward.neighbor_iter_mut(node) {
-                    if weight + node_incoming_weights[target as usize] < *shortcut_weight {
-                        *shortcut_weight = weight + node_incoming_weights[target as usize];
+                for Link { node, weight } in self.upward.neighbor_iter(current_node) {
+                    for (&mut target, shortcut_weight) in self.downward.neighbor_iter_mut(node) {
+                        if weight + node_incoming_weights[target as usize] < *shortcut_weight {
+                            *shortcut_weight = weight + node_incoming_weights[target as usize];
+                        }
                     }
                 }
-            }
 
-            for Link { node, .. } in self.downward.neighbor_iter(current_node) {
-                node_incoming_weights[node as usize] = INFINITY;
+                for Link { node, .. } in self.downward.neighbor_iter(current_node) {
+                    node_incoming_weights[node as usize] = INFINITY;
+                }
+                for Link { node, .. } in self.upward.neighbor_iter(current_node) {
+                    node_outgoing_weights[node as usize] = INFINITY;
+                }
             }
-            for Link { node, .. } in self.upward.neighbor_iter(current_node) {
-                node_outgoing_weights[node as usize] = INFINITY;
-            }
-        }
+        });
+
     }
 }

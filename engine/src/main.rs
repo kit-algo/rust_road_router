@@ -3,8 +3,6 @@ use std::path::Path;
 
 extern crate bmw_routing_engine;
 
-extern crate time;
-
 use bmw_routing_engine::*;
 use graph::first_out_graph::FirstOutGraph as Graph;
 use graph::INFINITY;
@@ -13,9 +11,10 @@ use shortest_path::query::bidirectional_dijkstra::Server as BiDijkServer;
 use shortest_path::query::async::dijkstra::Server as AsyncDijkServer;
 use shortest_path::query::async::bidirectional_dijkstra::Server as AsyncBiDijkServer;
 use shortest_path::query::contraction_hierarchy::Server as CHServer;
-use io::read_into_vector;
 use shortest_path::contraction_hierarchy;
 
+use io::read_into_vector;
+use bmw_routing_engine::benchmark::measure;
 
 fn main() {
     let mut args = env::args();
@@ -55,28 +54,23 @@ fn main() {
             val => Some(val),
         };
 
-        let start = time::now();
-        assert_eq!(simple_server.distance(from, to), ground_truth);
-        println!("simple took {}ms", (time::now() - start).num_milliseconds());
-
-        let start = time::now();
-        assert_eq!(bi_dir_server.distance(from, to), ground_truth);
-        println!("bidir took {}ms", (time::now() - start).num_milliseconds());
-
-        let start = time::now();
-        assert_eq!(async_server.distance(from, to), ground_truth);
-        println!("async took {}ms", (time::now() - start).num_milliseconds());
-
-        let start = time::now();
-        assert_eq!(async_bi_dir_server.distance(from, to), ground_truth);
-        println!("async bidir took {}ms", (time::now() - start).num_milliseconds());
-
-        let start = time::now();
-        assert_eq!(ch_server.distance(from, to), ground_truth);
-        println!("ch took {}ms", (time::now() - start).num_milliseconds());
-
-        let start = time::now();
-        assert_eq!(ch_server_with_own_ch.distance(inverted_order[from as usize], inverted_order[to as usize]), ground_truth);
-        println!("own ch took {}ms", (time::now() - start).num_milliseconds());
+        measure("simple dijkstra", || {
+            assert_eq!(simple_server.distance(from, to), ground_truth);
+        });
+        measure("bidir dijkstra", || {
+            assert_eq!(bi_dir_server.distance(from, to), ground_truth);
+        });
+        measure("async dijkstra", || {
+            assert_eq!(async_server.distance(from, to), ground_truth);
+        });
+        measure("async bidir dijkstra", || {
+            assert_eq!(async_bi_dir_server.distance(from, to), ground_truth);
+        });
+        measure("CH", || {
+            assert_eq!(ch_server.distance(from, to), ground_truth);
+        });
+        measure("own CH", || {
+            assert_eq!(ch_server_with_own_ch.distance(inverted_order[from as usize], inverted_order[to as usize]), ground_truth);
+        });
     }
 }
