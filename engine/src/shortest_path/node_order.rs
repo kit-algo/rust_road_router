@@ -20,6 +20,8 @@ impl NodeOrder {
             ranks[node as usize] = i as Rank;
         }
 
+        debug_assert_eq!(ranks.iter().position(|&rank| rank == n as Rank), None);
+
         NodeOrder { node_order, ranks }
     }
 
@@ -31,6 +33,8 @@ impl NodeOrder {
         for (node, &rank) in ranks.iter().enumerate() {
             node_order[rank as usize] = node as NodeId;
         }
+
+        debug_assert_eq!(node_order.iter().position(|&node| node == n as NodeId), None);
 
         NodeOrder { node_order, ranks }
     }
