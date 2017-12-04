@@ -1,4 +1,3 @@
-use std;
 use super::*;
 use super::first_out_graph::FirstOutGraph;
 use shortest_path::node_order::NodeOrder;
@@ -43,11 +42,13 @@ impl Node {
     fn remove_outgoing(&mut self, to: NodeId) {
         let pos = self.outgoing.iter().position(|&(node, _)| to == node).unwrap();
         self.outgoing.swap_remove(pos);
+        debug_assert_eq!(self.outgoing.iter().position(|&(node, _)| to == node), None);
     }
 
     fn remove_incmoing(&mut self, from: NodeId) {
         let pos = self.incoming.iter().position(|&(node, _)| from == node).unwrap();
         self.incoming.swap_remove(pos);
+        debug_assert_eq!(self.incoming.iter().position(|&(node, _)| from == node), None);
     }
 }
 
@@ -63,12 +64,13 @@ impl<'a> ContractionGraph<'a> {
         let n = graph.num_nodes() as NodeId;
 
         let nodes = {
-            let outs: Vec<Vec<(NodeId, InrangeOption<EdgeId>)>> = (0..n).map(|node|
-                graph.neighbor_iter(node_order.node(node))
-                    .map(|Link { node, .. }| node_order.rank(node))
-                    .zip(graph.neighbor_edge_indices(node).map(|edge_id| InrangeOption::new(Some(edge_id))))
+            let outs: Vec<Vec<(NodeId, InrangeOption<EdgeId>)>> = (0..n).map(|node| {
+                let old_node_id = node_order.node(node);
+                graph.neighbor_iter(old_node_id)
+                    .map(|Link { node: neighbor, .. }| { debug_assert_ne!(old_node_id, neighbor); node_order.rank(neighbor) })
+                    .zip(graph.neighbor_edge_indices(old_node_id).map(|edge_id| InrangeOption::new(Some(edge_id))))
                     .collect()
-            ).collect();
+            }).collect();
 
             let mut ins = vec![vec![]; n as usize];
             for node in 0..n {
@@ -89,18 +91,27 @@ impl<'a> ContractionGraph<'a> {
 
     fn contract(mut self) -> ContractedGraph<'a> {
         {
+            let mut num_shortcut_arcs = 0;
             let mut graph = self.partial_graph();
 
             while let Some((node, mut subgraph)) = graph.remove_lowest() {
                 for &(from, _) in node.incoming.iter() {
                     for &(to, _) in node.outgoing.iter() {
-                        subgraph.insert(from, to);
+                        if from != to {
+                            match subgraph.insert(from, to) {
+                                ShortcutResult::NewShortcut => num_shortcut_arcs += 1,
+                                ShortcutResult::Existed => (),
+                            }
+                        }
                     }
                 }
 
                 graph = subgraph;
             }
+
+            println!("Number of arcs inserted during contraction: {:?}", num_shortcut_arcs);
         }
+
 
         ContractedGraph(self)
     }
@@ -131,19 +142,23 @@ impl<'a> PartialContractionGraph<'a> {
     }
 
     fn remove_edges_to_removed(&mut self, node: &Node) {
+        let node_id = self.id_offset - 1;
         for &(from, _) in node.incoming.iter() {
-            self.nodes[(from - self.id_offset) as usize].remove_outgoing(self.id_offset - 1);
+            debug_assert!(from > node_id);
+            self.nodes[(from - self.id_offset) as usize].remove_outgoing(node_id);
         }
         for &(to, _) in node.outgoing.iter() {
-            self.nodes[(to - self.id_offset) as usize].remove_incmoing(self.id_offset - 1);
+            debug_assert!(to > node_id);
+            self.nodes[(to - self.id_offset) as usize].remove_incmoing(node_id);
         }
     }
 
     fn insert(&mut self, from: NodeId, to: NodeId) -> ShortcutResult {
+        debug_assert_ne!(from, to);
         let out_result = self.nodes[(from - self.id_offset) as usize].insert_outgoing(to);
         let in_result = self.nodes[(to - self.id_offset) as usize].insert_incoming(from);
 
-        assert_eq!(out_result, in_result);
+        debug_assert_eq!(out_result, in_result);
         out_result
     }
 }
