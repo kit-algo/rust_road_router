@@ -1,3 +1,6 @@
+use std::collections::LinkedList;
+use std::iter::{empty, once};
+
 #[derive(Debug)]
 struct TraceData {
     timestamp: u64, // [ms]
@@ -19,6 +22,172 @@ struct LinkSpeedData {
     estimate_quality: f32,
     velocity: f32
 }
+
+trait State: std::fmt::Debug {
+    fn on_link(self, link: LinkData) -> (Box<State>, Box<Iterator<Item = LinkSpeedData>>);
+    fn on_trace(self, trace: TraceData) -> (Box<State>, Box<Iterator<Item = LinkSpeedData>>);
+    fn on_done(self) -> (Box<Iterator<Item = LinkSpeedData>>);
+}
+
+#[derive(Debug)]
+struct Init {}
+impl State for Init {
+    fn on_link(self, link: LinkData) -> (Box<State>, Box<Iterator<Item = LinkSpeedData>>) {
+        (Box::new(InitialLink { link }), Box::new(empty()))
+    }
+
+    fn on_trace(self, _trace: TraceData) -> (Box<State>, Box<Iterator<Item = LinkSpeedData>>) {
+        panic!("Init: trace before initial link");
+    }
+
+    fn on_done(self) -> (Box<Iterator<Item = LinkSpeedData>>) {
+        panic!("Init: stream ended, expected link");
+    }
+}
+
+#[derive(Debug)]
+struct InitialLink {
+    link: LinkData
+}
+impl State for InitialLink {
+    fn on_link(self, _link: LinkData) -> (Box<State>, Box<Iterator<Item = LinkSpeedData>>) {
+        panic!("InitialLink: no trace on initial link");
+    }
+
+    fn on_trace(self, trace: TraceData) -> (Box<State>, Box<Iterator<Item = LinkSpeedData>>) {
+        assert_eq!(self.link.link_id, trace.link_id);
+        (Box::new(InitialLinkWithTrace { link: self.link, trace }), Box::new(empty()))
+    }
+
+    fn on_done(self) -> (Box<Iterator<Item = LinkSpeedData>>) {
+        panic!("InitialLink: stream ended, expected trace");
+    }
+}
+
+#[derive(Debug)]
+struct InitialLinkWithTrace {
+    link: LinkData,
+    trace: TraceData
+}
+impl State for InitialLinkWithTrace {
+    fn on_link(self, link: LinkData) -> (Box<State>, Box<Iterator<Item = LinkSpeedData>>) {
+        assert_ne!(self.link.link_id, link.link_id);
+        let mut intermediates = LinkedList::new();
+        intermediates.push_back(link);
+        (Box::new(IntermediateLinkAfterInitial { link: self.link, trace: self.trace, intermediates }), Box::new(empty()))
+    }
+
+    fn on_trace(self, trace: TraceData) -> (Box<State>, Box<Iterator<Item = LinkSpeedData>>) {
+        assert_eq!(trace.link_id, self.trace.link_id);
+        assert_eq!(trace.link_id, self.link.link_id);
+
+        let delta_t = trace.timestamp - self.trace.timestamp;
+        let delta_fraction = (trace.traversed_in_travel_direction_fraction - self.trace.traversed_in_travel_direction_fraction) as f64;
+        let t_pre = (delta_t as f64 * self.trace.traversed_in_travel_direction_fraction as f64 / delta_fraction) as u64;
+
+        debug_assert!(self.trace.timestamp > t_pre, "timestamp underflow");
+        let entry_timestamp = self.trace.timestamp - t_pre;
+
+        (Box::new(LinkWithEntryTimestampAndTrace { link: self.link, last_trace: trace, entry_timestamp }), Box::new(empty()))
+    }
+
+    fn on_done(self) -> (Box<Iterator<Item = LinkSpeedData>>) {
+        panic!("InitialLinkWithTrace: stream ended, expected link or trace");
+    }
+}
+
+#[derive(Debug)]
+struct IntermediateLinkAfterInitial {
+    link: LinkData,
+    trace: TraceData,
+    intermediates: LinkedList<LinkData>
+}
+impl State for IntermediateLinkAfterInitial {
+    fn on_link(mut self, link: LinkData) -> (Box<State>, Box<Iterator<Item = LinkSpeedData>>) {
+        self.intermediates.push_back(link);
+        (Box::new(self), Box::new(empty()))
+    }
+
+    fn on_trace(mut self, trace: TraceData) -> (Box<State>, Box<Iterator<Item = LinkSpeedData>>) {
+        let link = self.intermediates.pop_back().unwrap();
+        assert_eq!(link.link_id, trace.link_id);
+
+        let initial_timestamp = self.trace.timestamp;
+        let delta_t = trace.timestamp - initial_timestamp;
+        let length_after_initial_trace = ((1.0 - self.trace.traversed_in_travel_direction_fraction as f64) * self.link.length as f64) as u32;
+        let length_before_initial_trace = self.link.length - length_after_initial_trace;
+        let intermediate_total_length: u32 = self.intermediates.iter().map(|&LinkData { length, .. }| length).sum();
+        let length_before_current_trace = (trace.traversed_in_travel_direction_fraction as f64 * link.length as f64) as u32;
+        let total_length = length_after_initial_trace + intermediate_total_length + length_before_current_trace;
+
+        let velocity = total_length as f64 / delta_t as f64;
+        let time_before_initial = (length_before_initial_trace as f64 / velocity) as u64;
+        debug_assert!(time_before_initial < initial_timestamp);
+        let link_entered_timestamp = initial_timestamp - time_before_initial;
+
+        let output = once(LinkSpeedData { link_id: self.link.link_id, link_entered_timestamp, estimate_quality: 0.0, velocity: (velocity * 3.6) as f32  });
+
+        let output = output.chain(self.intermediates.into_iter().scan(length_after_initial_trace, move |state, link| {
+            *state = *state + link.length;
+            let link_entered_timestamp = initial_timestamp + (*state as f64 / velocity) as u64;
+            Some(LinkSpeedData { link_id: link.link_id, link_entered_timestamp, estimate_quality: 0.0, velocity: (velocity * 3.6) as f32 })
+        }));
+
+        let entry_timestamp = initial_timestamp + ((length_after_initial_trace + intermediate_total_length) as f64 / velocity) as u64;
+
+        (Box::new(LinkWithEntryTimestampAndTrace { link: link, last_trace: trace, entry_timestamp }), Box::new(output))
+    }
+
+    fn on_done(self) -> (Box<Iterator<Item = LinkSpeedData>>) {
+        panic!("IntermediateLinkAfterInitial: stream ended, expected link or trace");
+    }
+}
+
+#[derive(Debug)]
+struct LinkWithEntryTimestampAndTrace {
+    link: LinkData,
+    entry_timestamp: u64,
+    last_trace: TraceData,
+}
+impl State for LinkWithEntryTimestampAndTrace {
+    fn on_link(self, link: LinkData) -> (Box<State>, Box<Iterator<Item = LinkSpeedData>>) {
+        panic!("wrong transition");
+    }
+
+    fn on_trace(self, trace: TraceData) -> (Box<State>, Box<Iterator<Item = LinkSpeedData>>) {
+        panic!("wrong transition");
+    }
+
+    fn on_done(self) -> (Box<Iterator<Item = LinkSpeedData>>) {
+        panic!("LinkWithEntryTimestampAndTrace: stream ended, expected link or trace");
+    }
+}
+
+#[derive(Debug)]
+struct IntermediateLink {
+    link: LinkData,
+    trace: TraceData
+}
+impl State for IntermediateLink {
+    fn on_link(self, link: LinkData) -> (Box<State>, Box<Iterator<Item = LinkSpeedData>>) {
+        panic!("wrong transition");
+    }
+
+    fn on_trace(self, trace: TraceData) -> (Box<State>, Box<Iterator<Item = LinkSpeedData>>) {
+        panic!("wrong transition");
+    }
+
+    fn on_done(self) -> (Box<Iterator<Item = LinkSpeedData>>) {
+        panic!("IntermediateLink: stream ended, expected link or trace");
+    }
+}
+
+
+#[derive(Debug)]
+struct StateMachine {
+    state: Option<Box<State>>
+}
+
 
 fn calculate<'a, LinkIterator: Iterator<Item = &'a LinkData> + Clone, TraceIterator: Iterator<Item = &'a TraceData>>(mut links: LinkIterator, mut traces: TraceIterator) -> Result<Vec<LinkSpeedData>, &'static str> {
     let mut link_speeds = Vec::with_capacity(links.size_hint().0);
