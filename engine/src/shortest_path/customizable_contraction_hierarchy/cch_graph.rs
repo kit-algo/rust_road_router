@@ -7,16 +7,18 @@ use ::benchmark::measure;
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct CCHGraph {
-    upward: FirstOutGraph,
-    downward: FirstOutGraph,
-    node_order: NodeOrder,
+    // TODO get rid of pub
+    pub upward: FirstOutGraph,
+    pub downward: FirstOutGraph,
+    pub node_order: NodeOrder,
     original_edge_to_ch_edge: Vec<InrangeOption<EdgeId>>,
-    elimination_tree: Vec<InrangeOption<NodeId>>
+    pub upward_elimination_tree: Vec<InrangeOption<NodeId>>,
+    pub downward_elimination_tree: Vec<InrangeOption<NodeId>>
 }
 
 impl CCHGraph {
     pub(super) fn new(contracted_graph: ContractedGraph) -> CCHGraph {
-        let elimination_tree = contracted_graph.elimination_trees();
+        let (upward_elimination_tree, downward_elimination_tree) = contracted_graph.elimination_trees();
         let ContractedGraph(contracted_graph) = contracted_graph;
         let node_order = contracted_graph.node_order;
 
@@ -31,7 +33,8 @@ impl CCHGraph {
             downward: Self::adjancecy_lists_to_first_out_graph(incoming, &mut original_edge_to_ch_edge),
             node_order,
             original_edge_to_ch_edge,
-            elimination_tree
+            upward_elimination_tree,
+            downward_elimination_tree
         }
     }
 

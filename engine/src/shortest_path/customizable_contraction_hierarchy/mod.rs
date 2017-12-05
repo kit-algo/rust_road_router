@@ -4,7 +4,7 @@ use shortest_path::node_order::NodeOrder;
 use ::inrange_option::InrangeOption;
 use ::benchmark::measure;
 
-mod cch_graph;
+pub mod cch_graph;
 
 use self::cch_graph::CCHGraph;
 
@@ -168,16 +168,19 @@ impl<'a> PartialContractionGraph<'a> {
 pub struct ContractedGraph<'a>(ContractionGraph<'a>);
 
 impl<'a> ContractedGraph<'a> {
-    fn elimination_trees(&self) -> Vec<InrangeOption<NodeId>> {
+    fn elimination_trees(&self) -> (Vec<InrangeOption<NodeId>>, Vec<InrangeOption<NodeId>>) {
         let n = self.0.original_graph.num_nodes();
-        let mut elimination_tree = vec![InrangeOption::new(None); n];
+        let mut upward_elimination_tree = vec![InrangeOption::new(None); n];
+        let mut downward_elimination_tree = vec![InrangeOption::new(None); n];
 
         for (rank, node) in self.0.nodes.iter().enumerate() {
-            elimination_tree[rank] = InrangeOption::new(node.outgoing.iter().chain(node.incoming.iter()).map(|&(node, _)| node).min());
-            debug_assert!(elimination_tree[rank].value().unwrap_or(n as NodeId) as usize > rank);
+            upward_elimination_tree[rank] = InrangeOption::new(node.outgoing.iter().map(|&(node, _)| node).min());
+            downward_elimination_tree[rank] = InrangeOption::new(node.incoming.iter().map(|&(node, _)| node).min());
+            debug_assert!(upward_elimination_tree[rank].value().unwrap_or(n as NodeId) as usize > rank);
+            debug_assert!(downward_elimination_tree[rank].value().unwrap_or(n as NodeId) as usize > rank);
         }
 
-        elimination_tree
+        (upward_elimination_tree, downward_elimination_tree)
     }
 }
 

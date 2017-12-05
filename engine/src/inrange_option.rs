@@ -17,7 +17,7 @@ impl Sentinel for usize {
     const SENTINEL: usize = usize::MAX;
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct InrangeOption<T: Sentinel + Debug>(T);
 
 impl<T: Sentinel + Debug> InrangeOption<T> {
