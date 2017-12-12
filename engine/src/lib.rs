@@ -15,6 +15,7 @@ pub mod io;
 mod index_heap;
 pub mod rank_select_map;
 pub mod import;
+pub mod link_speed_estimates;
 
 #[cfg(test)]
 mod tests {
