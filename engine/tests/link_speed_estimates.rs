@@ -6,7 +6,7 @@ use bmw_routing_engine::link_speed_estimates::*;
 fn check_for_empty_errors() {
     let links = vec![];
     let traces = vec![];
-    assert!(estimate(Box::new(links.iter()), Box::new(traces.iter())).is_err());
+    assert!(estimate_iter(Box::new(links.iter()), Box::new(traces.iter())).is_err());
 }
 
 #[test]
@@ -16,7 +16,8 @@ fn two_points_one_link() {
         TraceData { timestamp: 100000, link_id: 1, traversed_in_travel_direction_fraction: 0.1 },
         TraceData { timestamp: 101000, link_id: 1, traversed_in_travel_direction_fraction: 0.9 }
     ];
-    assert_eq!(estimate(Box::new(links.iter()), Box::new(traces.iter())).unwrap(),
+    let result: Vec<LinkSpeedData> = estimate_iter(Box::new(links.iter()), Box::new(traces.iter())).unwrap().collect();
+    assert_eq!(result,
         vec![LinkSpeedData { link_id: 1, link_entered_timestamp: 99875, estimate_quality: 0.9 - 0.1, velocity: 28.8 }]);
 }
 
@@ -30,7 +31,8 @@ fn two_points_two_links() {
         TraceData { timestamp: 100000, link_id: 1, traversed_in_travel_direction_fraction: 0.5 },
         TraceData { timestamp: 101000, link_id: 2, traversed_in_travel_direction_fraction: 0.5 }
     ];
-    assert_eq!(estimate(Box::new(links.iter()), Box::new(traces.iter())).unwrap(),
+    let result: Vec<LinkSpeedData> = estimate_iter(Box::new(links.iter()), Box::new(traces.iter())).unwrap().collect();
+    assert_eq!(result,
         vec![
             LinkSpeedData { link_id: 1, link_entered_timestamp: 99750, estimate_quality: 0.125, velocity: 72.0 },
             LinkSpeedData { link_id: 2, link_entered_timestamp: 100250, estimate_quality: 0.375, velocity: 72.0 }
@@ -48,7 +50,8 @@ fn two_points_three_links() {
         TraceData { timestamp: 100000, link_id: 1, traversed_in_travel_direction_fraction: 0.5 },
         TraceData { timestamp: 102000, link_id: 3, traversed_in_travel_direction_fraction: 0.5 }
     ];
-    assert_eq!(estimate(Box::new(links.iter()), Box::new(traces.iter())).unwrap(),
+    let result: Vec<LinkSpeedData> = estimate_iter(Box::new(links.iter()), Box::new(traces.iter())).unwrap().collect();
+    assert_eq!(result,
         vec![
             LinkSpeedData { link_id: 1, link_entered_timestamp: 99750, estimate_quality: 0.0625, velocity: 72.0 },
             LinkSpeedData { link_id: 2, link_entered_timestamp: 100250, estimate_quality: 0.75, velocity: 72.0 },
@@ -68,7 +71,8 @@ fn three_points_three_links() {
         TraceData { timestamp: 100250, link_id: 1, traversed_in_travel_direction_fraction: 1.0 },
         TraceData { timestamp: 102000, link_id: 3, traversed_in_travel_direction_fraction: 0.5 }
     ];
-    assert_eq!(estimate(Box::new(links.iter()), Box::new(traces.iter())).unwrap(),
+    let result: Vec<LinkSpeedData> = estimate_iter(Box::new(links.iter()), Box::new(traces.iter())).unwrap().collect();
+    assert_eq!(result,
         vec![
             LinkSpeedData { link_id: 1, link_entered_timestamp: 99750, estimate_quality: 0.5, velocity: 72.0 },
             LinkSpeedData { link_id: 2, link_entered_timestamp: 100250, estimate_quality: 30000.0 / 35000.0, velocity: 72.0 },
