@@ -69,9 +69,9 @@ impl FirstOutGraph {
         Range { start: range.start as usize, end: range.end as usize }
     }
 
-    pub fn edge_index(&self, from: NodeId, to: NodeId) -> Option<usize> {
+    pub fn edge_index(&self, from: NodeId, to: NodeId) -> Option<EdgeId> {
         let first_out = self.first_out[from as usize] as usize;
-        self.neighbor_iter(from).enumerate().find(|&(_, Link { node, .. })| node == to).map(|(i, _)| first_out + i )
+        self.neighbor_iter(from).enumerate().find(|&(_, Link { node, .. })| node == to).map(|(i, _)| (first_out + i) as EdgeId )
     }
 
     pub fn reverse(&self) -> FirstOutGraph {

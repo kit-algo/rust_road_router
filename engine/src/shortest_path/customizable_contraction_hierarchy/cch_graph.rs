@@ -11,53 +11,59 @@ pub struct CCHGraph {
     pub upward: FirstOutGraph,
     pub downward: FirstOutGraph,
     pub node_order: NodeOrder,
-    original_edge_to_ch_edge: Vec<InrangeOption<EdgeId>>,
-    pub upward_elimination_tree: Vec<InrangeOption<NodeId>>,
-    pub downward_elimination_tree: Vec<InrangeOption<NodeId>>
+    original_edge_to_ch_edge: Vec<EdgeId>,
+    pub elimination_tree: Vec<InrangeOption<NodeId>>,
 }
 
 impl CCHGraph {
     pub(super) fn new(contracted_graph: ContractedGraph) -> CCHGraph {
-        let (upward_elimination_tree, downward_elimination_tree) = contracted_graph.elimination_trees();
+        let elimination_tree = contracted_graph.elimination_tree();
         let ContractedGraph(contracted_graph) = contracted_graph;
         let node_order = contracted_graph.node_order;
+        let original_graph = contracted_graph.original_graph;
 
-        let (outgoing, incoming) = contracted_graph.nodes.into_iter().map(|node| {
-            (node.outgoing, node.incoming)
-        }).unzip();
+        let graph = Self::adjancecy_lists_to_first_out_graph(contracted_graph.nodes);
+        let n = graph.num_nodes() as NodeId;
+        let original_edge_to_ch_edge = (0..n).flat_map(|node| {
+            {
+                let graph = &graph;
+                let node_order = &node_order;
 
-        let mut original_edge_to_ch_edge = vec![InrangeOption::<EdgeId>::new(None); contracted_graph.original_graph.num_arcs()];
+                original_graph.neighbor_iter(node).map(move |Link { node: neighbor, .. }| {
+                    let node_rank = node_order.rank(node);
+                    let neighbor_rank = node_order.rank(neighbor);
+                    if node_rank < neighbor_rank {
+                        graph.edge_index(node_rank, neighbor_rank).unwrap()
+                    } else {
+                        graph.edge_index(neighbor_rank, node_rank).unwrap()
+                    }
+                })
+            }
+        }).collect();
+        // let mut original_edge_to_ch_edge = vec![InrangeOption::<EdgeId>::new(None); contracted_graph.original_graph.num_arcs()];
 
         CCHGraph {
-            upward: Self::adjancecy_lists_to_first_out_graph(outgoing, &mut original_edge_to_ch_edge),
-            downward: Self::adjancecy_lists_to_first_out_graph(incoming, &mut original_edge_to_ch_edge),
+            upward: graph.clone(),
+            downward: graph,
             node_order,
             original_edge_to_ch_edge,
-            upward_elimination_tree,
-            downward_elimination_tree
+            elimination_tree,
         }
     }
 
-    fn adjancecy_lists_to_first_out_graph(adjancecy_lists: Vec<Vec<(NodeId, InrangeOption<EdgeId>)>>, original_edge_to_ch_edge: &mut Vec<InrangeOption<EdgeId>>) -> FirstOutGraph {
+    fn adjancecy_lists_to_first_out_graph(adjancecy_lists: Vec<Node>) -> FirstOutGraph {
         let n = adjancecy_lists.len();
 
         let first_out: Vec<EdgeId> = {
-            let degrees = adjancecy_lists.iter().map(|neighbors| neighbors.len() as EdgeId);
+            let degrees = adjancecy_lists.iter().map(|neighbors| neighbors.edges.len() as EdgeId);
             FirstOutGraph::degrees_to_first_out(degrees).collect()
         };
         debug_assert_eq!(first_out.len(), n + 1);
 
-        let (head, original_edge_ids): (Vec<NodeId>, Vec<InrangeOption<EdgeId>>) = adjancecy_lists
+        let head: Vec<NodeId> = adjancecy_lists
             .into_iter()
-            .flat_map(|neighbors| neighbors.into_iter())
-            .unzip();
-
-        for (ch_edge_index, original_edge_id) in original_edge_ids.into_iter().enumerate() {
-            if let Some(original_edge_id) = original_edge_id.value() {
-                debug_assert_eq!(original_edge_to_ch_edge[original_edge_id as usize].value(), None);
-                original_edge_to_ch_edge[original_edge_id as usize] = InrangeOption::new(Some(ch_edge_index as EdgeId));
-            }
-        }
+            .flat_map(|neighbors| neighbors.edges.into_iter())
+            .collect();
 
         let m = head.len();
         FirstOutGraph::new(first_out, head, vec![INFINITY; m])
@@ -72,12 +78,12 @@ impl CCHGraph {
 
             for node in 0..n {
                 for (edge_id, Link { node: neighbor, weight }) in metric.neighbor_edge_indices(node).zip(metric.neighbor_iter(node)) {
-                    if let Some(ch_edge_id) = self.original_edge_to_ch_edge[edge_id as usize].value() {
-                        if self.node_order.rank(node) < self.node_order.rank(neighbor) {
-                            upward_weights[ch_edge_id as usize] = weight;
-                        } else {
-                            downward_weights[ch_edge_id as usize] = weight;
-                        }
+                    let ch_edge_id = self.original_edge_to_ch_edge[edge_id as usize];
+
+                    if self.node_order.rank(node) < self.node_order.rank(neighbor) {
+                        upward_weights[ch_edge_id as usize] = weight;
+                    } else {
+                        downward_weights[ch_edge_id as usize] = weight;
                     }
                 }
             }

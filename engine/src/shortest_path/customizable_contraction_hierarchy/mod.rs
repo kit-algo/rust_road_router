@@ -16,40 +16,25 @@ enum ShortcutResult {
 
 #[derive(Debug)]
 struct Node {
-    outgoing: Vec<(NodeId, InrangeOption<EdgeId>)>,
-    incoming: Vec<(NodeId, InrangeOption<EdgeId>)>
+    edges: Vec<NodeId>,
 }
 
 impl Node {
-    fn insert_outgoing(&mut self, to: NodeId) -> ShortcutResult {
-        Node::insert(&mut self.outgoing, to)
-    }
-
-    fn insert_incoming(&mut self, from: NodeId) -> ShortcutResult {
-        Node::insert(&mut self.incoming, from)
-    }
-
-    fn insert(links: &mut Vec<(NodeId, InrangeOption<EdgeId>)>, node: NodeId) -> ShortcutResult {
-        for &(other, _) in links.iter() {
+    fn insert(&mut self, node: NodeId) -> ShortcutResult {
+        for &other in self.edges.iter() {
             if node == other {
                 return ShortcutResult::Existed
             }
         }
 
-        links.push((node, InrangeOption::new(None)));
+        self.edges.push(node);
         ShortcutResult::NewShortcut
     }
 
-    fn remove_outgoing(&mut self, to: NodeId) {
-        let pos = self.outgoing.iter().position(|&(node, _)| to == node).unwrap();
-        self.outgoing.swap_remove(pos);
-        debug_assert_eq!(self.outgoing.iter().position(|&(node, _)| to == node), None);
-    }
-
-    fn remove_incmoing(&mut self, from: NodeId) {
-        let pos = self.incoming.iter().position(|&(node, _)| from == node).unwrap();
-        self.incoming.swap_remove(pos);
-        debug_assert_eq!(self.incoming.iter().position(|&(node, _)| from == node), None);
+    fn remove(&mut self, to: NodeId) {
+        let pos = self.edges.iter().position(|&node| to == node).unwrap();
+        self.edges.swap_remove(pos);
+        debug_assert_eq!(self.edges.iter().position(|&node| to == node), None);
     }
 }
 
@@ -64,24 +49,33 @@ impl<'a> ContractionGraph<'a> {
     fn new(graph: &FirstOutGraph, node_order: NodeOrder) -> ContractionGraph {
         let n = graph.num_nodes() as NodeId;
 
-        let nodes = {
-            let outs: Vec<Vec<(NodeId, InrangeOption<EdgeId>)>> = (0..n).map(|node| {
-                let old_node_id = node_order.node(node);
-                graph.neighbor_iter(old_node_id)
-                    .map(|Link { node: neighbor, .. }| { debug_assert_ne!(old_node_id, neighbor); node_order.rank(neighbor) })
-                    .zip(graph.neighbor_edge_indices(old_node_id).map(|edge_id| InrangeOption::new(Some(edge_id))))
-                    .collect()
-            }).collect();
+        let mut nodes: Vec<Node> = (0..n).map(|node| {
+            let old_node_id = node_order.node(node);
+            let edges = graph.neighbor_iter(old_node_id)
+                .map(|Link { node: neighbor, .. }| {
+                    debug_assert_ne!(old_node_id, neighbor);
+                    node_order.rank(neighbor)
+                })
+                .collect();
+            Node { edges }
+        }).collect();
 
-            let mut ins = vec![vec![]; n as usize];
-            for node in 0..n {
-                for &(neighbor, edge_id) in outs[node as usize].iter() {
-                    ins[neighbor as usize].push((node, edge_id));
+        for node_id in 0..n {
+            let (nodes_before, nodes_after_including_node) = nodes.split_at_mut(node_id as usize);
+            let (node, nodes_after) = nodes_after_including_node.split_first_mut().unwrap();
+
+            debug_assert_eq!(nodes_before.len(), node_id as usize);
+            debug_assert_eq!(nodes_after.len(), (n - node_id - 1) as usize);
+
+            for &neighbor in node.edges.iter() {
+                debug_assert_ne!(node_id, neighbor);
+                if neighbor < node_id {
+                    nodes_before[neighbor as usize].insert(node_id);
+                } else {
+                    nodes_after[(neighbor - 1 - node_id) as usize].insert(node_id);
                 }
             }
-
-            outs.into_iter().zip(ins.into_iter()).map(|(outgoing, incoming)| Node { outgoing, incoming } ).collect()
-        };
+        }
 
         ContractionGraph {
             nodes,
@@ -96,8 +90,8 @@ impl<'a> ContractionGraph<'a> {
             let mut graph = self.partial_graph();
 
             while let Some((node, mut subgraph)) = graph.remove_lowest() {
-                for &(from, _) in node.incoming.iter() {
-                    for &(to, _) in node.outgoing.iter() {
+                for &from in node.edges.iter() {
+                    for &to in node.edges.iter() {
                         if from != to {
                             match subgraph.insert(from, to) {
                                 ShortcutResult::NewShortcut => num_shortcut_arcs += 1,
@@ -144,20 +138,16 @@ impl<'a> PartialContractionGraph<'a> {
 
     fn remove_edges_to_removed(&mut self, node: &Node) {
         let node_id = self.id_offset - 1;
-        for &(from, _) in node.incoming.iter() {
+        for &from in node.edges.iter() {
             debug_assert!(from > node_id);
-            self.nodes[(from - self.id_offset) as usize].remove_outgoing(node_id);
-        }
-        for &(to, _) in node.outgoing.iter() {
-            debug_assert!(to > node_id);
-            self.nodes[(to - self.id_offset) as usize].remove_incmoing(node_id);
+            self.nodes[(from - self.id_offset) as usize].remove(node_id);
         }
     }
 
     fn insert(&mut self, from: NodeId, to: NodeId) -> ShortcutResult {
         debug_assert_ne!(from, to);
-        let out_result = self.nodes[(from - self.id_offset) as usize].insert_outgoing(to);
-        let in_result = self.nodes[(to - self.id_offset) as usize].insert_incoming(from);
+        let out_result = self.nodes[(from - self.id_offset) as usize].insert(to);
+        let in_result = self.nodes[(to - self.id_offset) as usize].insert(from);
 
         debug_assert_eq!(out_result, in_result);
         out_result
@@ -168,19 +158,16 @@ impl<'a> PartialContractionGraph<'a> {
 pub struct ContractedGraph<'a>(ContractionGraph<'a>);
 
 impl<'a> ContractedGraph<'a> {
-    fn elimination_trees(&self) -> (Vec<InrangeOption<NodeId>>, Vec<InrangeOption<NodeId>>) {
+    fn elimination_tree(&self) -> Vec<InrangeOption<NodeId>> {
         let n = self.0.original_graph.num_nodes();
-        let mut upward_elimination_tree = vec![InrangeOption::new(None); n];
-        let mut downward_elimination_tree = vec![InrangeOption::new(None); n];
+        let mut elimination_tree = vec![InrangeOption::new(None); n];
 
         for (rank, node) in self.0.nodes.iter().enumerate() {
-            upward_elimination_tree[rank] = InrangeOption::new(node.outgoing.iter().map(|&(node, _)| node).min());
-            downward_elimination_tree[rank] = InrangeOption::new(node.incoming.iter().map(|&(node, _)| node).min());
-            debug_assert!(upward_elimination_tree[rank].value().unwrap_or(n as NodeId) as usize > rank);
-            debug_assert!(downward_elimination_tree[rank].value().unwrap_or(n as NodeId) as usize > rank);
+            elimination_tree[rank] = InrangeOption::new(node.edges.iter().cloned().min());
+            debug_assert!(elimination_tree[rank].value().unwrap_or(n as NodeId) as usize > rank);
         }
 
-        (upward_elimination_tree, downward_elimination_tree)
+        elimination_tree
     }
 }
 
