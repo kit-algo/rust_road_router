@@ -95,29 +95,41 @@ impl<'a> State<'a> for IntermediateLinkAfterInitial<'a> {
 
         let initial_timestamp = self.trace.timestamp;
         let delta_t = trace.timestamp - initial_timestamp;
+
         let fraction_after_initial_trace = 1.0 - self.trace.traversed_in_travel_direction_fraction as f64;
         let length_after_initial_trace = (fraction_after_initial_trace * self.initial_link.length as f64) as u32;
+        let freeflow_time_after_initial_trace = self.initial_link.free_flow_traversal_time() * fraction_after_initial_trace;
         let length_before_initial_trace = self.initial_link.length - length_after_initial_trace;
-        let intermediate_total_length: u32 = self.intermediates.iter().map(|&&LinkData { length, .. }| length).sum();
-        let length_before_current_trace = (trace.traversed_in_travel_direction_fraction as f64 * link.length as f64) as u32;
-        let total_length = length_after_initial_trace + intermediate_total_length + length_before_current_trace;
 
-        let velocity = total_length as f64 / delta_t as f64;
-        let time_before_initial = (length_before_initial_trace as f64 / velocity) as u64;
+        let intermediate_total_length: u32 = self.intermediates.iter().map(|&&LinkData { length, .. }| length).sum();
+        let intermediate_total_freeflow_time: f64 = self.intermediates.iter().map(|link| link.free_flow_traversal_time()).sum();
+
+        let length_before_current_trace = (trace.traversed_in_travel_direction_fraction as f64 * link.length as f64) as u32;
+        let freeflow_time_before_current_trace = link.free_flow_traversal_time() * trace.traversed_in_travel_direction_fraction as f64;
+
+        let total_length = length_after_initial_trace + intermediate_total_length + length_before_current_trace;
+        let total_freeflow_time = freeflow_time_after_initial_trace + intermediate_total_freeflow_time + freeflow_time_before_current_trace;
+        let velocity_factor = total_freeflow_time / delta_t as f64;
+
+        let initial_link_velocity = self.initial_link.speed_limit as f64 * velocity_factor;
+        let time_before_initial = (length_before_initial_trace as f64 * 3.6 / initial_link_velocity) as u64;
+        let next_entry = (length_after_initial_trace as f64 * 3.6 / initial_link_velocity) as u64 + initial_timestamp;
         debug_assert!(time_before_initial < initial_timestamp);
         let link_entered_timestamp = initial_timestamp - time_before_initial;
         let estimate_quality = (length_after_initial_trace as f64 / total_length as f64 * fraction_after_initial_trace) as f32;
 
-        let output = once(LinkSpeedData { link_id: self.initial_link.link_id, link_entered_timestamp, estimate_quality, velocity: (velocity * 3.6) as f32  });
+        let output = once(LinkSpeedData { link_id: self.initial_link.link_id, link_entered_timestamp, estimate_quality, velocity: initial_link_velocity as f32  });
 
-        let output = output.chain(self.intermediates.into_iter().scan(length_after_initial_trace, move |state, link| {
-            let link_entered_timestamp = initial_timestamp + (*state as f64 / velocity) as u64;
-            *state = *state + link.length;
+        let output = output.chain(self.intermediates.into_iter().scan(next_entry, move |state, link| {
+            let velocity = link.speed_limit as f64 * velocity_factor;
+            let traversal_time = (link.length as f64 * 3.6 / velocity) as u64;
+            let link_entered_timestamp = *state;
+            *state = *state + traversal_time;
             let estimate_quality = (link.length as f64 / total_length as f64) as f32;
-            Some(LinkSpeedData { link_id: link.link_id, link_entered_timestamp, estimate_quality, velocity: (velocity * 3.6) as f32 })
+            Some(LinkSpeedData { link_id: link.link_id, link_entered_timestamp, estimate_quality, velocity: velocity as f32 })
         }));
 
-        let entry_timestamp = initial_timestamp + ((length_after_initial_trace + intermediate_total_length) as f64 / velocity) as u64;
+        let entry_timestamp = trace.timestamp - (length_before_current_trace as f64 * 3.6 / (link.speed_limit as f64 * velocity_factor)) as u64;
         let quality = length_before_current_trace as f64 / total_length as f64 * trace.traversed_in_travel_direction_fraction as f64;
 
         (Box::new(LinkWithEntryTimestampAndTrace { link: link, last_trace: trace, entry_timestamp, quality }), Box::new(output))
@@ -174,29 +186,40 @@ impl<'a> State<'a> for IntermediateLink<'a> {
 
         let previous_timestamp = self.last_link_with_trace.last_trace.timestamp;
         let delta_t = trace.timestamp - previous_timestamp;
+
         let fraction_after_last_trace = 1.0 - self.last_link_with_trace.last_trace.traversed_in_travel_direction_fraction as f64;
         let length_after_last_trace = (fraction_after_last_trace * self.last_link_with_trace.link.length as f64) as u32;
+        let freeflow_time_after_last_trace = self.last_link_with_trace.link.free_flow_traversal_time() * fraction_after_last_trace;
+
         let intermediate_total_length: u32 = self.intermediates.iter().map(|&&LinkData { length, .. }| length).sum();
+        let intermediate_total_freeflow_time: f64 = self.intermediates.iter().map(|link| link.free_flow_traversal_time()).sum();
+
         let length_before_current_trace = (trace.traversed_in_travel_direction_fraction as f64 * link.length as f64) as u32;
+        let freeflow_time_before_current_trace = link.free_flow_traversal_time() * trace.traversed_in_travel_direction_fraction as f64;
+
         let total_length = length_after_last_trace + intermediate_total_length + length_before_current_trace;
+        let total_freeflow_time = freeflow_time_after_last_trace + intermediate_total_freeflow_time + freeflow_time_before_current_trace;
+        let velocity_factor = total_freeflow_time / delta_t as f64;
 
-        let velocity = total_length as f64 / delta_t as f64;
-
-        let time_on_link_after_last_trace = (velocity / length_after_last_trace as f64) as u64;
+        let last_link_velocity = self.last_link_with_trace.link.speed_limit as f64 * velocity_factor;
+        let time_on_link_after_last_trace = (length_after_last_trace as f64 * 3.6 / last_link_velocity) as u64;
+        let next_entry = self.last_link_with_trace.last_trace.timestamp + time_on_link_after_last_trace;
         let delta_t_link = self.last_link_with_trace.last_trace.timestamp - self.last_link_with_trace.entry_timestamp + time_on_link_after_last_trace;
         let link_velocity = self.last_link_with_trace.link.length as f64 / delta_t_link as f64;
         let estimate_quality = ((length_after_last_trace as f64 / total_length as f64 * fraction_after_last_trace) + self.last_link_with_trace.quality) as f32;
 
         let output = once(LinkSpeedData { link_id: self.last_link_with_trace.link.link_id, link_entered_timestamp: self.last_link_with_trace.entry_timestamp, estimate_quality, velocity: (link_velocity * 3.6) as f32 });
 
-        let output = output.chain(self.intermediates.into_iter().scan(length_after_last_trace, move |state, link| {
-            let link_entered_timestamp = previous_timestamp + (*state as f64 / velocity) as u64;
-            *state = *state + link.length;
+        let output = output.chain(self.intermediates.into_iter().scan(next_entry, move |state, link| {
+            let velocity = link.speed_limit as f64 * velocity_factor;
+            let traversal_time = (link.length as f64 * 3.6 / velocity) as u64;
+            let link_entered_timestamp = *state;
+            *state = *state + traversal_time;
             let estimate_quality = (link.length as f64 / total_length as f64) as f32;
-            Some(LinkSpeedData { link_id: link.link_id, link_entered_timestamp, estimate_quality, velocity: (velocity * 3.6) as f32 })
+            Some(LinkSpeedData { link_id: link.link_id, link_entered_timestamp, estimate_quality, velocity: velocity as f32 })
         }));
 
-        let entry_timestamp = previous_timestamp + ((length_after_last_trace + intermediate_total_length) as f64 / velocity) as u64;
+        let entry_timestamp = trace.timestamp - (length_before_current_trace as f64 * 3.6 / (link.speed_limit as f64 * velocity_factor)) as u64;
         let quality = length_before_current_trace as f64 / total_length as f64 * trace.traversed_in_travel_direction_fraction as f64;
 
         (Box::new(LinkWithEntryTimestampAndTrace { link: link, last_trace: trace, entry_timestamp, quality }), Box::new(output))

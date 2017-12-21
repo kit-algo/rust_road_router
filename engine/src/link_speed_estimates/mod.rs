@@ -18,6 +18,12 @@ pub struct LinkData {
     pub speed_limit: u32, // [km/s]
 }
 
+impl LinkData {
+    pub fn free_flow_traversal_time(&self) -> f64 {
+        self.length as f64 * 3.6 / self.speed_limit as f64
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct LinkSpeedData {
     pub link_id: u64,
