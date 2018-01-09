@@ -110,9 +110,26 @@ If the outer points are far off, but there are additional points on the link the
 
 To derive the speed estimate for a link (with sequence number $n$) we need its entry timestamp and its exit timestamp (that is its successors entry timestamp).
 With these two timestamps we can derive the speed estimate using the classical kinetics equation $v = \frac{s}{t}$.
-To derive the entry timestamp, we
+To derive the entry timestamp, we take first two tracepoints in $(T_{k_1}, T_{k_2}) \in T(n)$.
+If we do not consider speed limits, the velocity can be calculated as $\frac{\Delta s(T_{k_1}, T_{k_2})}{\Delta t(T_{k_1}, T_{k_2})}$.
+With this velocity we can calculate the entry timestamp.
+The exit timestamp can be retrieved in the same way using the last two tracepoints in $T(n)$.
+The first and the last link are edge cases where the interpolation of the entry timestamps needs to be adjusted slightly, but the basic algorithm is the same.
 
 \subsubsection{Speed Limits}
+
+One open issue with the approach described above is that it ignores speed limits.
+If the distance between two trace points covers several links with different speed limits, just using the same average speed for every link may not be accurate.
+We propose a simple approach, based on the assumption that the actual velocity of the car will reflect the ratios between the speed limits.
+As an example there might be a road with a speed limit of 100 km/h, than a segment with 50 km/h and than again a part with 100 km/h.
+Would a car drive with these exact speeds, the resulting average speed might be 75 km/h.
+But if we have a tracepair which tells us the average speed was 80 km/h we know the car was faster.
+If we keep the ratio between the speed limits and scale them with the actual average speed we end up with speed estimates of 106.6 km/h, 53.3 km/h and 106.6 km/h.
+We can derive this scaling factor from the ratio of the measured average speed to the average speed would the car go with the exact speed limits.
+
+Note that this approach primarily covers the case when the measured speed is greater than the allowed speeds.
+If the overall speed is consistently lower than the limits keeping the ratios might not make sense, e.g. in the case of a traffic jam.
+Extending the approach in that direction is planned for the future.
 
 % \subsubsection{The Case Against Weighing Speeds by Distances}
 
