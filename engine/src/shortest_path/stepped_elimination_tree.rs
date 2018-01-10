@@ -10,6 +10,7 @@ pub struct SteppedEliminationTree<Graph: DijkstrableGraph> {
     predecessors: Vec<NodeId>,
     elimination_tree: Vec<InrangeOption<NodeId>>,
     next: Option<NodeId>,
+    origin: Option<NodeId>
 }
 
 impl<Graph: DijkstrableGraph> SteppedEliminationTree<Graph> {
@@ -23,11 +24,13 @@ impl<Graph: DijkstrableGraph> SteppedEliminationTree<Graph> {
             predecessors: vec![n as NodeId; n],
             elimination_tree,
             next: None,
+            origin: None
         }
     }
 
     pub fn initialize_query(&mut self, from: NodeId) {
         // initialize
+        self.origin = Some(from);
         self.next = Some(from);
         self.distances.reset();
 
@@ -75,5 +78,17 @@ impl<Graph: DijkstrableGraph> SteppedEliminationTree<Graph> {
 
     pub fn tentative_distance(&self, node: NodeId) -> Weight {
         self.distances[node as usize]
+    }
+
+    pub fn predecessor(&self, node: NodeId) -> NodeId {
+        self.predecessors[node as usize]
+    }
+
+    pub fn origin(&self) -> NodeId {
+        self.origin.unwrap()
+    }
+
+    pub fn graph(&self) -> &Graph {
+        &self.graph
     }
 }

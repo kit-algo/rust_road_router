@@ -13,8 +13,8 @@ pub struct CCHGraph {
     pub node_order: NodeOrder,
     original_edge_to_ch_edge: Vec<EdgeId>,
     pub elimination_tree: Vec<InrangeOption<NodeId>>,
-    upward_shortcut_expansions: Vec<(InrangeOption<EdgeId>, InrangeOption<EdgeId>)>,
-    downward_shortcut_expansions: Vec<(InrangeOption<EdgeId>, InrangeOption<EdgeId>)>
+    pub upward_shortcut_expansions: Vec<(InrangeOption<EdgeId>, InrangeOption<EdgeId>)>,
+    pub downward_shortcut_expansions: Vec<(InrangeOption<EdgeId>, InrangeOption<EdgeId>)>
 }
 
 impl CCHGraph {
