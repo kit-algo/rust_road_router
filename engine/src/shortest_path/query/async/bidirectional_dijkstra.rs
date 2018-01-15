@@ -37,7 +37,7 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn new(graph: Graph) -> Server {
+    pub fn new(graph: OwnedGraph) -> Server {
         let (forward_query_sender, forward_query_receiver) = channel();
         let (forward_progress_sender, forward_progress_receiver) = channel();
         let (backward_query_sender, backward_query_receiver) = channel();
@@ -69,7 +69,7 @@ impl Server {
         }
     }
 
-    fn spawn_direction_worker(graph: Graph,
+    fn spawn_direction_worker(graph: OwnedGraph,
                               query_receiver: Receiver<(ServerControl, u32)>,
                               progress_sender: Sender<(QueryProgress, u32)>,
                               distances_pointer: Arc<RwLock<DistancesPointerWrapper>>,

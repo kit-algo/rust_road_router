@@ -4,11 +4,11 @@ use std::collections::LinkedList;
 
 #[derive(Debug)]
 pub struct Server {
-    dijkstra: SteppedDijkstra<Graph>,
+    dijkstra: SteppedDijkstra<OwnedGraph>,
 }
 
 impl Server {
-    pub fn new(graph: Graph) -> Server {
+    pub fn new(graph: OwnedGraph) -> Server {
         Server {
             dijkstra: SteppedDijkstra::new(graph)
         }

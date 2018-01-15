@@ -1,5 +1,5 @@
 use ::graph::*;
-use ::graph::first_out_graph::FirstOutGraph;
+use ::graph::first_out_graph::OwnedGraph;
 use ::rank_select_map::RankSelectMap;
 use std::iter;
 use std::str::FromStr;
@@ -130,7 +130,7 @@ pub trait RdfDataSource {
     fn link_geometries(&self) -> Vec<RdfLinkGeometry>;
 }
 
-pub fn read_graph(source: &RdfDataSource) -> (FirstOutGraph, Vec<f32>, Vec<f32>) {
+pub fn read_graph(source: &RdfDataSource) -> (OwnedGraph, Vec<f32>, Vec<f32>) {
     println!("read nav links");
     // start with all nav links
     let mut nav_links: Vec<RdfNavLink> = source.nav_links();
@@ -274,7 +274,7 @@ pub fn read_graph(source: &RdfDataSource) -> (FirstOutGraph, Vec<f32>, Vec<f32>)
     // insert a zero at the beginning - this will shift all values one to the right
     first_out.insert(0, 0);
 
-    let graph = FirstOutGraph::new(first_out, head, weights);
+    let graph = OwnedGraph::new(first_out, head, weights);
     let lat = nodes.iter().map(|node| ((node.lat as f64) / 100000.) as f32).collect();
     let lng = nodes.iter().map(|node| ((node.lon as f64) / 100000.) as f32).collect();
     (graph, lat, lng)

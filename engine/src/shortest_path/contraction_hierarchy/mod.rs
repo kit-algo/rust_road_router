@@ -1,5 +1,5 @@
 use super::*;
-use self::first_out_graph::FirstOutGraph;
+use self::first_out_graph::{OwnedGraph, from_adjancecy_lists};
 
 #[derive(Debug, PartialEq)]
 enum ShortcutResult {
@@ -58,7 +58,7 @@ struct ContractionGraph {
 }
 
 impl ContractionGraph {
-    fn new(graph: FirstOutGraph, node_order: Vec<NodeId>) -> ContractionGraph {
+    fn new(graph: OwnedGraph, node_order: Vec<NodeId>) -> ContractionGraph {
         let n = graph.num_nodes();
         let mut node_ranks = vec![0; n];
         for (i, &node) in node_order.iter().enumerate() {
@@ -110,7 +110,7 @@ impl ContractionGraph {
         }
     }
 
-    fn as_first_out_graphs(self) -> ((FirstOutGraph, FirstOutGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
+    fn as_first_out_graphs(self) -> ((OwnedGraph, OwnedGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
         let (outgoing, incoming): (Vec<(Vec<Link>, Vec<NodeId>)>, Vec<(Vec<Link>, Vec<NodeId>)>) = self.nodes.into_iter()
             .map(|node| {
                 (node.outgoing.into_iter().unzip(), node.incoming.into_iter().unzip())
@@ -124,7 +124,7 @@ impl ContractionGraph {
         // currently we stick to the reordered graph and also translate the query node ids.
         // TODO make more explicit
 
-        ((FirstOutGraph::from_adjancecy_lists(outgoing), FirstOutGraph::from_adjancecy_lists(incoming)), Some((forward_shortcut_middles, backward_shortcut_middles)))
+        ((from_adjancecy_lists(outgoing), from_adjancecy_lists(incoming)), Some((forward_shortcut_middles, backward_shortcut_middles)))
     }
 }
 
@@ -179,7 +179,7 @@ impl<'a> PartialContractionGraph<'a> {
     }
 }
 
-pub fn contract(graph: FirstOutGraph, node_order: Vec<NodeId>) -> ((FirstOutGraph, FirstOutGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
+pub fn contract(graph: OwnedGraph, node_order: Vec<NodeId>) -> ((OwnedGraph, OwnedGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
     let mut graph = ContractionGraph::new(graph, node_order);
     graph.contract();
     graph.as_first_out_graphs()

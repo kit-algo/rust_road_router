@@ -7,7 +7,7 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn new(graph: Graph) -> Server {
+    pub fn new(graph: OwnedGraph) -> Server {
         let (query_sender, query_receiver) = channel();
         let (progress_sender, progress_receiver) = channel();
 

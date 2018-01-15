@@ -6,7 +6,7 @@ extern crate bmw_routing_engine;
 extern crate time;
 
 use bmw_routing_engine::*;
-use graph::first_out_graph::FirstOutGraph as Graph;
+use graph::first_out_graph::OwnedGraph as Graph;
 use graph::INFINITY;
 use shortest_path::query::dijkstra::Server as DijkServer;
 use shortest_path::query::bidirectional_dijkstra::Server as BiDijkServer;

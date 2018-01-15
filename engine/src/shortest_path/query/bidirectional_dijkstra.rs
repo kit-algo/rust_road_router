@@ -11,7 +11,7 @@ pub struct Server<G: DijkstrableGraph, H: DijkstrableGraph> {
 }
 
 impl<G: DijkstrableGraph, H: DijkstrableGraph> Server<G, H> {
-    pub fn new(graph: Graph) -> Server<Graph, Graph> {
+    pub fn new(graph: OwnedGraph) -> Server<OwnedGraph, OwnedGraph> {
         let reversed = graph.reverse();
 
         Server {
