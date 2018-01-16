@@ -1,5 +1,5 @@
 use super::*;
-use self::first_out_graph::{OwnedGraph, from_adjancecy_lists};
+use self::first_out_graph::OwnedGraph;
 
 #[derive(Debug, PartialEq)]
 enum ShortcutResult {
@@ -124,7 +124,7 @@ impl ContractionGraph {
         // currently we stick to the reordered graph and also translate the query node ids.
         // TODO make more explicit
 
-        ((from_adjancecy_lists(outgoing), from_adjancecy_lists(incoming)), Some((forward_shortcut_middles, backward_shortcut_middles)))
+        ((OwnedGraph::from_adjancecy_lists(outgoing), OwnedGraph::from_adjancecy_lists(incoming)), Some((forward_shortcut_middles, backward_shortcut_middles)))
     }
 }
 

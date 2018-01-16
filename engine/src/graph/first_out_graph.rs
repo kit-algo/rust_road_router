@@ -27,22 +27,6 @@ pub struct FirstOutGraph<FirstOutContainer, FirstOutInner, HeadContainer, HeadIn
 
 pub type OwnedGraph = FirstOutGraph<Vec<u32>, Vec<u32>, Vec<NodeId>, Vec<NodeId>, Vec<Weight>, Vec<Weight>>;
 
-pub fn from_adjancecy_lists(adjancecy_lists: Vec<Vec<Link>>) -> OwnedGraph {
-    // create first_out array for reversed by doing a prefix sum over the adjancecy list sizes
-    let first_out = std::iter::once(0).chain(adjancecy_lists.iter().scan(0, |state, incoming_links| {
-        *state = *state + incoming_links.len() as u32;
-        Some(*state)
-    })).collect();
-
-    // append all adjancecy list and split the pairs into two seperate vectors
-    let (head, weight) = adjancecy_lists
-        .into_iter()
-        .flat_map(|neighbors| neighbors.into_iter().map(|Link { node, weight }| (node, weight) ) )
-        .unzip();
-
-    OwnedGraph::new(first_out, head, weight)
-}
-
 impl<FirstOutContainer, FirstOutInner, HeadContainer, HeadInner, WeightContainer, WeightInner> FirstOutGraph<FirstOutContainer, FirstOutInner, HeadContainer, HeadInner, WeightContainer, WeightInner> where
     FirstOutContainer: Borrow<FirstOutInner>,
     FirstOutInner: AsRef<[u32]>,
@@ -66,50 +50,6 @@ impl<FirstOutContainer, FirstOutInner, HeadContainer, HeadInner, WeightContainer
         }
     }
 
-
-    pub fn neighbor_iter(&self, node: NodeId) -> std::iter::Map<std::iter::Zip<std::slice::Iter<NodeId>, std::slice::Iter<Weight>>, fn((&NodeId, &Weight))->Link> {
-        let range = (self.first_out()[node as usize] as usize)..(self.first_out()[(node + 1) as usize] as usize);
-        self.head()[range.clone()].iter()
-            .zip(self.weight()[range].iter())
-            .map( |(&neighbor, &weight)| Link { node: neighbor, weight: weight } )
-    }
-
-    pub fn edge_index(&self, from: NodeId, to: NodeId) -> Option<usize> {
-        let first_out = self.first_out()[from as usize] as usize;
-        self.neighbor_iter(from).enumerate().find(|&(_, Link { node, .. })| node == to).map(|(i, _)| first_out + i )
-    }
-
-    pub fn reverse(&self) -> OwnedGraph {
-        // vector of adjacency lists for the reverse graph
-        let mut reversed: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new() ).collect();
-
-        // iterate over all edges and insert them in the reversed structure
-        for node in 0..(self.num_nodes() as NodeId) {
-            for Link { node: neighbor, weight } in self.neighbor_iter(node) {
-                reversed[neighbor as usize].push(Link { node, weight });
-            }
-        }
-        from_adjancecy_lists(reversed)
-    }
-
-    pub fn ch_split(self, node_ranks: &Vec<u32>) -> (OwnedGraph, OwnedGraph) {
-        let mut up: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new() ).collect();
-        let mut down: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new() ).collect();
-
-        // iterate over all edges and insert them in the reversed structure
-        for node in 0..(self.num_nodes() as NodeId) {
-            for Link { node: neighbor, weight } in self.neighbor_iter(node) {
-                if node_ranks[node as usize] < node_ranks[neighbor as usize] {
-                    up[node as usize].push(Link { node: neighbor, weight });
-                } else {
-                    down[neighbor as usize].push(Link { node, weight });
-                }
-            }
-        }
-
-        (from_adjancecy_lists(up), from_adjancecy_lists(down))
-    }
-
     pub fn write_to_dir(&self, dir: &str) -> Result<()> {
         let path = Path::new(dir);
         let res1 = io::write_vector_to_file(path.join("first_out").to_str().unwrap(), self.first_out());
@@ -119,7 +59,25 @@ impl<FirstOutContainer, FirstOutInner, HeadContainer, HeadInner, WeightContainer
     }
 }
 
-impl<FirstOutContainer, FirstOutInner, HeadContainer, HeadInner, WeightContainer, WeightInner> DijkstrableGraph for FirstOutGraph<FirstOutContainer, FirstOutInner, HeadContainer, HeadInner, WeightContainer, WeightInner> where
+impl OwnedGraph {
+    pub fn from_adjancecy_lists(adjancecy_lists: Vec<Vec<Link>>) -> OwnedGraph {
+        // create first_out array for reversed by doing a prefix sum over the adjancecy list sizes
+        let first_out = std::iter::once(0).chain(adjancecy_lists.iter().scan(0, |state, incoming_links| {
+            *state = *state + incoming_links.len() as u32;
+            Some(*state)
+        })).collect();
+
+        // append all adjancecy list and split the pairs into two seperate vectors
+        let (head, weight) = adjancecy_lists
+            .into_iter()
+            .flat_map(|neighbors| neighbors.into_iter().map(|Link { node, weight }| (node, weight) ) )
+            .unzip();
+
+        OwnedGraph::new(first_out, head, weight)
+    }
+}
+
+impl<FirstOutContainer, FirstOutInner, HeadContainer, HeadInner, WeightContainer, WeightInner> Graph for FirstOutGraph<FirstOutContainer, FirstOutInner, HeadContainer, HeadInner, WeightContainer, WeightInner> where
     FirstOutContainer: Borrow<FirstOutInner>,
     FirstOutInner: AsRef<[u32]>,
     HeadContainer: Borrow<HeadInner>,
@@ -130,11 +88,23 @@ impl<FirstOutContainer, FirstOutInner, HeadContainer, HeadInner, WeightContainer
     fn num_nodes(&self) -> usize {
         self.first_out().len() - 1
     }
+}
 
-    fn for_each_neighbor(&self, node: NodeId, f: &mut FnMut(Link)) {
-        for link in self.neighbor_iter(node) {
-            f(link);
-        }
+impl<'a, FirstOutContainer, FirstOutInner, HeadContainer, HeadInner, WeightContainer, WeightInner> LinkIterGraph<'a> for FirstOutGraph<FirstOutContainer, FirstOutInner, HeadContainer, HeadInner, WeightContainer, WeightInner> where
+    FirstOutContainer: Borrow<FirstOutInner>,
+    FirstOutInner: AsRef<[u32]>,
+    HeadContainer: Borrow<HeadInner>,
+    HeadInner: AsRef<[NodeId]>,
+    WeightContainer: Borrow<WeightInner>,
+    WeightInner: AsRef<[Weight]>
+{
+    type Iter = std::iter::Map<std::iter::Zip<std::slice::Iter<'a, NodeId>, std::slice::Iter<'a, Weight>>, fn((&NodeId, &Weight))->Link>;
+
+    fn neighbor_iter(&'a self, node: NodeId) -> Self::Iter {
+        let range = (self.first_out()[node as usize] as usize)..(self.first_out()[(node + 1) as usize] as usize);
+        self.head()[range.clone()].iter()
+            .zip(self.weight()[range].iter())
+            .map( |(&neighbor, &weight)| Link { node: neighbor, weight: weight } )
     }
 }
 
