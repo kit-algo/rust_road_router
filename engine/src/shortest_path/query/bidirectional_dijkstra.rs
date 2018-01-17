@@ -2,7 +2,7 @@ use std::collections::LinkedList;
 use super::*;
 
 #[derive(Debug)]
-pub struct Server<G: DijkstrableGraph, H: DijkstrableGraph> {
+pub struct Server<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>> {
     pub forward_dijkstra: SteppedDijkstra<G>,
     pub backward_dijkstra: SteppedDijkstra<H>,
     pub tentative_distance: Weight,
@@ -10,8 +10,8 @@ pub struct Server<G: DijkstrableGraph, H: DijkstrableGraph> {
     pub meeting_node: NodeId
 }
 
-impl<G: DijkstrableGraph, H: DijkstrableGraph> Server<G, H> {
-    pub fn new(graph: Graph) -> Server<Graph, Graph> {
+impl<G: for<'a> LinkIterGraph<'a>> Server<G, OwnedGraph> {
+    pub fn new(graph: G) -> Server<G, OwnedGraph> {
         let reversed = graph.reverse();
 
         Server {
@@ -22,7 +22,9 @@ impl<G: DijkstrableGraph, H: DijkstrableGraph> Server<G, H> {
             meeting_node: 0
         }
     }
+}
 
+impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>> Server<G, H> {
     pub fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
         // initialize
         self.tentative_distance = INFINITY;

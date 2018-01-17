@@ -1,15 +1,15 @@
 use super::*;
 use shortest_path::node_order::NodeOrder;
-use shortest_path::DijkstrableGraph;
-use ::inrange_option::InrangeOption;
-use ::benchmark::measure;
+use inrange_option::InrangeOption;
+use benchmark::measure;
+use self::first_out_graph::degrees_to_first_out;
 
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct CCHGraph {
     // TODO get rid of pub
-    pub upward: FirstOutGraph,
-    pub downward: FirstOutGraph,
+    pub upward: OwnedGraph,
+    pub downward: OwnedGraph,
     pub node_order: NodeOrder,
     original_edge_to_ch_edge: Vec<EdgeId>,
     pub elimination_tree: Vec<InrangeOption<NodeId>>,
@@ -57,12 +57,12 @@ impl CCHGraph {
         }
     }
 
-    fn adjancecy_lists_to_first_out_graph(adjancecy_lists: Vec<Node>) -> FirstOutGraph {
+    fn adjancecy_lists_to_first_out_graph(adjancecy_lists: Vec<Node>) -> OwnedGraph {
         let n = adjancecy_lists.len();
 
         let first_out: Vec<EdgeId> = {
             let degrees = adjancecy_lists.iter().map(|neighbors| neighbors.edges.len() as EdgeId);
-            FirstOutGraph::degrees_to_first_out(degrees).collect()
+            degrees_to_first_out(degrees).collect()
         };
         debug_assert_eq!(first_out.len(), n + 1);
 
@@ -72,10 +72,10 @@ impl CCHGraph {
             .collect();
 
         let m = head.len();
-        FirstOutGraph::new(first_out, head, vec![INFINITY; m])
+        OwnedGraph::new(first_out, head, vec![INFINITY; m])
     }
 
-    pub fn customize(&mut self, metric: &FirstOutGraph) {
+    pub fn customize(&mut self, metric: &OwnedGraph) {
         let n = self.upward.num_nodes() as NodeId;
 
 

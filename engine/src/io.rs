@@ -23,7 +23,7 @@ pub fn read_into_vector<T>(filename: &str) -> Result<Vec<T>> {
     Ok(buffer)
 }
 
-pub fn write_vector_to_file<T>(filename: &str, vector: &Vec<T>) -> Result<()> {
+pub fn write_vector_to_file<T>(filename: &str, vector: &[T]) -> Result<()> {
     let mut buffer = File::create(filename)?;
     let num_bytes = vector.len() * mem::size_of::<T>();
 

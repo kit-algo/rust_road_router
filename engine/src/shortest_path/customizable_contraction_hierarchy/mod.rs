@@ -1,5 +1,4 @@
 use super::*;
-use super::first_out_graph::FirstOutGraph;
 use shortest_path::node_order::NodeOrder;
 use ::inrange_option::InrangeOption;
 use ::benchmark::measure;
@@ -42,11 +41,11 @@ impl Node {
 struct ContractionGraph<'a> {
     nodes: Vec<Node>,
     node_order: NodeOrder,
-    original_graph: &'a FirstOutGraph
+    original_graph: &'a OwnedGraph
 }
 
 impl<'a> ContractionGraph<'a> {
-    fn new(graph: &FirstOutGraph, node_order: NodeOrder) -> ContractionGraph {
+    fn new(graph: &OwnedGraph, node_order: NodeOrder) -> ContractionGraph {
         let n = graph.num_nodes() as NodeId;
 
         let mut nodes: Vec<Node> = (0..n).map(|node| {
@@ -171,6 +170,6 @@ impl<'a> ContractedGraph<'a> {
     }
 }
 
-pub fn contract(graph: &FirstOutGraph, node_order: NodeOrder) -> CCHGraph {
+pub fn contract(graph: &OwnedGraph, node_order: NodeOrder) -> CCHGraph {
     CCHGraph::new(ContractionGraph::new(graph, node_order).contract())
 }

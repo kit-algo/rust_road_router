@@ -7,8 +7,8 @@ use ::inrange_option::InrangeOption;
 
 #[derive(Debug)]
 pub struct Server {
-    forward: SteppedEliminationTree<Graph>,
-    backward: SteppedEliminationTree<Graph>,
+    forward: SteppedEliminationTree<OwnedGraph>,
+    backward: SteppedEliminationTree<OwnedGraph>,
     node_order: NodeOrder,
     tentative_distance: Weight,
     meeting_node: NodeId,

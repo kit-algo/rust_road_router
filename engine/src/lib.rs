@@ -19,6 +19,7 @@ mod inrange_option;
 pub mod benchmark;
 pub mod rank_select_map;
 pub mod import;
+mod as_slice;
 
 #[cfg(test)]
 mod tests {

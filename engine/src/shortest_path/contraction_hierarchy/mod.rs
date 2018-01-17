@@ -1,5 +1,4 @@
 use super::*;
-use self::first_out_graph::FirstOutGraph;
 
 #[derive(Debug, PartialEq)]
 enum ShortcutResult {
@@ -58,7 +57,7 @@ struct ContractionGraph {
 }
 
 impl ContractionGraph {
-    fn new(graph: FirstOutGraph, node_order: Vec<NodeId>) -> ContractionGraph {
+    fn new<Graph: for<'a> LinkIterGraph<'a>>(graph: Graph, node_order: Vec<NodeId>) -> ContractionGraph {
         let n = graph.num_nodes();
         let mut node_ranks = vec![0; n];
         for (i, &node) in node_order.iter().enumerate() {
@@ -110,7 +109,7 @@ impl ContractionGraph {
         }
     }
 
-    fn as_first_out_graphs(self) -> ((FirstOutGraph, FirstOutGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
+    fn as_first_out_graphs(self) -> ((OwnedGraph, OwnedGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
         let (outgoing, incoming): (Vec<(Vec<Link>, Vec<NodeId>)>, Vec<(Vec<Link>, Vec<NodeId>)>) = self.nodes.into_iter()
             .map(|node| {
                 (node.outgoing.into_iter().unzip(), node.incoming.into_iter().unzip())
@@ -124,7 +123,7 @@ impl ContractionGraph {
         // currently we stick to the reordered graph and also translate the query node ids.
         // TODO make more explicit
 
-        ((FirstOutGraph::from_adjancecy_lists(outgoing), FirstOutGraph::from_adjancecy_lists(incoming)), Some((forward_shortcut_middles, backward_shortcut_middles)))
+        ((OwnedGraph::from_adjancecy_lists(outgoing), OwnedGraph::from_adjancecy_lists(incoming)), Some((forward_shortcut_middles, backward_shortcut_middles)))
     }
 }
 
@@ -179,7 +178,7 @@ impl<'a> PartialContractionGraph<'a> {
     }
 }
 
-pub fn contract(graph: FirstOutGraph, node_order: Vec<NodeId>) -> ((FirstOutGraph, FirstOutGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
+pub fn contract<Graph: for<'a> LinkIterGraph<'a>>(graph: Graph, node_order: Vec<NodeId>) -> ((OwnedGraph, OwnedGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
     let mut graph = ContractionGraph::new(graph, node_order);
     graph.contract();
     graph.as_first_out_graphs()
@@ -190,31 +189,60 @@ struct ForwardWrapper<'a> {
     graph: &'a PartialContractionGraph<'a>
 }
 
-impl<'a> DijkstrableGraph for ForwardWrapper<'a> {
-    fn num_nodes(&self) -> usize {
-        self.graph.nodes.len()
-    }
-
-    fn for_each_neighbor(&self, node: NodeId, f: &mut FnMut(Link)) {
-        for &(Link { node: target, weight }, _) in self.graph.nodes[node as usize].outgoing.iter() {
-            f(Link { node: target - self.graph.id_offset, weight });
-        }
-    }
-}
-
 #[derive(Debug)]
 struct BackwardWrapper<'a> {
     graph: &'a PartialContractionGraph<'a>
 }
 
-impl<'a> DijkstrableGraph for BackwardWrapper<'a> {
+impl<'a> Graph for ForwardWrapper<'a> {
     fn num_nodes(&self) -> usize {
         self.graph.nodes.len()
     }
+}
 
-    fn for_each_neighbor(&self, node: NodeId, f: &mut FnMut(Link)) {
-        for &(Link { node: target, weight }, _) in self.graph.nodes[node as usize].incoming.iter() {
-            f(Link { node: target - self.graph.id_offset, weight });
+impl<'a> Graph for BackwardWrapper<'a> {
+    fn num_nodes(&self) -> usize {
+        self.graph.nodes.len()
+    }
+}
+
+// workaround until we get an implementation of https://github.com/rust-lang/rfcs/pull/2071
+#[derive(Debug)]
+struct LinkMappingIterator<'a> {
+    iter: std::slice::Iter<'a, (Link, NodeId)>,
+    offset: NodeId,
+}
+
+impl<'a> Iterator for LinkMappingIterator<'a> {
+    type Item = Link;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.iter.next() {
+            Some(&(Link { node: target, weight }, _)) => Some(Link { node: target - self.offset, weight }),
+            None => None,
+        }
+    }
+}
+
+use std;
+impl<'a, 'b> LinkIterGraph<'b> for ForwardWrapper<'a> {
+    type Iter = LinkMappingIterator<'b>;
+
+    fn neighbor_iter(&'b self, node: NodeId) -> Self::Iter {
+        LinkMappingIterator {
+            iter: self.graph.nodes[node as usize].outgoing.iter(),
+            offset: self.graph.id_offset
+        }
+    }
+}
+
+impl<'a, 'b> LinkIterGraph<'b> for BackwardWrapper<'a> {
+    type Iter = LinkMappingIterator<'b>;
+
+    fn neighbor_iter(&'b self, node: NodeId) -> Self::Iter {
+        LinkMappingIterator {
+            iter: self.graph.nodes[node as usize].incoming.iter(),
+            offset: self.graph.id_offset
         }
     }
 }

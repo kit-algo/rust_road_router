@@ -4,7 +4,7 @@ use super::stepped_dijkstra::QueryProgress;
 use ::inrange_option::InrangeOption;
 
 #[derive(Debug)]
-pub struct SteppedEliminationTree<Graph: DijkstrableGraph> {
+pub struct SteppedEliminationTree<Graph: for<'a> LinkIterGraph<'a>> {
     graph: Graph,
     distances: TimestampedVector<Weight>,
     predecessors: Vec<NodeId>,
@@ -13,7 +13,7 @@ pub struct SteppedEliminationTree<Graph: DijkstrableGraph> {
     origin: Option<NodeId>
 }
 
-impl<Graph: DijkstrableGraph> SteppedEliminationTree<Graph> {
+impl<Graph: for<'a> LinkIterGraph<'a>> SteppedEliminationTree<Graph> {
     pub fn new(graph: Graph, elimination_tree: Vec<InrangeOption<NodeId>>) -> SteppedEliminationTree<Graph> {
         let n = graph.num_nodes();
 
@@ -48,23 +48,18 @@ impl<Graph: DijkstrableGraph> SteppedEliminationTree<Graph> {
             let distance = self.distances[node as usize];
             self.next = self.elimination_tree[node as usize].value();
 
-            // these are necessary because otherwise the borrow checker could not figure out
-            // that we're only borrowing parts of self
-            let distances = &mut self.distances;
-            let predecessors = &mut self.predecessors;
-
             // For each node we can reach, see if we can find a way with
             // a lower distance going through this node
-            self.graph.for_each_neighbor(node, &mut |edge: Link| {
+            for edge in self.graph.neighbor_iter(node) {
                 let next = State { distance: distance + edge.weight, node: edge.node };
 
                 // If so, add it to the frontier and continue
-                if next.distance < distances[next.node as usize] {
+                if next.distance < self.distances[next.node as usize] {
                     // Relaxation, we have now found a better way
-                    distances.set(next.node as usize, next.distance);
-                    predecessors[next.node as usize] = node;
+                    self.distances.set(next.node as usize, next.distance);
+                    self.predecessors[next.node as usize] = node;
                 }
-            });
+            }
 
             QueryProgress::Progress(State { distance, node })
         } else {
