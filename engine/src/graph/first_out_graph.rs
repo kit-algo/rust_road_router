@@ -1,18 +1,14 @@
 use super::*;
+use as_slice::AsSlice;
 use ::io;
 use std::io::Result;
 use std::path::Path;
-use std::borrow::{Borrow};
-use std::marker::PhantomData;
 
 #[derive(Debug, Clone)]
-pub struct FirstOutGraph<FirstOutContainer, FirstOutInner, HeadContainer, HeadInner, WeightContainer, WeightInner> where
-    FirstOutContainer: Borrow<FirstOutInner>,
-    FirstOutInner: AsRef<[u32]>,
-    HeadContainer: Borrow<HeadInner>,
-    HeadInner: AsRef<[NodeId]>,
-    WeightContainer: Borrow<WeightInner>,
-    WeightInner: AsRef<[Weight]>
+pub struct FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> where
+    FirstOutContainer: AsSlice<u32>,
+    HeadContainer: AsSlice<NodeId>,
+    WeightContainer: AsSlice<Weight>,
 {
     // index of first edge of each node +1 entry in the end
     first_out: FirstOutContainer,
@@ -20,34 +16,25 @@ pub struct FirstOutGraph<FirstOutContainer, FirstOutInner, HeadContainer, HeadIn
     head: HeadContainer,
     // the weight of each edge
     weight: WeightContainer,
-    _first_out_phantom: PhantomData<FirstOutInner>,
-    _head_phantom: PhantomData<HeadInner>,
-    _weight_phantom: PhantomData<WeightInner>
 }
 
-pub type OwnedGraph = FirstOutGraph<Vec<u32>, Vec<u32>, Vec<NodeId>, Vec<NodeId>, Vec<Weight>, Vec<Weight>>;
+pub type OwnedGraph = FirstOutGraph<Vec<u32>, Vec<NodeId>, Vec<Weight>>;
 
-impl<FirstOutContainer, FirstOutInner, HeadContainer, HeadInner, WeightContainer, WeightInner> FirstOutGraph<FirstOutContainer, FirstOutInner, HeadContainer, HeadInner, WeightContainer, WeightInner> where
-    FirstOutContainer: Borrow<FirstOutInner>,
-    FirstOutInner: AsRef<[u32]>,
-    HeadContainer: Borrow<HeadInner>,
-    HeadInner: AsRef<[NodeId]>,
-    WeightContainer: Borrow<WeightInner>,
-    WeightInner: AsRef<[Weight]>
+impl<FirstOutContainer, HeadContainer, WeightContainer> FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> where
+    FirstOutContainer: AsSlice<u32>,
+    HeadContainer: AsSlice<NodeId>,
+    WeightContainer: AsSlice<Weight>,
 {
-    fn first_out(&self) -> &[u32] { self.first_out.borrow().as_ref() }
-    fn head(&self) -> &[u32] { self.head.borrow().as_ref() }
-    fn weight(&self) -> &[u32] { self.weight.borrow().as_ref() }
+    fn first_out(&self) -> &[u32] { self.first_out.as_slice() }
+    fn head(&self) -> &[u32] { self.head.as_slice() }
+    fn weight(&self) -> &[u32] { self.weight.as_slice() }
 
     pub fn new(first_out: Vec<u32>, head: Vec<NodeId>, weight: Vec<Weight>) -> OwnedGraph {
         assert_eq!(*first_out.first().unwrap(), 0);
         assert_eq!(*first_out.last().unwrap() as usize, head.len());
         assert_eq!(weight.len(), head.len());
 
-        FirstOutGraph {
-            first_out, head, weight,
-            _first_out_phantom: PhantomData, _head_phantom: PhantomData, _weight_phantom: PhantomData
-        }
+        FirstOutGraph { first_out, head, weight }
     }
 
     pub fn write_to_dir(&self, dir: &str) -> Result<()> {
@@ -77,26 +64,20 @@ impl OwnedGraph {
     }
 }
 
-impl<FirstOutContainer, FirstOutInner, HeadContainer, HeadInner, WeightContainer, WeightInner> Graph for FirstOutGraph<FirstOutContainer, FirstOutInner, HeadContainer, HeadInner, WeightContainer, WeightInner> where
-    FirstOutContainer: Borrow<FirstOutInner>,
-    FirstOutInner: AsRef<[u32]>,
-    HeadContainer: Borrow<HeadInner>,
-    HeadInner: AsRef<[NodeId]>,
-    WeightContainer: Borrow<WeightInner>,
-    WeightInner: AsRef<[Weight]>
+impl<FirstOutContainer, HeadContainer, WeightContainer> Graph for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> where
+    FirstOutContainer: AsSlice<u32>,
+    HeadContainer: AsSlice<NodeId>,
+    WeightContainer: AsSlice<Weight>,
 {
     fn num_nodes(&self) -> usize {
         self.first_out().len() - 1
     }
 }
 
-impl<'a, FirstOutContainer, FirstOutInner, HeadContainer, HeadInner, WeightContainer, WeightInner> LinkIterGraph<'a> for FirstOutGraph<FirstOutContainer, FirstOutInner, HeadContainer, HeadInner, WeightContainer, WeightInner> where
-    FirstOutContainer: Borrow<FirstOutInner>,
-    FirstOutInner: AsRef<[u32]>,
-    HeadContainer: Borrow<HeadInner>,
-    HeadInner: AsRef<[NodeId]>,
-    WeightContainer: Borrow<WeightInner>,
-    WeightInner: AsRef<[Weight]>
+impl<'a, FirstOutContainer, HeadContainer, WeightContainer> LinkIterGraph<'a> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> where
+    FirstOutContainer: AsSlice<u32>,
+    HeadContainer: AsSlice<NodeId>,
+    WeightContainer: AsSlice<Weight>,
 {
     type Iter = std::iter::Map<std::iter::Zip<std::slice::Iter<'a, NodeId>, std::slice::Iter<'a, Weight>>, fn((&NodeId, &Weight))->Link>;
 
@@ -108,13 +89,10 @@ impl<'a, FirstOutContainer, FirstOutInner, HeadContainer, HeadInner, WeightConta
     }
 }
 
-impl<FirstOutContainer, FirstOutInner, HeadContainer, HeadInner, WeightContainer, WeightInner> RandomLinkAccessGraph for FirstOutGraph<FirstOutContainer, FirstOutInner, HeadContainer, HeadInner, WeightContainer, WeightInner> where
-    FirstOutContainer: Borrow<FirstOutInner>,
-    FirstOutInner: AsRef<[u32]>,
-    HeadContainer: Borrow<HeadInner>,
-    HeadInner: AsRef<[NodeId]>,
-    WeightContainer: Borrow<WeightInner>,
-    WeightInner: AsRef<[Weight]>
+impl<FirstOutContainer, HeadContainer, WeightContainer> RandomLinkAccessGraph for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> where
+    FirstOutContainer: AsSlice<u32>,
+    HeadContainer: AsSlice<NodeId>,
+    WeightContainer: AsSlice<Weight>,
 {
     fn edge_index(&self, from: NodeId, to: NodeId) -> Option<usize> {
         let first_out = self.first_out()[from as usize] as usize;
