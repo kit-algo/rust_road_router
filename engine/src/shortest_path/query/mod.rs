@@ -1,5 +1,4 @@
 use super::*;
-use graph::first_out_graph::FirstOutGraph as Graph;
 use graph::first_out_graph::OwnedGraph;
 
 pub mod async;

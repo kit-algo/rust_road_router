@@ -1,5 +1,4 @@
 use std;
-use shortest_path::DijkstrableGraph;
 
 pub mod first_out_graph;
 

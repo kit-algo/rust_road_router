@@ -108,6 +108,20 @@ impl<'a, FirstOutContainer, FirstOutInner, HeadContainer, HeadInner, WeightConta
     }
 }
 
+impl<FirstOutContainer, FirstOutInner, HeadContainer, HeadInner, WeightContainer, WeightInner> RandomLinkAccessGraph for FirstOutGraph<FirstOutContainer, FirstOutInner, HeadContainer, HeadInner, WeightContainer, WeightInner> where
+    FirstOutContainer: Borrow<FirstOutInner>,
+    FirstOutInner: AsRef<[u32]>,
+    HeadContainer: Borrow<HeadInner>,
+    HeadInner: AsRef<[NodeId]>,
+    WeightContainer: Borrow<WeightInner>,
+    WeightInner: AsRef<[Weight]>
+{
+    fn edge_index(&self, from: NodeId, to: NodeId) -> Option<usize> {
+        let first_out = self.first_out()[from as usize] as usize;
+        self.neighbor_iter(from).enumerate().find(|&(_, Link { node, .. })| node == to).map(|(i, _)| first_out + i )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
