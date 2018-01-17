@@ -29,10 +29,10 @@ impl<FirstOutContainer, HeadContainer, WeightContainer> FirstOutGraph<FirstOutCo
     fn head(&self) -> &[u32] { self.head.as_slice() }
     fn weight(&self) -> &[u32] { self.weight.as_slice() }
 
-    pub fn new(first_out: Vec<u32>, head: Vec<NodeId>, weight: Vec<Weight>) -> OwnedGraph {
-        assert_eq!(*first_out.first().unwrap(), 0);
-        assert_eq!(*first_out.last().unwrap() as usize, head.len());
-        assert_eq!(weight.len(), head.len());
+    pub fn new(first_out: FirstOutContainer, head: HeadContainer, weight: WeightContainer) -> FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> {
+        assert_eq!(*first_out.as_slice().first().unwrap(), 0);
+        assert_eq!(*first_out.as_slice().last().unwrap() as usize, head.as_slice().len());
+        assert_eq!(weight.as_slice().len(), head.as_slice().len());
 
         FirstOutGraph { first_out, head, weight }
     }
