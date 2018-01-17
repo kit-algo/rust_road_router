@@ -32,11 +32,12 @@ fn main() {
     let to = read_into_vector(path.join("test/target").to_str().unwrap()).expect("could not read target");
     let ground_truth = read_into_vector(path.join("test/travel_time_length").to_str().unwrap()).expect("could not read travel_time_length");
 
-    let graph = Graph::new(first_out, head, travel_time);
+    let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
+    let owned_graph = OwnedGraph::new(first_out.clone(), head.clone(), travel_time.clone());
     let mut simple_server = DijkServer::new(graph.clone());
-    let mut bi_dir_server = BiDijkServer::<Graph, Graph>::new(graph.clone());
-    let async_server = AsyncDijkServer::new(graph.clone());
-    let mut async_bi_dir_server = AsyncBiDijkServer::new(graph.clone());
+    let mut bi_dir_server = BiDijkServer::new(graph.clone());
+    let async_server = AsyncDijkServer::new(owned_graph.clone());
+    let mut async_bi_dir_server = AsyncBiDijkServer::new(owned_graph);
 
     let ch_first_out = read_into_vector(path.join("travel_time_ch/first_out").to_str().unwrap()).expect("could not read travel_time_ch/first_out");
     let ch_head = read_into_vector(path.join("travel_time_ch/head").to_str().unwrap()).expect("could not read travel_time_ch/head");

@@ -58,7 +58,7 @@ struct ContractionGraph {
 }
 
 impl ContractionGraph {
-    fn new(graph: OwnedGraph, node_order: Vec<NodeId>) -> ContractionGraph {
+    fn new<Graph: for<'a> LinkIterGraph<'a>>(graph: Graph, node_order: Vec<NodeId>) -> ContractionGraph {
         let n = graph.num_nodes();
         let mut node_ranks = vec![0; n];
         for (i, &node) in node_order.iter().enumerate() {
@@ -179,7 +179,7 @@ impl<'a> PartialContractionGraph<'a> {
     }
 }
 
-pub fn contract(graph: OwnedGraph, node_order: Vec<NodeId>) -> ((OwnedGraph, OwnedGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
+pub fn contract<Graph: for<'a> LinkIterGraph<'a>>(graph: Graph, node_order: Vec<NodeId>) -> ((OwnedGraph, OwnedGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
     let mut graph = ContractionGraph::new(graph, node_order);
     graph.contract();
     graph.as_first_out_graphs()

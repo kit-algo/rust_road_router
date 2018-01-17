@@ -10,8 +10,8 @@ pub struct Server<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>> {
     pub meeting_node: NodeId
 }
 
-impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>> Server<G, H> {
-    pub fn new(graph: OwnedGraph) -> Server<OwnedGraph, OwnedGraph> {
+impl<G: for<'a> LinkIterGraph<'a>> Server<G, OwnedGraph> {
+    pub fn new(graph: G) -> Server<G, OwnedGraph> {
         let reversed = graph.reverse();
 
         Server {
@@ -22,7 +22,9 @@ impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>> Server<G, H> {
             meeting_node: 0
         }
     }
+}
 
+impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>> Server<G, H> {
     pub fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
         // initialize
         self.tentative_distance = INFINITY;

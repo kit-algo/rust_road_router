@@ -2,7 +2,7 @@ use std;
 
 pub mod first_out_graph;
 
-use self::first_out_graph::OwnedGraph;
+pub use self::first_out_graph::{OwnedGraph, FirstOutGraph};
 
 pub type NodeId = u32;
 pub type Weight = u32;
