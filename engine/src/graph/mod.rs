@@ -19,7 +19,7 @@ pub trait Graph {
 }
 
 pub trait LinkIterGraph<'a>: Graph {
-    type Iter: Iterator<Item = Link> + 'a;
+    type Iter: Iterator<Item = Link> + 'a; // fix with https://github.com/rust-lang/rfcs/pull/1598
 
     fn neighbor_iter(&'a self, node: NodeId) -> Self::Iter;
 
