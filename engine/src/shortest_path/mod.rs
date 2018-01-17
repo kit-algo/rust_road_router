@@ -1,8 +1,10 @@
-use super::graph::*;
-use self::stepped_dijkstra::{SteppedDijkstra, QueryProgress, State};
+use graph::*;
 
 mod timestamped_vector;
 mod stepped_dijkstra;
+
+use self::stepped_dijkstra::{SteppedDijkstra, QueryProgress, State};
+
 pub mod contraction_hierarchy;
 pub mod query;
 

@@ -1,5 +1,4 @@
 use super::*;
-use self::first_out_graph::OwnedGraph;
 
 #[derive(Debug, PartialEq)]
 enum ShortcutResult {

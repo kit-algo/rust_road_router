@@ -1,5 +1,4 @@
 use ::graph::*;
-use ::graph::first_out_graph::OwnedGraph;
 use ::rank_select_map::RankSelectMap;
 use std::iter;
 use std::str::FromStr;
