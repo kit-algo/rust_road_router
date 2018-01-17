@@ -120,7 +120,7 @@ impl CCHGraph {
 
                 for (Link { node, weight }, edge_id) in self.downward.neighbor_iter(current_node).zip(self.downward.neighbor_edge_indices(current_node)) {
                     let shortcut_edge_ids = self.upward.neighbor_edge_indices(node);
-                    for ((&mut target, shortcut_weight), shortcut_edge_id) in self.upward.neighbor_iter_mut(node).zip(shortcut_edge_ids) {
+                    for ((&target, shortcut_weight), shortcut_edge_id) in self.upward.mut_weight_link_iter(node).zip(shortcut_edge_ids) {
                         if weight + node_outgoing_weights[target as usize].0 < *shortcut_weight {
                             *shortcut_weight = weight + node_outgoing_weights[target as usize].0;
                             debug_assert!(node_outgoing_weights[target as usize].1.value().is_some());
@@ -130,7 +130,7 @@ impl CCHGraph {
                 }
                 for (Link { node, weight }, edge_id) in self.upward.neighbor_iter(current_node).zip(self.upward.neighbor_edge_indices(current_node)) {
                     let shortcut_edge_ids = self.downward.neighbor_edge_indices(node);
-                    for ((&mut target, shortcut_weight), shortcut_edge_id) in self.downward.neighbor_iter_mut(node).zip(shortcut_edge_ids) {
+                    for ((&target, shortcut_weight), shortcut_edge_id) in self.downward.mut_weight_link_iter(node).zip(shortcut_edge_ids) {
                         if weight + node_incoming_weights[target as usize].0 < *shortcut_weight {
                             *shortcut_weight = weight + node_incoming_weights[target as usize].0;
                             debug_assert!(node_incoming_weights[target as usize].1.value().is_some());

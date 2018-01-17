@@ -57,6 +57,11 @@ pub trait LinkIterGraph<'a>: Graph {
     }
 }
 
+pub trait MutWeightLinkIterGraph<'a>: Graph {
+    type Iter: Iterator<Item = (&'a NodeId, &'a mut Weight)> + 'a;
+    fn mut_weight_link_iter(&'a mut self, node: NodeId) -> Self::Iter;
+}
+
 pub trait RandomLinkAccessGraph {
     fn link(&self, edge_id: EdgeId) -> Link;
     fn edge_index(&self, from: NodeId, to: NodeId) -> Option<EdgeId>;

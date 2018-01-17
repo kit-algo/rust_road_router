@@ -1,5 +1,6 @@
 use super::*;
 use as_slice::AsSlice;
+use as_mut_slice::AsMutSlice;
 use ::io;
 use std::io::Result;
 use std::path::Path;
@@ -83,11 +84,6 @@ impl OwnedGraph {
 
         OwnedGraph::new(first_out, head, weight)
     }
-
-    pub fn neighbor_iter_mut(&mut self, node: NodeId) -> std::iter::Zip<std::slice::IterMut<NodeId>, std::slice::IterMut<Weight>> {
-        let range = self.neighbor_edge_indices_usize(node);
-        self.head[range.clone()].iter_mut().zip(self.weight[range].iter_mut())
-    }
 }
 
 impl<FirstOutContainer, HeadContainer> FirstOutGraph<FirstOutContainer, HeadContainer, Vec<Weight>> where
@@ -122,6 +118,19 @@ impl<'a, FirstOutContainer, HeadContainer, WeightContainer> LinkIterGraph<'a> fo
         self.head()[range.clone()].iter()
             .zip(self.weight()[range].iter())
             .map( |(&neighbor, &weight)| Link { node: neighbor, weight: weight } )
+    }
+}
+
+impl<'a, FirstOutContainer, HeadContainer, WeightContainer> MutWeightLinkIterGraph<'a> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> where
+    FirstOutContainer: AsSlice<EdgeId>,
+    HeadContainer: AsSlice<NodeId>,
+    WeightContainer: AsSlice<Weight> + AsMutSlice<Weight>,
+{
+    type Iter = std::iter::Zip<std::slice::Iter<'a, NodeId>, std::slice::IterMut<'a, Weight>>;
+
+    fn mut_weight_link_iter(&'a mut self, node: NodeId) -> Self::Iter {
+        let range = self.neighbor_edge_indices_usize(node);
+        self.head.as_slice()[range.clone()].iter().zip(self.weight.as_mut_slice()[range].iter_mut())
     }
 }
 
