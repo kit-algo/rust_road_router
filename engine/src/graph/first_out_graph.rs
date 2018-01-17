@@ -44,6 +44,10 @@ impl<FirstOutContainer, HeadContainer, WeightContainer> FirstOutGraph<FirstOutCo
         let res3 = io::write_vector_to_file(path.join("weights").to_str().unwrap(), self.weight());
         res1.and(res2).and(res3)
     }
+
+    pub fn decompose(self) -> (FirstOutContainer, HeadContainer, WeightContainer) {
+        (self.first_out, self.head, self.weight)
+    }
 }
 
 impl OwnedGraph {
