@@ -20,6 +20,7 @@ pub mod benchmark;
 pub mod rank_select_map;
 pub mod import;
 mod as_slice;
+mod as_mut_slice;
 
 #[cfg(test)]
 mod tests {

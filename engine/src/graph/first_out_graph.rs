@@ -20,8 +20,6 @@ pub struct FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> wher
     weight: WeightContainer,
 }
 
-pub type OwnedGraph = FirstOutGraph<Vec<EdgeId>, Vec<NodeId>, Vec<Weight>>;
-
 impl<FirstOutContainer, HeadContainer, WeightContainer> FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> where
     FirstOutContainer: AsSlice<EdgeId>,
     HeadContainer: AsSlice<NodeId>,
@@ -67,6 +65,8 @@ impl<FirstOutContainer, HeadContainer, WeightContainer> FirstOutGraph<FirstOutCo
     }
 }
 
+pub type OwnedGraph = FirstOutGraph<Vec<EdgeId>, Vec<NodeId>, Vec<Weight>>;
+
 impl OwnedGraph {
     pub fn from_adjancecy_lists(adjancecy_lists: Vec<Vec<Link>>) -> OwnedGraph {
         // create first_out array by doing a prefix sum over the adjancecy list sizes
@@ -84,14 +84,19 @@ impl OwnedGraph {
         OwnedGraph::new(first_out, head, weight)
     }
 
-    pub fn swap_weights(&mut self, mut new_weights: &mut Vec<Weight>) {
-        assert!(new_weights.len() == self.weight.len());
-        swap(&mut self.weight, &mut new_weights);
-    }
-
     pub fn neighbor_iter_mut(&mut self, node: NodeId) -> std::iter::Zip<std::slice::IterMut<NodeId>, std::slice::IterMut<Weight>> {
         let range = self.neighbor_edge_indices_usize(node);
         self.head[range.clone()].iter_mut().zip(self.weight[range].iter_mut())
+    }
+}
+
+impl<FirstOutContainer, HeadContainer> FirstOutGraph<FirstOutContainer, HeadContainer, Vec<Weight>> where
+    FirstOutContainer: AsSlice<EdgeId>,
+    HeadContainer: AsSlice<NodeId>,
+{
+    pub fn swap_weights(&mut self, mut new_weights: &mut Vec<Weight>) {
+        assert!(new_weights.len() == self.weight.len());
+        swap(&mut self.weight, &mut new_weights);
     }
 }
 
