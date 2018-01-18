@@ -15,7 +15,7 @@ pub struct CCHGraph {
 }
 
 impl CCHGraph {
-    pub(super) fn new(contracted_graph: ContractedGraph) -> CCHGraph {
+    pub(super) fn new<Graph: for<'a> LinkIterGraph<'a>>(contracted_graph: ContractedGraph<Graph>) -> CCHGraph {
         let elimination_tree = contracted_graph.elimination_tree();
         let ContractedGraph(contracted_graph) = contracted_graph;
         let node_order = contracted_graph.node_order;
@@ -70,7 +70,7 @@ impl CCHGraph {
         OwnedGraph::new(first_out, head, vec![INFINITY; m])
     }
 
-    pub fn customize(&self, metric: &OwnedGraph) ->
+    pub fn customize<Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph>(&self, metric: &Graph) ->
         (
             FirstOutGraph<&[EdgeId], &[NodeId], Vec<Weight>>,
             FirstOutGraph<&[EdgeId], &[NodeId], Vec<Weight>>,

@@ -5,7 +5,7 @@ use ::io;
 use std::io::Result;
 use std::path::Path;
 use std::mem::swap;
-use std::ops::Range;
+
 
 #[derive(Debug, Clone)]
 pub struct FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> where
@@ -42,15 +42,6 @@ impl<FirstOutContainer, HeadContainer, WeightContainer> FirstOutGraph<FirstOutCo
 
     pub fn num_arcs(&self) -> usize {
         self.head().len()
-    }
-
-    pub fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {
-        (self.first_out()[node as usize] as EdgeId)..(self.first_out()[(node + 1) as usize] as EdgeId)
-    }
-
-    fn neighbor_edge_indices_usize(&self, node: NodeId) -> Range<usize> {
-        let range = self.neighbor_edge_indices(node);
-        Range { start: range.start as usize, end: range.end as usize }
     }
 
     pub fn write_to_dir(&self, dir: &str) -> Result<()> {
@@ -146,6 +137,10 @@ impl<FirstOutContainer, HeadContainer, WeightContainer> RandomLinkAccessGraph fo
     fn edge_index(&self, from: NodeId, to: NodeId) -> Option<EdgeId> {
         let first_out = self.first_out()[from as usize] as usize;
         self.neighbor_iter(from).enumerate().find(|&(_, Link { node, .. })| node == to).map(|(i, _)| (first_out + i) as EdgeId )
+    }
+
+    fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {
+        (self.first_out()[node as usize] as EdgeId)..(self.first_out()[(node + 1) as usize] as EdgeId)
     }
 }
 

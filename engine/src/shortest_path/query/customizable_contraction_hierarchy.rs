@@ -17,7 +17,9 @@ pub struct Server<'a> {
 }
 
 impl<'a> Server<'a> {
-    pub fn new(cch_graph: &'a CCHGraph, metric: &OwnedGraph) -> Server<'a> {
+    pub fn new<Graph>(cch_graph: &'a CCHGraph, metric: &Graph) -> Server<'a> where
+        Graph: for<'b> LinkIterGraph<'b> + RandomLinkAccessGraph
+    {
         let (upward, downward, upward_shortcut_expansions, downward_shortcut_expansions) = cch_graph.customize(metric);
         let forward = SteppedEliminationTree::new(upward, cch_graph.elimination_tree());
         let backward = SteppedEliminationTree::new(downward, cch_graph.elimination_tree());

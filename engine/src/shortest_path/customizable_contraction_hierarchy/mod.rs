@@ -38,14 +38,14 @@ impl Node {
 }
 
 #[derive(Debug)]
-struct ContractionGraph<'a> {
+struct ContractionGraph<'a, Graph: for<'b> LinkIterGraph<'b> + 'a> {
     nodes: Vec<Node>,
     node_order: NodeOrder,
-    original_graph: &'a OwnedGraph
+    original_graph: &'a Graph
 }
 
-impl<'a> ContractionGraph<'a> {
-    fn new(graph: &OwnedGraph, node_order: NodeOrder) -> ContractionGraph {
+impl<'a, Graph: for<'b> LinkIterGraph<'b>> ContractionGraph<'a, Graph> {
+    fn new(graph: &'a Graph, node_order: NodeOrder) -> ContractionGraph<'a, Graph> {
         let n = graph.num_nodes() as NodeId;
 
         let mut nodes: Vec<Node> = (0..n).map(|node| {
@@ -83,7 +83,7 @@ impl<'a> ContractionGraph<'a> {
         }
     }
 
-    fn contract(mut self) -> ContractedGraph<'a> {
+    fn contract(mut self) -> ContractedGraph<'a, Graph> {
         measure("CCH Contraction", || {
             let mut num_shortcut_arcs = 0;
             let mut graph = self.partial_graph();
@@ -154,9 +154,9 @@ impl<'a> PartialContractionGraph<'a> {
 }
 
 #[derive(Debug)]
-pub struct ContractedGraph<'a>(ContractionGraph<'a>);
+pub struct ContractedGraph<'a, Graph: for<'b> LinkIterGraph<'b> + 'a>(ContractionGraph<'a, Graph>);
 
-impl<'a> ContractedGraph<'a> {
+impl<'a, Graph: for<'b> LinkIterGraph<'b>> ContractedGraph<'a, Graph> {
     fn elimination_tree(&self) -> Vec<InrangeOption<NodeId>> {
         let n = self.0.original_graph.num_nodes();
         let mut elimination_tree = vec![InrangeOption::new(None); n];
@@ -170,6 +170,6 @@ impl<'a> ContractedGraph<'a> {
     }
 }
 
-pub fn contract(graph: &OwnedGraph, node_order: NodeOrder) -> CCHGraph {
+pub fn contract<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, node_order: NodeOrder) -> CCHGraph {
     CCHGraph::new(ContractionGraph::new(graph, node_order).contract())
 }

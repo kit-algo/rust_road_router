@@ -4,8 +4,7 @@ use std::path::Path;
 extern crate bmw_routing_engine;
 
 use bmw_routing_engine::*;
-use graph::first_out_graph::FirstOutGraph as Graph;
-use graph::INFINITY;
+use graph::*;
 use shortest_path::customizable_contraction_hierarchy;
 use shortest_path::node_order::NodeOrder;
 use shortest_path::query::customizable_contraction_hierarchy::Server;
@@ -27,7 +26,7 @@ fn main() {
     let to = read_into_vector(path.join("test/target").to_str().unwrap()).expect("could not read target");
     let ground_truth = read_into_vector(path.join("test/travel_time_length").to_str().unwrap()).expect("could not read travel_time_length");
 
-    let graph = Graph::new(first_out, head, travel_time);
+    let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
     let cch_order = read_into_vector(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm");
 
     let cch = customizable_contraction_hierarchy::contract(&graph, NodeOrder::from_node_order(cch_order));

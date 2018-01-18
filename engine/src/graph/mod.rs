@@ -1,4 +1,5 @@
 use std;
+use std::ops::Range;
 
 pub mod first_out_graph;
 
@@ -65,4 +66,10 @@ pub trait MutWeightLinkIterGraph<'a>: Graph {
 pub trait RandomLinkAccessGraph {
     fn link(&self, edge_id: EdgeId) -> Link;
     fn edge_index(&self, from: NodeId, to: NodeId) -> Option<EdgeId>;
+    fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId>;
+
+    fn neighbor_edge_indices_usize(&self, node: NodeId) -> Range<usize> {
+        let range = self.neighbor_edge_indices(node);
+        Range { start: range.start as usize, end: range.end as usize }
+    }
 }
