@@ -30,10 +30,9 @@ fn main() {
     let graph = Graph::new(first_out, head, travel_time);
     let cch_order = read_into_vector(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm");
 
-    let mut cch = customizable_contraction_hierarchy::contract(&graph, NodeOrder::from_node_order(cch_order));
-    cch.customize(&graph);
+    let cch = customizable_contraction_hierarchy::contract(&graph, NodeOrder::from_node_order(cch_order));
 
-    let mut server = Server::new(cch);
+    let mut server = Server::new(&cch, &graph);
 
     for ((&from, &to), &ground_truth) in from.iter().zip(to.iter()).zip(ground_truth.iter()).take(100) {
         let ground_truth = match ground_truth {

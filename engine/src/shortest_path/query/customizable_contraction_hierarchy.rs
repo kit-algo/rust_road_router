@@ -6,26 +6,30 @@ use std::collections::LinkedList;
 use ::inrange_option::InrangeOption;
 
 #[derive(Debug)]
-pub struct Server {
-    forward: SteppedEliminationTree<OwnedGraph>,
-    backward: SteppedEliminationTree<OwnedGraph>,
-    node_order: NodeOrder,
+pub struct Server<'a> {
+    forward: SteppedEliminationTree<'a, FirstOutGraph<&'a[EdgeId], &'a[NodeId], Vec<Weight>>>,
+    backward: SteppedEliminationTree<'a, FirstOutGraph<&'a[EdgeId], &'a[NodeId], Vec<Weight>>>,
+    node_order: &'a NodeOrder,
     tentative_distance: Weight,
     meeting_node: NodeId,
     upward_shortcut_expansions: Vec<(InrangeOption<EdgeId>, InrangeOption<EdgeId>)>,
     downward_shortcut_expansions: Vec<(InrangeOption<EdgeId>, InrangeOption<EdgeId>)>
 }
 
-impl Server {
-    pub fn new(cch_graph: CCHGraph) -> Server {
+impl<'a> Server<'a> {
+    pub fn new(cch_graph: &'a CCHGraph, metric: &OwnedGraph) -> Server<'a> {
+        let (upward, downward, upward_shortcut_expansions, downward_shortcut_expansions) = cch_graph.customize(metric);
+        let forward = SteppedEliminationTree::new(upward, cch_graph.elimination_tree());
+        let backward = SteppedEliminationTree::new(downward, cch_graph.elimination_tree());
+
         Server {
-            forward: SteppedEliminationTree::new(cch_graph.upward, cch_graph.elimination_tree.clone()),
-            backward: SteppedEliminationTree::new(cch_graph.downward, cch_graph.elimination_tree),
-            node_order: cch_graph.node_order,
+            forward,
+            backward,
+            node_order: cch_graph.node_order(),
             tentative_distance: INFINITY,
             meeting_node: 0,
-            upward_shortcut_expansions: cch_graph.upward_shortcut_expansions,
-            downward_shortcut_expansions: cch_graph.downward_shortcut_expansions,
+            upward_shortcut_expansions,
+            downward_shortcut_expansions,
         }
     }
 

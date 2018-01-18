@@ -7,14 +7,11 @@ use self::first_out_graph::degrees_to_first_out;
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct CCHGraph {
-    // TODO get rid of pub
-    pub upward: OwnedGraph,
-    pub downward: OwnedGraph,
-    pub node_order: NodeOrder,
+    first_out: Vec<EdgeId>,
+    head: Vec<NodeId>,
+    node_order: NodeOrder,
     original_edge_to_ch_edge: Vec<EdgeId>,
-    pub elimination_tree: Vec<InrangeOption<NodeId>>,
-    pub upward_shortcut_expansions: Vec<(InrangeOption<EdgeId>, InrangeOption<EdgeId>)>,
-    pub downward_shortcut_expansions: Vec<(InrangeOption<EdgeId>, InrangeOption<EdgeId>)>
+    elimination_tree: Vec<InrangeOption<NodeId>>,
 }
 
 impl CCHGraph {
@@ -26,6 +23,7 @@ impl CCHGraph {
 
         let graph = Self::adjancecy_lists_to_first_out_graph(contracted_graph.nodes);
         let n = graph.num_nodes() as NodeId;
+
         let original_edge_to_ch_edge = (0..n).flat_map(|node| {
             {
                 let graph = &graph;
@@ -43,17 +41,14 @@ impl CCHGraph {
             }
         }).collect();
 
-        let upward_shortcut_expansions = vec![(InrangeOption::new(None), InrangeOption::new(None)); graph.num_arcs()];
-        let downward_shortcut_expansions = vec![(InrangeOption::new(None), InrangeOption::new(None)); graph.num_arcs()];
+        let (first_out, head, _) = graph.decompose();
 
         CCHGraph {
-            upward: graph.clone(),
-            downward: graph,
+            first_out,
+            head,
             node_order,
             original_edge_to_ch_edge,
             elimination_tree,
-            upward_shortcut_expansions,
-            downward_shortcut_expansions
         }
     }
 
@@ -75,14 +70,24 @@ impl CCHGraph {
         OwnedGraph::new(first_out, head, vec![INFINITY; m])
     }
 
-    pub fn customize(&mut self, metric: &OwnedGraph) {
-        let n = self.upward.num_nodes() as NodeId;
+    pub fn customize(&self, metric: &OwnedGraph) ->
+        (
+            FirstOutGraph<&[EdgeId], &[NodeId], Vec<Weight>>,
+            FirstOutGraph<&[EdgeId], &[NodeId], Vec<Weight>>,
+            Vec<(InrangeOption<EdgeId>, InrangeOption<EdgeId>)>,
+            Vec<(InrangeOption<EdgeId>, InrangeOption<EdgeId>)>,
+        )
+    {
+        let n = (self.first_out.len() - 1) as NodeId;
+        let m = self.head.len();
 
+        let mut upward_shortcut_expansions = vec![(InrangeOption::new(None), InrangeOption::new(None)); m];
+        let mut downward_shortcut_expansions = vec![(InrangeOption::new(None), InrangeOption::new(None)); m];
+
+        let mut upward_weights = vec![INFINITY; m];
+        let mut downward_weights = vec![INFINITY; m];
 
         measure("CCH apply weights", || {
-            let mut upward_weights = vec![INFINITY; self.upward.num_arcs()];
-            let mut downward_weights = vec![INFINITY; self.downward.num_arcs()];
-
             for node in 0..n {
                 for (edge_id, Link { node: neighbor, weight }) in metric.neighbor_edge_indices(node).zip(metric.neighbor_iter(node)) {
                     let ch_edge_id = self.original_edge_to_ch_edge[edge_id as usize];
@@ -94,59 +99,61 @@ impl CCHGraph {
                     }
                 }
             }
-
-            self.upward.swap_weights(&mut upward_weights);
-            self.downward.swap_weights(&mut downward_weights);
-
-            for expansion in self.upward_shortcut_expansions.iter_mut() {
-                *expansion = (InrangeOption::new(None), InrangeOption::new(None));
-            }
-            for expansion in self.downward_shortcut_expansions.iter_mut() {
-                *expansion = (InrangeOption::new(None), InrangeOption::new(None));
-            }
         });
+
+        let mut upward = FirstOutGraph::new(&self.first_out[..], &self.head[..], upward_weights);
+        let mut downward = FirstOutGraph::new(&self.first_out[..], &self.head[..], downward_weights);
 
         measure("CCH Customization", || {
             let mut node_outgoing_weights = vec![(INFINITY, InrangeOption::new(None)); n as usize];
             let mut node_incoming_weights = vec![(INFINITY, InrangeOption::new(None)); n as usize];
 
             for current_node in 0..n {
-                for (Link { node, weight }, edge_id) in self.downward.neighbor_iter(current_node).zip(self.downward.neighbor_edge_indices(current_node)) {
+                for (Link { node, weight }, edge_id) in downward.neighbor_iter(current_node).zip(downward.neighbor_edge_indices(current_node)) {
                     node_incoming_weights[node as usize] = (weight, InrangeOption::new(Some(edge_id)));
                 }
-                for (Link { node, weight }, edge_id) in self.upward.neighbor_iter(current_node).zip(self.upward.neighbor_edge_indices(current_node)) {
+                for (Link { node, weight }, edge_id) in upward.neighbor_iter(current_node).zip(upward.neighbor_edge_indices(current_node)) {
                     node_outgoing_weights[node as usize] = (weight, InrangeOption::new(Some(edge_id)));
                 }
 
-                for (Link { node, weight }, edge_id) in self.downward.neighbor_iter(current_node).zip(self.downward.neighbor_edge_indices(current_node)) {
-                    let shortcut_edge_ids = self.upward.neighbor_edge_indices(node);
-                    for ((&target, shortcut_weight), shortcut_edge_id) in self.upward.mut_weight_link_iter(node).zip(shortcut_edge_ids) {
+                for (Link { node, weight }, edge_id) in downward.neighbor_iter(current_node).zip(downward.neighbor_edge_indices(current_node)) {
+                    let shortcut_edge_ids = upward.neighbor_edge_indices(node);
+                    for ((&target, shortcut_weight), shortcut_edge_id) in upward.mut_weight_link_iter(node).zip(shortcut_edge_ids) {
                         if weight + node_outgoing_weights[target as usize].0 < *shortcut_weight {
                             *shortcut_weight = weight + node_outgoing_weights[target as usize].0;
                             debug_assert!(node_outgoing_weights[target as usize].1.value().is_some());
-                            self.upward_shortcut_expansions[shortcut_edge_id as usize] = (InrangeOption::new(Some(edge_id)), node_outgoing_weights[target as usize].1)
+                            upward_shortcut_expansions[shortcut_edge_id as usize] = (InrangeOption::new(Some(edge_id)), node_outgoing_weights[target as usize].1)
                         }
                     }
                 }
-                for (Link { node, weight }, edge_id) in self.upward.neighbor_iter(current_node).zip(self.upward.neighbor_edge_indices(current_node)) {
-                    let shortcut_edge_ids = self.downward.neighbor_edge_indices(node);
-                    for ((&target, shortcut_weight), shortcut_edge_id) in self.downward.mut_weight_link_iter(node).zip(shortcut_edge_ids) {
+                for (Link { node, weight }, edge_id) in upward.neighbor_iter(current_node).zip(upward.neighbor_edge_indices(current_node)) {
+                    let shortcut_edge_ids = downward.neighbor_edge_indices(node);
+                    for ((&target, shortcut_weight), shortcut_edge_id) in downward.mut_weight_link_iter(node).zip(shortcut_edge_ids) {
                         if weight + node_incoming_weights[target as usize].0 < *shortcut_weight {
                             *shortcut_weight = weight + node_incoming_weights[target as usize].0;
                             debug_assert!(node_incoming_weights[target as usize].1.value().is_some());
-                            self.downward_shortcut_expansions[shortcut_edge_id as usize] = (node_incoming_weights[target as usize].1, InrangeOption::new(Some(edge_id)))
+                            downward_shortcut_expansions[shortcut_edge_id as usize] = (node_incoming_weights[target as usize].1, InrangeOption::new(Some(edge_id)))
                         }
                     }
                 }
 
-                for Link { node, .. } in self.downward.neighbor_iter(current_node) {
+                for Link { node, .. } in downward.neighbor_iter(current_node) {
                     node_incoming_weights[node as usize] = (INFINITY, InrangeOption::new(None));
                 }
-                for Link { node, .. } in self.upward.neighbor_iter(current_node) {
+                for Link { node, .. } in upward.neighbor_iter(current_node) {
                     node_outgoing_weights[node as usize] = (INFINITY, InrangeOption::new(None));
                 }
             }
         });
 
+        (upward, downward, upward_shortcut_expansions, downward_shortcut_expansions)
+    }
+
+    pub fn node_order(&self) -> &NodeOrder {
+        &self.node_order
+    }
+
+    pub fn elimination_tree(&self) -> &[InrangeOption<NodeId>] {
+        &self.elimination_tree[..]
     }
 }

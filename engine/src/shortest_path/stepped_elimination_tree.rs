@@ -4,17 +4,17 @@ use super::stepped_dijkstra::QueryProgress;
 use ::inrange_option::InrangeOption;
 
 #[derive(Debug)]
-pub struct SteppedEliminationTree<Graph: for<'a> LinkIterGraph<'a>> {
+pub struct SteppedEliminationTree<'b, Graph: for<'a> LinkIterGraph<'a>> {
     graph: Graph,
     distances: TimestampedVector<Weight>,
     predecessors: Vec<NodeId>,
-    elimination_tree: Vec<InrangeOption<NodeId>>,
+    elimination_tree: &'b [InrangeOption<NodeId>],
     next: Option<NodeId>,
     origin: Option<NodeId>
 }
 
-impl<Graph: for<'a> LinkIterGraph<'a>> SteppedEliminationTree<Graph> {
-    pub fn new(graph: Graph, elimination_tree: Vec<InrangeOption<NodeId>>) -> SteppedEliminationTree<Graph> {
+impl<'b, Graph: for<'a> LinkIterGraph<'a>> SteppedEliminationTree<'b, Graph> {
+    pub fn new(graph: Graph, elimination_tree: &'b [InrangeOption<NodeId>]) -> SteppedEliminationTree<'b, Graph> {
         let n = graph.num_nodes();
 
         SteppedEliminationTree {
