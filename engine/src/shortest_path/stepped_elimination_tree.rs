@@ -1,20 +1,20 @@
 use super::*;
 use super::timestamped_vector::TimestampedVector;
 use super::stepped_dijkstra::QueryProgress;
-use ::inrange_option::InrangeOption;
+use ::in_range_option::InRangeOption;
 
 #[derive(Debug)]
 pub struct SteppedEliminationTree<'b, Graph: for<'a> LinkIterGraph<'a>> {
     graph: Graph,
     distances: TimestampedVector<Weight>,
     predecessors: Vec<NodeId>,
-    elimination_tree: &'b [InrangeOption<NodeId>],
+    elimination_tree: &'b [InRangeOption<NodeId>],
     next: Option<NodeId>,
     origin: Option<NodeId>
 }
 
 impl<'b, Graph: for<'a> LinkIterGraph<'a>> SteppedEliminationTree<'b, Graph> {
-    pub fn new(graph: Graph, elimination_tree: &'b [InrangeOption<NodeId>]) -> SteppedEliminationTree<'b, Graph> {
+    pub fn new(graph: Graph, elimination_tree: &'b [InRangeOption<NodeId>]) -> SteppedEliminationTree<'b, Graph> {
         let n = graph.num_nodes();
 
         SteppedEliminationTree {

@@ -18,21 +18,21 @@ impl Sentinel for usize {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct InrangeOption<T: Sentinel + Debug>(T);
+pub struct InRangeOption<T: Sentinel + Debug>(T);
 
-impl<T: Sentinel + Debug> InrangeOption<T> {
-    pub fn new(value: Option<T>) -> InrangeOption<T> {
+impl<T: Sentinel + Debug> InRangeOption<T> {
+    pub fn new(value: Option<T>) -> InRangeOption<T> {
         match value {
             Some(value) => {
-                assert_ne!(value, T::SENTINEL, "InrangeOption::new: Got sentinel as a value");
-                InrangeOption(value)
+                assert_ne!(value, T::SENTINEL, "InRangeOption::new: Got sentinel as a value");
+                InRangeOption(value)
             },
-            None => InrangeOption(T::SENTINEL),
+            None => InRangeOption(T::SENTINEL),
         }
     }
 
     pub fn value(&self) -> Option<T> {
-        let &InrangeOption(value) = self;
+        let &InRangeOption(value) = self;
         if value != T::SENTINEL {
             Some(value)
         } else {

@@ -1,6 +1,6 @@
 use super::*;
 use shortest_path::node_order::NodeOrder;
-use inrange_option::InrangeOption;
+use in_range_option::InRangeOption;
 use benchmark::measure;
 use self::first_out_graph::degrees_to_first_out;
 use rank_select_map::*;
@@ -12,7 +12,7 @@ pub struct CCHGraph {
     head: Vec<NodeId>,
     node_order: NodeOrder,
     original_edge_to_ch_edge: Vec<EdgeId>,
-    elimination_tree: Vec<InrangeOption<NodeId>>,
+    elimination_tree: Vec<InRangeOption<NodeId>>,
     edge_id_to_tail: RankSelectMap,
 }
 
@@ -89,15 +89,15 @@ impl CCHGraph {
         (
             FirstOutGraph<&[EdgeId], &[NodeId], Vec<Weight>>,
             FirstOutGraph<&[EdgeId], &[NodeId], Vec<Weight>>,
-            Vec<(InrangeOption<EdgeId>, InrangeOption<EdgeId>)>,
-            Vec<(InrangeOption<EdgeId>, InrangeOption<EdgeId>)>,
+            Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,
+            Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,
         )
     {
         let n = (self.first_out.len() - 1) as NodeId;
         let m = self.head.len();
 
-        let mut upward_shortcut_expansions = vec![(InrangeOption::new(None), InrangeOption::new(None)); m];
-        let mut downward_shortcut_expansions = vec![(InrangeOption::new(None), InrangeOption::new(None)); m];
+        let mut upward_shortcut_expansions = vec![(InRangeOption::new(None), InRangeOption::new(None)); m];
+        let mut downward_shortcut_expansions = vec![(InRangeOption::new(None), InRangeOption::new(None)); m];
 
         let mut upward_weights = vec![INFINITY; m];
         let mut downward_weights = vec![INFINITY; m];
@@ -120,16 +120,16 @@ impl CCHGraph {
         let mut downward = FirstOutGraph::new(&self.first_out[..], &self.head[..], downward_weights);
 
         measure("CCH Customization", || {
-            let mut node_outgoing_weights = vec![(INFINITY, InrangeOption::new(None)); n as usize];
-            let mut node_incoming_weights = vec![(INFINITY, InrangeOption::new(None)); n as usize];
+            let mut node_outgoing_weights = vec![(INFINITY, InRangeOption::new(None)); n as usize];
+            let mut node_incoming_weights = vec![(INFINITY, InRangeOption::new(None)); n as usize];
 
             for current_node in 0..n {
                 for (Link { node, weight }, edge_id) in downward.neighbor_iter(current_node).zip(downward.neighbor_edge_indices(current_node)) {
-                    node_incoming_weights[node as usize] = (weight, InrangeOption::new(Some(edge_id)));
+                    node_incoming_weights[node as usize] = (weight, InRangeOption::new(Some(edge_id)));
                     debug_assert_eq!(downward.link(edge_id).node, node);
                 }
                 for (Link { node, weight }, edge_id) in upward.neighbor_iter(current_node).zip(upward.neighbor_edge_indices(current_node)) {
-                    node_outgoing_weights[node as usize] = (weight, InrangeOption::new(Some(edge_id)));
+                    node_outgoing_weights[node as usize] = (weight, InRangeOption::new(Some(edge_id)));
                     debug_assert_eq!(upward.link(edge_id).node, node);
                 }
 
@@ -141,7 +141,7 @@ impl CCHGraph {
                         if weight + node_outgoing_weights[target as usize].0 < *shortcut_weight {
                             *shortcut_weight = weight + node_outgoing_weights[target as usize].0;
                             debug_assert!(node_outgoing_weights[target as usize].1.value().is_some());
-                            upward_shortcut_expansions[shortcut_edge_id as usize] = (InrangeOption::new(Some(edge_id)), node_outgoing_weights[target as usize].1)
+                            upward_shortcut_expansions[shortcut_edge_id as usize] = (InRangeOption::new(Some(edge_id)), node_outgoing_weights[target as usize].1)
                         }
                     }
                 }
@@ -153,16 +153,16 @@ impl CCHGraph {
                         if weight + node_incoming_weights[target as usize].0 < *shortcut_weight {
                             *shortcut_weight = weight + node_incoming_weights[target as usize].0;
                             debug_assert!(node_incoming_weights[target as usize].1.value().is_some());
-                            downward_shortcut_expansions[shortcut_edge_id as usize] = (node_incoming_weights[target as usize].1, InrangeOption::new(Some(edge_id)))
+                            downward_shortcut_expansions[shortcut_edge_id as usize] = (node_incoming_weights[target as usize].1, InRangeOption::new(Some(edge_id)))
                         }
                     }
                 }
 
                 for Link { node, .. } in downward.neighbor_iter(current_node) {
-                    node_incoming_weights[node as usize] = (INFINITY, InrangeOption::new(None));
+                    node_incoming_weights[node as usize] = (INFINITY, InRangeOption::new(None));
                 }
                 for Link { node, .. } in upward.neighbor_iter(current_node) {
-                    node_outgoing_weights[node as usize] = (INFINITY, InrangeOption::new(None));
+                    node_outgoing_weights[node as usize] = (INFINITY, InRangeOption::new(None));
                 }
             }
         });
@@ -174,7 +174,7 @@ impl CCHGraph {
         &self.node_order
     }
 
-    pub fn elimination_tree(&self) -> &[InrangeOption<NodeId>] {
+    pub fn elimination_tree(&self) -> &[InRangeOption<NodeId>] {
         &self.elimination_tree[..]
     }
 

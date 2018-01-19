@@ -2,7 +2,7 @@ use super::*;
 use super::stepped_elimination_tree::SteppedEliminationTree;
 use ::shortest_path::customizable_contraction_hierarchy::cch_graph::CCHGraph;
 use std::collections::LinkedList;
-use ::inrange_option::InrangeOption;
+use ::in_range_option::InRangeOption;
 
 #[derive(Debug)]
 pub struct Server<'a> {
@@ -11,8 +11,8 @@ pub struct Server<'a> {
     cch_graph: &'a CCHGraph,
     tentative_distance: Weight,
     meeting_node: NodeId,
-    upward_shortcut_expansions: Vec<(InrangeOption<EdgeId>, InrangeOption<EdgeId>)>,
-    downward_shortcut_expansions: Vec<(InrangeOption<EdgeId>, InrangeOption<EdgeId>)>
+    upward_shortcut_expansions: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,
+    downward_shortcut_expansions: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>
 }
 
 impl<'a> Server<'a> {

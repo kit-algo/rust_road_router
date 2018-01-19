@@ -1,6 +1,6 @@
 use super::*;
 use shortest_path::node_order::NodeOrder;
-use ::inrange_option::InrangeOption;
+use ::in_range_option::InRangeOption;
 use ::benchmark::measure;
 
 pub mod cch_graph;
@@ -157,12 +157,12 @@ impl<'a> PartialContractionGraph<'a> {
 pub struct ContractedGraph<'a, Graph: for<'b> LinkIterGraph<'b> + 'a>(ContractionGraph<'a, Graph>);
 
 impl<'a, Graph: for<'b> LinkIterGraph<'b>> ContractedGraph<'a, Graph> {
-    fn elimination_tree(&self) -> Vec<InrangeOption<NodeId>> {
+    fn elimination_tree(&self) -> Vec<InRangeOption<NodeId>> {
         let n = self.0.original_graph.num_nodes();
-        let mut elimination_tree = vec![InrangeOption::new(None); n];
+        let mut elimination_tree = vec![InRangeOption::new(None); n];
 
         for (rank, node) in self.0.nodes.iter().enumerate() {
-            elimination_tree[rank] = InrangeOption::new(node.edges.iter().cloned().min());
+            elimination_tree[rank] = InRangeOption::new(node.edges.iter().cloned().min());
             debug_assert!(elimination_tree[rank].value().unwrap_or(n as NodeId) as usize > rank);
         }
 

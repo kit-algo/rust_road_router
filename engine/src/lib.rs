@@ -20,6 +20,6 @@ pub mod import;
 pub mod link_speed_estimates;
 
 mod index_heap;
-mod inrange_option;
+mod in_range_option;
 mod as_slice;
 mod as_mut_slice;
