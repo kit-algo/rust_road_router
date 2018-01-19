@@ -2,7 +2,7 @@
 // global id space into a smaller consecutive id space from 0 to n where the order is preserved
 
 use std::mem::size_of;
-use std::cmp::{min, max};
+use std::cmp::min;
 
 use std::heap::{Heap, Alloc, Layout};
 
@@ -127,6 +127,15 @@ impl RankSelectMap {
         self.prefix_sum[key / BITS_PER_PREFIX] + self.bit_count_partial_range(key)
     }
 
+    pub fn at_or_next_lower(&self, key: usize) -> usize {
+        let value = self.prefix_sum[key / BITS_PER_PREFIX] + self.bit_count_partial_range(key);
+        if self.contained_keys_flags.get(key) {
+            value
+        } else {
+            value - 1
+        }
+    }
+
     pub fn get(&self, key: usize) -> Option<usize> {
         if key < self.contained_keys_flags.size && self.contained_keys_flags.get(key) {
             Some(self.prefix_sum[key / BITS_PER_PREFIX] + self.bit_count_partial_range(key))
@@ -139,10 +148,7 @@ impl RankSelectMap {
         let index = key / STORAGE_BITS; // the index of the number containing the bit
         let num = (self.contained_keys_flags.data[index] % (1 << (key % STORAGE_BITS))).count_ones() as usize; // num ones in the number
 
-        let range = ((index / INTS_PER_PREFIX) * INTS_PER_PREFIX)..(max(index, 1) - 1); // the range over the numbers before our number
-        if range.len() == 0 {
-            return num;
-        }
+        let range = ((index / INTS_PER_PREFIX) * INTS_PER_PREFIX)..index; // the range over the numbers before our number
         let sum: usize = self.contained_keys_flags.data[range].iter().map(|num| num.count_ones() as usize).sum(); // num ones in that range
         sum + num
     }
@@ -162,6 +168,16 @@ mod tests {
         bits.set(149);
         bits.set(999);
         RankSelectMap::new(bits)
+    }
+
+    #[test]
+    fn at_or_next_lower() {
+        let map = create_and_fill_map();
+        assert_eq!(map.at_or_next_lower(0), 0);
+        assert_eq!(map.at_or_next_lower(1), 0);
+        assert_eq!(map.at_or_next_lower(2), 1);
+        assert_eq!(map.at_or_next_lower(3), 1);
+        assert_eq!(map.at_or_next_lower(52), 3);
     }
 
     #[test]
@@ -186,5 +202,15 @@ mod tests {
     fn test_len() {
         let map = create_and_fill_map();
         assert_eq!(map.len(), 7);
+    }
+
+    #[test]
+    fn test_bug() {
+        let mut bits = BitVec::new(1000);
+        bits.set(0);
+        bits.set(64);
+        let map = RankSelectMap::new(bits);
+        assert_eq!(map.at(0), 0);
+        assert_eq!(map.at(64), 1);
     }
 }
