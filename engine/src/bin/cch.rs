@@ -10,6 +10,7 @@ use shortest_path::node_order::NodeOrder;
 use shortest_path::query::customizable_contraction_hierarchy::Server;
 use io::read_into_vector;
 use bmw_routing_engine::benchmark::measure;
+use shortest_path::query::dijkstra::Server as DijkServer;
 
 fn main() {
     let mut args = env::args();
@@ -32,6 +33,7 @@ fn main() {
     let cch = customizable_contraction_hierarchy::contract(&graph, NodeOrder::from_node_order(cch_order));
 
     let mut server = Server::new(&cch, &graph);
+    let mut simple_server = DijkServer::new(graph);
 
     for ((&from, &to), &ground_truth) in from.iter().zip(to.iter()).zip(ground_truth.iter()).take(100) {
         let ground_truth = match ground_truth {
@@ -42,5 +44,11 @@ fn main() {
         measure("CCH query", || {
             assert_eq!(server.distance(from, to), ground_truth);
         });
+
+        measure("Dijkstra query", || {
+            assert_eq!(simple_server.distance(from, to), ground_truth);
+        });
+
+        assert_eq!(simple_server.path(), server.path());
     }
 }

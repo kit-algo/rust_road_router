@@ -3,6 +3,7 @@ use shortest_path::node_order::NodeOrder;
 use inrange_option::InrangeOption;
 use benchmark::measure;
 use self::first_out_graph::degrees_to_first_out;
+use rank_select_map::*;
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -12,6 +13,7 @@ pub struct CCHGraph {
     node_order: NodeOrder,
     original_edge_to_ch_edge: Vec<EdgeId>,
     elimination_tree: Vec<InrangeOption<NodeId>>,
+    edge_id_to_tail: RankSelectMap,
 }
 
 impl CCHGraph {
@@ -41,7 +43,19 @@ impl CCHGraph {
             }
         }).collect();
 
+        let mut first_out_bits = BitVec::new(graph.num_arcs() + 1);
         let (first_out, head, _) = graph.decompose();
+        for &index in first_out.iter() {
+            assert!(!first_out_bits.get(index as usize) || index as usize == head.len());
+            first_out_bits.set(index as usize);
+        }
+        let edge_id_to_tail = RankSelectMap::new(first_out_bits);
+
+        for (node_id, window) in first_out[..].windows(2).enumerate() {
+            for edge_id in window[0]..window[1] {
+                debug_assert_eq!(edge_id_to_tail.at_or_next_lower(edge_id as usize), node_id)
+            }
+        }
 
         CCHGraph {
             first_out,
@@ -49,6 +63,7 @@ impl CCHGraph {
             node_order,
             original_edge_to_ch_edge,
             elimination_tree,
+            edge_id_to_tail,
         }
     }
 
@@ -111,14 +126,18 @@ impl CCHGraph {
             for current_node in 0..n {
                 for (Link { node, weight }, edge_id) in downward.neighbor_iter(current_node).zip(downward.neighbor_edge_indices(current_node)) {
                     node_incoming_weights[node as usize] = (weight, InrangeOption::new(Some(edge_id)));
+                    debug_assert_eq!(downward.link(edge_id).node, node);
                 }
                 for (Link { node, weight }, edge_id) in upward.neighbor_iter(current_node).zip(upward.neighbor_edge_indices(current_node)) {
                     node_outgoing_weights[node as usize] = (weight, InrangeOption::new(Some(edge_id)));
+                    debug_assert_eq!(upward.link(edge_id).node, node);
                 }
 
                 for (Link { node, weight }, edge_id) in downward.neighbor_iter(current_node).zip(downward.neighbor_edge_indices(current_node)) {
+                    debug_assert_eq!(self.edge_id_to_tail(edge_id), current_node);
                     let shortcut_edge_ids = upward.neighbor_edge_indices(node);
                     for ((&target, shortcut_weight), shortcut_edge_id) in upward.mut_weight_link_iter(node).zip(shortcut_edge_ids) {
+                        debug_assert_eq!(self.edge_id_to_tail(shortcut_edge_id), node);
                         if weight + node_outgoing_weights[target as usize].0 < *shortcut_weight {
                             *shortcut_weight = weight + node_outgoing_weights[target as usize].0;
                             debug_assert!(node_outgoing_weights[target as usize].1.value().is_some());
@@ -127,8 +146,10 @@ impl CCHGraph {
                     }
                 }
                 for (Link { node, weight }, edge_id) in upward.neighbor_iter(current_node).zip(upward.neighbor_edge_indices(current_node)) {
+                    debug_assert_eq!(self.edge_id_to_tail(edge_id), current_node);
                     let shortcut_edge_ids = downward.neighbor_edge_indices(node);
                     for ((&target, shortcut_weight), shortcut_edge_id) in downward.mut_weight_link_iter(node).zip(shortcut_edge_ids) {
+                        debug_assert_eq!(self.edge_id_to_tail(shortcut_edge_id), node);
                         if weight + node_incoming_weights[target as usize].0 < *shortcut_weight {
                             *shortcut_weight = weight + node_incoming_weights[target as usize].0;
                             debug_assert!(node_incoming_weights[target as usize].1.value().is_some());
@@ -155,5 +176,9 @@ impl CCHGraph {
 
     pub fn elimination_tree(&self) -> &[InrangeOption<NodeId>] {
         &self.elimination_tree[..]
+    }
+
+    pub fn edge_id_to_tail(&self, edge_id: EdgeId) -> NodeId {
+        self.edge_id_to_tail.at_or_next_lower(edge_id as usize) as NodeId
     }
 }
