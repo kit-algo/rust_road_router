@@ -1,6 +1,6 @@
 use super::*;
+use self::timestamped_vector::TimestampedVector;
 use index_heap::{IndexdMinHeap, Indexing};
-use super::timestamped_vector::TimestampedVector;
 
 #[derive(Debug, Clone)]
 pub enum QueryProgress {
@@ -21,7 +21,7 @@ impl Indexing for State {
 }
 
 #[derive(Debug)]
-pub struct SteppedDijkstra<Graph: DijkstrableGraph> {
+pub struct SteppedDijkstra<Graph: for<'a> LinkIterGraph<'a>> {
     graph: Graph,
     distances: TimestampedVector<Weight>,
     predecessors: Vec<NodeId>,
@@ -32,7 +32,7 @@ pub struct SteppedDijkstra<Graph: DijkstrableGraph> {
     result: Option<Option<Weight>>
 }
 
-impl<Graph: DijkstrableGraph> SteppedDijkstra<Graph> {
+impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
     pub fn new(graph: Graph) -> SteppedDijkstra<Graph> {
         let n = graph.num_nodes();
 
@@ -80,29 +80,23 @@ impl<Graph: DijkstrableGraph> SteppedDijkstra<Graph> {
                 return QueryProgress::Done(Some(distance));
             }
 
-            // these are necessary because otherwise the borrow checker could not figure out
-            // that we're only borrowing parts of self
-            let closest_node_priority_queue = &mut self.closest_node_priority_queue;
-            let distances = &mut self.distances;
-            let predecessors = &mut self.predecessors;
-
             // For each node we can reach, see if we can find a way with
             // a lower distance going through this node
-            self.graph.for_each_neighbor(node, &mut |edge: Link| {
+            for edge in self.graph.neighbor_iter(node) {
                 let next = State { distance: distance + edge.weight, node: edge.node };
 
                 // If so, add it to the frontier and continue
-                if next.distance < distances[next.node as usize] {
+                if next.distance < self.distances[next.node as usize] {
                     // Relaxation, we have now found a better way
-                    distances.set(next.node as usize, next.distance);
-                    predecessors[next.node as usize] = node;
-                    if closest_node_priority_queue.contains_index(next.as_index()) {
-                        closest_node_priority_queue.decrease_key(next);
+                    self.distances.set(next.node as usize, next.distance);
+                    self.predecessors[next.node as usize] = node;
+                    if self.closest_node_priority_queue.contains_index(next.as_index()) {
+                        self.closest_node_priority_queue.decrease_key(next);
                     } else {
-                        closest_node_priority_queue.push(next);
+                        self.closest_node_priority_queue.push(next);
                     }
                 }
-            });
+            }
 
             QueryProgress::Progress(State { distance, node })
         } else {
