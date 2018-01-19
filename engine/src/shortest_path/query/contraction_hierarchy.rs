@@ -3,15 +3,15 @@ use super::*;
 
 #[derive(Debug)]
 pub struct Server {
-    forward_dijkstra: SteppedDijkstra<Graph>,
-    backward_dijkstra: SteppedDijkstra<Graph>,
+    forward_dijkstra: SteppedDijkstra<OwnedGraph>,
+    backward_dijkstra: SteppedDijkstra<OwnedGraph>,
     tentative_distance: Weight,
     meeting_node: NodeId,
     shortcut_middle_nodes: Option<(Vec<NodeId>, Vec<NodeId>)>
 }
 
 impl Server {
-    pub fn new(((up, down), shortcut_middle_nodes): ((Graph, Graph), Option<(Vec<NodeId>, Vec<NodeId>)>)) -> Server {
+    pub fn new(((up, down), shortcut_middle_nodes): ((OwnedGraph, OwnedGraph), Option<(Vec<NodeId>, Vec<NodeId>)>)) -> Server {
         Server {
             forward_dijkstra: SteppedDijkstra::new(up),
             backward_dijkstra: SteppedDijkstra::new(down),
@@ -97,7 +97,7 @@ impl Server {
 
             while let Some(node) = shortcut_stack.pop() {
                 let next = self.forward_dijkstra.predecessor(*forwad_path.front().unwrap());
-                let middle = forward_middle_nodes[self.forward_dijkstra.graph().edge_index(node, next).unwrap()];
+                let middle = forward_middle_nodes[self.forward_dijkstra.graph().edge_index(node, next).unwrap() as usize];
                 if middle < self.forward_dijkstra.graph().num_nodes() as NodeId {
                     shortcut_stack.push(node);
                     shortcut_stack.push(middle);
@@ -116,7 +116,7 @@ impl Server {
 
             while let Some(node) = shortcut_stack.pop() {
                 let next = self.backward_dijkstra.predecessor(*backward_path.back().unwrap());
-                let middle = backward_middle_nodes[self.backward_dijkstra.graph().edge_index(node, next).unwrap()];
+                let middle = backward_middle_nodes[self.backward_dijkstra.graph().edge_index(node, next).unwrap() as usize];
                 if middle < self.backward_dijkstra.graph().num_nodes() as NodeId {
                     shortcut_stack.push(node);
                     shortcut_stack.push(middle);

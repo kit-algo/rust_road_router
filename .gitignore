@@ -1,2 +1,3 @@
 **/*.rs.bk
 *.sublime-*
+**/.gdb_history

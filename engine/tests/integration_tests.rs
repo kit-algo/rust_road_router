@@ -1,13 +1,13 @@
 extern crate bmw_routing_engine;
 
 use bmw_routing_engine::*;
+use graph::*;
 use shortest_path::query::dijkstra::Server as DijkServer;
 use shortest_path::query::bidirectional_dijkstra::Server as BiDijkServer;
 use shortest_path::query::async::dijkstra::Server as AsyncDijkServer;
 use shortest_path::query::async::bidirectional_dijkstra::Server as AsyncBiDijkServer;
-use graph::first_out_graph::FirstOutGraph as Graph;
 
-fn graph() -> Graph {
+fn graph() -> OwnedGraph {
     // This is the directed graph we're going to use.
     // The node numbers correspond to the different states,
     // and the edge weights symbolize the cost of moving
@@ -26,7 +26,7 @@ fn graph() -> Graph {
     //           10      |               |
     //                   +---------------+
     //
-    Graph::new(
+    OwnedGraph::new(
         vec![0,      2,  3,        6,    8, 8, 8],
         vec![2,  1,  3,  1, 3, 4,  0, 4],
         vec![10, 1,  2,  1, 3, 1,  7, 2])
@@ -45,7 +45,7 @@ fn simple_dijkstra_correct_distances() {
 
 #[test]
 fn bidir_dijkstra_correct_distances() {
-    let mut server = BiDijkServer::<Graph, Graph>::new(graph());
+    let mut server = BiDijkServer::new(graph());
 
     assert_eq!(server.distance(0, 1), Some(1));
     assert_eq!(server.distance(0, 3), Some(3));

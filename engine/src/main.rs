@@ -1,21 +1,21 @@
 use std::env;
 use std::path::Path;
+use std::sync::Arc;
 
 extern crate bmw_routing_engine;
 
-extern crate time;
-
 use bmw_routing_engine::*;
-use graph::first_out_graph::FirstOutGraph as Graph;
-use graph::INFINITY;
+use graph::*;
+use graph::first_out_graph::OwnedGraph as Graph;
 use shortest_path::query::dijkstra::Server as DijkServer;
 use shortest_path::query::bidirectional_dijkstra::Server as BiDijkServer;
 use shortest_path::query::async::dijkstra::Server as AsyncDijkServer;
 use shortest_path::query::async::bidirectional_dijkstra::Server as AsyncBiDijkServer;
 use shortest_path::query::contraction_hierarchy::Server as CHServer;
-use io::read_into_vector;
 use shortest_path::contraction_hierarchy;
 
+use io::read_into_vector;
+use bmw_routing_engine::benchmark::measure;
 
 fn main() {
     let mut args = env::args();
@@ -24,19 +24,20 @@ fn main() {
     let arg = &args.next().expect("No directory arg given");
     let path = Path::new(arg);
 
-    let first_out = read_into_vector(path.join("first_out").to_str().unwrap()).expect("could not read first_out");
-    let head = read_into_vector(path.join("head").to_str().unwrap()).expect("could not read head");
-    let travel_time = read_into_vector(path.join("travel_time").to_str().unwrap()).expect("could not read travel_time");
+    let first_out = Arc::new(read_into_vector(path.join("first_out").to_str().unwrap()).expect("could not read first_out"));
+    let head = Arc::new(read_into_vector(path.join("head").to_str().unwrap()).expect("could not read head"));
+    let travel_time = Arc::new(read_into_vector(path.join("travel_time").to_str().unwrap()).expect("could not read travel_time"));
 
     let from = read_into_vector(path.join("test/source").to_str().unwrap()).expect("could not read source");
     let to = read_into_vector(path.join("test/target").to_str().unwrap()).expect("could not read target");
     let ground_truth = read_into_vector(path.join("test/travel_time_length").to_str().unwrap()).expect("could not read travel_time_length");
 
-    let graph = Graph::new(first_out, head, travel_time);
+    let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
+    let arcd_graph = FirstOutGraph::new(first_out.clone(), head.clone(), travel_time.clone());
     let mut simple_server = DijkServer::new(graph.clone());
-    let mut bi_dir_server = BiDijkServer::<Graph, Graph>::new(graph.clone());
-    let async_server = AsyncDijkServer::new(graph.clone());
-    let mut async_bi_dir_server = AsyncBiDijkServer::new(graph.clone());
+    let mut bi_dir_server = BiDijkServer::new(graph.clone());
+    let async_server = AsyncDijkServer::new(arcd_graph.clone());
+    let mut async_bi_dir_server = AsyncBiDijkServer::new(arcd_graph);
 
     let ch_first_out = read_into_vector(path.join("travel_time_ch/first_out").to_str().unwrap()).expect("could not read travel_time_ch/first_out");
     let ch_head = read_into_vector(path.join("travel_time_ch/head").to_str().unwrap()).expect("could not read travel_time_ch/head");
@@ -55,28 +56,23 @@ fn main() {
             val => Some(val),
         };
 
-        let start = time::now();
-        assert_eq!(simple_server.distance(from, to), ground_truth);
-        println!("simple took {}ms", (time::now() - start).num_milliseconds());
-
-        let start = time::now();
-        assert_eq!(bi_dir_server.distance(from, to), ground_truth);
-        println!("bidir took {}ms", (time::now() - start).num_milliseconds());
-
-        let start = time::now();
-        assert_eq!(async_server.distance(from, to), ground_truth);
-        println!("async took {}ms", (time::now() - start).num_milliseconds());
-
-        let start = time::now();
-        assert_eq!(async_bi_dir_server.distance(from, to), ground_truth);
-        println!("async bidir took {}ms", (time::now() - start).num_milliseconds());
-
-        let start = time::now();
-        assert_eq!(ch_server.distance(from, to), ground_truth);
-        println!("ch took {}ms", (time::now() - start).num_milliseconds());
-
-        let start = time::now();
-        assert_eq!(ch_server_with_own_ch.distance(inverted_order[from as usize], inverted_order[to as usize]), ground_truth);
-        println!("own ch took {}ms", (time::now() - start).num_milliseconds());
+        measure("simple dijkstra", || {
+            assert_eq!(simple_server.distance(from, to), ground_truth);
+        });
+        measure("bidir dijkstra", || {
+            assert_eq!(bi_dir_server.distance(from, to), ground_truth);
+        });
+        measure("async dijkstra", || {
+            assert_eq!(async_server.distance(from, to), ground_truth);
+        });
+        measure("async bidir dijkstra", || {
+            assert_eq!(async_bi_dir_server.distance(from, to), ground_truth);
+        });
+        measure("CH", || {
+            assert_eq!(ch_server.distance(from, to), ground_truth);
+        });
+        measure("own CH", || {
+            assert_eq!(ch_server_with_own_ch.distance(inverted_order[from as usize], inverted_order[to as usize]), ground_truth);
+        });
     }
 }
