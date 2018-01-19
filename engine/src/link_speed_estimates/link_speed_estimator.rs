@@ -1,4 +1,3 @@
-use std::collections::LinkedList;
 use std::iter::{empty, once};
 use std::fmt::Debug;
 use std::mem::replace;
@@ -53,8 +52,8 @@ struct InitialLinkWithTrace<'a> {
 impl<'a> State<'a> for InitialLinkWithTrace<'a> {
     fn on_link(self: Box<Self>, link: &'a LinkData) -> (Box<State + 'a>, Box<Iterator<Item = LinkSpeedData>>) {
         assert_ne!(self.link.link_id, link.link_id);
-        let mut intermediates = LinkedList::new();
-        intermediates.push_back(link);
+        let mut intermediates = Vec::new();
+        intermediates.push(link);
         (Box::new(IntermediateLinkAfterInitial { initial_link: self.link, trace: self.trace, intermediates }), Box::new(empty()))
     }
 
@@ -81,16 +80,16 @@ impl<'a> State<'a> for InitialLinkWithTrace<'a> {
 struct IntermediateLinkAfterInitial<'a> {
     initial_link: &'a LinkData,
     trace: &'a TraceData,
-    intermediates: LinkedList<&'a LinkData>
+    intermediates: Vec<&'a LinkData>
 }
 impl<'a> State<'a> for IntermediateLinkAfterInitial<'a> {
     fn on_link(mut self: Box<Self>, link: &'a LinkData) -> (Box<State + 'a>, Box<Iterator<Item = LinkSpeedData>>) {
-        self.intermediates.push_back(link);
+        self.intermediates.push(link);
         (self, Box::new(empty()))
     }
 
     fn on_trace(mut self: Box<Self>, trace: &'a TraceData) -> (Box<State + 'a>, Box<Iterator<Item = LinkSpeedData> + 'a>) {
-        let link = self.intermediates.pop_back().unwrap();
+        let link = self.intermediates.pop().unwrap();
         assert_eq!(link.link_id, trace.link_id);
 
         let initial_timestamp = self.trace.timestamp;
@@ -149,8 +148,8 @@ struct LinkWithEntryTimestampAndTrace<'a> {
 }
 impl<'a> State<'a> for LinkWithEntryTimestampAndTrace<'a> {
     fn on_link(self: Box<Self>, link: &'a LinkData) -> (Box<State + 'a>, Box<Iterator<Item = LinkSpeedData>>) {
-        let mut intermediates = LinkedList::new();
-        intermediates.push_back(link);
+        let mut intermediates = Vec::new();
+        intermediates.push(link);
         (Box::new(IntermediateLink { last_link_with_trace: self, intermediates }), Box::new(empty()))
     }
 
@@ -172,16 +171,16 @@ impl<'a> State<'a> for LinkWithEntryTimestampAndTrace<'a> {
 #[derive(Debug, Clone)]
 struct IntermediateLink<'a> {
     last_link_with_trace: Box<LinkWithEntryTimestampAndTrace<'a>>,
-    intermediates: LinkedList<&'a LinkData>
+    intermediates: Vec<&'a LinkData>
 }
 impl<'a> State<'a> for IntermediateLink<'a> {
     fn on_link(mut self: Box<Self>, link: &'a LinkData) -> (Box<State + 'a>, Box<Iterator<Item = LinkSpeedData>>) {
-        self.intermediates.push_back(link);
+        self.intermediates.push(link);
         (self, Box::new(empty()))
     }
 
     fn on_trace(mut self: Box<Self>, trace: &'a TraceData) -> (Box<State + 'a>, Box<Iterator<Item = LinkSpeedData> + 'a>) {
-        let link = self.intermediates.pop_back().unwrap();
+        let link = self.intermediates.pop().unwrap();
         assert_eq!(link.link_id, trace.link_id);
 
         let previous_timestamp = self.last_link_with_trace.last_trace.timestamp;
