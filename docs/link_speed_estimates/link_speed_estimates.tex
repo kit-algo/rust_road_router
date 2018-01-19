@@ -1,0 +1,136 @@
+\documentclass{scrartcl}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[english]{babel}
+\usepackage{amsmath}
+
+\title{Link Speed Estimate Calculation}
+\author{Tim Zeitz}
+\date{\today}
+\begin{document}
+
+\maketitle
+\tableofcontents
+\section{Problem}
+
+Given a set of GPS tracepoints $(T_1, \dots, T_K)$ and a sequence of links $(L_1, \dots, L_N)$ derive an estimated velocity of the car for each link.
+We assume that the link sequence was derived from the traces using a mapmatching algorithm.
+Therefore, the first tracepoint has to be on the first link and the last tracepoint on the last link.
+Note that the link sequence may contain the same link several times, for example in the case of a U-turn.
+To distinguish between several occurrences of the same link we address links by their sequence number.
+We denote the sequence number of the link to which a tracepoint $T$ was matched with $L(T)$.
+Not every link must have an associated tracepoint.
+
+\paragraph{Associated Data}
+
+We further assume that the following data is available.
+For each tracepoint $T$:
+
+\begin{itemize}
+  \item a timestamp $t(T)$
+  \item the fraction of the matched link traversed in travel direction $\alpha(T)$
+\end{itemize}
+
+For each tracepoint $L_n$ with sequence number $n$:
+\begin{itemize}
+  \item the length of the link $s(n)$
+  \item the speed limit on the link $v_{max}(n)$.
+    We currently assume that every link has a speed limit.
+    For highways this is of course not always true.
+    But this can be circumvented using the ``Richtgeschwindigkeit''.
+    So whether this is a valid assumption is still up for discussion.
+\end{itemize}
+
+\paragraph{Output}
+
+The algorithm should derive the following data for each link $L_n$ with sequence number $n$:
+
+\begin{itemize}
+  \item a timestamp at which the car supposedly entered the link $t_{entry}(n)$
+  \item a single estimated velocity for the entire link $v(n)$.
+    The actual speed on the link of the car may of course differ from that number.
+    For example, the car may have waited for a traffic light.
+    In that case, the total estimated speed would become slower accordingly.
+  \item a quality score $\gamma(n)$.
+    This should be a number between zero and one indicating how trustworthy the speed estimate is.
+\end{itemize}
+
+Our output should satisfy the following consistency condition:
+For every ${1 \le n < N - 1}$
+\[
+t_{entry}(n + 1) = t_{entry}(n) + \frac{s(n)}{v(n)}
+\]
+
+We do not demand any consistencies between link speeds, entry timestamps and the timestamps of the original tracepoints.
+The goal of our algorithms is to combine the information of the trace points into only per trace data.
+
+\section{Calculations}
+
+For two tracepoints $T_{k_1}$ and $T_{k_2}$ we define:
+
+\[ \Delta t(T_{k_1}, T_{k_2}) := t(T_{k_2}) - t(T_{k_1}) \]
+
+\[ \Delta s(T_{k_1}, T_{k_2}) := s(L(T_{k_1})) (1 - \alpha(T_{k_1})) + \sum_{L(T_{k_1}) < n < L(T_{k_2})} s(n) + s(L(T_{k_2})) \alpha(T_{k_2}) \]
+
+Furthermore for each link (with sequence number $n$) there is a sequence of traces $T(n)$ influencing the speed estimate of this link.
+This sequence is a subsequence of the sequence of all tracepoints, so no points can be skipped.
+It contains at least two points.
+The first one will be the last trace before the concerned link, if it exists.
+Then, all points on the link are included.
+Finally, the first point after the link is included, if it exists.
+If there are points exactly on the beginning or end of the link, the points before or after are not included.
+
+Finally, we define $\Delta s_{\cap n}(T_{k_1}, T_{k_2})$ as only the distance between the traces on the link with sequence number $n$.
+
+\subsection{Quality Score}
+
+The quality score should give us an intuition on how good a speed estimate is.
+The score defined here tries to measure how much of the link is ``covered'' with tracepoints.
+If a tracepoint pair covers more distance on other links, this negatively impacts the score because the derived estimate will then be less meaningful for this specific link.
+
+Let $n$ be the sequence number of the current link.
+Then we can calculate the quality as:
+\[ \gamma(n) := \sum_{(T_{k_1}, T_{k_2}) \in T(n)} \frac{\Delta s_{\cap n}(T_{k_1}, T_{k_2})}{\Delta s(T_{k_1}, T_{k_2})} \frac{\Delta s_{\cap n}(T_{k_1}, T_{k_2})}{\Delta s(n)} \]
+
+\paragraph{Examples}
+
+If there are two tracepoints exactly on the beginning and the end of the link the score will be the perfect score value of $1$.
+If there is an additional point on the link, the score will still be $1$.
+The reason for this is, that even though we could derive more precise speed information from these traces, the information will still be lost, since we emit only one estimate for the entire link.
+Thus, the final information is not better than in the previous case.
+
+If the outer tracepoints are slightly before and after the link the score will be slightly worse, but still good.
+But if the points cover a much greater distance the estimate will loose meaningfulness and the score will decrease accordingly.
+
+If the outer points are far off, but there are additional points on the link these additional points will improve the speed estimate for the link, and again the score will reflect that.
+
+\subsection{Speed Estimate and Entry Timestamp}
+
+To derive the speed estimate for a link (with sequence number $n$) we need its entry timestamp and its exit timestamp (that is its successors entry timestamp).
+With these two timestamps we can derive the speed estimate using the classical kinetics equation $v = \frac{s}{t}$.
+To derive the entry timestamp, we take first two tracepoints in $(T_{k_1}, T_{k_2}) \in T(n)$.
+If we do not consider speed limits, the velocity can be calculated as $\frac{\Delta s(T_{k_1}, T_{k_2})}{\Delta t(T_{k_1}, T_{k_2})}$.
+With this velocity we can calculate the entry timestamp.
+The exit timestamp can be retrieved in the same way using the last two tracepoints in $T(n)$.
+The first and the last link are edge cases where the interpolation of the entry timestamps needs to be adjusted slightly, but the basic algorithm is the same.
+
+\subsubsection{Speed Limits}
+
+One open issue with the approach described above is that it ignores speed limits.
+If the distance between two trace points covers several links with different speed limits, just using the same average speed for every link may not be accurate.
+We propose a simple approach, based on the assumption that the actual velocity of the car will reflect the ratios between the speed limits.
+As an example there might be a road with a speed limit of 100 km/h, than a segment with 50 km/h and than again a part with 100 km/h.
+Would a car drive with these exact speeds, the resulting average speed might be 75 km/h.
+But if we have a tracepair which tells us the average speed was 80 km/h we know the car was faster.
+If we keep the ratio between the speed limits and scale them with the actual average speed we end up with speed estimates of 106.6 km/h, 53.3 km/h and 106.6 km/h.
+We can derive this scaling factor from the ratio of the measured average speed to the average speed would the car go with the exact speed limits.
+
+Note that this approach primarily covers the case when the measured speed is greater than the allowed speeds.
+If the overall speed is consistently lower than the limits keeping the ratios might not make sense, e.g. in the case of a traffic jam.
+Extending the approach in that direction is planned for the future.
+
+% \subsubsection{The Case Against Weighing Speeds by Distances}
+
+\end{document}
