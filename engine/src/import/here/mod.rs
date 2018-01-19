@@ -1,5 +1,5 @@
 use ::graph::*;
-use ::rank_select_map::RankSelectMap;
+use ::rank_select_map::{RankSelectMap, BitVec};
 use std::iter;
 use std::str::FromStr;
 use std::error::Error;
@@ -138,18 +138,18 @@ pub fn read_graph(source: &RdfDataSource) -> (OwnedGraph, Vec<f32>, Vec<f32>) {
 
     println!("build link indices");
     // local ids for links
-    let mut link_indexes = RankSelectMap::new(nav_links.last().unwrap().link_id as usize + 1);
+    let mut link_indexes = BitVec::new(nav_links.last().unwrap().link_id as usize + 1);
     for nav_link in nav_links.iter() {
-        link_indexes.insert(nav_link.link_id as usize);
+        link_indexes.set(nav_link.link_id as usize);
     }
-    link_indexes.compile();
+    let link_indexes = RankSelectMap::new(link_indexes);
 
     println!("read links");
     let links = source.links();
     let maximum_node_id = links.iter().flat_map(|link| iter::once(link.ref_node_id).chain(iter::once(link.nonref_node_id)) ).max().unwrap();
 
     // a data structure to do the global to local node ids mapping
-    let mut node_id_mapping = RankSelectMap::new(maximum_node_id as usize + 1);
+    let mut node_id_mapping = BitVec::new(maximum_node_id as usize + 1);
 
 
     println!("build node id mapping");
@@ -157,13 +157,13 @@ pub fn read_graph(source: &RdfDataSource) -> (OwnedGraph, Vec<f32>, Vec<f32>) {
     for link in links.iter() {
         match link_indexes.get(link.link_id as usize) {
             Some(_) => {
-                node_id_mapping.insert(link.ref_node_id as usize);
-                node_id_mapping.insert(link.nonref_node_id as usize);
+                node_id_mapping.set(link.ref_node_id as usize);
+                node_id_mapping.set(link.nonref_node_id as usize);
             },
             None => (),
         }
     }
-    node_id_mapping.compile();
+    let node_id_mapping = RankSelectMap::new(node_id_mapping);
 
     println!("build up degrees");
     // now we know the number of nodes

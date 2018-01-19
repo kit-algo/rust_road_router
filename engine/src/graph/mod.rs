@@ -1,10 +1,12 @@
 use std;
+use std::ops::Range;
 
 pub mod first_out_graph;
 
 pub use self::first_out_graph::{OwnedGraph, FirstOutGraph};
 
 pub type NodeId = u32;
+pub type EdgeId = u32;
 pub type Weight = u32;
 pub const INFINITY: u32 = std::u32::MAX / 2;
 
@@ -56,6 +58,18 @@ pub trait LinkIterGraph<'a>: Graph {
     }
 }
 
+pub trait MutWeightLinkIterGraph<'a>: Graph {
+    type Iter: Iterator<Item = (&'a NodeId, &'a mut Weight)> + 'a;
+    fn mut_weight_link_iter(&'a mut self, node: NodeId) -> Self::Iter;
+}
+
 pub trait RandomLinkAccessGraph {
-    fn edge_index(&self, from: NodeId, to: NodeId) -> Option<usize>;
+    fn link(&self, edge_id: EdgeId) -> Link;
+    fn edge_index(&self, from: NodeId, to: NodeId) -> Option<EdgeId>;
+    fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId>;
+
+    fn neighbor_edge_indices_usize(&self, node: NodeId) -> Range<usize> {
+        let range = self.neighbor_edge_indices(node);
+        Range { start: range.start as usize, end: range.end as usize }
+    }
 }

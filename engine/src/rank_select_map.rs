@@ -2,7 +2,7 @@
 // global id space into a smaller consecutive id space from 0 to n where the order is preserved
 
 use std::mem::size_of;
-use std::cmp::{min, max};
+use std::cmp::min;
 
 use std::heap::{Heap, Alloc, Layout};
 
@@ -22,13 +22,13 @@ const STORAGE_BITS: usize = size_of::<u64>() * 8;
 // -> create a thin wrapper around a Vec<u64>, where we do the first allocation ourselves, and have operations to set individual bits
 
 #[derive(Debug)]
-struct BitVec {
+pub struct BitVec {
     data: Vec<u64>,
     size: usize
 }
 
 impl BitVec {
-    fn new(size: usize) -> BitVec {
+    pub fn new(size: usize) -> BitVec {
         // ceiling to the right number of u64s
         let num_ints = (size + STORAGE_BITS - 1) / STORAGE_BITS;
         let data = unsafe {
@@ -42,20 +42,26 @@ impl BitVec {
         BitVec { data, size }
     }
 
-    fn get(&self, index: usize) -> bool {
+    pub fn get(&self, index: usize) -> bool {
         assert!(index < self.size, "index: {} size: {}", index, self.size);
         // shifting a 1 bit to the right place and masking
         self.data[index / STORAGE_BITS] & (1 << (index % STORAGE_BITS)) != 0
     }
 
-    fn set(&mut self, index: usize, value: bool) {
+    pub fn set(&mut self, index: usize) {
         assert!(index < self.size, "index: {} size: {}", index, self.size);
         // shifting a 1 bit to the right place and then eighter set through | or negate and unset with &
-        if value {
-            self.data[index / STORAGE_BITS] |= 1 << (index % STORAGE_BITS);
-        } else {
-            self.data[index / STORAGE_BITS] &= !(1 << (index % STORAGE_BITS));
-        }
+        self.data[index / STORAGE_BITS] |= 1 << (index % STORAGE_BITS);
+    }
+
+    pub fn unset(&mut self, index: usize) {
+        assert!(index < self.size, "index: {} size: {}", index, self.size);
+        // shifting a 1 bit to the right place and then eighter set through | or negate and unset with &
+        self.data[index / STORAGE_BITS] &= !(1 << (index % STORAGE_BITS));
+    }
+
+    pub fn len(&self) -> usize {
+        self.size
     }
 }
 
@@ -74,21 +80,22 @@ impl BitVec {
 pub struct RankSelectMap {
     contained_keys_flags: BitVec,
     prefix_sum: Vec<usize>,
-    compiled: bool
 }
 
 const BITS_PER_PREFIX: usize = CACHE_LINE_WIDTH * 8;
 const INTS_PER_PREFIX: usize = BITS_PER_PREFIX / STORAGE_BITS;
 
 impl RankSelectMap {
-    pub fn new(max_key: usize) -> RankSelectMap {
-        RankSelectMap {
-            contained_keys_flags: BitVec::new(max_key),
+    pub fn new(bit_vec: BitVec) -> RankSelectMap {
+        let max_index = bit_vec.len();
+        let mut this = RankSelectMap {
+            contained_keys_flags: bit_vec,
             // the number of elements in the prefix vector is ceiled and one extra element
             // is added in the back containing the total number of elements
-            prefix_sum: vec![0; (max_key + BITS_PER_PREFIX - 1) / BITS_PER_PREFIX + 1],
-            compiled: true
-        }
+            prefix_sum: vec![0; (max_index + BITS_PER_PREFIX - 1) / BITS_PER_PREFIX + 1],
+        };
+        this.compile();
+        this
     }
 
     pub fn len(&self) -> usize {
@@ -98,19 +105,13 @@ impl RankSelectMap {
         }
     }
 
-    pub fn insert(&mut self, key: usize) {
-        self.compiled = false;
-        self.contained_keys_flags.set(key, true);
-    }
-
-    pub fn compile(&mut self) {
+    fn compile(&mut self) {
         let mut previous = 0;
         // we start from one here, since the first prefix is always zero, and it saves some corner case handling
         for index in 1..self.prefix_sum.len() {
             self.prefix_sum[index] = self.bit_count_entire_range(index - 1) + previous;
             previous = self.prefix_sum[index];
         }
-        self.compiled = true;
     }
 
     fn bit_count_entire_range(&self, range_index: usize) -> usize {
@@ -122,13 +123,20 @@ impl RankSelectMap {
     }
 
     pub fn at(&self, key: usize) -> usize {
-        debug_assert!(self.compiled);
         assert!(self.contained_keys_flags.get(key));
         self.prefix_sum[key / BITS_PER_PREFIX] + self.bit_count_partial_range(key)
     }
 
+    pub fn at_or_next_lower(&self, key: usize) -> usize {
+        let value = self.prefix_sum[key / BITS_PER_PREFIX] + self.bit_count_partial_range(key);
+        if self.contained_keys_flags.get(key) {
+            value
+        } else {
+            value - 1
+        }
+    }
+
     pub fn get(&self, key: usize) -> Option<usize> {
-        debug_assert!(self.compiled);
         if key < self.contained_keys_flags.size && self.contained_keys_flags.get(key) {
             Some(self.prefix_sum[key / BITS_PER_PREFIX] + self.bit_count_partial_range(key))
         } else {
@@ -140,10 +148,7 @@ impl RankSelectMap {
         let index = key / STORAGE_BITS; // the index of the number containing the bit
         let num = (self.contained_keys_flags.data[index] % (1 << (key % STORAGE_BITS))).count_ones() as usize; // num ones in the number
 
-        let range = ((index / INTS_PER_PREFIX) * INTS_PER_PREFIX)..(max(index, 1) - 1); // the range over the numbers before our number
-        if range.len() == 0 {
-            return num;
-        }
+        let range = ((index / INTS_PER_PREFIX) * INTS_PER_PREFIX)..index; // the range over the numbers before our number
         let sum: usize = self.contained_keys_flags.data[range].iter().map(|num| num.count_ones() as usize).sum(); // num ones in that range
         sum + num
     }
@@ -154,16 +159,25 @@ mod tests {
     use super::*;
 
     fn create_and_fill_map() -> RankSelectMap {
-        let mut map = RankSelectMap::new(1000);
-        map.insert(31);
-        map.insert(52);
-        map.insert(2);
-        map.insert(130);
-        map.insert(0);
-        map.insert(149);
-        map.insert(999);
-        map.compile();
-        map
+        let mut bits = BitVec::new(1000);
+        bits.set(31);
+        bits.set(52);
+        bits.set(2);
+        bits.set(130);
+        bits.set(0);
+        bits.set(149);
+        bits.set(999);
+        RankSelectMap::new(bits)
+    }
+
+    #[test]
+    fn at_or_next_lower() {
+        let map = create_and_fill_map();
+        assert_eq!(map.at_or_next_lower(0), 0);
+        assert_eq!(map.at_or_next_lower(1), 0);
+        assert_eq!(map.at_or_next_lower(2), 1);
+        assert_eq!(map.at_or_next_lower(3), 1);
+        assert_eq!(map.at_or_next_lower(52), 3);
     }
 
     #[test]
@@ -188,5 +202,15 @@ mod tests {
     fn test_len() {
         let map = create_and_fill_map();
         assert_eq!(map.len(), 7);
+    }
+
+    #[test]
+    fn test_bug() {
+        let mut bits = BitVec::new(1000);
+        bits.set(0);
+        bits.set(64);
+        let map = RankSelectMap::new(bits);
+        assert_eq!(map.at(0), 0);
+        assert_eq!(map.at(64), 1);
     }
 }

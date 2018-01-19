@@ -97,7 +97,7 @@ impl Server {
 
             while let Some(node) = shortcut_stack.pop() {
                 let next = self.forward_dijkstra.predecessor(*forwad_path.front().unwrap());
-                let middle = forward_middle_nodes[self.forward_dijkstra.graph().edge_index(node, next).unwrap()];
+                let middle = forward_middle_nodes[self.forward_dijkstra.graph().edge_index(node, next).unwrap() as usize];
                 if middle < self.forward_dijkstra.graph().num_nodes() as NodeId {
                     shortcut_stack.push(node);
                     shortcut_stack.push(middle);
@@ -116,7 +116,7 @@ impl Server {
 
             while let Some(node) = shortcut_stack.pop() {
                 let next = self.backward_dijkstra.predecessor(*backward_path.back().unwrap());
-                let middle = backward_middle_nodes[self.backward_dijkstra.graph().edge_index(node, next).unwrap()];
+                let middle = backward_middle_nodes[self.backward_dijkstra.graph().edge_index(node, next).unwrap() as usize];
                 if middle < self.backward_dijkstra.graph().num_nodes() as NodeId {
                     shortcut_stack.push(node);
                     shortcut_stack.push(middle);
