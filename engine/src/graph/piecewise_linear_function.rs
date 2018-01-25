@@ -9,10 +9,10 @@ pub struct PiecewiseLinearFunction<'a> {
 
 impl<'a> PiecewiseLinearFunction<'a> {
     pub fn new(departure_time: &'a [Weight], travel_time: &'a [Weight], period: Weight) -> PiecewiseLinearFunction<'a> {
-        assert_eq!(departure_time.len(), travel_time.len());
-        assert!(!departure_time.is_empty());
+        debug_assert_eq!(departure_time.len(), travel_time.len());
+        debug_assert!(!departure_time.is_empty());
         for pair in departure_time.windows(2) {
-            assert!(pair[0] < pair[1]);
+            debug_assert!(pair[0] < pair[1]);
         }
         // TODO FIFO
 
