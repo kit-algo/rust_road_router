@@ -1,5 +1,4 @@
 use super::*;
-use super::linked::*;
 use in_range_option::InRangeOption;
 
 #[derive(Debug)]
@@ -29,28 +28,24 @@ impl ShortcutData {
         }
     }
 
-    pub fn evaluate(&self, departure: Timestamp) -> Weight {
+    pub fn evaluate(&self, departure: Timestamp, original_graph: &TDGraph, shortcut_graph: &ShortcutGraph) -> Weight {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
-                Linked::new(down_shortcut_id, self.up_arc).evaluate(departure)
+                Linked::new(down_shortcut_id, self.up_arc).evaluate(departure, original_graph, shortcut_graph)
             },
             None => {
-                // TODO get data from actual graph
-                // graph.get(self.up_arc).evaluate(departure)
-                unimplemented!()
+                original_graph.travel_time_function(self.up_arc).evaluate(departure)
             },
         }
     }
 
-    pub fn next_ipp_greater_eq(&self, time: Timestamp) -> Option<Timestamp> {
+    pub fn next_ipp_greater_eq(&self, time: Timestamp, original_graph: &TDGraph, shortcut_graph: &ShortcutGraph) -> Option<Timestamp> {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
-                Linked::new(down_shortcut_id, self.up_arc).next_ipp_greater_eq(time)
+                Linked::new(down_shortcut_id, self.up_arc).next_ipp_greater_eq(time, original_graph, shortcut_graph)
             },
             None => {
-                // TODO get data from actual graph
-                // graph.get(self.up_arc).next_ipp_greater_eq(time)
-                unimplemented!()
+                original_graph.travel_time_function(self.up_arc).next_ipp_greater_eq(time)
             },
         }
     }

@@ -1,6 +1,4 @@
 use super::*;
-use super::linked::*;
-use super::shortcut_source::*;
 
 #[derive(Debug)]
 pub struct Shortcut {
@@ -20,46 +18,46 @@ impl Shortcut {
         Shortcut { source_data, time_data }
     }
 
-    pub fn shorten(&mut self, down: EdgeId, up: EdgeId) {
+    pub fn shorten(&mut self, down: EdgeId, up: EdgeId, original_graph: &TDGraph, shortcut_graph: &ShortcutGraph) {
         if self.source_data.is_empty() {
             self.source_data.push(ShortcutData::new(ShortcutSource::Shortcut(down, up)));
             self.time_data.push(0);
         } else {
             // TODO use bounds and check for dominance???
-            let current_initial_value = self.evaluate(0);
+            let current_initial_value = self.evaluate(0, original_graph, shortcut_graph);
             let other = Linked::new(down, up);
-            let other_initial_value = other.evaluate(0);
+            let other_initial_value = other.evaluate(0, original_graph, shortcut_graph);
 
             let is_current_initially_lower = current_initial_value <= other_initial_value;
             let mut is_current_lower_for_prev_ipp = is_current_initially_lower;
-            let mut self_next_ipp = self.next_ipp_greater_eq(0);
-            let mut other_next_ipp = other.next_ipp_greater_eq(0);
+            let mut self_next_ipp = self.next_ipp_greater_eq(0, original_graph, shortcut_graph);
+            let mut other_next_ipp = other.next_ipp_greater_eq(0, original_graph, shortcut_graph);
             let mut better_way = vec![];
 
             while self_next_ipp.is_some() || other_next_ipp.is_some() {
                 let ipp = match (self_next_ipp, other_next_ipp) {
                     (Some(self_next_ipp_at), Some(other_next_ipp_at)) => {
                         if self_next_ipp_at <= other_next_ipp_at {
-                            self_next_ipp = self.next_ipp_greater_eq(self_next_ipp_at + 1);
+                            self_next_ipp = self.next_ipp_greater_eq(self_next_ipp_at + 1, original_graph, shortcut_graph);
                             self_next_ipp_at
                         } else {
-                            other_next_ipp = other.next_ipp_greater_eq(other_next_ipp_at + 1);
+                            other_next_ipp = other.next_ipp_greater_eq(other_next_ipp_at + 1, original_graph, shortcut_graph);
                             other_next_ipp_at
                         }
                     },
                     (None, Some(other_next_ipp_at)) => {
-                        other_next_ipp = other.next_ipp_greater_eq(other_next_ipp_at + 1);
+                        other_next_ipp = other.next_ipp_greater_eq(other_next_ipp_at + 1, original_graph, shortcut_graph);
                         other_next_ipp_at
                     },
                     (Some(self_next_ipp_at), None) => {
-                        self_next_ipp = self.next_ipp_greater_eq(self_next_ipp_at + 1);
+                        self_next_ipp = self.next_ipp_greater_eq(self_next_ipp_at + 1, original_graph, shortcut_graph);
                         self_next_ipp_at
                     },
                     (None, None) => panic!("while loop should have terminated")
                 };
 
-                let self_next_ipp_value = self.evaluate(ipp);
-                let other_next_ipp_value = other.evaluate(ipp);
+                let self_next_ipp_value = self.evaluate(ipp, original_graph, shortcut_graph);
+                let other_next_ipp_value = other.evaluate(ipp, original_graph, shortcut_graph);
 
                 let is_current_lower_for_ipp = self_next_ipp_value <= other_next_ipp_value;
                 if is_current_lower_for_ipp != is_current_lower_for_prev_ipp {
@@ -105,24 +103,24 @@ impl Shortcut {
         }
     }
 
-    pub fn evaluate(&self, departure: Timestamp) -> Weight {
+    pub fn evaluate(&self, departure: Timestamp, original_graph: &TDGraph, shortcut_graph: &ShortcutGraph) -> Weight {
         if self.source_data.is_empty() { return INFINITY }
         match self.time_data.binary_search(&departure) {
-            Ok(index) => self.source_data[index].evaluate(departure),
+            Ok(index) => self.source_data[index].evaluate(departure, original_graph, shortcut_graph),
             Err(index) => {
                 let index = (index + self.source_data.len() - 1) % self.source_data.len();
-                self.source_data[index].evaluate(departure)
+                self.source_data[index].evaluate(departure, original_graph, shortcut_graph)
             },
         }
     }
 
-    pub fn next_ipp_greater_eq(&self, time: Timestamp) -> Option<Timestamp> {
+    pub fn next_ipp_greater_eq(&self, time: Timestamp, original_graph: &TDGraph, shortcut_graph: &ShortcutGraph) -> Option<Timestamp> {
         if self.source_data.is_empty() { return None }
         match self.time_data.binary_search(&time) {
             Ok(_) => Some(time),
             Err(index) => {
                 let index = (index + self.source_data.len() - 1) % self.source_data.len();
-                self.source_data[index].next_ipp_greater_eq(time)
+                self.source_data[index].next_ipp_greater_eq(time, original_graph, shortcut_graph)
             },
         }
     }
