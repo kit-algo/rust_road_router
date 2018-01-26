@@ -30,7 +30,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     pub fn evaluate(&self, departure: Timestamp) -> Weight {
-        println!("\n\ndeparture {:?}", departure);
         let departure = departure % self.period;
         match self.departure_time.binary_search(&departure) {
             Ok(departure_index) => self.travel_time[departure_index],
@@ -39,9 +38,21 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 let lower_index = if upper_index > 0 { upper_index - 1 } else { self.departure_time.len() - 1 };
                 let delta_dt = self.subtract_wrapping(self.departure_time[upper_index], self.departure_time[lower_index]);
                 let relative_x = self.subtract_wrapping(departure, self.departure_time[lower_index]);
-                println!("delta dt {:?}", delta_dt);
                 interpolate(delta_dt, self.travel_time[lower_index], self.travel_time[upper_index], relative_x)
             },
+        }
+    }
+
+    pub fn next_ipp_greater_eq(&self, time: Timestamp) -> Option<Timestamp> {
+        match self.departure_time.binary_search(&time) {
+            Ok(_) => Some(time),
+            Err(index) => {
+                if index < self.departure_time.len() {
+                    Some(self.departure_time[index])
+                } else {
+                    None
+                }
+            }
         }
     }
 

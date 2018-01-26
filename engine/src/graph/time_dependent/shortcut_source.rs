@@ -36,7 +36,20 @@ impl ShortcutData {
             },
             None => {
                 // TODO get data from actual graph
-                // let ttf = graph.get(self.up_arc).evaluate(departure)
+                // graph.get(self.up_arc).evaluate(departure)
+                unimplemented!()
+            },
+        }
+    }
+
+    pub fn next_ipp_greater_eq(&self, time: Timestamp) -> Option<Timestamp> {
+        match self.down_arc.value() {
+            Some(down_shortcut_id) => {
+                Linked::new(down_shortcut_id, self.up_arc).next_ipp_greater_eq(time)
+            },
+            None => {
+                // TODO get data from actual graph
+                // graph.get(self.up_arc).next_ipp_greater_eq(time)
                 unimplemented!()
             },
         }
