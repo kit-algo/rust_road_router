@@ -57,6 +57,10 @@ impl Linked {
         let (second_min, second_max) = shortcut_graph.get(self.second).bounds(original_graph, shortcut_graph);
         (first_min + second_min, first_max + second_max)
     }
+
+    pub fn as_shortcut_data(&self) -> ShortcutData {
+        ShortcutData::new(ShortcutSource::Shortcut(self.first, self.second))
+    }
 }
 
 fn invert(first_ipp: (Timestamp, Timestamp), second_ipp: (Timestamp, Timestamp), y: Timestamp, period: Timestamp) -> Timestamp {

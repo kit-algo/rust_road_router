@@ -18,20 +18,18 @@ impl Shortcut {
         Shortcut { source_data, time_data }
     }
 
-    pub fn shorten(&mut self, down: EdgeId, up: EdgeId, original_graph: &TDGraph, shortcut_graph: &ShortcutGraph) {
+    pub fn merge(&mut self, other: Linked, original_graph: &TDGraph, shortcut_graph: &ShortcutGraph) {
         if self.source_data.is_empty() {
-            self.source_data.push(ShortcutData::new(ShortcutSource::Shortcut(down, up)));
+            self.source_data.push(other.as_shortcut_data());
             self.time_data.push(0);
         } else {
-            let other = Linked::new(down, up);
-
             // TODO bounds for range
             let (current_lower_bound, current_upper_bound) = self.bounds(original_graph, shortcut_graph);
             let (other_lower_bound, other_upper_bound) = other.bounds(original_graph, shortcut_graph);
             if current_lower_bound >= other_upper_bound {
                 self.source_data.clear();
                 self.time_data.clear();
-                self.source_data.push(ShortcutData::new(ShortcutSource::Shortcut(down, up)));
+                self.source_data.push(other.as_shortcut_data());
                 self.time_data.push(0);
                 return
             } else if other_lower_bound >= current_upper_bound {
@@ -98,7 +96,7 @@ impl Shortcut {
                         if current_better_way {
                             new_shortcut.source_data.push(*prev_source);
                         } else {
-                            new_shortcut.source_data.push(ShortcutData::new(ShortcutSource::Shortcut(down, up)));
+                            new_shortcut.source_data.push(other.as_shortcut_data());
                         }
                         new_shortcut.time_data.push(next_better_way.unwrap().1);
                     }
