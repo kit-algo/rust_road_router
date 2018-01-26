@@ -2,13 +2,13 @@ use super::*;
 
 #[derive(Debug)]
 pub struct PiecewiseLinearFunction<'a> {
-    departure_time: &'a [Weight],
+    departure_time: &'a [Timestamp],
     travel_time: &'a [Weight],
-    period: Weight
+    period: Timestamp
 }
 
 impl<'a> PiecewiseLinearFunction<'a> {
-    pub fn new(departure_time: &'a [Weight], travel_time: &'a [Weight], period: Weight) -> PiecewiseLinearFunction<'a> {
+    pub fn new(departure_time: &'a [Timestamp], travel_time: &'a [Weight], period: Weight) -> PiecewiseLinearFunction<'a> {
         debug_assert_eq!(departure_time.len(), travel_time.len());
         debug_assert!(!departure_time.is_empty());
         for pair in departure_time.windows(2) {
@@ -29,7 +29,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         *self.travel_time.iter().max().unwrap()
     }
 
-    pub fn evaluate(&self, departure: Weight) -> Weight {
+    pub fn evaluate(&self, departure: Timestamp) -> Weight {
         println!("\n\ndeparture {:?}", departure);
         let departure = departure % self.period;
         match self.departure_time.binary_search(&departure) {
@@ -50,7 +50,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 }
 
-fn interpolate(delta_x: Weight, y1: Weight, y2: Weight, x: Weight) -> Weight {
+fn interpolate(delta_x: Weight, y1: Weight, y2: Weight, x: Timestamp) -> Weight {
     debug_assert!(x <= delta_x);
     debug_assert_ne!(delta_x, 0);
     let delta_y = y2 as i64 - y1 as i64;

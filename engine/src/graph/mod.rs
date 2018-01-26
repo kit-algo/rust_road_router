@@ -3,14 +3,14 @@ use std::ops::Range;
 
 pub mod first_out_graph;
 pub mod link_id_to_tail_mapper;
-mod piecewise_linear_function;
+pub mod time_dependent;
 
 pub use self::first_out_graph::{OwnedGraph, FirstOutGraph};
 
 pub type NodeId = u32;
 pub type EdgeId = u32;
 pub type Weight = u32;
-pub const INFINITY: u32 = std::u32::MAX / 2;
+pub const INFINITY: Weight = std::u32::MAX / 2;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Link {
