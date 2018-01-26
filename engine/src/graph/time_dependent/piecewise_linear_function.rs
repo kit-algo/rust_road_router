@@ -29,6 +29,10 @@ impl<'a> PiecewiseLinearFunction<'a> {
         *self.travel_time.iter().max().unwrap()
     }
 
+    pub fn bounds(&self) -> (Weight, Weight) {
+        (self.lower_bound(), self.upper_bound())
+    }
+
     pub fn evaluate(&self, departure: Timestamp) -> Weight {
         let departure = departure % self.period;
         match self.departure_time.binary_search(&departure) {

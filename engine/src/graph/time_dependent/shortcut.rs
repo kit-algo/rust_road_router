@@ -23,9 +23,22 @@ impl Shortcut {
             self.source_data.push(ShortcutData::new(ShortcutSource::Shortcut(down, up)));
             self.time_data.push(0);
         } else {
-            // TODO use bounds and check for dominance???
-            let current_initial_value = self.evaluate(0, original_graph, shortcut_graph);
             let other = Linked::new(down, up);
+
+            // TODO bounds for range
+            let (current_lower_bound, current_upper_bound) = self.bounds(original_graph, shortcut_graph);
+            let (other_lower_bound, other_upper_bound) = other.bounds(original_graph, shortcut_graph);
+            if current_lower_bound >= other_upper_bound {
+                self.source_data.clear();
+                self.time_data.clear();
+                self.source_data.push(ShortcutData::new(ShortcutSource::Shortcut(down, up)));
+                self.time_data.push(0);
+                return
+            } else if other_lower_bound >= current_upper_bound {
+                return
+            }
+
+            let current_initial_value = self.evaluate(0, original_graph, shortcut_graph);
             let other_initial_value = other.evaluate(0, original_graph, shortcut_graph);
 
             let is_current_initially_lower = current_initial_value <= other_initial_value;
@@ -123,6 +136,11 @@ impl Shortcut {
                 self.source_data[index].next_ipp_greater_eq(time, original_graph, shortcut_graph)
             },
         }
+    }
+
+    pub fn bounds(&self, original_graph: &TDGraph, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
+        let (mins, maxs): (Vec<Weight>, Vec<Weight>) = self.source_data.iter().map(|source| source.bounds(original_graph, shortcut_graph)).unzip();
+        (mins.into_iter().min().unwrap_or(INFINITY), maxs.into_iter().max().unwrap_or(INFINITY))
     }
 }
 

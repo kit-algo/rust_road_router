@@ -51,6 +51,12 @@ impl Linked {
             },
         }
     }
+
+    pub fn bounds(&self, original_graph: &TDGraph, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
+        let (first_min, first_max) = shortcut_graph.get(self.first).bounds(original_graph, shortcut_graph);
+        let (second_min, second_max) = shortcut_graph.get(self.second).bounds(original_graph, shortcut_graph);
+        (first_min + second_min, first_max + second_max)
+    }
 }
 
 fn invert(first_ipp: (Timestamp, Timestamp), second_ipp: (Timestamp, Timestamp), y: Timestamp, period: Timestamp) -> Timestamp {

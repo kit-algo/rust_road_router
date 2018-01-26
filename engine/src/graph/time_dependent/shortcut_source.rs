@@ -49,4 +49,15 @@ impl ShortcutData {
             },
         }
     }
+
+    pub fn bounds(&self, original_graph: &TDGraph, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
+        match self.down_arc.value() {
+            Some(down_shortcut_id) => {
+                Linked::new(down_shortcut_id, self.up_arc).bounds(original_graph, shortcut_graph)
+            },
+            None => {
+                original_graph.travel_time_function(self.up_arc).bounds()
+            },
+        }
+    }
 }
