@@ -15,7 +15,7 @@ mod linked;
 use self::linked::*;
 
 mod graph;
-use self::graph::Graph as TDGraph;
+pub use self::graph::Graph as TDGraph;
 
-mod shortcut_graph;
-use self::shortcut_graph::*;
+pub mod shortcut_graph;
+pub use self::shortcut_graph::ShortcutGraph;
