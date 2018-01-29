@@ -60,8 +60,8 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
-    pub fn ipp_iter(&self, range: Range<Timestamp>) -> Iter {
-        Iter::new(&self, range)
+    pub fn ipp_iter(&self, range: Range<Timestamp>) -> Iter<'a> {
+        Iter::new(self.departure_time, range)
     }
 
     fn subtract_wrapping(&self, x: Weight, y: Weight) -> Weight {
@@ -79,33 +79,33 @@ fn interpolate(delta_x: Weight, y1: Weight, y2: Weight, x: Timestamp) -> Weight 
 }
 
 #[derive(Debug)]
-pub struct Iter<'a, 'b: 'a> {
-    ttf: &'a PiecewiseLinearFunction<'b>,
+pub struct Iter<'a> {
+    departure_time: &'a [Timestamp],
     upper_bound: Timestamp, // exclusive
     current_index: usize
 }
 
-impl<'a, 'b> Iter<'a, 'b> {
-    fn new(ttf: &'a PiecewiseLinearFunction<'b>, range: Range<Timestamp>) -> Iter<'a, 'b> {
-        let current_index = match ttf.departure_time.binary_search(&range.start) {
+impl<'a> Iter<'a> {
+    fn new(departure_time: &'a [Timestamp], range: Range<Timestamp>) -> Iter<'a> {
+        let current_index = match departure_time.binary_search(&range.start) {
             Ok(index) => index,
             Err(index) => index
-        } % ttf.departure_time.len();
+        } % departure_time.len();
 
-        Iter { ttf, upper_bound: range.end, current_index }
+        Iter { departure_time, upper_bound: range.end, current_index }
     }
 }
 
-impl<'a, 'b> Iterator for Iter<'a, 'b> {
+impl<'a> Iterator for Iter<'a> {
     type Item = Timestamp;
 
     fn next(&mut self) -> Option<Timestamp> {
-        let ipp = self.ttf.departure_time[self.current_index];
+        let ipp = self.departure_time[self.current_index];
 
         if ipp >= self.upper_bound {
             None
         } else {
-            self.current_index = (self.current_index + 1) % self.ttf.departure_time.len();
+            self.current_index = (self.current_index + 1) % self.departure_time.len();
             Some(ipp)
         }
     }

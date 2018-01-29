@@ -50,6 +50,17 @@ impl ShortcutData {
         }
     }
 
+    pub fn ipp_iter<'a>(&self, range: Range<Timestamp>, original_graph: &'a TDGraph, _shortcut_graph: &'a ShortcutGraph) -> ShortcutSourceIter<'a> {
+        match self.down_arc.value() {
+            Some(_down_shortcut_id) => {
+                ShortcutSourceIter::Shortcut
+            },
+            None => {
+                ShortcutSourceIter::OriginalEdge(original_graph.travel_time_function(self.up_arc).ipp_iter(range))
+            },
+        }
+    }
+
     pub fn bounds(&self, original_graph: &TDGraph, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
@@ -58,6 +69,23 @@ impl ShortcutData {
             None => {
                 original_graph.travel_time_function(self.up_arc).bounds()
             },
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum ShortcutSourceIter<'a> {
+    Shortcut,
+    OriginalEdge(piecewise_linear_function::Iter<'a>),
+}
+
+impl<'a> Iterator for ShortcutSourceIter<'a> {
+    type Item = Timestamp;
+
+    fn next(&mut self) -> Option<Timestamp> {
+        match self {
+            &mut ShortcutSourceIter::Shortcut => None,
+            &mut ShortcutSourceIter::OriginalEdge(ref mut iter) => iter.next(),
         }
     }
 }
