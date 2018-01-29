@@ -60,6 +60,10 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
+    pub fn ipp_iter(&self, range: Range<Timestamp>) -> Iter {
+        Iter::new(&self, range)
+    }
+
     fn subtract_wrapping(&self, x: Weight, y: Weight) -> Weight {
         (self.period + x - y) % self.period
     }
@@ -72,6 +76,39 @@ fn interpolate(delta_x: Weight, y1: Weight, y2: Weight, x: Timestamp) -> Weight 
     let result = y1 as i64 + (x as i64 * delta_y / delta_x as i64);
     debug_assert!(result >= 0);
     result as Weight
+}
+
+#[derive(Debug)]
+pub struct Iter<'a, 'b: 'a> {
+    ttf: &'a PiecewiseLinearFunction<'b>,
+    upper_bound: Timestamp, // exclusive
+    current_index: usize
+}
+
+impl<'a, 'b> Iter<'a, 'b> {
+    fn new(ttf: &'a PiecewiseLinearFunction<'b>, range: Range<Timestamp>) -> Iter<'a, 'b> {
+        let current_index = match ttf.departure_time.binary_search(&range.start) {
+            Ok(index) => index,
+            Err(index) => index
+        } % ttf.departure_time.len();
+
+        Iter { ttf, upper_bound: range.end, current_index }
+    }
+}
+
+impl<'a, 'b> Iterator for Iter<'a, 'b> {
+    type Item = Timestamp;
+
+    fn next(&mut self) -> Option<Timestamp> {
+        let ipp = self.ttf.departure_time[self.current_index];
+
+        if ipp >= self.upper_bound {
+            None
+        } else {
+            self.current_index = (self.current_index + 1) % self.ttf.departure_time.len();
+            Some(ipp)
+        }
+    }
 }
 
 #[cfg(test)]
