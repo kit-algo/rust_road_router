@@ -130,9 +130,73 @@ impl Shortcut {
         }
     }
 
+    pub fn ipp_iter<'a, 'b: 'a>(&'b self, range: Range<Timestamp>, original_graph: &'a TDGraph, shortcut_graph: &'a ShortcutGraph) -> Iter<'a, 'b> {
+        Iter::new(&self, WrappingRange::new(range, original_graph.period()), original_graph, shortcut_graph)
+    }
+
     pub fn bounds(&self, original_graph: &TDGraph, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
         let (mins, maxs): (Vec<Weight>, Vec<Weight>) = self.source_data.iter().map(|source| source.bounds(original_graph, shortcut_graph)).unzip();
         (mins.into_iter().min().unwrap_or(INFINITY), maxs.into_iter().max().unwrap_or(INFINITY))
     }
 }
 
+pub struct Iter<'a, 'b: 'a> {
+    shortcut: &'b Shortcut,
+    original_graph: &'a TDGraph,
+    shortcut_graph: &'a ShortcutGraph,
+    range: WrappingRange<Timestamp>,
+    current_index: usize,
+    current_source_iter: Option<Box<Iterator<Item = Timestamp> + 'a>>
+}
+
+impl<'a, 'b> Iter<'a, 'b> {
+    fn new(shortcut: &'b Shortcut, range: WrappingRange<Timestamp>, original_graph: &'a TDGraph, shortcut_graph: &'a ShortcutGraph) -> Iter<'a, 'b> {
+        let (current_index, current_source_iter) = match shortcut.time_data.binary_search(range.start()) {
+            Ok(index) => (index, None),
+            Err(index) => {
+                let current_index = (index + shortcut.source_data.len() - 1) % shortcut.source_data.len();
+                let next_index = (current_index + 1) % shortcut.source_data.len();
+                (current_index, Some(Box::new(shortcut.source_data[current_index].ipp_iter(Range { start: *range.start(), end: shortcut.time_data[next_index] }, original_graph, shortcut_graph)) as Box<Iterator<Item = Timestamp>>))
+            },
+        };
+
+        Iter { shortcut, original_graph, shortcut_graph, range, current_index, current_source_iter }
+    }
+}
+
+impl<'a, 'b> Iterator for Iter<'a, 'b> {
+    type Item = Timestamp;
+
+    fn next(&mut self) -> Option<Timestamp> {
+        match self.current_source_iter {
+            Some(_) => {
+                // TODO move borrow into Some(...) match once NLL are more stable
+                match self.current_source_iter.as_mut().unwrap().next() {
+                    Some(ipp) => {
+                        if self.range.contains(ipp) {
+                            Some(ipp)
+                        } else {
+                            None
+                        }
+                    },
+                    None => {
+                        self.current_source_iter = None;
+                        self.current_index = (self.current_index + 1) % self.shortcut.source_data.len();
+                        self.next()
+                    },
+                }
+            },
+            None => {
+                let ipp = self.shortcut.time_data[self.current_index];
+
+                if self.range.contains(ipp) {
+                    let next_index = (self.current_index + 1) % self.shortcut.source_data.len();
+                    self.current_source_iter = Some(Box::new(self.shortcut.source_data[self.current_index].ipp_iter(Range { start: (ipp + 1) % self.original_graph.period(), end: self.shortcut.time_data[next_index] }, self.original_graph, self.shortcut_graph)));
+                    Some(ipp)
+                } else {
+                    None
+                }
+            },
+        }
+    }
+}

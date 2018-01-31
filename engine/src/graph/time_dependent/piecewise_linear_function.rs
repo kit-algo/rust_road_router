@@ -61,7 +61,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     pub fn ipp_iter(&self, range: Range<Timestamp>) -> Iter<'a> {
-        Iter::new(self.departure_time, range)
+        Iter::new(self.departure_time, WrappingRange::new(range, self.period))
     }
 
     fn subtract_wrapping(&self, x: Weight, y: Weight) -> Weight {
@@ -81,18 +81,18 @@ fn interpolate(delta_x: Weight, y1: Weight, y2: Weight, x: Timestamp) -> Weight 
 #[derive(Debug)]
 pub struct Iter<'a> {
     departure_time: &'a [Timestamp],
-    upper_bound: Timestamp, // exclusive
+    range: WrappingRange<Timestamp>,
     current_index: usize
 }
 
 impl<'a> Iter<'a> {
-    fn new(departure_time: &'a [Timestamp], range: Range<Timestamp>) -> Iter<'a> {
-        let current_index = match departure_time.binary_search(&range.start) {
+    fn new(departure_time: &'a [Timestamp], range: WrappingRange<Timestamp>) -> Iter<'a> {
+        let current_index = match departure_time.binary_search(range.start()) {
             Ok(index) => index,
             Err(index) => index
         } % departure_time.len();
 
-        Iter { departure_time, upper_bound: range.end, current_index }
+        Iter { departure_time, range, current_index }
     }
 }
 
@@ -102,11 +102,11 @@ impl<'a> Iterator for Iter<'a> {
     fn next(&mut self) -> Option<Timestamp> {
         let ipp = self.departure_time[self.current_index];
 
-        if ipp >= self.upper_bound {
-            None
-        } else {
+        if self.range.contains(ipp) {
             self.current_index = (self.current_index + 1) % self.departure_time.len();
             Some(ipp)
+        } else {
+            None
         }
     }
 }
