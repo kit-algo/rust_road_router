@@ -78,17 +78,12 @@ fn files(file: PathBuf) -> Option<NamedFile> {
 
 #[get("/query?<query_params>", format = "application/json")]
 fn query(query_params: RoutingQuery, state: State<Mutex<(Sender<RoutingQuery>, Receiver<Option<RoutingQueryResponse>>)>>) -> Json<Option<RoutingQueryResponse>> {
-    let mut result = None;
-
-    measure("Total Query Request Time", || {
+    let result = measure("Total Query Request Time", || {
         println!("Received Query: {:?}", query_params);
 
         let (ref tx_query, ref rx_result) = *state.lock().unwrap();
         tx_query.send(query_params).unwrap();
-        match rx_result.recv() {
-            Ok(response) => result = response,
-            Err(_) => panic!("routing engine crashed or hung up"),
-        }
+        rx_result.recv().expect("routing engine crashed or hung up")
     });
 
     println!("");
@@ -135,22 +130,21 @@ fn main() {
                 Ok(query_params) => {
                     let RoutingQuery { from_lat, from_lng, to_lat, to_lng } = query_params;
 
-                    let mut from = 0;
-                    let mut to = 0;
-                    measure("match nodes", || {
-                        from = closest_node((from_lat, from_lng));
-                        to = closest_node((to_lat, to_lng));
+                    let (from, to) = measure("match nodes", || {
+                        (closest_node((from_lat, from_lng)), closest_node((to_lat, to_lng)))
                     });
 
-                    measure("cch query", || {
+                    let result = measure("cch query", || {
                         match server.distance(from, to) {
                             Some(distance) => {
                                 let path = server.path().iter().map(|&node| coords(node)).collect();
-                                tx_result.send(Some(RoutingQueryResponse { distance, path })).unwrap();
+                                Some(RoutingQueryResponse { distance, path })
                             },
-                            None => tx_result.send(None).unwrap(),
+                            None => None,
                         }
                     });
+
+                    tx_result.send(result).unwrap();
                 },
                 Err(_) => panic!("query connection hung up"),
             }
