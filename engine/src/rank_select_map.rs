@@ -6,6 +6,8 @@ use std::cmp::min;
 
 use std::heap::{Heap, Alloc, Layout};
 
+use io::*;
+
 // the number of bytes in one L1 cache line
 // hardcoded for now, no idea, if we can retreave it during compilation
 const CACHE_LINE_WIDTH: usize = 64; // bytes
@@ -151,6 +153,12 @@ impl RankSelectMap {
         let range = ((index / INTS_PER_PREFIX) * INTS_PER_PREFIX)..index; // the range over the numbers before our number
         let sum: usize = self.contained_keys_flags.data[range].iter().map(|num| num.count_ones() as usize).sum(); // num ones in that range
         sum + num
+    }
+}
+
+impl DataBytes for RankSelectMap {
+    fn data_bytes(&self) -> &[u8] {
+        self.contained_keys_flags.data.data_bytes()
     }
 }
 

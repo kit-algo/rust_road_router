@@ -129,7 +129,7 @@ pub trait RdfDataSource {
     fn link_geometries(&self) -> Vec<RdfLinkGeometry>;
 }
 
-pub fn read_graph(source: &RdfDataSource) -> (OwnedGraph, Vec<f32>, Vec<f32>) {
+pub fn read_graph(source: &RdfDataSource) -> (OwnedGraph, Vec<f32>, Vec<f32>, RankSelectMap) {
     println!("read nav links");
     // start with all nav links
     let mut nav_links: Vec<RdfNavLink> = source.nav_links();
@@ -276,7 +276,7 @@ pub fn read_graph(source: &RdfDataSource) -> (OwnedGraph, Vec<f32>, Vec<f32>) {
     let graph = OwnedGraph::new(first_out, head, weights);
     let lat = nodes.iter().map(|node| ((node.lat as f64) / 100000.) as f32).collect();
     let lng = nodes.iter().map(|node| ((node.lon as f64) / 100000.) as f32).collect();
-    (graph, lat, lng)
+    (graph, lat, lng, link_indexes)
 }
 
 fn calculate_length_in_m(geometries: &[RdfLinkGeometry]) -> f64 {
