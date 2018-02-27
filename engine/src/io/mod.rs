@@ -5,30 +5,63 @@ use std::io::Result;
 use std::mem;
 use std::slice;
 
-pub fn read_into_vector<T>(filename: &str) -> Result<Vec<T>> {
-    let metadata = fs::metadata(filename)?;
-    let bytes = metadata.len() as usize;
-    let num_elements = bytes / mem::size_of::<T>();
-    let mut file = File::open(filename)?;
-
-    let mut buffer = Vec::with_capacity(bytes);
-    file.read_to_end(&mut buffer)?;
-
-    let p = buffer.as_mut_ptr();
-    let buffer = unsafe {
-        mem::forget(buffer);
-        Vec::<T>::from_raw_parts(p as *mut T, num_elements, num_elements)
-    };
-
-    Ok(buffer)
+pub trait DataBytes {
+    fn data_bytes(&self) -> &[u8];
 }
 
-pub fn write_vector_to_file<T>(filename: &str, vector: &[T]) -> Result<()> {
-    let mut buffer = File::create(filename)?;
-    let num_bytes = vector.len() * mem::size_of::<T>();
+pub trait DataBytesMut {
+    fn data_bytes_mut(&mut self) -> &mut [u8];
+}
 
-    unsafe {
-        let slice = slice::from_raw_parts(vector.as_ptr() as *const u8, num_bytes);
-        buffer.write_all(slice)
+impl<T: Copy> DataBytes for [T] {
+    fn data_bytes(&self) -> &[u8] {
+        let num_bytes = self.len() * mem::size_of::<T>();
+        unsafe { slice::from_raw_parts(self.as_ptr() as *const u8, num_bytes) }
+    }
+}
+
+impl<T: Copy> DataBytesMut for [T] {
+    fn data_bytes_mut(&mut self) -> &mut [u8] {
+        let num_bytes = self.len() * mem::size_of::<T>();
+        unsafe { slice::from_raw_parts_mut(self.as_mut_ptr() as *mut u8, num_bytes) }
+    }
+}
+
+impl<T: Copy> DataBytesMut for Vec<T> {
+    fn data_bytes_mut(&mut self) -> &mut [u8] {
+        let num_bytes = self.len() * mem::size_of::<T>();
+        unsafe { slice::from_raw_parts_mut(self.as_mut_ptr() as *mut u8, num_bytes) }
+    }
+}
+
+pub trait Store : DataBytes {
+    fn write_to(&self, filename: &str) -> Result<()> {
+        File::create(filename)?.write_all(self.data_bytes())
+    }
+}
+
+impl<T: DataBytes> Store for T {}
+impl<T> Store for [T] where [T]: DataBytes {}
+
+pub trait Load : DataBytesMut + Sized {
+    fn new_with_bytes(num_bytes: usize) -> Self;
+
+    fn load_from(filename: &str) -> Result<Self> {
+        let metadata = fs::metadata(filename)?;
+        let mut file = File::open(filename)?;
+
+        let mut object = Self::new_with_bytes(metadata.len() as usize);
+        assert_eq!(metadata.len() as usize, object.data_bytes_mut().len());
+        file.read_exact(object.data_bytes_mut())?;
+
+        Ok(object)
+    }
+}
+
+impl<T: Default + Copy> Load for Vec<T> {
+    fn new_with_bytes(num_bytes: usize) -> Self {
+        assert_eq!(num_bytes % mem::size_of::<T>(), 0);
+        let num_elements = num_bytes / mem::size_of::<T>();
+        (0..num_elements).map(|_| T::default()).collect()
     }
 }

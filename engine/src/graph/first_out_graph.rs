@@ -1,7 +1,7 @@
 use super::*;
 use as_slice::AsSlice;
 use as_mut_slice::AsMutSlice;
-use ::io;
+use ::io::*;
 use std::io::Result;
 use std::path::Path;
 use std::mem::swap;
@@ -46,9 +46,9 @@ impl<FirstOutContainer, HeadContainer, WeightContainer> FirstOutGraph<FirstOutCo
 
     pub fn write_to_dir(&self, dir: &str) -> Result<()> {
         let path = Path::new(dir);
-        let res1 = io::write_vector_to_file(path.join("first_out").to_str().unwrap(), self.first_out());
-        let res2 = io::write_vector_to_file(path.join("head").to_str().unwrap(), self.head());
-        let res3 = io::write_vector_to_file(path.join("weights").to_str().unwrap(), self.weight());
+        let res1 = self.first_out().write_to(path.join("first_out").to_str().unwrap());
+        let res2 = self.head().write_to(path.join("head").to_str().unwrap());
+        let res3 = self.weight().write_to(path.join("weights").to_str().unwrap());
         res1.and(res2).and(res3)
     }
 
