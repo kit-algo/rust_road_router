@@ -3,6 +3,7 @@
 
 use std::mem::size_of;
 use std::cmp::min;
+use std::ops::Deref;
 
 use std::heap::{Heap, Alloc, Layout};
 
@@ -162,6 +163,116 @@ impl DataBytes for RankSelectMap {
     }
 }
 
+const GROUPED_LOCALS: usize = 256;
+
+#[derive(Debug)]
+struct InvertableRankSelectMap {
+    map: RankSelectMap,
+    blocks: Vec<usize>
+}
+
+impl InvertableRankSelectMap {
+    fn new(map: RankSelectMap) -> InvertableRankSelectMap {
+        let num_groups = 1 + (map.len() + GROUPED_LOCALS - 1) / GROUPED_LOCALS;
+        let mut blocks = vec![0; num_groups];
+        *blocks.last_mut().unwrap() = map.prefix_sum.len() - 1;
+
+        let mut value = 0;
+        for (block_index, prefix_sums) in map.prefix_sum.windows(2).enumerate() {
+            while prefix_sums[0] <= value && value < prefix_sums[1] {
+                blocks[value / GROUPED_LOCALS] = block_index;
+                value += GROUPED_LOCALS;
+            }
+        }
+
+        InvertableRankSelectMap { map, blocks }
+    }
+
+    fn inverse(&self, value: usize) -> usize {
+        debug_assert!(value < self.map.len());
+        let group = value / GROUPED_LOCALS;
+        let block_index = match self.map.prefix_sum[self.blocks[group]..self.blocks[group+1]].binary_search(&value) {
+            Ok(block_index) => block_index,
+            Err(block_index) => block_index - 1,
+        };
+
+        let block_local_rank = value - self.map.prefix_sum[block_index];
+        let block_local_index = self.block_local_index(block_index, block_local_rank);
+
+        block_index * BITS_PER_PREFIX + block_local_index
+    }
+
+    fn block_local_index(&self, block: usize, rank: usize) -> usize {
+        let data_begin = block * INTS_PER_PREFIX;
+        let data_end = min((block + 1) * INTS_PER_PREFIX, self.map.contained_keys_flags.data.len());
+        let data = &self.map.contained_keys_flags.data[data_begin..data_end];
+
+        let mut popcount_sum = 0;
+        let mut num_skipped_bits = 0;
+        let mut iter = data.iter();
+        let bits = loop {
+            let bits = iter.next().unwrap();
+            let popcount = bits.count_ones() as usize;
+
+            if popcount_sum + popcount > rank {
+                break bits;
+            }
+            popcount_sum += popcount;
+            num_skipped_bits += STORAGE_BITS;
+        };
+
+        num_skipped_bits + InvertableRankSelectMap::int_local_index(*bits, rank - popcount_sum)
+    }
+
+    fn int_local_index(int: u64, rank: usize) -> usize {
+        debug_assert!(rank < int.count_ones() as usize);
+        let mut word = int;
+        let mut adjusted_rank = rank;
+        let mut shifted = 0;
+
+        debug_assert!(adjusted_rank < 64);
+        let lower_ones = (word as u32).count_ones() as usize;
+        if lower_ones <= adjusted_rank {
+            word >>= 32;
+            adjusted_rank -= lower_ones;
+            shifted += 32;
+        }
+
+        debug_assert!(adjusted_rank < 32);
+        let lower_ones = (word as u16).count_ones() as usize;
+        if lower_ones <= adjusted_rank {
+            word >>= 16;
+            adjusted_rank -= lower_ones;
+            shifted += 16;
+        }
+
+        debug_assert!(adjusted_rank < 16);
+        let lower_ones = (word as u8).count_ones() as usize;
+        if lower_ones <= adjusted_rank {
+            word >>= 8;
+            adjusted_rank -= lower_ones;
+            shifted += 8;
+        }
+
+        debug_assert!(adjusted_rank < 8);
+        while adjusted_rank > 0 {
+            word &= word - 1;
+            adjusted_rank -= 1;
+        }
+
+        debug_assert_ne!(word.trailing_zeros(), 64);
+        shifted + word.trailing_zeros() as usize
+    }
+}
+
+impl Deref for InvertableRankSelectMap {
+    type Target = RankSelectMap;
+
+    fn deref(&self) -> &Self::Target {
+        &self.map
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -220,5 +331,17 @@ mod tests {
         let map = RankSelectMap::new(bits);
         assert_eq!(map.at(0), 0);
         assert_eq!(map.at(64), 1);
+    }
+
+    #[test]
+    fn test_inverse() {
+        let map = InvertableRankSelectMap::new(create_and_fill_map());
+        assert_eq!(map.at(0), 0);
+        assert_eq!(map.inverse(0), 0);
+        assert_eq!(map.inverse(1), 2);
+        assert_eq!(map.inverse(3), 52);
+        assert_eq!(map.inverse(4), 130);
+        assert_eq!(map.inverse(5), 149);
+        assert_eq!(map.inverse(6), 999);
     }
 }
