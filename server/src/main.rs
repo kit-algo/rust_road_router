@@ -25,6 +25,7 @@ use rocket_contrib::Json;
 
 use bmw_routing_engine::*;
 use graph::*;
+use rank_select_map::*;
 use shortest_path::customizable_contraction_hierarchy;
 use shortest_path::node_order::NodeOrder;
 use shortest_path::query::customizable_contraction_hierarchy::Server;
@@ -105,8 +106,8 @@ fn main() {
         let head = Vec::load_from(path.join("head").to_str().unwrap()).expect("could not read head");
         let travel_time = Vec::load_from(path.join("travel_time").to_str().unwrap()).expect("could not read travel_time");
 
-        let lat = Vec::load_from(path.join("latitude").to_str().unwrap()).expect("could not read first_out");
-        let lng = Vec::load_from(path.join("longitude").to_str().unwrap()).expect("could not read first_out");
+        let lat = Vec::load_from(path.join("latitude").to_str().unwrap()).expect("could not read latitude");
+        let lng = Vec::load_from(path.join("longitude").to_str().unwrap()).expect("could not read longitude");
 
         let graph = FirstOutGraph::new(first_out, head, travel_time);
         let cch_order = Vec::load_from(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm");
