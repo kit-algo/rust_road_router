@@ -129,20 +129,20 @@ pub trait RdfDataSource {
     fn link_geometries(&self) -> Vec<RdfLinkGeometry>;
 }
 
-pub fn read_graph(source: &RdfDataSource) -> (OwnedGraph, Vec<f32>, Vec<f32>, RankSelectMap) {
+pub fn read_graph(source: &RdfDataSource) -> (OwnedGraph, Vec<f32>, Vec<f32>, RankSelectMap, Vec<EdgeId>) {
     println!("read nav links");
     // start with all nav links
     let mut nav_links: Vec<RdfNavLink> = source.nav_links();
     println!("sort nav links");
     nav_links.sort_by_key(|nav_link| nav_link.link_id);
 
-    println!("build link indices");
+    println!("build link id mapping");
     // local ids for links
-    let mut link_indexes = BitVec::new(nav_links.last().unwrap().link_id as usize + 1);
+    let mut link_id_mapping = BitVec::new(nav_links.last().unwrap().link_id as usize + 1);
     for nav_link in nav_links.iter() {
-        link_indexes.set(nav_link.link_id as usize);
+        link_id_mapping.set(nav_link.link_id as usize);
     }
-    let link_indexes = RankSelectMap::new(link_indexes);
+    let link_id_mapping = RankSelectMap::new(link_id_mapping);
 
     println!("read links");
     let links = source.links();
@@ -155,7 +155,7 @@ pub fn read_graph(source: &RdfDataSource) -> (OwnedGraph, Vec<f32>, Vec<f32>, Ra
     println!("build node id mapping");
     // insert all global node ids we encounter in links
     for link in links.iter() {
-        match link_indexes.get(link.link_id as usize) {
+        match link_id_mapping.get(link.link_id as usize) {
             Some(_) => {
                 node_id_mapping.set(link.ref_node_id as usize);
                 node_id_mapping.set(link.nonref_node_id as usize);
@@ -173,7 +173,7 @@ pub fn read_graph(source: &RdfDataSource) -> (OwnedGraph, Vec<f32>, Vec<f32>, Ra
 
     // iterate over all links and count degrees for nodes
     for link in links.iter() {
-        match link_indexes.get(link.link_id as usize) {
+        match link_id_mapping.get(link.link_id as usize) {
             Some(link_index) => {
                 match nav_links[link_index].travel_direction {
                     RdfLinkDirection::FromRef => degrees[node_id_mapping.at(link.ref_node_id as usize)] += 1,
@@ -200,9 +200,9 @@ pub fn read_graph(source: &RdfDataSource) -> (OwnedGraph, Vec<f32>, Vec<f32>, Ra
 
     println!("read link geometry");
     // fetch links geometry
-    let mut link_geometries = vec![Vec::new(); link_indexes.len()];
+    let mut link_geometries = vec![Vec::new(); link_id_mapping.len()];
     for geometry in source.link_geometries().into_iter() {
-        match link_indexes.get(geometry.link_id as usize) {
+        match link_id_mapping.get(geometry.link_id as usize) {
             Some(link_index) => link_geometries[link_index].push(geometry),
             None => (),
         }
@@ -223,12 +223,13 @@ pub fn read_graph(source: &RdfDataSource) -> (OwnedGraph, Vec<f32>, Vec<f32>, Ra
     // init other graph arrays
     let mut head: Vec<NodeId> = vec![0; m as usize];
     let mut weights: Vec<Weight> = vec![0; m as usize];
+    let mut link_ids: Vec<EdgeId> = vec![0; m as usize];
 
     println!("calculate weights");
     // iterate over all links and insert head and weight
     // increment the first_out values along the way
     for link in links.iter() {
-        match link_indexes.get(link.link_id as usize) {
+        match link_id_mapping.get(link.link_id as usize) {
             Some(link_index) => {
                 let nav_link = &nav_links[link_index];
                 let length = if link_geometries[link_index].is_empty() {
@@ -238,28 +239,36 @@ pub fn read_graph(source: &RdfDataSource) -> (OwnedGraph, Vec<f32>, Vec<f32>, Ra
                 } else {
                     calculate_length_in_m(&link_geometries[link_index])
                 };
+                let from_node = node_id_mapping.at(link.ref_node_id as usize);
+                let to_node = node_id_mapping.at(link.nonref_node_id as usize);
+
                 let from_weight = (1000. * length / nav_link.speed_in_m_per_s(RdfLinkDirection::FromRef)).round() as Weight;
                 let to_weight = (1000. * length / nav_link.speed_in_m_per_s(RdfLinkDirection::ToRef)).round() as Weight;
 
                 match nav_link.travel_direction {
+
                     RdfLinkDirection::FromRef => {
-                        head[first_out[node_id_mapping.at(link.ref_node_id as usize)] as usize] = node_id_mapping.at(link.nonref_node_id as usize) as NodeId;
-                        weights[first_out[node_id_mapping.at(link.ref_node_id as usize)] as usize] = from_weight;
-                        first_out[node_id_mapping.at(link.ref_node_id as usize)] += 1;
+                        head[first_out[from_node] as usize] = to_node as NodeId;
+                        weights[first_out[from_node] as usize] = from_weight;
+                        link_ids[first_out[from_node] as usize] = link_index as EdgeId;
+                        first_out[from_node] += 1;
                     },
                     RdfLinkDirection::ToRef => {
-                        head[first_out[node_id_mapping.at(link.nonref_node_id as usize)] as usize] = node_id_mapping.at(link.ref_node_id as usize) as NodeId;
-                        weights[first_out[node_id_mapping.at(link.nonref_node_id as usize)] as usize] = to_weight;
-                        first_out[node_id_mapping.at(link.nonref_node_id as usize)] += 1;
+                        head[first_out[to_node] as usize] = from_node as NodeId;
+                        weights[first_out[to_node] as usize] = to_weight;
+                        link_ids[first_out[to_node] as usize] = link_index as EdgeId;
+                        first_out[to_node] += 1;
                     },
                     RdfLinkDirection::Both => {
-                        head[first_out[node_id_mapping.at(link.ref_node_id as usize)] as usize] = node_id_mapping.at(link.nonref_node_id as usize) as NodeId;
-                        weights[first_out[node_id_mapping.at(link.ref_node_id as usize)] as usize] = from_weight;
-                        first_out[node_id_mapping.at(link.ref_node_id as usize)] += 1;
+                        head[first_out[from_node] as usize] = to_node as NodeId;
+                        weights[first_out[from_node] as usize] = from_weight;
+                        link_ids[first_out[from_node] as usize] = link_index as EdgeId;
+                        first_out[from_node] += 1;
 
-                        head[first_out[node_id_mapping.at(link.nonref_node_id as usize)] as usize] = node_id_mapping.at(link.ref_node_id as usize) as NodeId;
-                        weights[first_out[node_id_mapping.at(link.nonref_node_id as usize)] as usize] = to_weight;
-                        first_out[node_id_mapping.at(link.nonref_node_id as usize)] += 1;
+                        head[first_out[to_node] as usize] = from_node as NodeId;
+                        weights[first_out[to_node] as usize] = to_weight;
+                        link_ids[first_out[to_node] as usize] = link_index as EdgeId;
+                        first_out[to_node] += 1;
                     }
                 }
             },
@@ -276,7 +285,7 @@ pub fn read_graph(source: &RdfDataSource) -> (OwnedGraph, Vec<f32>, Vec<f32>, Ra
     let graph = OwnedGraph::new(first_out, head, weights);
     let lat = nodes.iter().map(|node| ((node.lat as f64) / 100000.) as f32).collect();
     let lng = nodes.iter().map(|node| ((node.lon as f64) / 100000.) as f32).collect();
-    (graph, lat, lng, link_indexes)
+    (graph, lat, lng, link_id_mapping, link_ids)
 }
 
 fn calculate_length_in_m(geometries: &[RdfLinkGeometry]) -> f64 {
