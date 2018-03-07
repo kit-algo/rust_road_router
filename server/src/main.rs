@@ -25,7 +25,6 @@ use rocket_contrib::Json;
 
 use bmw_routing_engine::*;
 use graph::*;
-use rank_select_map::*;
 use shortest_path::customizable_contraction_hierarchy;
 use shortest_path::node_order::NodeOrder;
 use shortest_path::query::customizable_contraction_hierarchy::Server;
@@ -136,13 +135,10 @@ fn main() {
                     });
 
                     let result = measure("cch query", || {
-                        match server.distance(from, to) {
-                            Some(distance) => {
-                                let path = server.path().iter().map(|&node| coords(node)).collect();
-                                Some(RoutingQueryResponse { distance, path })
-                            },
-                            None => None,
-                        }
+                        server.distance(from, to).map(|distance| {
+                            let path = server.path().iter().map(|&node| coords(node)).collect();
+                            RoutingQueryResponse { distance, path }
+                        })
                     });
 
                     tx_result.send(result).unwrap();
