@@ -191,10 +191,10 @@ impl InvertableRankSelectMap {
     fn inverse(&self, value: usize) -> usize {
         debug_assert!(value < self.map.len());
         let group = value / GROUPED_LOCALS;
-        let block_index = match self.map.prefix_sum[self.blocks[group]..self.blocks[group+1]].binary_search(&value) {
+        let block_index = match self.map.prefix_sum[self.blocks[group]..self.blocks[group+1]+1].binary_search(&value) {
             Ok(block_index) => block_index,
             Err(block_index) => block_index - 1,
-        };
+        } + self.blocks[group];
 
         let block_local_rank = value - self.map.prefix_sum[block_index];
         let block_local_index = self.block_local_index(block_index, block_local_rank);
@@ -343,5 +343,25 @@ mod tests {
         assert_eq!(map.inverse(4), 130);
         assert_eq!(map.inverse(5), 149);
         assert_eq!(map.inverse(6), 999);
+    }
+
+    #[test]
+    fn test_with_bigger_map() {
+        let mut bits = BitVec::new(1 << 16);
+        for i in 0..(1<<16) {
+            if i % 7 == 3 {
+                bits.set(i);
+            }
+        }
+        let map = InvertableRankSelectMap::new(RankSelectMap::new(bits));
+
+        let mut counter = 0;
+        for i in 0..(1<<16) {
+            if i % 7 == 3 {
+                assert_eq!(map.at(i), counter);
+                assert_eq!(map.inverse(counter), i);
+                counter += 1;
+            }
+        }
     }
 }
