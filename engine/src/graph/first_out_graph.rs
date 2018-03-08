@@ -44,6 +44,13 @@ impl<FirstOutContainer, HeadContainer, WeightContainer> FirstOutGraph<FirstOutCo
         self.head().len()
     }
 
+    pub fn tail(&self, link_id: EdgeId) -> NodeId {
+        (match self.first_out().binary_search(&link_id) {
+            Ok(index) => index,
+            Err(index) => index - 1,
+        }) as NodeId
+    }
+
     pub fn write_to_dir(&self, dir: &str) -> Result<()> {
         let path = Path::new(dir);
         let res1 = self.first_out().write_to(path.join("first_out").to_str().unwrap());

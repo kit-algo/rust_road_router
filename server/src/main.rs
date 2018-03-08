@@ -14,9 +14,8 @@ use std::env;
 
 use std::thread;
 use std::sync::mpsc;
-use mpsc::{Receiver, Sender};
+use mpsc::Sender;
 use std::sync::Mutex;
-// use std::sync::RwLock;
 
 use std::cmp::Ordering;
 use rocket::response::NamedFile;
@@ -25,6 +24,8 @@ use rocket_contrib::Json;
 
 use bmw_routing_engine::*;
 use graph::*;
+use rank_select_map::*;
+use import::here::link_id_mapper::*;
 use shortest_path::customizable_contraction_hierarchy;
 use shortest_path::node_order::NodeOrder;
 use shortest_path::query::customizable_contraction_hierarchy::Server;
@@ -53,7 +54,7 @@ impl Ord for NonNan {
 }
 
 #[derive(Debug, FromForm, Copy, Clone)]
-struct RoutingQuery {
+struct GeoQuery {
     from_lat: f32,
     from_lng: f32,
     to_lat: f32,
@@ -61,9 +62,31 @@ struct RoutingQuery {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct RoutingQueryResponse {
+struct GeoResponse {
     distance: Weight,
     path: Vec<(f32, f32)>
+}
+
+#[derive(Debug, FromForm, Copy, Clone)]
+struct HereQuery {
+    from_link_id: u64,
+    from_direction: bool,
+    from_link_fraction: f32,
+    to_link_id: u64,
+    to_direction: bool,
+    to_link_fraction: f32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct HereResponse {
+    distance: Weight,
+    path: Vec<u64>
+}
+
+#[derive(Debug)]
+enum Query {
+    Geo((GeoQuery, Sender<Option<GeoResponse>>)),
+    Here((HereQuery, Sender<Option<HereResponse>>)),
 }
 
 #[get("/")]
@@ -77,12 +100,30 @@ fn files(file: PathBuf) -> Option<NamedFile> {
 }
 
 #[get("/query?<query_params>", format = "application/json")]
-fn query(query_params: RoutingQuery, state: State<Mutex<(Sender<RoutingQuery>, Receiver<Option<RoutingQueryResponse>>)>>) -> Json<Option<RoutingQueryResponse>> {
+fn query(query_params: GeoQuery, state: State<Mutex<Sender<Query>>>) -> Json<Option<GeoResponse>> {
     let result = measure("Total Query Request Time", || {
         println!("Received Query: {:?}", query_params);
 
-        let (ref tx_query, ref rx_result) = *state.lock().unwrap();
-        tx_query.send(query_params).unwrap();
+        let tx_query = state.lock().unwrap();
+        let (tx_result, rx_result) = mpsc::channel::<Option<GeoResponse>>();
+
+        tx_query.send(Query::Geo((query_params, tx_result))).unwrap();
+        rx_result.recv().expect("routing engine crashed or hung up")
+    });
+
+    println!("");
+    Json(result)
+}
+
+#[get("/here_query?<query_params>", format = "application/json")]
+fn here_query(query_params: HereQuery, state: State<Mutex<Sender<Query>>>) -> Json<Option<HereResponse>> {
+    let result = measure("Total Query Request Time", || {
+        println!("Received Query: {:?}", query_params);
+
+        let tx_query = state.lock().unwrap();
+        let (tx_result, rx_result) = mpsc::channel::<Option<HereResponse>>();
+
+        tx_query.send(Query::Here((query_params, tx_result))).unwrap();
         rx_result.recv().expect("routing engine crashed or hung up")
     });
 
@@ -91,8 +132,7 @@ fn query(query_params: RoutingQuery, state: State<Mutex<(Sender<RoutingQuery>, R
 }
 
 fn main() {
-    let (tx_query, rx_query) = mpsc::channel::<RoutingQuery>();
-    let (tx_result, rx_result) = mpsc::channel::<Option<RoutingQueryResponse>>();
+    let (tx_query, rx_query) = mpsc::channel::<Query>();
 
     thread::spawn(move || {
         let mut args = env::args();
@@ -107,6 +147,11 @@ fn main() {
 
         let lat = Vec::load_from(path.join("latitude").to_str().unwrap()).expect("could not read latitude");
         let lng = Vec::load_from(path.join("longitude").to_str().unwrap()).expect("could not read longitude");
+
+        let link_id_mapping = BitVec::load_from(path.join("link_id_mapping").to_str().unwrap()).expect("could not read link_id_mapping");
+        let link_id_mapping = InvertableRankSelectMap::new(RankSelectMap::new(link_id_mapping));
+        let here_rank_to_link_id = Vec::load_from(path.join("here_rank_to_link_id").to_str().unwrap()).expect("could not read here_rank_to_link_id");
+        let id_mapper = LinkIdMapper::new(link_id_mapping, here_rank_to_link_id, head.len());
 
         let graph = FirstOutGraph::new(first_out, head, travel_time);
         let cch_order = Vec::load_from(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm");
@@ -125,11 +170,17 @@ fn main() {
             }).map(|(id, _)| id).unwrap() as NodeId
         };
 
-        loop {
-            match rx_query.recv() {
-                Ok(query_params) => {
-                    let RoutingQuery { from_lat, from_lng, to_lat, to_lng } = query_params;
+        let node_path_to_link_path = |path: Vec<NodeId>| {
+            path.windows(2).map(|nodes| {
+                graph.edge_index(nodes[0], nodes[1]).unwrap()
+            }).map(|link_id| {
+                id_mapper.local_to_here_link_id(link_id)
+            }).collect()
+        };
 
+        for query_params in rx_query {
+            match query_params {
+                Query::Geo((GeoQuery { from_lat, from_lng, to_lat, to_lng }, tx_result)) => {
                     let (from, to) = measure("match nodes", || {
                         (closest_node((from_lat, from_lng)), closest_node((to_lat, to_lng)))
                     });
@@ -137,13 +188,36 @@ fn main() {
                     let result = measure("cch query", || {
                         server.distance(from, to).map(|distance| {
                             let path = server.path().iter().map(|&node| coords(node)).collect();
-                            RoutingQueryResponse { distance, path }
+                            GeoResponse { distance, path }
                         })
                     });
 
                     tx_result.send(result).unwrap();
                 },
-                Err(_) => panic!("query connection hung up"),
+                Query::Here((HereQuery { from_link_id, from_direction, from_link_fraction, to_link_id, to_direction, to_link_fraction }, tx_result)) => {
+                    let from_link_direction = if from_direction { LinkDirection::FromRef } else { LinkDirection::ToRef };
+                    let from_link_local_id = id_mapper.here_to_local_link_id(from_link_id, from_link_direction).expect("non existing link");
+                    let from_link = graph.link(from_link_local_id);
+                    let from = from_link.node;
+
+                    let to_link_direction = if to_direction { LinkDirection::FromRef } else { LinkDirection::ToRef };
+                    let to_link_local_id = id_mapper.here_to_local_link_id(to_link_id, to_link_direction).expect("non existing link");
+                    let to_link = graph.link(to_link_local_id);
+                    let to = graph.tail(to_link_local_id);
+
+                    let result = measure("cch query", || {
+                        server.distance(from, to).map(|distance| {
+                            let mut path: Vec<u64> = node_path_to_link_path(server.path().into_iter().collect());
+                            path.insert(0, from_link_id);
+                            path.push(to_link_id);
+
+                            let distance = distance + (from_link_fraction * from_link.weight as f32) as u32 + (to_link_fraction * to_link.weight as f32) as u32;
+                            HereResponse { distance, path }
+                        })
+                    });
+
+                    tx_result.send(result).unwrap();
+                },
             }
         }
     });
@@ -153,7 +227,7 @@ fn main() {
         .finalize().expect("Could not create config");
 
     rocket::custom(config, false)
-        .mount("/", routes![index, files, query])
-        .manage(Mutex::new((tx_query, rx_result)))
+        .mount("/", routes![index, files, query, here_query])
+        .manage(Mutex::new(tx_query))
         .launch();
 }
