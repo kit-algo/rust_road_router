@@ -26,15 +26,15 @@ impl LinkIdMapper {
         LinkIdMapper { link_id_mapping, here_rank_to_link_id, link_id_to_here_rank }
     }
 
-    pub fn here_to_local_edge_id(&self, here_edge_id: u64, direction: LinkDirection) -> Option<EdgeId> {
-        let rank = self.link_id_mapping.get(here_edge_id as usize)?;
+    pub fn here_to_local_link_id(&self, here_link_id: u64, direction: LinkDirection) -> Option<EdgeId> {
+        let rank = self.link_id_mapping.get(here_link_id as usize)?;
         match direction {
             LinkDirection::FromRef => self.here_rank_to_link_id[rank].0.value(),
             LinkDirection::ToRef => self.here_rank_to_link_id[rank].1.value(),
         }
     }
 
-    pub fn local_to_here_edge_id(&self, edge_id: u64) -> u64 {
-        self.link_id_mapping.inverse(self.link_id_to_here_rank[edge_id as usize] as usize) as u64
+    pub fn local_to_here_link_id(&self, link_id: EdgeId) -> u64 {
+        self.link_id_mapping.inverse(self.link_id_to_here_rank[link_id as usize] as usize) as u64
     }
 }

@@ -40,3 +40,9 @@ impl<T: Sentinel + Debug> InRangeOption<T> {
         }
     }
 }
+
+impl<T: Sentinel + Debug> Default for InRangeOption<T> {
+    fn default() -> Self {
+        Self::new(None)
+    }
+}
