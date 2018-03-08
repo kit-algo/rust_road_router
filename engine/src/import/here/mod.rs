@@ -1,5 +1,6 @@
 use ::graph::*;
 use ::rank_select_map::{RankSelectMap, BitVec};
+use in_range_option::*;
 use std::iter;
 use std::str::FromStr;
 use std::error::Error;
@@ -9,6 +10,7 @@ use nav_types::WGS84;
 
 pub mod postgres_source;
 pub mod csv_source;
+pub mod link_id_mapper;
 
 #[derive(Debug)]
 pub struct DirectionParseError;
@@ -129,7 +131,7 @@ pub trait RdfDataSource {
     fn link_geometries(&self) -> Vec<RdfLinkGeometry>;
 }
 
-pub fn read_graph(source: &RdfDataSource) -> (OwnedGraph, Vec<f32>, Vec<f32>, RankSelectMap, Vec<EdgeId>) {
+pub fn read_graph(source: &RdfDataSource) -> (OwnedGraph, Vec<f32>, Vec<f32>, RankSelectMap, Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>) {
     println!("read nav links");
     // start with all nav links
     let mut nav_links: Vec<RdfNavLink> = source.nav_links();
@@ -223,7 +225,7 @@ pub fn read_graph(source: &RdfDataSource) -> (OwnedGraph, Vec<f32>, Vec<f32>, Ra
     // init other graph arrays
     let mut head: Vec<NodeId> = vec![0; m as usize];
     let mut weights: Vec<Weight> = vec![0; m as usize];
-    let mut link_ids: Vec<EdgeId> = vec![0; m as usize];
+    let mut here_rank_to_link_id: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)> = vec![(InRangeOption::new(None), InRangeOption::new(None)); links.len()];
 
     println!("calculate weights");
     // iterate over all links and insert head and weight
@@ -246,28 +248,27 @@ pub fn read_graph(source: &RdfDataSource) -> (OwnedGraph, Vec<f32>, Vec<f32>, Ra
                 let to_weight = (1000. * length / nav_link.speed_in_m_per_s(RdfLinkDirection::ToRef)).round() as Weight;
 
                 match nav_link.travel_direction {
-
                     RdfLinkDirection::FromRef => {
                         head[first_out[from_node] as usize] = to_node as NodeId;
                         weights[first_out[from_node] as usize] = from_weight;
-                        link_ids[first_out[from_node] as usize] = link_index as EdgeId;
+                        here_rank_to_link_id[link_index].0 = InRangeOption::new(Some(first_out[from_node]));
                         first_out[from_node] += 1;
                     },
                     RdfLinkDirection::ToRef => {
                         head[first_out[to_node] as usize] = from_node as NodeId;
                         weights[first_out[to_node] as usize] = to_weight;
-                        link_ids[first_out[to_node] as usize] = link_index as EdgeId;
+                        here_rank_to_link_id[link_index].1 = InRangeOption::new(Some(first_out[to_node]));
                         first_out[to_node] += 1;
                     },
                     RdfLinkDirection::Both => {
                         head[first_out[from_node] as usize] = to_node as NodeId;
                         weights[first_out[from_node] as usize] = from_weight;
-                        link_ids[first_out[from_node] as usize] = link_index as EdgeId;
+                        here_rank_to_link_id[link_index].0 = InRangeOption::new(Some(first_out[from_node]));
                         first_out[from_node] += 1;
 
                         head[first_out[to_node] as usize] = from_node as NodeId;
                         weights[first_out[to_node] as usize] = to_weight;
-                        link_ids[first_out[to_node] as usize] = link_index as EdgeId;
+                        here_rank_to_link_id[link_index].1 = InRangeOption::new(Some(first_out[to_node]));
                         first_out[to_node] += 1;
                     }
                 }
@@ -285,7 +286,7 @@ pub fn read_graph(source: &RdfDataSource) -> (OwnedGraph, Vec<f32>, Vec<f32>, Ra
     let graph = OwnedGraph::new(first_out, head, weights);
     let lat = nodes.iter().map(|node| ((node.lat as f64) / 100000.) as f32).collect();
     let lng = nodes.iter().map(|node| ((node.lon as f64) / 100000.) as f32).collect();
-    (graph, lat, lng, link_id_mapping, link_ids)
+    (graph, lat, lng, link_id_mapping, here_rank_to_link_id)
 }
 
 fn calculate_length_in_m(geometries: &[RdfLinkGeometry]) -> f64 {

@@ -68,6 +68,24 @@ impl BitVec {
     }
 }
 
+impl DataBytes for BitVec {
+    fn data_bytes(&self) -> &[u8] {
+        self.data.data_bytes()
+    }
+}
+
+impl DataBytesMut for BitVec {
+    fn data_bytes_mut(&mut self) -> &mut [u8] {
+        self.data.data_bytes_mut()
+    }
+}
+
+impl Load for BitVec {
+    fn new_with_bytes(num_bytes: usize) -> Self {
+        BitVec::new(num_bytes * 8)
+    }
+}
+
 // the actual map data structure.
 // made up of the bitvec with one bit for each global id
 // and an vec containing prefix sums of the number of elements
@@ -159,20 +177,20 @@ impl RankSelectMap {
 
 impl DataBytes for RankSelectMap {
     fn data_bytes(&self) -> &[u8] {
-        self.contained_keys_flags.data.data_bytes()
+        self.contained_keys_flags.data_bytes()
     }
 }
 
 const GROUPED_LOCALS: usize = 256;
 
 #[derive(Debug)]
-struct InvertableRankSelectMap {
+pub struct InvertableRankSelectMap {
     map: RankSelectMap,
     blocks: Vec<usize>
 }
 
 impl InvertableRankSelectMap {
-    fn new(map: RankSelectMap) -> InvertableRankSelectMap {
+    pub fn new(map: RankSelectMap) -> InvertableRankSelectMap {
         let num_groups = 1 + (map.len() + GROUPED_LOCALS - 1) / GROUPED_LOCALS;
         let mut blocks = vec![0; num_groups];
         *blocks.last_mut().unwrap() = map.prefix_sum.len() - 1;
@@ -188,7 +206,7 @@ impl InvertableRankSelectMap {
         InvertableRankSelectMap { map, blocks }
     }
 
-    fn inverse(&self, value: usize) -> usize {
+    pub fn inverse(&self, value: usize) -> usize {
         debug_assert!(value < self.map.len());
         let group = value / GROUPED_LOCALS;
         let block_index = match self.map.prefix_sum[self.blocks[group]..self.blocks[group+1]+1].binary_search(&value) {
