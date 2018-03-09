@@ -44,11 +44,9 @@ impl<FirstOutContainer, HeadContainer, WeightContainer> FirstOutGraph<FirstOutCo
         self.head().len()
     }
 
-    pub fn tail(&self, link_id: EdgeId) -> NodeId {
-        (match self.first_out().binary_search(&link_id) {
-            Ok(index) => index,
-            Err(index) => index - 1,
-        }) as NodeId
+    pub fn degree(&self, node: NodeId) -> usize {
+        let range = self.neighbor_edge_indices_usize(node);
+        range.end - range.start
     }
 
     pub fn write_to_dir(&self, dir: &str) -> Result<()> {

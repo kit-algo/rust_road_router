@@ -3,7 +3,7 @@ use shortest_path::node_order::NodeOrder;
 use in_range_option::InRangeOption;
 use benchmark::measure;
 use self::first_out_graph::degrees_to_first_out;
-use rank_select_map::*;
+use graph::link_id_to_tail_mapper::*;
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -13,8 +13,7 @@ pub struct CCHGraph {
     node_order: NodeOrder,
     original_edge_to_ch_edge: Vec<EdgeId>,
     elimination_tree: Vec<InRangeOption<NodeId>>,
-    edge_id_to_tail: RankSelectMap,
-    deg_zero_nodes_indices: Vec<EdgeId>
+    link_id_to_tail_mapper: LinkIdToTailMapper,
 }
 
 impl CCHGraph {
@@ -44,29 +43,17 @@ impl CCHGraph {
             }
         }).collect();
 
-        let mut first_out_bits = BitVec::new(graph.num_arcs() + 1);
-        let mut deg_zero_nodes_indices = Vec::new();
+        let link_id_to_tail_mapper = LinkIdToTailMapper::new(&graph);
         let (first_out, head, _) = graph.decompose();
-        for &edge_index in first_out.iter() {
-            if first_out_bits.get(edge_index as usize) && edge_index as usize != head.len() {
-                deg_zero_nodes_indices.push(edge_index as EdgeId);
-            } else {
-                first_out_bits.set(edge_index as usize);
-            }
-        }
-        let edge_id_to_tail = RankSelectMap::new(first_out_bits);
 
-        let cch = CCHGraph {
+        CCHGraph {
             first_out,
             head,
             node_order,
             original_edge_to_ch_edge,
             elimination_tree,
-            edge_id_to_tail,
-            deg_zero_nodes_indices
-        };
-        cch.validate_edge_id_to_tail_mapping();
-        cch
+            link_id_to_tail_mapper
+        }
     }
 
     fn adjancecy_lists_to_first_out_graph(adjancecy_lists: Vec<Node>) -> OwnedGraph {
@@ -181,23 +168,6 @@ impl CCHGraph {
     }
 
     pub fn edge_id_to_tail(&self, edge_id: EdgeId) -> NodeId {
-        let num_deg_zeros_below = match self.deg_zero_nodes_indices.binary_search(&edge_id) {
-            Ok(ref mut index) => {
-                while *index < self.deg_zero_nodes_indices.len() && self.deg_zero_nodes_indices[*index] == edge_id {
-                    *index += 1;
-                }
-                *index
-            },
-            Err(index) => index,
-        };
-        self.edge_id_to_tail.at_or_next_lower(edge_id as usize) as NodeId + num_deg_zeros_below as NodeId
-    }
-
-    fn validate_edge_id_to_tail_mapping(&self) {
-        for (node_id, window) in self.first_out[..].windows(2).enumerate() {
-            for edge_id in window[0]..window[1] {
-                assert_eq!(self.edge_id_to_tail(edge_id), node_id as NodeId);
-            }
-        }
+        self.link_id_to_tail_mapper.link_id_to_tail(edge_id)
     }
 }

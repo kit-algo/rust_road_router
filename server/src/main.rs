@@ -31,6 +31,7 @@ use shortest_path::node_order::NodeOrder;
 use shortest_path::query::customizable_contraction_hierarchy::Server;
 use io::*;
 use bmw_routing_engine::benchmark::measure;
+use graph::link_id_to_tail_mapper::*;
 
 #[derive(PartialEq,PartialOrd)]
 struct NonNan(f32);
@@ -156,6 +157,8 @@ fn main() {
         let graph = FirstOutGraph::new(first_out, head, travel_time);
         let cch_order = Vec::load_from(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm");
 
+        let link_id_to_tail_mapper = LinkIdToTailMapper::new(&graph);
+
         let cch = customizable_contraction_hierarchy::contract(&graph, NodeOrder::from_node_order(cch_order));
 
         let mut server = Server::new(&cch, &graph);
@@ -203,7 +206,7 @@ fn main() {
                     let to_link_direction = if to_direction { LinkDirection::FromRef } else { LinkDirection::ToRef };
                     let to_link_local_id = id_mapper.here_to_local_link_id(to_link_id, to_link_direction).expect("non existing link");
                     let to_link = graph.link(to_link_local_id);
-                    let to = graph.tail(to_link_local_id);
+                    let to = link_id_to_tail_mapper.link_id_to_tail(to_link_local_id);
 
                     let result = measure("cch query", || {
                         server.distance(from, to).map(|distance| {
