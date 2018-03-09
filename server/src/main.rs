@@ -11,6 +11,7 @@ extern crate bmw_routing_engine;
 
 use std::path::{Path, PathBuf};
 use std::env;
+use std::iter::once;
 
 use std::thread;
 use std::sync::mpsc;
@@ -173,14 +174,6 @@ fn main() {
             }).map(|(id, _)| id).unwrap() as NodeId
         };
 
-        let node_path_to_link_path = |path: Vec<NodeId>| {
-            path.windows(2).map(|nodes| {
-                graph.edge_index(nodes[0], nodes[1]).unwrap()
-            }).map(|link_id| {
-                id_mapper.local_to_here_link_id(link_id)
-            }).collect()
-        };
-
         for query_params in rx_query {
             match query_params {
                 Query::Geo((GeoQuery { from_lat, from_lng, to_lat, to_lng }, tx_result)) => {
@@ -210,9 +203,16 @@ fn main() {
 
                     let result = measure("cch query", || {
                         server.distance(from, to).map(|distance| {
-                            let mut path: Vec<u64> = node_path_to_link_path(server.path().into_iter().collect());
-                            path.insert(0, from_link_id);
-                            path.push(to_link_id);
+                            let path = server.path();
+                            let path_iter = path.iter();
+                            let mut second_node_iter = path_iter.clone();
+                            second_node_iter.next();
+
+                            let path = once(from_link_id).chain(path_iter.zip(second_node_iter).map(|(first_node, second_node)| {
+                                graph.edge_index(*first_node, *second_node).unwrap()
+                            }).map(|link_id| {
+                                id_mapper.local_to_here_link_id(link_id)
+                            })).chain(once(to_link_id)).collect();
 
                             let distance = distance + (from_link_fraction * from_link.weight as f32) as u32 + (to_link_fraction * to_link.weight as f32) as u32;
                             HereResponse { distance, path }
