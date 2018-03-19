@@ -39,17 +39,6 @@ impl ShortcutData {
         }
     }
 
-    pub fn next_ipp_greater_eq(&self, time: Timestamp, shortcut_graph: &ShortcutGraph) -> Option<Timestamp> {
-        match self.down_arc.value() {
-            Some(down_shortcut_id) => {
-                Linked::new(down_shortcut_id, self.up_arc).next_ipp_greater_eq(time, shortcut_graph)
-            },
-            None => {
-                shortcut_graph.original_graph().travel_time_function(self.up_arc).next_ipp_greater_eq(time)
-            },
-        }
-    }
-
     pub fn ipp_iter<'a>(&self, range: Range<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> ShortcutSourceIter<'a> {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {

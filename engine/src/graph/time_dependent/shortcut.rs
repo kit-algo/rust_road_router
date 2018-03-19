@@ -37,27 +37,32 @@ impl Shortcut {
 
         let is_current_initially_lower = current_initial_value <= other_initial_value;
         let mut is_current_lower_for_prev_ipp = is_current_initially_lower;
-        let mut self_next_ipp = self.next_ipp_greater_eq(0, shortcut_graph);
-        let mut other_next_ipp = other.next_ipp_greater_eq(0, shortcut_graph);
-        let mut better_way = vec![];
+
+        let range = Range { start: 0, end: shortcut_graph.original_graph().period() };
+        let mut self_iter = self.ipp_iter(range.clone(), shortcut_graph);
+        let mut other_iter = other.ipp_iter(range, shortcut_graph);
+
+        let mut self_next_ipp = self_iter.next();
+        let mut other_next_ipp = other_iter.next();
+        let mut better_way = Vec::new();
 
         while self_next_ipp.is_some() || other_next_ipp.is_some() {
             let ipp = match (self_next_ipp, other_next_ipp) {
                 (Some(self_next_ipp_at), Some(other_next_ipp_at)) => {
                     if self_next_ipp_at <= other_next_ipp_at {
-                        self_next_ipp = self.next_ipp_greater_eq(self_next_ipp_at + 1, shortcut_graph);
+                        self_next_ipp = self_iter.next();
                         self_next_ipp_at
                     } else {
-                        other_next_ipp = other.next_ipp_greater_eq(other_next_ipp_at + 1, shortcut_graph);
+                        other_next_ipp = other_iter.next();
                         other_next_ipp_at
                     }
                 },
                 (None, Some(other_next_ipp_at)) => {
-                    other_next_ipp = other.next_ipp_greater_eq(other_next_ipp_at + 1, shortcut_graph);
+                    other_next_ipp = other_iter.next();
                     other_next_ipp_at
                 },
                 (Some(self_next_ipp_at), None) => {
-                    self_next_ipp = self.next_ipp_greater_eq(self_next_ipp_at + 1, shortcut_graph);
+                    self_next_ipp = self_iter.next();
                     self_next_ipp_at
                 },
                 (None, None) => panic!("while loop should have terminated")
@@ -115,17 +120,6 @@ impl Shortcut {
             Err(index) => {
                 let index = (index + self.source_data.len() - 1) % self.source_data.len();
                 self.source_data[index].evaluate(departure, shortcut_graph)
-            },
-        }
-    }
-
-    pub fn next_ipp_greater_eq(&self, time: Timestamp, shortcut_graph: &ShortcutGraph) -> Option<Timestamp> {
-        if self.source_data.is_empty() { return None }
-        match self.time_data.binary_search(&time) {
-            Ok(_) => Some(time),
-            Err(index) => {
-                let index = (index + self.source_data.len() - 1) % self.source_data.len();
-                self.source_data[index].next_ipp_greater_eq(time, shortcut_graph)
             },
         }
     }

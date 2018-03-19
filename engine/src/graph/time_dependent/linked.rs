@@ -17,41 +17,6 @@ impl Linked {
         second_edge.evaluate(departure + first_edge.evaluate(departure, shortcut_graph), shortcut_graph)
     }
 
-    pub fn next_ipp_greater_eq(&self, time: Timestamp, shortcut_graph: &ShortcutGraph) -> Option<Timestamp> {
-        let first_edge = shortcut_graph.get_downward(self.first);
-        let second_edge = shortcut_graph.get_upward(self.second);
-        let first_edge_next_ipp = first_edge.next_ipp_greater_eq(time, shortcut_graph);
-        let first_edge_next_ipp_at = first_edge_next_ipp.unwrap_or(shortcut_graph.original_graph().period()); // TODO end of period, need range
-        let first_edge_current_value = first_edge.evaluate(time, shortcut_graph);
-        let first_edge_next_ipp_value = first_edge.evaluate(first_edge_next_ipp_at, shortcut_graph);
-
-        let second_edge_next_ipp = second_edge.next_ipp_greater_eq(time + first_edge_current_value, shortcut_graph);
-        match second_edge_next_ipp {
-            Some(second_edge_next_ipp_at) => {
-                if second_edge_next_ipp_at < first_edge_next_ipp_at + first_edge_next_ipp_value {
-                    Some(invert((time, time + first_edge_current_value), (first_edge_next_ipp_at, first_edge_next_ipp_at + first_edge_next_ipp_value), second_edge_next_ipp_at, shortcut_graph.original_graph().period()))
-                } else {
-                    first_edge_next_ipp
-                }
-            },
-            None => {
-                // wrapping
-                match second_edge.next_ipp_greater_eq(0, shortcut_graph) {
-                    Some(second_edge_next_ipp_at) => {
-                        if second_edge_next_ipp_at < first_edge_next_ipp_at + first_edge_next_ipp_value {
-                            Some(invert((time, time + first_edge_current_value), (first_edge_next_ipp_at, first_edge_next_ipp_at + first_edge_next_ipp_value), second_edge_next_ipp_at, shortcut_graph.original_graph().period()))
-                        } else {
-                            first_edge_next_ipp
-                        }
-                    },
-                    None => {
-                        first_edge_next_ipp
-                    },
-                }
-            },
-        }
-    }
-
     pub fn bounds(&self, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
         let (first_min, first_max) = shortcut_graph.get_downward(self.first).bounds(shortcut_graph);
         let (second_min, second_max) = shortcut_graph.get_upward(self.second).bounds(shortcut_graph);

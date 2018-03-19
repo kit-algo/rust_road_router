@@ -47,19 +47,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
-    pub fn next_ipp_greater_eq(&self, time: Timestamp) -> Option<Timestamp> {
-        match self.departure_time.binary_search(&time) {
-            Ok(_) => Some(time),
-            Err(index) => {
-                if index < self.departure_time.len() {
-                    Some(self.departure_time[index])
-                } else {
-                    None
-                }
-            }
-        }
-    }
-
     pub fn ipp_iter(&self, range: Range<Timestamp>) -> Iter<'a> {
         Iter::new(self.departure_time, WrappingRange::new(range, self.period))
     }

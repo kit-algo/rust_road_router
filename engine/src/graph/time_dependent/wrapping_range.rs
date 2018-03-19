@@ -14,7 +14,7 @@ pub struct WrappingRange<Idx: PartialOrd> {
 impl<Idx: PartialOrd> WrappingRange<Idx> {
     pub fn new(range: Range<Idx>, wrap_around_at: Idx) -> WrappingRange<Idx> {
         debug_assert!(range.start < wrap_around_at);
-        debug_assert!(range.end < wrap_around_at);
+        debug_assert!(range.end <= wrap_around_at);
         WrappingRange { range, wrap_around_at }
     }
 
