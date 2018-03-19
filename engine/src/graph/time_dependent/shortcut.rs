@@ -18,53 +18,53 @@ impl Shortcut {
         Shortcut { source_data, time_data }
     }
 
-    pub fn merge(&self, other: Linked, original_graph: &TDGraph, shortcut_graph: &ShortcutGraph) -> Shortcut {
+    pub fn merge(&self, other: Linked, shortcut_graph: &ShortcutGraph) -> Shortcut {
         if self.source_data.is_empty() {
             return Shortcut { source_data: vec![other.as_shortcut_data()], time_data: vec![0] }
         }
 
         // TODO bounds for range
-        let (current_lower_bound, current_upper_bound) = self.bounds(original_graph, shortcut_graph);
-        let (other_lower_bound, other_upper_bound) = other.bounds(original_graph, shortcut_graph);
+        let (current_lower_bound, current_upper_bound) = self.bounds(shortcut_graph);
+        let (other_lower_bound, other_upper_bound) = other.bounds(shortcut_graph);
         if current_lower_bound >= other_upper_bound {
             return Shortcut { source_data: vec![other.as_shortcut_data()], time_data: vec![0] }
         } else if other_lower_bound >= current_upper_bound {
             return self.clone()
         }
 
-        let current_initial_value = self.evaluate(0, original_graph, shortcut_graph);
-        let other_initial_value = other.evaluate(0, original_graph, shortcut_graph);
+        let current_initial_value = self.evaluate(0, shortcut_graph);
+        let other_initial_value = other.evaluate(0, shortcut_graph);
 
         let is_current_initially_lower = current_initial_value <= other_initial_value;
         let mut is_current_lower_for_prev_ipp = is_current_initially_lower;
-        let mut self_next_ipp = self.next_ipp_greater_eq(0, original_graph, shortcut_graph);
-        let mut other_next_ipp = other.next_ipp_greater_eq(0, original_graph, shortcut_graph);
+        let mut self_next_ipp = self.next_ipp_greater_eq(0, shortcut_graph);
+        let mut other_next_ipp = other.next_ipp_greater_eq(0, shortcut_graph);
         let mut better_way = vec![];
 
         while self_next_ipp.is_some() || other_next_ipp.is_some() {
             let ipp = match (self_next_ipp, other_next_ipp) {
                 (Some(self_next_ipp_at), Some(other_next_ipp_at)) => {
                     if self_next_ipp_at <= other_next_ipp_at {
-                        self_next_ipp = self.next_ipp_greater_eq(self_next_ipp_at + 1, original_graph, shortcut_graph);
+                        self_next_ipp = self.next_ipp_greater_eq(self_next_ipp_at + 1, shortcut_graph);
                         self_next_ipp_at
                     } else {
-                        other_next_ipp = other.next_ipp_greater_eq(other_next_ipp_at + 1, original_graph, shortcut_graph);
+                        other_next_ipp = other.next_ipp_greater_eq(other_next_ipp_at + 1, shortcut_graph);
                         other_next_ipp_at
                     }
                 },
                 (None, Some(other_next_ipp_at)) => {
-                    other_next_ipp = other.next_ipp_greater_eq(other_next_ipp_at + 1, original_graph, shortcut_graph);
+                    other_next_ipp = other.next_ipp_greater_eq(other_next_ipp_at + 1, shortcut_graph);
                     other_next_ipp_at
                 },
                 (Some(self_next_ipp_at), None) => {
-                    self_next_ipp = self.next_ipp_greater_eq(self_next_ipp_at + 1, original_graph, shortcut_graph);
+                    self_next_ipp = self.next_ipp_greater_eq(self_next_ipp_at + 1, shortcut_graph);
                     self_next_ipp_at
                 },
                 (None, None) => panic!("while loop should have terminated")
             };
 
-            let self_next_ipp_value = self.evaluate(ipp, original_graph, shortcut_graph);
-            let other_next_ipp_value = other.evaluate(ipp, original_graph, shortcut_graph);
+            let self_next_ipp_value = self.evaluate(ipp, shortcut_graph);
+            let other_next_ipp_value = other.evaluate(ipp, shortcut_graph);
 
             let is_current_lower_for_ipp = self_next_ipp_value <= other_next_ipp_value;
             if is_current_lower_for_ipp != is_current_lower_for_prev_ipp {
@@ -108,59 +108,58 @@ impl Shortcut {
         new_shortcut
     }
 
-    pub fn evaluate(&self, departure: Timestamp, original_graph: &TDGraph, shortcut_graph: &ShortcutGraph) -> Weight {
+    pub fn evaluate(&self, departure: Timestamp, shortcut_graph: &ShortcutGraph) -> Weight {
         if self.source_data.is_empty() { return INFINITY }
         match self.time_data.binary_search(&departure) {
-            Ok(index) => self.source_data[index].evaluate(departure, original_graph, shortcut_graph),
+            Ok(index) => self.source_data[index].evaluate(departure, shortcut_graph),
             Err(index) => {
                 let index = (index + self.source_data.len() - 1) % self.source_data.len();
-                self.source_data[index].evaluate(departure, original_graph, shortcut_graph)
+                self.source_data[index].evaluate(departure, shortcut_graph)
             },
         }
     }
 
-    pub fn next_ipp_greater_eq(&self, time: Timestamp, original_graph: &TDGraph, shortcut_graph: &ShortcutGraph) -> Option<Timestamp> {
+    pub fn next_ipp_greater_eq(&self, time: Timestamp, shortcut_graph: &ShortcutGraph) -> Option<Timestamp> {
         if self.source_data.is_empty() { return None }
         match self.time_data.binary_search(&time) {
             Ok(_) => Some(time),
             Err(index) => {
                 let index = (index + self.source_data.len() - 1) % self.source_data.len();
-                self.source_data[index].next_ipp_greater_eq(time, original_graph, shortcut_graph)
+                self.source_data[index].next_ipp_greater_eq(time, shortcut_graph)
             },
         }
     }
 
-    pub fn ipp_iter<'a, 'b: 'a>(&'b self, range: Range<Timestamp>, original_graph: &'a TDGraph, shortcut_graph: &'a ShortcutGraph) -> Iter<'a, 'b> {
-        Iter::new(&self, WrappingRange::new(range, original_graph.period()), original_graph, shortcut_graph)
+    pub fn ipp_iter<'a, 'b: 'a>(&'b self, range: Range<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> Iter<'a, 'b> {
+        Iter::new(&self, WrappingRange::new(range, shortcut_graph.original_graph().period()), shortcut_graph)
     }
 
-    pub fn bounds(&self, original_graph: &TDGraph, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
-        let (mins, maxs): (Vec<Weight>, Vec<Weight>) = self.source_data.iter().map(|source| source.bounds(original_graph, shortcut_graph)).unzip();
+    pub fn bounds(&self, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
+        let (mins, maxs): (Vec<Weight>, Vec<Weight>) = self.source_data.iter().map(|source| source.bounds(shortcut_graph)).unzip();
         (mins.into_iter().min().unwrap_or(INFINITY), maxs.into_iter().max().unwrap_or(INFINITY))
     }
 }
 
 pub struct Iter<'a, 'b: 'a> {
     shortcut: &'b Shortcut,
-    original_graph: &'a TDGraph,
-    shortcut_graph: &'a ShortcutGraph,
+    shortcut_graph: &'a ShortcutGraph<'a>,
     range: WrappingRange<Timestamp>,
     current_index: usize,
     current_source_iter: Option<Box<Iterator<Item = Timestamp> + 'a>>
 }
 
 impl<'a, 'b> Iter<'a, 'b> {
-    fn new(shortcut: &'b Shortcut, range: WrappingRange<Timestamp>, original_graph: &'a TDGraph, shortcut_graph: &'a ShortcutGraph) -> Iter<'a, 'b> {
+    fn new(shortcut: &'b Shortcut, range: WrappingRange<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> Iter<'a, 'b> {
         let (current_index, current_source_iter) = match shortcut.time_data.binary_search(range.start()) {
             Ok(index) => (index, None),
             Err(index) => {
                 let current_index = (index + shortcut.source_data.len() - 1) % shortcut.source_data.len();
                 let next_index = (current_index + 1) % shortcut.source_data.len();
-                (current_index, Some(Box::new(shortcut.source_data[current_index].ipp_iter(Range { start: *range.start(), end: shortcut.time_data[next_index] }, original_graph, shortcut_graph)) as Box<Iterator<Item = Timestamp>>))
+                (current_index, Some(Box::new(shortcut.source_data[current_index].ipp_iter(Range { start: *range.start(), end: shortcut.time_data[next_index] }, shortcut_graph)) as Box<Iterator<Item = Timestamp>>))
             },
         };
 
-        Iter { shortcut, original_graph, shortcut_graph, range, current_index, current_source_iter }
+        Iter { shortcut, shortcut_graph, range, current_index, current_source_iter }
     }
 }
 
@@ -191,7 +190,7 @@ impl<'a, 'b> Iterator for Iter<'a, 'b> {
 
                 if self.range.contains(ipp) {
                     let next_index = (self.current_index + 1) % self.shortcut.source_data.len();
-                    self.current_source_iter = Some(Box::new(self.shortcut.source_data[self.current_index].ipp_iter(Range { start: (ipp + 1) % self.original_graph.period(), end: self.shortcut.time_data[next_index] }, self.original_graph, self.shortcut_graph)));
+                    self.current_source_iter = Some(Box::new(self.shortcut.source_data[self.current_index].ipp_iter(Range { start: (ipp + 1) % self.shortcut_graph.original_graph().period(), end: self.shortcut.time_data[next_index] }, self.shortcut_graph)));
                     Some(ipp)
                 } else {
                     None

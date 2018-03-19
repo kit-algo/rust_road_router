@@ -28,46 +28,46 @@ impl ShortcutData {
         }
     }
 
-    pub fn evaluate(&self, departure: Timestamp, original_graph: &TDGraph, shortcut_graph: &ShortcutGraph) -> Weight {
+    pub fn evaluate(&self, departure: Timestamp, shortcut_graph: &ShortcutGraph) -> Weight {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
-                Linked::new(down_shortcut_id, self.up_arc).evaluate(departure, original_graph, shortcut_graph)
+                Linked::new(down_shortcut_id, self.up_arc).evaluate(departure, shortcut_graph)
             },
             None => {
-                original_graph.travel_time_function(self.up_arc).evaluate(departure)
+                shortcut_graph.original_graph().travel_time_function(self.up_arc).evaluate(departure)
             },
         }
     }
 
-    pub fn next_ipp_greater_eq(&self, time: Timestamp, original_graph: &TDGraph, shortcut_graph: &ShortcutGraph) -> Option<Timestamp> {
+    pub fn next_ipp_greater_eq(&self, time: Timestamp, shortcut_graph: &ShortcutGraph) -> Option<Timestamp> {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
-                Linked::new(down_shortcut_id, self.up_arc).next_ipp_greater_eq(time, original_graph, shortcut_graph)
+                Linked::new(down_shortcut_id, self.up_arc).next_ipp_greater_eq(time, shortcut_graph)
             },
             None => {
-                original_graph.travel_time_function(self.up_arc).next_ipp_greater_eq(time)
+                shortcut_graph.original_graph().travel_time_function(self.up_arc).next_ipp_greater_eq(time)
             },
         }
     }
 
-    pub fn ipp_iter<'a>(&self, range: Range<Timestamp>, original_graph: &'a TDGraph, shortcut_graph: &'a ShortcutGraph) -> ShortcutSourceIter<'a> {
+    pub fn ipp_iter<'a>(&self, range: Range<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> ShortcutSourceIter<'a> {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
-                ShortcutSourceIter::Shortcut(Linked::new(down_shortcut_id, self.up_arc).ipp_iter(range, original_graph, shortcut_graph))
+                ShortcutSourceIter::Shortcut(Linked::new(down_shortcut_id, self.up_arc).ipp_iter(range, shortcut_graph))
             },
             None => {
-                ShortcutSourceIter::OriginalEdge(original_graph.travel_time_function(self.up_arc).ipp_iter(range))
+                ShortcutSourceIter::OriginalEdge(shortcut_graph.original_graph().travel_time_function(self.up_arc).ipp_iter(range))
             },
         }
     }
 
-    pub fn bounds(&self, original_graph: &TDGraph, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
+    pub fn bounds(&self, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
-                Linked::new(down_shortcut_id, self.up_arc).bounds(original_graph, shortcut_graph)
+                Linked::new(down_shortcut_id, self.up_arc).bounds(shortcut_graph)
             },
             None => {
-                original_graph.travel_time_function(self.up_arc).bounds()
+                shortcut_graph.original_graph().travel_time_function(self.up_arc).bounds()
             },
         }
     }

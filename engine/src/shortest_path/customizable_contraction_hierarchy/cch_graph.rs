@@ -163,7 +163,7 @@ impl CCHGraph {
         (upward, downward, upward_shortcut_expansions, downward_shortcut_expansions)
     }
 
-    pub fn customize_td(&self, metric: &TDGraph) -> (ShortcutGraph, ShortcutGraph) {
+    pub fn customize_td<'a, 'b: 'a>(&'a self, metric: &'b TDGraph) -> ShortcutGraph<'a> {
         let n = (self.first_out.len() - 1) as NodeId;
         let m = self.head.len();
 
@@ -184,8 +184,7 @@ impl CCHGraph {
             }
         });
 
-        let mut upward = ShortcutGraph::new(upward_weights);
-        let mut downward = ShortcutGraph::new(downward_weights);
+        let mut shortcut_graph = ShortcutGraph::new(metric, &self.first_out, &self.head, upward_weights, downward_weights);
 
         measure("TD-CCH Customization", || {
             let mut node_outgoing_edge_ids = vec![InRangeOption::new(None); n as usize];
@@ -206,13 +205,7 @@ impl CCHGraph {
                     let shortcut_edge_ids = self.neighbor_edge_indices(node); // upward / outgoing
                     for (target, shortcut_edge_id) in self.neighbor_iter(node).zip(shortcut_edge_ids) { // upward / outgoing
                         debug_assert_eq!(self.edge_id_to_tail(shortcut_edge_id), node);
-
-                        let merged = {
-                            let shortcut = upward.get(shortcut_edge_id);
-                            let alternative = Linked::new(edge_id, node_outgoing_edge_ids[target as usize].value().unwrap());
-                            shortcut.merge(alternative, metric, &upward) // TODO downward
-                        };
-                        upward.set(shortcut_edge_id, merged);
+                        shortcut_graph.merge_upward(shortcut_edge_id, Linked::new(edge_id, node_outgoing_edge_ids[target as usize].value().unwrap()));
                     }
                 }
                 for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) { // upward / outgoing
@@ -220,13 +213,7 @@ impl CCHGraph {
                     let shortcut_edge_ids = self.neighbor_edge_indices(node); // downward / incoming
                     for (target, shortcut_edge_id) in self.neighbor_iter(node).zip(shortcut_edge_ids) { // downward / incoming
                         debug_assert_eq!(self.edge_id_to_tail(shortcut_edge_id), node);
-
-                        let merged =  {
-                            let shortcut = downward.get(shortcut_edge_id);
-                            let alternative = Linked::new(node_incoming_edge_ids[target as usize].value().unwrap(), edge_id);
-                            shortcut.merge(alternative, metric, &upward) // TODO downward
-                        };
-                        downward.set(shortcut_edge_id, merged);
+                        shortcut_graph.merge_downward(shortcut_edge_id, Linked::new(node_incoming_edge_ids[target as usize].value().unwrap(), edge_id));
                     }
                 }
 
@@ -239,7 +226,7 @@ impl CCHGraph {
             }
         });
 
-        (upward, downward)
+        shortcut_graph
     }
 
     pub fn node_order(&self) -> &NodeOrder {
