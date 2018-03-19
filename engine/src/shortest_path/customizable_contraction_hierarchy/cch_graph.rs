@@ -4,6 +4,10 @@ use in_range_option::InRangeOption;
 use benchmark::measure;
 use self::first_out_graph::degrees_to_first_out;
 use graph::link_id_to_tail_mapper::*;
+use graph::time_dependent::*;
+
+use std;
+use std::ops::Range;
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -159,6 +163,85 @@ impl CCHGraph {
         (upward, downward, upward_shortcut_expansions, downward_shortcut_expansions)
     }
 
+    pub fn customize_td(&self, metric: &TDGraph) -> (ShortcutGraph, ShortcutGraph) {
+        let n = (self.first_out.len() - 1) as NodeId;
+        let m = self.head.len();
+
+        let mut upward_weights = vec![Shortcut::new(None); m];
+        let mut downward_weights = vec![Shortcut::new(None); m];
+
+        measure("TD-CCH apply weights", || {
+            for node in 0..n {
+                for (edge_id, neighbor) in metric.neighbor_edge_indices(node).zip(metric.neighbor_iter(node)) {
+                    let ch_edge_id = self.original_edge_to_ch_edge[edge_id as usize];
+
+                    if self.node_order.rank(node) < self.node_order.rank(neighbor) {
+                        upward_weights[ch_edge_id as usize] = Shortcut::new(Some(edge_id));
+                    } else {
+                        downward_weights[ch_edge_id as usize] = Shortcut::new(Some(edge_id));
+                    }
+                }
+            }
+        });
+
+        let mut upward = ShortcutGraph::new(upward_weights);
+        let mut downward = ShortcutGraph::new(downward_weights);
+
+        measure("TD-CCH Customization", || {
+            let mut node_outgoing_edge_ids = vec![InRangeOption::new(None); n as usize];
+            let mut node_incoming_edge_ids = vec![InRangeOption::new(None); n as usize];
+
+            for current_node in 0..n {
+                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
+                    node_incoming_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
+                    // debug_assert_eq!(downward.link(edge_id).node, node);
+                }
+                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
+                    node_outgoing_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
+                    // debug_assert_eq!(upward.link(edge_id).node, node);
+                }
+
+                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) { // downward / incoming
+                    debug_assert_eq!(self.edge_id_to_tail(edge_id), current_node);
+                    let shortcut_edge_ids = self.neighbor_edge_indices(node); // upward / outgoing
+                    for (target, shortcut_edge_id) in self.neighbor_iter(node).zip(shortcut_edge_ids) { // upward / outgoing
+                        debug_assert_eq!(self.edge_id_to_tail(shortcut_edge_id), node);
+
+                        let merged = {
+                            let shortcut = upward.get(shortcut_edge_id);
+                            let alternative = Linked::new(edge_id, node_outgoing_edge_ids[target as usize].value().unwrap());
+                            shortcut.merge(alternative, metric, &upward) // TODO downward
+                        };
+                        upward.set(shortcut_edge_id, merged);
+                    }
+                }
+                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) { // upward / outgoing
+                    debug_assert_eq!(self.edge_id_to_tail(edge_id), current_node);
+                    let shortcut_edge_ids = self.neighbor_edge_indices(node); // downward / incoming
+                    for (target, shortcut_edge_id) in self.neighbor_iter(node).zip(shortcut_edge_ids) { // downward / incoming
+                        debug_assert_eq!(self.edge_id_to_tail(shortcut_edge_id), node);
+
+                        let merged =  {
+                            let shortcut = downward.get(shortcut_edge_id);
+                            let alternative = Linked::new(node_incoming_edge_ids[target as usize].value().unwrap(), edge_id);
+                            shortcut.merge(alternative, metric, &upward) // TODO downward
+                        };
+                        downward.set(shortcut_edge_id, merged);
+                    }
+                }
+
+                for node in self.neighbor_iter(current_node) {
+                    node_incoming_edge_ids[node as usize] = InRangeOption::new(None);
+                }
+                for node in self.neighbor_iter(current_node) {
+                    node_outgoing_edge_ids[node as usize] = InRangeOption::new(None);
+                }
+            }
+        });
+
+        (upward, downward)
+    }
+
     pub fn node_order(&self) -> &NodeOrder {
         &self.node_order
     }
@@ -169,5 +252,19 @@ impl CCHGraph {
 
     pub fn edge_id_to_tail(&self, edge_id: EdgeId) -> NodeId {
         self.link_id_to_tail_mapper.link_id_to_tail(edge_id)
+    }
+
+    fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {
+        (self.first_out[node as usize] as EdgeId)..(self.first_out[(node + 1) as usize] as EdgeId)
+    }
+
+    fn neighbor_edge_indices_usize(&self, node: NodeId) -> Range<usize> {
+        let range = self.neighbor_edge_indices(node);
+        Range { start: range.start as usize, end: range.end as usize }
+    }
+
+    fn neighbor_iter(&self, node: NodeId) -> std::iter::Cloned<std::slice::Iter<u32>> {
+        let range = self.neighbor_edge_indices_usize(node);
+        self.head[range].iter().cloned()
     }
 }

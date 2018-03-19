@@ -24,4 +24,18 @@ impl Graph {
     pub fn period(&self) -> Timestamp {
         self.period
     }
+
+    pub fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {
+        (self.first_out[node as usize] as EdgeId)..(self.first_out[(node + 1) as usize] as EdgeId)
+    }
+
+    pub fn neighbor_edge_indices_usize(&self, node: NodeId) -> Range<usize> {
+        let range = self.neighbor_edge_indices(node);
+        Range { start: range.start as usize, end: range.end as usize }
+    }
+
+    pub fn neighbor_iter(&self, node: NodeId) -> std::iter::Cloned<std::slice::Iter<u32>> {
+        let range = self.neighbor_edge_indices_usize(node);
+        self.head[range].iter().cloned()
+    }
 }

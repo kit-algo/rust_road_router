@@ -9,10 +9,10 @@ mod shortcut_source;
 use self::shortcut_source::*;
 
 mod shortcut;
-use self::shortcut::*;
+pub use self::shortcut::*;
 
 mod linked;
-use self::linked::*;
+pub use self::linked::*;
 
 mod wrapping_range;
 use self::wrapping_range::*;
