@@ -43,7 +43,7 @@ pub struct Iter<'a> {
     shortcut_graph: &'a ShortcutGraph<'a>,
 
     first_edge_prev_ipp: (Timestamp, Weight),
-    first_edge_next_ipp: (Timestamp, Weight),
+    first_edge_next_ipp: Option<(Timestamp, Weight)>,
 }
 
 impl<'a> Iter<'a> {
@@ -55,14 +55,13 @@ impl<'a> Iter<'a> {
 
         let second_iter = second_edge.ipp_iter(Range { start: second_edge_range_begin, end: second_edge_range_begin }, shortcut_graph).peekable();
 
-        let first_edge_next_ipp_at = first_iter.next().unwrap_or(range.end);
-        let first_edge_next_ipp_value = first_edge.evaluate(first_edge_next_ipp_at, shortcut_graph);
+        let first_edge_next_ipp = first_iter.next().map(|ipp| (ipp, first_edge.evaluate(ipp, shortcut_graph)));
 
         Iter {
             first_edge, first_iter, second_iter, shortcut_graph,
             range: WrappingRange::new(range.clone(), shortcut_graph.original_graph().period()),
             first_edge_prev_ipp: (range.start, first_edge_initial_value),
-            first_edge_next_ipp: (first_edge_next_ipp_at, first_edge_next_ipp_value)
+            first_edge_next_ipp
         }
     }
 }
@@ -73,18 +72,15 @@ impl<'a> Iterator for Iter<'a> {
     fn next(&mut self) -> Option<Timestamp> {
         match self.second_iter.peek().cloned() {
             Some(second_edge_ipp) => {
-                if WrappingRange::new(Range { start: self.first_edge_prev_ipp.0 + self.first_edge_prev_ipp.1, end: self.first_edge_next_ipp.0 + self.first_edge_next_ipp.1 }, *self.range.wrap_around()).contains(second_edge_ipp) {
-                    let ipp = invert(self.first_edge_prev_ipp, self.first_edge_next_ipp, second_edge_ipp, self.shortcut_graph.original_graph().period());
+                let first_edge_next_ipp = self.first_edge_next_ipp.unwrap_or((*self.range.end(), self.first_edge.evaluate(*self.range.end(), self.shortcut_graph)));
+                if WrappingRange::new(Range { start: self.first_edge_prev_ipp.0 + self.first_edge_prev_ipp.1, end: first_edge_next_ipp.0 + first_edge_next_ipp.1 }, *self.range.wrap_around()).contains(second_edge_ipp) {
+                    let ipp = invert(self.first_edge_prev_ipp, first_edge_next_ipp, second_edge_ipp, self.shortcut_graph.original_graph().period());
                     self.second_iter.next();
                     Some(ipp)
                 } else {
-                    // TODO what if range.start == range.end???
-                    if self.first_edge_next_ipp.0 != *self.range.end() {
-                        self.first_edge_prev_ipp = self.first_edge_next_ipp;
-
-                        self.first_edge_next_ipp.0 = self.first_iter.next().unwrap_or(*self.range.end());
-                        self.first_edge_next_ipp.1 = self.first_edge.evaluate(self.first_edge_next_ipp.0, self.shortcut_graph);
-
+                    if let Some(first_edge_next_ipp) = self.first_edge_next_ipp {
+                        self.first_edge_prev_ipp = first_edge_next_ipp;
+                        self.first_edge_next_ipp = self.first_iter.next().map(|ipp| (ipp, self.first_edge.evaluate(ipp, self.shortcut_graph)));
                         Some(self.first_edge_prev_ipp.0)
                     } else {
                         None
@@ -92,13 +88,9 @@ impl<'a> Iterator for Iter<'a> {
                 }
             },
             None => {
-                // TODO what if range.start == range.end???
-                if self.first_edge_next_ipp.0 != *self.range.end() {
-                    self.first_edge_prev_ipp = self.first_edge_next_ipp;
-
-                    self.first_edge_next_ipp.0 = self.first_iter.next().unwrap_or(*self.range.end());
-                    self.first_edge_next_ipp.1 = self.first_edge.evaluate(self.first_edge_next_ipp.0, self.shortcut_graph);
-
+                if let Some(first_edge_next_ipp) = self.first_edge_next_ipp {
+                    self.first_edge_prev_ipp = first_edge_next_ipp;
+                    self.first_edge_next_ipp = self.first_iter.next().map(|ipp| (ipp, self.first_edge.evaluate(ipp, self.shortcut_graph)));
                     Some(self.first_edge_prev_ipp.0)
                 } else {
                     None
