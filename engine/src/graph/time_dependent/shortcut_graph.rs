@@ -39,4 +39,10 @@ impl<'a> ShortcutGraph<'a> {
     pub fn original_graph(&self) -> &TDGraph {
         self.original_graph
     }
+
+    pub fn total_num_segments(&self) -> usize {
+        let a: usize = self.outgoing.iter().map(|shortcut| shortcut.num_segments()).sum();
+        let b: usize = self.incoming.iter().map(|shortcut| shortcut.num_segments()).sum();
+        a + b
+    }
 }

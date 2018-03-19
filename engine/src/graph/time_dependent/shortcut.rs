@@ -132,6 +132,10 @@ impl Shortcut {
         let (mins, maxs): (Vec<Weight>, Vec<Weight>) = self.source_data.iter().map(|source| source.bounds(shortcut_graph)).unzip();
         (mins.into_iter().min().unwrap_or(INFINITY), maxs.into_iter().max().unwrap_or(INFINITY))
     }
+
+    pub fn num_segments(&self) -> usize {
+        self.source_data.len()
+    }
 }
 
 pub struct Iter<'a, 'b: 'a> {

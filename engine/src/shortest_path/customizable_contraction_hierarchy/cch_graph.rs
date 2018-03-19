@@ -172,7 +172,7 @@ impl CCHGraph {
 
         measure("TD-CCH apply weights", || {
             for node in 0..n {
-                for (edge_id, neighbor) in metric.neighbor_edge_indices(node).zip(metric.neighbor_iter(node)) {
+                for (edge_id, neighbor) in metric.neighbor_edge_indices(node).zip(metric.neighbor_iter(node).map(|link| link.node)) {
                     let ch_edge_id = self.original_edge_to_ch_edge[edge_id as usize];
 
                     if self.node_order.rank(node) < self.node_order.rank(neighbor) {
