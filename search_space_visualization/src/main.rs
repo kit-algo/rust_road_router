@@ -12,11 +12,9 @@ use std::cmp::max;
 use std::cmp::Ordering;
 
 use bmw_routing_engine::*;
-use graph::first_out_graph::FirstOutGraph as Graph;
 use graph::*;
-use shortest_path::DijkstrableGraph;
 use shortest_path::query::bidirectional_dijkstra::Server as DijkServer;
-use io::read_into_vector;
+use io::Load;
 
 use svg::Document;
 use svg::node::element::{Line, Circle};
@@ -76,14 +74,14 @@ fn main() {
     };
     let output = matches.opt_str("o").unwrap_or("image.svg".to_owned());
 
-    let first_out = read_into_vector(path.join("first_out").to_str().unwrap()).expect("could not read first_out");
-    let lat: Vec<f32> = read_into_vector(path.join("latitude").to_str().unwrap()).expect("could not read first_out");
-    let lon: Vec<f32> = read_into_vector(path.join("longitude").to_str().unwrap()).expect("could not read first_out");
-    let head = read_into_vector(path.join("head").to_str().unwrap()).expect("could not read head");
-    let travel_time = read_into_vector(path.join("travel_time").to_str().unwrap()).expect("could not read travel_time");
+    let first_out = Vec::load_from(path.join("first_out").to_str().unwrap()).expect("could not read first_out");
+    let lat: Vec<f32> = Vec::load_from(path.join("latitude").to_str().unwrap()).expect("could not read first_out");
+    let lon: Vec<f32> = Vec::load_from(path.join("longitude").to_str().unwrap()).expect("could not read first_out");
+    let head = Vec::load_from(path.join("head").to_str().unwrap()).expect("could not read head");
+    let travel_time = Vec::load_from(path.join("travel_time").to_str().unwrap()).expect("could not read travel_time");
 
-    let graph = Graph::new(first_out, head, travel_time);
-    let mut query_server = DijkServer::<Graph, Graph>::new(graph.clone());
+    let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
+    let mut query_server = DijkServer::new(graph.clone());
 
     let find_closest = |(p_lat, p_lon): (f32, f32)| -> NodeId {
         lat.iter().zip(lon.iter()).enumerate().min_by_key(|&(_, (lat, lon))| {
