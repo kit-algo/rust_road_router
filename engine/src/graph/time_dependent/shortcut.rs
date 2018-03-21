@@ -19,6 +19,9 @@ impl Shortcut {
     }
 
     pub fn merge(&self, other: Linked, shortcut_graph: &ShortcutGraph) -> Shortcut {
+        if !other.is_valid_path(shortcut_graph) {
+            return self.clone()
+        }
         if self.source_data.is_empty() {
             return Shortcut { source_data: vec![other.as_shortcut_data()], time_data: vec![0] }
         }
@@ -136,6 +139,10 @@ impl Shortcut {
     pub fn num_segments(&self) -> usize {
         self.source_data.len()
     }
+
+    pub fn is_valid_path(&self) -> bool {
+        self.num_segments() > 0
+    }
 }
 
 pub struct Iter<'a, 'b: 'a> {
@@ -143,6 +150,7 @@ pub struct Iter<'a, 'b: 'a> {
     shortcut_graph: &'a ShortcutGraph<'a>,
     range: WrappingRange<Timestamp>,
     current_index: usize,
+    initial_index: usize,
     current_source_iter: Option<Box<Iterator<Item = Timestamp> + 'a>>
 }
 
@@ -157,7 +165,7 @@ impl<'a, 'b> Iter<'a, 'b> {
             },
         };
 
-        Iter { shortcut, shortcut_graph, range, current_index, current_source_iter }
+        Iter { shortcut, shortcut_graph, range, current_index, initial_index: current_index, current_source_iter }
     }
 }
 
@@ -179,7 +187,11 @@ impl<'a, 'b> Iterator for Iter<'a, 'b> {
                     None => {
                         self.current_source_iter = None;
                         self.current_index = (self.current_index + 1) % self.shortcut.source_data.len();
-                        self.next()
+                        if self.current_index != self.initial_index {
+                            self.next()
+                        } else {
+                            None
+                        }
                     },
                 }
             },

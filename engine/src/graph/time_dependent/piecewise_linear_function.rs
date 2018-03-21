@@ -34,6 +34,10 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     pub fn evaluate(&self, departure: Timestamp) -> Weight {
+        if self.departure_time.len() == 1 {
+            return self.travel_time[0]
+        }
+
         let departure = departure % self.period;
         match self.departure_time.binary_search(&departure) {
             Ok(departure_index) => self.travel_time[departure_index],
@@ -69,7 +73,9 @@ fn interpolate(delta_x: Weight, y1: Weight, y2: Weight, x: Timestamp) -> Weight 
 pub struct Iter<'a> {
     departure_time: &'a [Timestamp],
     range: WrappingRange<Timestamp>,
-    current_index: usize
+    current_index: usize,
+    initial_index: usize,
+    done: bool
 }
 
 impl<'a> Iter<'a> {
@@ -79,7 +85,7 @@ impl<'a> Iter<'a> {
             Err(index) => index
         } % departure_time.len();
 
-        Iter { departure_time, range, current_index }
+        Iter { departure_time, range, current_index, initial_index: current_index, done: false }
     }
 }
 
@@ -87,10 +93,14 @@ impl<'a> Iterator for Iter<'a> {
     type Item = Timestamp;
 
     fn next(&mut self) -> Option<Timestamp> {
+        // println!("plf next");
         let ipp = self.departure_time[self.current_index];
 
-        if self.range.contains(ipp) {
+        if !self.done && self.range.contains(ipp) {
             self.current_index = (self.current_index + 1) % self.departure_time.len();
+            if self.current_index == self.initial_index {
+                self.done = true;
+            }
             Some(ipp)
         } else {
             None

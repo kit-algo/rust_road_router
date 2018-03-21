@@ -205,7 +205,9 @@ impl CCHGraph {
                     let shortcut_edge_ids = self.neighbor_edge_indices(node); // upward / outgoing
                     for (target, shortcut_edge_id) in self.neighbor_iter(node).zip(shortcut_edge_ids) { // upward / outgoing
                         debug_assert_eq!(self.edge_id_to_tail(shortcut_edge_id), node);
-                        shortcut_graph.merge_upward(shortcut_edge_id, Linked::new(edge_id, node_outgoing_edge_ids[target as usize].value().unwrap()));
+                        if let Some(other_edge_id) = node_outgoing_edge_ids[target as usize].value() {
+                            shortcut_graph.merge_upward(shortcut_edge_id, Linked::new(edge_id, other_edge_id));
+                        }
                     }
                 }
                 for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) { // upward / outgoing
@@ -213,7 +215,9 @@ impl CCHGraph {
                     let shortcut_edge_ids = self.neighbor_edge_indices(node); // downward / incoming
                     for (target, shortcut_edge_id) in self.neighbor_iter(node).zip(shortcut_edge_ids) { // downward / incoming
                         debug_assert_eq!(self.edge_id_to_tail(shortcut_edge_id), node);
-                        shortcut_graph.merge_downward(shortcut_edge_id, Linked::new(node_incoming_edge_ids[target as usize].value().unwrap(), edge_id));
+                        if let Some(other_edge_id) = node_incoming_edge_ids[target as usize].value() {
+                            shortcut_graph.merge_downward(shortcut_edge_id, Linked::new(other_edge_id, edge_id));
+                        }
                     }
                 }
 

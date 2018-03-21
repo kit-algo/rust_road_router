@@ -32,6 +32,10 @@ impl Linked {
     pub fn as_shortcut_data(&self) -> ShortcutData {
         ShortcutData::new(ShortcutSource::Shortcut(self.first, self.second))
     }
+
+    pub fn is_valid_path(&self, shortcut_graph: &ShortcutGraph) -> bool {
+        shortcut_graph.get_downward(self.first).is_valid_path() && shortcut_graph.get_upward(self.second).is_valid_path()
+    }
 }
 
 pub struct Iter<'a> {
@@ -100,17 +104,23 @@ impl<'a> Iterator for Iter<'a> {
     }
 }
 
-fn invert(first_ipp: (Timestamp, Timestamp), second_ipp: (Timestamp, Timestamp), y: Timestamp, period: Timestamp) -> Timestamp {
+fn invert(first_ipp: (Timestamp, Timestamp), second_ipp: (Timestamp, Timestamp), target_time: Timestamp, period: Timestamp) -> Timestamp {
     if first_ipp.1 == second_ipp.1 {
         return first_ipp.0
     }
+    let first_ipp = (first_ipp.0, first_ipp.0 + first_ipp.1);
+    let second_ipp = if second_ipp.0 < first_ipp.0 {
+        (second_ipp.0 + period, second_ipp.0 + period + second_ipp.1)
+    } else {
+        (second_ipp.0, second_ipp.0 + second_ipp.1)
+    };
+    let target_time = if target_time < first_ipp.0 { target_time + period } else { target_time };
 
-    let delta_x = (period + second_ipp.0 - first_ipp.0) % period;
-    let delta_y = second_ipp.1 as i64 - first_ipp.1 as i64;
+    let delta_x = second_ipp.0 - first_ipp.0;
+    let delta_y = second_ipp.1 - first_ipp.1;
 
-    let delta_y_to_target = y as i64 - first_ipp.1 as i64;
-    let delta_x_to_target = delta_y_to_target * delta_x as i64 / delta_y;
-    debug_assert!(delta_x_to_target >= 0);
+    let delta_y_to_target = target_time - first_ipp.1;
+    let delta_x_to_target = delta_y_to_target as u64 * delta_x as u64 / delta_y as u64;
 
-    first_ipp.1 + delta_x_to_target as Weight
+    (first_ipp.1 + delta_x_to_target as u32) % period
 }
