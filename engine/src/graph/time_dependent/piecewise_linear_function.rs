@@ -180,4 +180,13 @@ mod tests {
         let all_ipps: Vec<(Timestamp, Weight)> = ttf.ipp_iter(WrappingRange::new(Range { start: 10, end: 21 }, 24)).collect();
         assert_eq!(all_ipps, vec![(14,2), (20,1)]);
     }
+
+    #[test]
+    fn test_static_weight_iter() {
+        let departure_time = vec![0];
+        let travel_time =    vec![2];
+        let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time, 24);
+        let all_ipps: Vec<(Timestamp, Weight)> = ttf.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 24)).collect();
+        assert_eq!(all_ipps, vec![(0,2)]);
+    }
 }

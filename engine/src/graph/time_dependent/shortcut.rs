@@ -207,7 +207,9 @@ impl<'a, 'b> Iterator for Iter<'a, 'b> {
 
                 if self.range.contains(ipp) {
                     let mut segment_range = self.shortcut.segment_range(self.current_index);
-                    segment_range.start = (segment_range.start + 1) % *self.range.wrap_around();
+                    if self.shortcut.source_data.len() > 1 {
+                        segment_range.start = (segment_range.start + 1) % *self.range.wrap_around();
+                    }
                     let segment_range = WrappingRange::new(segment_range, *self.range.wrap_around());
                     self.current_source_iter = Some(Box::new(self.shortcut.source_data[self.current_index].ipp_iter(segment_range, self.shortcut_graph)));
                     if self.shortcut.source_data.len() == 1 {
@@ -271,5 +273,28 @@ mod tests {
 
         let all_ipps: Vec<(Timestamp, Weight)> = shortcut_graph.get_upward(0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).collect();
         assert_eq!(all_ipps, vec![(1,2), (3,5), (9,3)]);
+    }
+
+    #[test]
+    fn test_static_weight_iter() {
+        let graph = TDGraph::new(
+            vec![0, 1],
+            vec![0],
+            vec![0, 1],
+            vec![0],
+            vec![2],
+            10
+        );
+
+        let cch_first_out = vec![0, 1];
+        let cch_head =      vec![0];
+
+        let outgoing = vec![Shortcut::new(Some(0))];
+        let incoming = vec![Shortcut::new(Some(0))];
+
+        let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
+
+        let all_ipps: Vec<(Timestamp, Weight)> = shortcut_graph.get_upward(0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).collect();
+        assert_eq!(all_ipps, vec![(0,2)]);
     }
 }
