@@ -90,8 +90,8 @@ impl<'a> Iter<'a> {
         println!("first_edge_next_ipp {:?}", self.first_edge_next_ipp);
         match self.second_iter.peek().cloned() {
             Some(second_edge_ipp) => {
-                println!("target range {:?}", self.first_edge_target_range_to_next());
                 if self.first_edge_prev_ipp.is_some() && self.first_edge_target_range_to_next().contains(second_edge_ipp.0) {
+                    println!("target range {:?}", self.first_edge_target_range_to_next());
                     println!("before next first edge ipp");
                     println!("first edge next or end ipp {:?}", self.first_edge_next_ipp_or_end());
                     let ipp = invert(self.first_edge_prev_ipp.unwrap(), self.first_edge_next_ipp_or_end(), second_edge_ipp.0, self.shortcut_graph.original_graph().period());
