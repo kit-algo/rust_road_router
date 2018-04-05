@@ -1,4 +1,5 @@
 use super::*;
+use benchmark::measure;
 
 #[derive(Debug, Clone)]
 pub struct Shortcut {
@@ -35,6 +36,8 @@ impl Shortcut {
             return self.clone()
         }
 
+        println!("actual work: {}", self.num_segments());
+
         let current_initial_value = self.evaluate(0, shortcut_graph);
         let other_initial_value = other.evaluate(0, shortcut_graph);
 
@@ -48,37 +51,45 @@ impl Shortcut {
         let mut self_next_ipp = self_iter.next();
         let mut other_next_ipp = other_iter.next();
         let mut better_way = Vec::new();
+        let mut ipp_counter = 0;
 
-        while self_next_ipp.is_some() || other_next_ipp.is_some() {
-            let (ipp, self_next_ipp_value, other_next_ipp_value) = match (self_next_ipp, other_next_ipp) {
-                (Some((self_next_ipp_at, self_next_ipp_value)), Some((other_next_ipp_at, other_next_ipp_value))) => {
-                    if self_next_ipp_at <= other_next_ipp_at {
-                        self_next_ipp = self_iter.next();
-                        (self_next_ipp_at, self_next_ipp_value, other.evaluate(self_next_ipp_at, shortcut_graph))
-                    } else {
+        let mut switched = false;
+
+        measure("combined ipp iteration", || {
+            while self_next_ipp.is_some() || other_next_ipp.is_some() {
+                let (ipp, self_next_ipp_value, other_next_ipp_value) = match (self_next_ipp, other_next_ipp) {
+                    (Some((self_next_ipp_at, self_next_ipp_value)), Some((other_next_ipp_at, other_next_ipp_value))) => {
+                        if self_next_ipp_at <= other_next_ipp_at {
+                            self_next_ipp = self_iter.next();
+                            (self_next_ipp_at, self_next_ipp_value, other.evaluate(self_next_ipp_at, shortcut_graph))
+                        } else {
+                            other_next_ipp = other_iter.next();
+                            (other_next_ipp_at, self.evaluate(other_next_ipp_at, shortcut_graph), other_next_ipp_value)
+                        }
+                    },
+                    (None, Some((other_next_ipp_at, other_next_ipp_value))) => {
                         other_next_ipp = other_iter.next();
                         (other_next_ipp_at, self.evaluate(other_next_ipp_at, shortcut_graph), other_next_ipp_value)
-                    }
-                },
-                (None, Some((other_next_ipp_at, other_next_ipp_value))) => {
-                    other_next_ipp = other_iter.next();
-                    (other_next_ipp_at, self.evaluate(other_next_ipp_at, shortcut_graph), other_next_ipp_value)
-                },
-                (Some((self_next_ipp_at, self_next_ipp_value)), None) => {
-                    self_next_ipp = self_iter.next();
-                    (self_next_ipp_at, self_next_ipp_value, other.evaluate(self_next_ipp_at, shortcut_graph))
-                },
-                (None, None) => panic!("while loop should have terminated")
-            };
+                    },
+                    (Some((self_next_ipp_at, self_next_ipp_value)), None) => {
+                        self_next_ipp = self_iter.next();
+                        (self_next_ipp_at, self_next_ipp_value, other.evaluate(self_next_ipp_at, shortcut_graph))
+                    },
+                    (None, None) => panic!("while loop should have terminated")
+                };
 
-            let is_current_lower_for_ipp = self_next_ipp_value <= other_next_ipp_value;
-            if is_current_lower_for_ipp != is_current_lower_for_prev_ipp {
-                better_way.push((is_current_lower_for_ipp, ipp));
+                let is_current_lower_for_ipp = self_next_ipp_value <= other_next_ipp_value;
+                if is_current_lower_for_ipp != is_current_lower_for_prev_ipp {
+                    switched = true;
+                    better_way.push((is_current_lower_for_ipp, ipp));
+                }
+
+                is_current_lower_for_prev_ipp = is_current_lower_for_ipp;
+                ipp_counter += 1;
             }
+        });
 
-            is_current_lower_for_prev_ipp = is_current_lower_for_ipp;
-        }
-
+        println!("iterated ipps: {:?}", ipp_counter);
         let mut new_shortcut = Shortcut { source_data: vec![], time_data: vec![] };
 
         // TODO schnittpunkte switch???
@@ -109,6 +120,9 @@ impl Shortcut {
                 }
                 prev_source = source;
             }
+        }
+        if switched {
+            assert!(new_shortcut.num_segments() > 1);
         }
 
         new_shortcut
@@ -165,12 +179,12 @@ impl<'a, 'b> Iter<'a, 'b> {
                 let current_index = (index + shortcut.source_data.len() - 1) % shortcut.source_data.len();
                 let mut segment_range = WrappingRange::new(shortcut.segment_range(current_index), *range.wrap_around());
                 segment_range.shift_start(*range.start());
-                println!("shortcut segment iter range {:?}", segment_range);
+                // println!("shortcut segment iter range {:?}", segment_range);
                 (current_index, Some(Box::new(shortcut.source_data[current_index].ipp_iter(segment_range, shortcut_graph)) as Box<Iterator<Item = (Timestamp, Weight)>>))
             },
         };
 
-        println!("new shortcut iter range {:?}, index: {}, iter created? {}", range, current_index, current_source_iter.is_some());
+        // println!("new shortcut iter range {:?}, index: {}, iter created? {}", range, current_index, current_source_iter.is_some());
         Iter { shortcut, shortcut_graph, range, current_index, initial_index: current_index, current_source_iter }
     }
 }
@@ -228,6 +242,30 @@ impl<'a, 'b> Iterator for Iter<'a, 'b> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_merging() {
+        let graph = TDGraph::new(
+            vec![0, 1,    3, 3],
+            vec![2, 0, 2],
+            vec![0,  1,     3,     5],
+            vec![0,  2, 6,  2, 6],
+            vec![1,  1, 5,  6, 2],
+            8
+        );
+
+        let cch_first_out = vec![0, 1, 3, 3];
+        let cch_head =      vec![2, 0, 2];
+
+        let outgoing = vec![Shortcut::new(Some(0)), Shortcut::new(None), Shortcut::new(Some(2))];
+        let incoming = vec![Shortcut::new(None), Shortcut::new(Some(1)), Shortcut::new(None)];
+
+        let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
+        let new_shortcut = shortcut_graph.get_upward(2).merge(Linked::new(1, 0), &shortcut_graph);
+
+        assert_eq!(new_shortcut.time_data, vec![0, 4]);
+        assert_eq!(new_shortcut.source_data, vec![ShortcutData::new(ShortcutSource::Shortcut(1, 0)), ShortcutData::new(ShortcutSource::OriginalEdge(2))]);
+    }
 
     #[test]
     fn test_eval() {

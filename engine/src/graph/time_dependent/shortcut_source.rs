@@ -7,7 +7,7 @@ pub enum ShortcutSource {
     OriginalEdge(EdgeId),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ShortcutData {
     down_arc: InRangeOption<EdgeId>,
     up_arc: EdgeId
