@@ -39,7 +39,7 @@ impl ShortcutData {
         }
     }
 
-    pub fn ipp_iter<'a>(&self, range: Range<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> ShortcutSourceIter<'a> {
+    pub fn ipp_iter<'a>(&self, range: WrappingRange<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> ShortcutSourceIter<'a> {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
                 ShortcutSourceIter::Shortcut(Linked::new(down_shortcut_id, self.up_arc).ipp_iter(range, shortcut_graph))
@@ -68,9 +68,9 @@ pub enum ShortcutSourceIter<'a> {
 }
 
 impl<'a> Iterator for ShortcutSourceIter<'a> {
-    type Item = Timestamp;
+    type Item = (Timestamp, Weight);
 
-    fn next(&mut self) -> Option<Timestamp> {
+    fn next(&mut self) -> Option<Self::Item> {
         match self {
             &mut ShortcutSourceIter::Shortcut(ref mut iter) => iter.next(),
             &mut ShortcutSourceIter::OriginalEdge(ref mut iter) => iter.next(),

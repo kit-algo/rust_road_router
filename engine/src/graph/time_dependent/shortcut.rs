@@ -41,7 +41,7 @@ impl Shortcut {
         let is_current_initially_lower = current_initial_value <= other_initial_value;
         let mut is_current_lower_for_prev_ipp = is_current_initially_lower;
 
-        let range = Range { start: 0, end: shortcut_graph.original_graph().period() };
+        let range = WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.original_graph().period());
         let mut self_iter = self.ipp_iter(range.clone(), shortcut_graph);
         let mut other_iter = other.ipp_iter(range, shortcut_graph);
 
@@ -50,29 +50,26 @@ impl Shortcut {
         let mut better_way = Vec::new();
 
         while self_next_ipp.is_some() || other_next_ipp.is_some() {
-            let ipp = match (self_next_ipp, other_next_ipp) {
-                (Some(self_next_ipp_at), Some(other_next_ipp_at)) => {
+            let (ipp, self_next_ipp_value, other_next_ipp_value) = match (self_next_ipp, other_next_ipp) {
+                (Some((self_next_ipp_at, self_next_ipp_value)), Some((other_next_ipp_at, other_next_ipp_value))) => {
                     if self_next_ipp_at <= other_next_ipp_at {
                         self_next_ipp = self_iter.next();
-                        self_next_ipp_at
+                        (self_next_ipp_at, self_next_ipp_value, other.evaluate(self_next_ipp_at, shortcut_graph))
                     } else {
                         other_next_ipp = other_iter.next();
-                        other_next_ipp_at
+                        (other_next_ipp_at, self.evaluate(other_next_ipp_at, shortcut_graph), other_next_ipp_value)
                     }
                 },
-                (None, Some(other_next_ipp_at)) => {
+                (None, Some((other_next_ipp_at, other_next_ipp_value))) => {
                     other_next_ipp = other_iter.next();
-                    other_next_ipp_at
+                    (other_next_ipp_at, self.evaluate(other_next_ipp_at, shortcut_graph), other_next_ipp_value)
                 },
-                (Some(self_next_ipp_at), None) => {
+                (Some((self_next_ipp_at, self_next_ipp_value)), None) => {
                     self_next_ipp = self_iter.next();
-                    self_next_ipp_at
+                    (self_next_ipp_at, self_next_ipp_value, other.evaluate(self_next_ipp_at, shortcut_graph))
                 },
                 (None, None) => panic!("while loop should have terminated")
             };
-
-            let self_next_ipp_value = self.evaluate(ipp, shortcut_graph);
-            let other_next_ipp_value = other.evaluate(ipp, shortcut_graph);
 
             let is_current_lower_for_ipp = self_next_ipp_value <= other_next_ipp_value;
             if is_current_lower_for_ipp != is_current_lower_for_prev_ipp {
@@ -84,6 +81,7 @@ impl Shortcut {
 
         let mut new_shortcut = Shortcut { source_data: vec![], time_data: vec![] };
 
+        // TODO schnittpunkte switch???
         let initial_better_way = better_way.last().map(|way| way.0).unwrap_or(is_current_initially_lower);
         let mut current_better_way = initial_better_way;
         let mut better_way_iter = better_way.iter();
@@ -127,8 +125,8 @@ impl Shortcut {
         }
     }
 
-    pub fn ipp_iter<'a, 'b: 'a>(&'b self, range: Range<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> Iter<'a, 'b> {
-        Iter::new(&self, WrappingRange::new(range, shortcut_graph.original_graph().period()), shortcut_graph)
+    pub fn ipp_iter<'a, 'b: 'a>(&'b self, range: WrappingRange<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> Iter<'a, 'b> {
+        Iter::new(&self, range, shortcut_graph)
     }
 
     pub fn bounds(&self, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
@@ -143,6 +141,11 @@ impl Shortcut {
     pub fn is_valid_path(&self) -> bool {
         self.num_segments() > 0
     }
+
+    fn segment_range(&self, segment: usize) -> Range<Timestamp> {
+        let next_index = (segment + 1) % self.source_data.len();
+        Range { start: self.time_data[segment], end: self.time_data[next_index] }
+    }
 }
 
 pub struct Iter<'a, 'b: 'a> {
@@ -151,7 +154,7 @@ pub struct Iter<'a, 'b: 'a> {
     range: WrappingRange<Timestamp>,
     current_index: usize,
     initial_index: usize,
-    current_source_iter: Option<Box<Iterator<Item = Timestamp> + 'a>>
+    current_source_iter: Option<Box<Iterator<Item = (Timestamp, Weight)> + 'a>>
 }
 
 impl<'a, 'b> Iter<'a, 'b> {
@@ -160,25 +163,29 @@ impl<'a, 'b> Iter<'a, 'b> {
             Ok(index) => (index, None),
             Err(index) => {
                 let current_index = (index + shortcut.source_data.len() - 1) % shortcut.source_data.len();
-                let next_index = (current_index + 1) % shortcut.source_data.len();
-                (current_index, Some(Box::new(shortcut.source_data[current_index].ipp_iter(Range { start: *range.start(), end: shortcut.time_data[next_index] }, shortcut_graph)) as Box<Iterator<Item = Timestamp>>))
+                let mut segment_range = WrappingRange::new(shortcut.segment_range(current_index), *range.wrap_around());
+                segment_range.shift_start(*range.start());
+                println!("shortcut segment iter range {:?}", segment_range);
+                (current_index, Some(Box::new(shortcut.source_data[current_index].ipp_iter(segment_range, shortcut_graph)) as Box<Iterator<Item = (Timestamp, Weight)>>))
             },
         };
 
+        println!("new shortcut iter range {:?}", range);
         Iter { shortcut, shortcut_graph, range, current_index, initial_index: current_index, current_source_iter }
     }
 }
 
 impl<'a, 'b> Iterator for Iter<'a, 'b> {
-    type Item = Timestamp;
+    type Item = (Timestamp, Weight);
 
-    fn next(&mut self) -> Option<Timestamp> {
+    fn next(&mut self) -> Option<Self::Item> {
         match self.current_source_iter {
             Some(_) => {
                 // TODO move borrow into Some(...) match once NLL are more stable
                 match self.current_source_iter.as_mut().unwrap().next() {
                     Some(ipp) => {
-                        if self.range.contains(ipp) {
+                        debug_assert_eq!(ipp.1, self.shortcut.evaluate(ipp.0, self.shortcut_graph));
+                        if self.range.contains(ipp.0) {
                             Some(ipp)
                         } else {
                             None
@@ -199,9 +206,11 @@ impl<'a, 'b> Iterator for Iter<'a, 'b> {
                 let ipp = self.shortcut.time_data[self.current_index];
 
                 if self.range.contains(ipp) {
-                    let next_index = (self.current_index + 1) % self.shortcut.source_data.len();
-                    self.current_source_iter = Some(Box::new(self.shortcut.source_data[self.current_index].ipp_iter(Range { start: (ipp + 1) % self.shortcut_graph.original_graph().period(), end: self.shortcut.time_data[next_index] }, self.shortcut_graph)));
-                    Some(ipp)
+                    let mut segment_range = self.shortcut.segment_range(self.current_index);
+                    segment_range.start = (segment_range.start + 1) % *self.range.wrap_around();
+                    let segment_range = WrappingRange::new(segment_range, *self.range.wrap_around());
+                    self.current_source_iter = Some(Box::new(self.shortcut.source_data[self.current_index].ipp_iter(segment_range, self.shortcut_graph)));
+                    Some((ipp, self.shortcut.evaluate(ipp, self.shortcut_graph))) // TODO optimize?
                 } else {
                     None
                 }
