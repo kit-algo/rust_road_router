@@ -71,6 +71,7 @@ impl<'a> Iterator for ShortcutSourceIter<'a> {
     type Item = (Timestamp, Weight);
 
     fn next(&mut self) -> Option<Self::Item> {
+        // println!("shortcut src next");
         match self {
             &mut ShortcutSourceIter::Shortcut(ref mut iter) => iter.next(),
             &mut ShortcutSourceIter::OriginalEdge(ref mut iter) => iter.next(),

@@ -191,6 +191,11 @@ impl CCHGraph {
             let mut node_incoming_edge_ids = vec![InRangeOption::new(None); n as usize];
 
             for current_node in 0..n {
+                if current_node % 100 == 0 || current_node > 40000 {
+                    println!("customizing from node {}, degree: {}, current_num_segements: {}", current_node, self.degree(current_node), shortcut_graph.total_num_segments());
+                } else {
+                    println!("customizing from node {}, degree: {}", current_node, self.degree(current_node));
+                }
                 for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
                     node_incoming_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
                     // debug_assert_eq!(downward.link(edge_id).node, node);
@@ -247,6 +252,11 @@ impl CCHGraph {
 
     fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {
         (self.first_out[node as usize] as EdgeId)..(self.first_out[(node + 1) as usize] as EdgeId)
+    }
+
+    fn degree(&self, node: NodeId) -> usize {
+        let range = self.neighbor_edge_indices_usize(node);
+        range.end - range.start
     }
 
     fn neighbor_edge_indices_usize(&self, node: NodeId) -> Range<usize> {

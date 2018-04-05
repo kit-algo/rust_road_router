@@ -21,6 +21,7 @@ impl Linked {
     pub fn bounds(&self, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
         let (first_min, first_max) = shortcut_graph.get_downward(self.first).bounds(shortcut_graph);
         let (second_min, second_max) = shortcut_graph.get_upward(self.second).bounds(shortcut_graph);
+        // INFINITY????
         (first_min + second_min, first_max + second_max)
     }
 
@@ -105,6 +106,7 @@ impl<'a> Iter<'a> {
                         self.first_edge_next_ipp = self.first_iter.next();
                         Some((first_edge_next_ipp_at, first_edge_next_ipp_value + second_edge_value))
                     } else {
+                        // println!("      no first");
                         None
                     }
                 }
@@ -117,6 +119,7 @@ impl<'a> Iter<'a> {
                     self.first_edge_next_ipp = self.first_iter.next();
                     Some((first_edge_next_ipp_at, first_edge_next_ipp_value + second_edge_value))
                 } else {
+                    // println!("    no first");
                     None
                 }
             },

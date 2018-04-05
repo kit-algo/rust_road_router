@@ -193,6 +193,7 @@ impl<'a, 'b> Iterator for Iter<'a, 'b> {
     type Item = (Timestamp, Weight);
 
     fn next(&mut self) -> Option<Self::Item> {
+        // println!("shortcut next");
         match self.current_source_iter {
             Some(_) => {
                 // TODO move borrow into Some(...) match once NLL are more stable
@@ -200,6 +201,7 @@ impl<'a, 'b> Iterator for Iter<'a, 'b> {
                     Some(ipp) => {
                         debug_assert_eq!(ipp.1, self.shortcut.evaluate(ipp.0, self.shortcut_graph));
                         if self.range.contains(ipp.0) {
+                            // println!("shortcut result {}", ipp);
                             Some(ipp)
                         } else {
                             None

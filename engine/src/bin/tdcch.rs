@@ -23,6 +23,8 @@ fn main() {
     let ipp_travel_time = Vec::load_from(path.join("ipp_travel_time").to_str().unwrap()).expect("could not read ipp_travel_time");
     let period = 86400000;
 
+    println!("nodes: {}, arcs: {}, ipps: {}", first_out.len() - 1, head.len(), ipp_departure_time.len());
+
     let graph = TDGraph::new(first_out, head, first_ipp_of_arc, ipp_departure_time, ipp_travel_time, period);
     let cch_order = Vec::load_from(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm");
 
