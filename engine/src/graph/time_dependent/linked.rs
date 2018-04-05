@@ -58,7 +58,6 @@ impl<'a> Iter<'a> {
         let mut first_iter = first_edge.ipp_iter(range.clone(), shortcut_graph);
         let first_edge_next_ipp = first_iter.next();
 
-
         let first_edge_initial_value = if first_edge_next_ipp.unwrap().0 == *range.start() {
             first_edge_next_ipp.unwrap().1
         } else {
@@ -70,7 +69,7 @@ impl<'a> Iter<'a> {
             Some((*range.start(), first_edge_initial_value))
         };
 
-        let second_edge_range_begin = *range.start() + first_edge_initial_value;
+        let second_edge_range_begin = (*range.start() + first_edge_initial_value) % shortcut_graph.original_graph().period();
         let second_iter = second_edge.ipp_iter(WrappingRange::new(Range { start: second_edge_range_begin, end: second_edge_range_begin }, shortcut_graph.original_graph().period()), shortcut_graph).peekable();
 
         Iter {
@@ -92,10 +91,11 @@ impl<'a> Iter<'a> {
             Some(second_edge_ipp) => {
                 if self.first_edge_prev_ipp.is_some() && self.first_edge_range_to_next().contains(second_edge_ipp.0) {
                     println!("before next first edge ipp");
+                    println!("first edge next or end ipp {:?}", self.first_edge_next_ipp_or_end());
                     let ipp = invert(self.first_edge_prev_ipp.unwrap(), self.first_edge_next_ipp_or_end(), second_edge_ipp.0, self.shortcut_graph.original_graph().period());
                     println!("inverted {}", ipp);
                     self.second_iter.next();
-                    Some((ipp, second_edge_ipp.0 - ipp + second_edge_ipp.1))
+                    Some((ipp, (self.range.wrap_around() + second_edge_ipp.0 - ipp + second_edge_ipp.1) % self.range.wrap_around()))
                 } else {
                     println!("next first edge ipp is earlier: {:?}", self.first_edge_next_ipp);
                     if let Some((first_edge_next_ipp_at, first_edge_next_ipp_value)) = self.first_edge_next_ipp {
@@ -157,7 +157,7 @@ impl<'a> Iterator for Iter<'a> {
 
 fn invert(first_ipp: (Timestamp, Timestamp), second_ipp: (Timestamp, Timestamp), target_time: Timestamp, period: Timestamp) -> Timestamp {
     if first_ipp.1 == second_ipp.1 {
-        return first_ipp.0
+        return (target_time + period - first_ipp.1) % period
     }
     let first_ipp = (first_ipp.0, first_ipp.0 + first_ipp.1);
     let second_ipp = if second_ipp.0 < first_ipp.0 {
@@ -227,9 +227,6 @@ mod tests {
         let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
         let linked = Linked::new(1, 0);
 
-        // TODO move to other test case
-        assert_eq!(shortcut_graph.get_downward(1).evaluate(0, &shortcut_graph), 1);
-        assert_eq!(shortcut_graph.get_upward(0).evaluate(1, &shortcut_graph), 2);
         assert_eq!(linked.evaluate(0, &shortcut_graph), 3);
     }
 
@@ -262,6 +259,7 @@ mod tests {
         assert_eq!(invert((0,1), (5,2), 3, 10), 2);
         assert_eq!(invert((0,2), (5,1), 2, 10), 0);
         assert_eq!(invert((0,2), (5,1), 3, 10), 2);
+        assert_eq!(invert((0,1), (4,1), 3, 10), 2);
     }
 
     #[test]
@@ -308,10 +306,24 @@ mod tests {
         let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
         let linked = Linked::new(1, 0);
 
+        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 1, end: 1 }, 10), &shortcut_graph).collect();
+        assert_eq!(all_ipps, vec![(2,6), (5,5), (8,4), (0,3)]);
+        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 2, end: 2 }, 10), &shortcut_graph).collect();
+        assert_eq!(all_ipps, vec![(2,6), (5,5), (8,4), (0,3)]);
+        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 3, end: 3 }, 10), &shortcut_graph).collect();
+        assert_eq!(all_ipps, vec![(5,5), (8,4), (0,3), (2,6)]);
         let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 4, end: 4 }, 10), &shortcut_graph).collect();
         assert_eq!(all_ipps, vec![(5,5), (8,4), (0,3), (2,6)]);
         let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 5, end: 5 }, 10), &shortcut_graph).collect();
         assert_eq!(all_ipps, vec![(5,5), (8,4), (0,3), (2,6)]);
+        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 6, end: 6 }, 10), &shortcut_graph).collect();
+        assert_eq!(all_ipps, vec![(8,4), (0,3), (2,6), (5,5)]);
+        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 7, end: 7 }, 10), &shortcut_graph).collect();
+        assert_eq!(all_ipps, vec![(8,4), (0,3), (2,6), (5,5)]);
+        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 8, end: 8 }, 10), &shortcut_graph).collect();
+        assert_eq!(all_ipps, vec![(8,4), (0,3), (2,6), (5,5)]);
+        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 9, end: 9 }, 10), &shortcut_graph).collect();
+        assert_eq!(all_ipps, vec![(0,3), (2,6), (5,5), (8,4)]);
     }
 
     #[test]

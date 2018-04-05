@@ -170,7 +170,7 @@ impl<'a, 'b> Iter<'a, 'b> {
             },
         };
 
-        println!("new shortcut iter range {:?}", range);
+        println!("new shortcut iter range {:?}, index: {}, iter created? {}", range, current_index, current_source_iter.is_some());
         Iter { shortcut, shortcut_graph, range, current_index, initial_index: current_index, current_source_iter }
     }
 }
@@ -210,11 +210,66 @@ impl<'a, 'b> Iterator for Iter<'a, 'b> {
                     segment_range.start = (segment_range.start + 1) % *self.range.wrap_around();
                     let segment_range = WrappingRange::new(segment_range, *self.range.wrap_around());
                     self.current_source_iter = Some(Box::new(self.shortcut.source_data[self.current_index].ipp_iter(segment_range, self.shortcut_graph)));
-                    Some((ipp, self.shortcut.evaluate(ipp, self.shortcut_graph))) // TODO optimize?
+                    if self.shortcut.source_data.len() == 1 {
+                        self.next()
+                    } else {
+                        Some((ipp, self.shortcut.evaluate(ipp, self.shortcut_graph))) // TODO optimize?
+                    }
                 } else {
                     None
                 }
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_eval() {
+        let graph = TDGraph::new(
+            vec![0, 1, 2, 2],
+            vec![2, 0],
+            vec![0, 3, 6],
+            vec![1, 3, 9,  0, 5, 8],
+            vec![2, 5, 3,  1, 2, 1],
+            10
+        );
+
+        let cch_first_out = vec![0, 1, 3, 3];
+        let cch_head =      vec![2, 0, 2];
+
+        let outgoing = vec![Shortcut::new(Some(0)), Shortcut::new(None), Shortcut::new(None)];
+        let incoming = vec![Shortcut::new(None), Shortcut::new(Some(1)), Shortcut::new(None)];
+
+        let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
+
+        assert_eq!(shortcut_graph.get_downward(1).evaluate(0, &shortcut_graph), 1);
+        assert_eq!(shortcut_graph.get_upward(0).evaluate(1, &shortcut_graph), 2);
+    }
+
+    #[test]
+    fn test_iter() {
+        let graph = TDGraph::new(
+            vec![0, 1, 2, 2],
+            vec![2, 0],
+            vec![0, 3, 6],
+            vec![1, 3, 9,  0, 5, 8],
+            vec![2, 5, 3,  1, 2, 1],
+            10
+        );
+
+        let cch_first_out = vec![0, 1, 3, 3];
+        let cch_head =      vec![2, 0, 2];
+
+        let outgoing = vec![Shortcut::new(Some(0)), Shortcut::new(None), Shortcut::new(None)];
+        let incoming = vec![Shortcut::new(None), Shortcut::new(Some(1)), Shortcut::new(None)];
+
+        let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
+
+        let all_ipps: Vec<(Timestamp, Weight)> = shortcut_graph.get_upward(0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).collect();
+        assert_eq!(all_ipps, vec![(1,2), (3,5), (9,3)]);
     }
 }
