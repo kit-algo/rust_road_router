@@ -89,7 +89,8 @@ impl<'a> Iter<'a> {
         println!("first_edge_next_ipp {:?}", self.first_edge_next_ipp);
         match self.second_iter.peek().cloned() {
             Some(second_edge_ipp) => {
-                if self.first_edge_prev_ipp.is_some() && self.first_edge_range_to_next().contains(second_edge_ipp.0) {
+                println!("target range {:?}", self.first_edge_target_range_to_next());
+                if self.first_edge_prev_ipp.is_some() && self.first_edge_target_range_to_next().contains(second_edge_ipp.0) {
                     println!("before next first edge ipp");
                     println!("first edge next or end ipp {:?}", self.first_edge_next_ipp_or_end());
                     let ipp = invert(self.first_edge_prev_ipp.unwrap(), self.first_edge_next_ipp_or_end(), second_edge_ipp.0, self.shortcut_graph.original_graph().period());
@@ -122,12 +123,13 @@ impl<'a> Iter<'a> {
         }
     }
 
-    fn first_edge_range_to_next(&self) -> WrappingRange<Timestamp> {
+    fn first_edge_target_range_to_next(&self) -> WrappingRange<Timestamp> {
         let first_edge_next_ipp = self.first_edge_next_ipp_or_end();
         let wrap = *self.range.wrap_around();
         let (first_edge_prev_ipp_at, first_edge_prev_ipp_value) = self.first_edge_prev_ipp.unwrap();
         let start = (first_edge_prev_ipp_at + first_edge_prev_ipp_value) % wrap;
-        let end = (first_edge_next_ipp.0 + first_edge_next_ipp.1) % wrap;
+        let mut end = (first_edge_next_ipp.0 + first_edge_next_ipp.1) % wrap;
+        if start == end { end += 1; } // happens in the case of ascent -1
         WrappingRange::new(Range { start , end }, wrap)
     }
 
@@ -165,6 +167,8 @@ fn invert(first_ipp: (Timestamp, Timestamp), second_ipp: (Timestamp, Timestamp),
     } else {
         (second_ipp.0, second_ipp.0 + second_ipp.1)
     };
+    debug_assert!(target_time >= first_ipp.1);
+    debug_assert!(target_time <= second_ipp.1);
     let target_time = if target_time < first_ipp.0 { target_time + period } else { target_time };
 
     let delta_x = second_ipp.0 - first_ipp.0;
@@ -172,7 +176,10 @@ fn invert(first_ipp: (Timestamp, Timestamp), second_ipp: (Timestamp, Timestamp),
     let delta_y = second_ipp.1 - first_ipp.1;
     let delta_y = delta_y as u64;
 
-    debug_assert_ne!(delta_y, 0);
+    if delta_y == 0 {
+        debug_assert_eq!(first_ipp.1, target_time);
+        return first_ipp.0
+    }
 
     let delta_y_to_target = target_time - first_ipp.1;
     let delta_x_to_target = (delta_y - 1 + delta_y_to_target as u64 * delta_x) / delta_y;
