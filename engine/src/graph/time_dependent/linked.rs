@@ -328,5 +328,25 @@ mod tests {
 
     #[test]
     fn test_partial_range_ipp_iter() {
+        let graph = TDGraph::new(
+            vec![0, 1, 2, 2],
+            vec![2, 0],
+            vec![0, 3, 6],
+            vec![1, 3, 9,  0, 5, 8],
+            vec![2, 5, 3,  1, 2, 1],
+            10
+        );
+
+        let cch_first_out = vec![0, 1, 3, 3];
+        let cch_head =      vec![2, 0, 2];
+
+        let outgoing = vec![Shortcut::new(Some(0)), Shortcut::new(None), Shortcut::new(None)];
+        let incoming = vec![Shortcut::new(None), Shortcut::new(Some(1)), Shortcut::new(None)];
+
+        let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
+        let linked = Linked::new(1, 0);
+
+        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 4, end: 1 }, 10), &shortcut_graph).collect();
+        assert_eq!(all_ipps, vec![(5,5), (8,4), (0,3)]);
     }
 }
