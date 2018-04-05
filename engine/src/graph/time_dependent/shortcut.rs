@@ -1,5 +1,6 @@
 use super::*;
 use benchmark::measure;
+use std::iter::Peekable;
 
 #[derive(Debug, Clone)]
 pub struct Shortcut {
@@ -38,91 +39,101 @@ impl Shortcut {
 
         println!("actual work: {}", self.num_segments());
 
-        let current_initial_value = self.evaluate(0, shortcut_graph);
-        let other_initial_value = other.evaluate(0, shortcut_graph);
-
-        let is_current_initially_lower = current_initial_value <= other_initial_value;
-        let mut is_current_lower_for_prev_ipp = is_current_initially_lower;
-
         let range = WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.original_graph().period());
-        let mut self_iter = self.ipp_iter(range.clone(), shortcut_graph);
-        let mut other_iter = other.ipp_iter(range, shortcut_graph);
+        let mut ipp_iter = MergingIter {
+            shortcut_iter: self.ipp_iter(range.clone(), shortcut_graph).peekable(),
+            linked_iter: other.ipp_iter(range, shortcut_graph).peekable()
+        }.map(|(ipp, value)| {
+            let (self_value, other_value) = match value {
+                IppSource::Shortcut(value) => (value, other.evaluate(ipp, shortcut_graph)),
+                IppSource::Linked(value) => (self.evaluate(ipp, shortcut_graph), value),
+            };
+            (ipp, self_value, other_value)
+        });
 
-        let mut self_next_ipp = self_iter.next();
-        let mut other_next_ipp = other_iter.next();
-        let mut better_way = Vec::new();
+        let first_ipp = ipp_iter.next().unwrap();
+        let mut prev_ipp = first_ipp;
+
+        let mut intersections = Vec::new();
         let mut ipp_counter = 0;
 
-        let mut switched = false;
-
         measure("combined ipp iteration", || {
-            while self_next_ipp.is_some() || other_next_ipp.is_some() {
-                let (ipp, self_next_ipp_value, other_next_ipp_value) = match (self_next_ipp, other_next_ipp) {
-                    (Some((self_next_ipp_at, self_next_ipp_value)), Some((other_next_ipp_at, other_next_ipp_value))) => {
-                        if self_next_ipp_at <= other_next_ipp_at {
-                            self_next_ipp = self_iter.next();
-                            (self_next_ipp_at, self_next_ipp_value, other.evaluate(self_next_ipp_at, shortcut_graph))
-                        } else {
-                            other_next_ipp = other_iter.next();
-                            (other_next_ipp_at, self.evaluate(other_next_ipp_at, shortcut_graph), other_next_ipp_value)
-                        }
-                    },
-                    (None, Some((other_next_ipp_at, other_next_ipp_value))) => {
-                        other_next_ipp = other_iter.next();
-                        (other_next_ipp_at, self.evaluate(other_next_ipp_at, shortcut_graph), other_next_ipp_value)
-                    },
-                    (Some((self_next_ipp_at, self_next_ipp_value)), None) => {
-                        self_next_ipp = self_iter.next();
-                        (self_next_ipp_at, self_next_ipp_value, other.evaluate(self_next_ipp_at, shortcut_graph))
-                    },
-                    (None, None) => panic!("while loop should have terminated")
-                };
-
-                let is_current_lower_for_ipp = self_next_ipp_value <= other_next_ipp_value;
-                if is_current_lower_for_ipp != is_current_lower_for_prev_ipp {
-                    switched = true;
-                    better_way.push((is_current_lower_for_ipp, ipp));
+            for ipp in ipp_iter {
+                if (ipp.1 <= ipp.2) != (prev_ipp.1 <= prev_ipp.2) {
+                    intersections.push((prev_ipp, ipp));
                 }
 
-                is_current_lower_for_prev_ipp = is_current_lower_for_ipp;
+                prev_ipp = ipp;
                 ipp_counter += 1;
+            }
+
+            if (prev_ipp.1 <= prev_ipp.2) != (first_ipp.1 <= first_ipp.2) {
+                intersections.push((prev_ipp, first_ipp));
             }
         });
 
         println!("iterated ipps: {:?}", ipp_counter);
-        let mut new_shortcut = Shortcut { source_data: vec![], time_data: vec![] };
 
-        // TODO schnittpunkte switch???
-        let initial_better_way = better_way.last().map(|way| way.0).unwrap_or(is_current_initially_lower);
-        let mut current_better_way = initial_better_way;
-        let mut better_way_iter = better_way.iter();
-        let mut next_better_way = better_way_iter.next();
-        {
-            let mut prev_source = self.source_data.last().unwrap();
-
-            for (&time, source) in self.time_data.iter().zip(self.source_data.iter()) {
-                if next_better_way.is_some() && time >= next_better_way.unwrap().1 {
-                    debug_assert_ne!(current_better_way, next_better_way.unwrap().0);
-                    current_better_way = next_better_way.unwrap().0;
-                    next_better_way = better_way_iter.next();
-
-                    if current_better_way {
-                        new_shortcut.source_data.push(*prev_source);
-                    } else {
-                        new_shortcut.source_data.push(other.as_shortcut_data());
-                    }
-                    new_shortcut.time_data.push(next_better_way.unwrap().1);
-                }
-
-                if current_better_way {
-                    new_shortcut.source_data.push(*source);
-                    new_shortcut.time_data.push(time);
-                }
-                prev_source = source;
+        if intersections.is_empty() {
+            if first_ipp.1 <= first_ipp.2 {
+                return self.clone()
+            } else {
+                return Shortcut { source_data: vec![other.as_shortcut_data()], time_data: vec![0] }
             }
         }
-        if switched {
-            assert!(new_shortcut.num_segments() > 1);
+
+        let c = intersections.len();
+        debug_assert_eq!(c % 2, 0);
+
+        let mut intersections: Vec<(Timestamp, bool)> = intersections.into_iter().map(|((first_at, first_self_value, first_other_value), (second_at, second_self_value, second_other_value))| {
+            let is_self_better = second_self_value <= second_other_value;
+            // TODO calc intersection
+            (second_at, is_self_better)
+        }).collect();
+
+        if intersections[c - 2].1 > intersections[c - 1].1 {
+            let last = intersections[c - 1];
+            let second_last = intersections[c - 2];
+            intersections.insert(0, last);
+            intersections.insert(0, second_last);
+        } else {
+            let first = intersections[0];
+            let last = intersections[c - 1];
+            intersections.insert(0, last);
+            intersections.push(first);
+        }
+
+        let mut new_shortcut = Shortcut { source_data: vec![], time_data: vec![] };
+
+        let mut intersections = intersections.into_iter().peekable();
+        let (_, mut is_self_currently_better) = intersections.next().unwrap();
+        let mut prev_source = self.source_data.last().unwrap();
+
+        for (&time, source) in self.time_data.iter().zip(self.source_data.iter()) {
+            let &(mut next_intersection_ipp, mut next_segment_self_better) = intersections.peek().unwrap();
+
+            while time >= next_intersection_ipp {
+                let next = intersections.next().unwrap();
+                next_intersection_ipp = next.0;
+                next_segment_self_better = next.1;
+
+                if next_segment_self_better {
+                    new_shortcut.time_data.push(next_intersection_ipp);
+                    new_shortcut.source_data.push(*prev_source);
+                } else {
+                    new_shortcut.time_data.push(next_intersection_ipp);
+                    new_shortcut.source_data.push(other.as_shortcut_data());
+                }
+
+                is_self_currently_better = next_segment_self_better;
+            }
+
+            if is_self_currently_better {
+                new_shortcut.source_data.push(*source);
+                new_shortcut.time_data.push(time);
+            }
+
+            prev_source = source;
         }
 
         new_shortcut
@@ -159,6 +170,44 @@ impl Shortcut {
     fn segment_range(&self, segment: usize) -> Range<Timestamp> {
         let next_index = (segment + 1) % self.source_data.len();
         Range { start: self.time_data[segment], end: self.time_data[next_index] }
+    }
+}
+
+#[derive(Debug)]
+enum IppSource {
+    Shortcut(Weight),
+    Linked(Weight),
+}
+
+struct MergingIter<'a, 'b: 'a> {
+    shortcut_iter: Peekable<Iter<'a, 'b>>,
+    linked_iter: Peekable<linked::Iter<'a>>
+}
+
+impl<'a, 'b> Iterator for MergingIter<'a, 'b> {
+    type Item = (Timestamp, IppSource);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match (self.shortcut_iter.peek(), self.linked_iter.peek()) {
+            (Some((self_next_ipp_at, self_next_ipp_value)), Some((other_next_ipp_at, other_next_ipp_value))) => {
+                if self_next_ipp_at <= other_next_ipp_at {
+                    self.shortcut_iter.next();
+                    Some((*self_next_ipp_at, IppSource::Shortcut(*self_next_ipp_value)))
+                } else {
+                    self.linked_iter.next();
+                    Some((*other_next_ipp_at, IppSource::Linked(*other_next_ipp_value)))
+                }
+            },
+            (None, Some((other_next_ipp_at, other_next_ipp_value))) => {
+                self.linked_iter.next();
+                Some((*other_next_ipp_at, IppSource::Linked(*other_next_ipp_value)))
+            },
+            (Some((self_next_ipp_at, self_next_ipp_value)), None) => {
+                self.shortcut_iter.next();
+                Some((*self_next_ipp_at, IppSource::Shortcut(*self_next_ipp_value)))
+            },
+            (None, None) => panic!("while loop should have terminated")
+        }
     }
 }
 
