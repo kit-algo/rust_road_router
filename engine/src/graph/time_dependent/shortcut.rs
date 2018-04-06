@@ -47,7 +47,7 @@ impl Shortcut {
             shortcut_iter: self.ipp_iter(range.clone(), shortcut_graph).peekable(),
             linked_iter: other.ipp_iter(range, shortcut_graph).peekable()
         }.map(|(ipp, value)| {
-            println!("ipp: {:?}", ipp);
+            // println!("ipp: {:?}", ipp);
             let (self_value, other_value) = match value {
                 IppSource::Shortcut(value) => (value, other.evaluate(ipp, shortcut_graph)),
                 IppSource::Linked(value) => (self.evaluate(ipp, shortcut_graph), value),
@@ -64,7 +64,7 @@ impl Shortcut {
         measure("combined ipp iteration", || {
             for ipp in ipp_iter {
                 if (ipp.1 <= ipp.2) != (prev_ipp.1 <= prev_ipp.2) {
-                    println!("intersection before {:?}", ipp.0);
+                    // println!("intersection before {:?}", ipp.0);
                     intersections.push((prev_ipp, ipp));
                 }
 
@@ -73,7 +73,7 @@ impl Shortcut {
             }
 
             if (prev_ipp.1 <= prev_ipp.2) != (first_ipp.1 <= first_ipp.2) {
-                println!("intersection before {:?}", first_ipp.0);
+                // println!("intersection before {:?}", first_ipp.0);
                 intersections.push((prev_ipp, first_ipp));
             }
         });
@@ -98,16 +98,18 @@ impl Shortcut {
             if second_at < first_at {
                 second_at += period;
             }
-            let d1 = abs_diff(first_self_value, first_other_value);
-            let d2 = abs_diff(second_self_value, second_other_value);
-            let dx = second_at - first_at;
+            let d1 = abs_diff(first_self_value, first_other_value) as u64;
+            let d2 = abs_diff(second_self_value, second_other_value) as u64;
+            let dx = (second_at - first_at) as u64;
 
             let intersection = (d1 * dx + dx - 1) / (d1 + d2);
+            debug_assert!(intersection < std::u32::MAX as u64);
+            let intersection = intersection as u32;
 
             ((first_at + intersection) % period, is_self_better)
         }).collect();
 
-        println!("{:?}", intersections);
+        // println!("{:?}", intersections);
 
         if intersections[c - 2].1 > intersections[c - 1].1 {
             let last = intersections[c - 1];
@@ -121,7 +123,7 @@ impl Shortcut {
             intersections.push(first);
         }
 
-        println!("{:?}", intersections);
+        // println!("{:?}", intersections);
 
         let mut new_shortcut = Shortcut { source_data: vec![], time_data: vec![] };
 

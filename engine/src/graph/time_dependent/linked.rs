@@ -83,23 +83,23 @@ impl<'a> Iter<'a> {
     }
 
     fn get_next(&mut self) -> Option<<Self as Iterator>::Item> {
-        println!("");
-        println!("next");
-        println!("second iter peek: {:?}", self.second_iter.peek());
-        println!("first_edge_prev_ipp {:?}", self.first_edge_prev_ipp);
-        println!("first_edge_next_ipp {:?}", self.first_edge_next_ipp);
+        // println!("");
+        // println!("next");
+        // println!("second iter peek: {:?}", self.second_iter.peek());
+        // println!("first_edge_prev_ipp {:?}", self.first_edge_prev_ipp);
+        // println!("first_edge_next_ipp {:?}", self.first_edge_next_ipp);
         match self.second_iter.peek().cloned() {
             Some(second_edge_ipp) => {
                 if self.first_edge_prev_ipp.is_some() && self.first_edge_target_range_to_next().contains(second_edge_ipp.0) {
-                    println!("target range {:?}", self.first_edge_target_range_to_next());
-                    println!("before next first edge ipp");
-                    println!("first edge next or end ipp {:?}", self.first_edge_next_ipp_or_end());
+                    // println!("target range {:?}", self.first_edge_target_range_to_next());
+                    // println!("before next first edge ipp");
+                    // println!("first edge next or end ipp {:?}", self.first_edge_next_ipp_or_end());
                     let ipp = invert(self.first_edge_prev_ipp.unwrap(), self.first_edge_next_ipp_or_end(), second_edge_ipp.0, self.shortcut_graph.original_graph().period());
-                    println!("inverted {}", ipp);
+                    // println!("inverted {}", ipp);
                     self.second_iter.next();
                     Some((ipp, (self.range.wrap_around() + second_edge_ipp.0 - ipp + second_edge_ipp.1) % self.range.wrap_around()))
                 } else {
-                    println!("next first edge ipp is earlier: {:?}", self.first_edge_next_ipp);
+                    // println!("next first edge ipp is earlier: {:?}", self.first_edge_next_ipp);
                     if let Some((first_edge_next_ipp_at, first_edge_next_ipp_value)) = self.first_edge_next_ipp {
                         self.first_edge_prev_ipp = Some((first_edge_next_ipp_at, first_edge_next_ipp_value));
                         let second_edge_value = self.second_edge.evaluate(first_edge_next_ipp_at + first_edge_next_ipp_value, self.shortcut_graph);
@@ -112,7 +112,7 @@ impl<'a> Iter<'a> {
                 }
             },
             None => {
-                println!("next first edge ipp: {:?}", self.first_edge_next_ipp);
+                // println!("next first edge ipp: {:?}", self.first_edge_next_ipp);
                 if let Some((first_edge_next_ipp_at, first_edge_next_ipp_value)) = self.first_edge_next_ipp {
                     self.first_edge_prev_ipp = Some((first_edge_next_ipp_at, first_edge_next_ipp_value));
                     let second_edge_value = self.second_edge.evaluate(first_edge_next_ipp_at + first_edge_next_ipp_value, self.shortcut_graph);

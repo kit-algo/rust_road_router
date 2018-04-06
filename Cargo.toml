@@ -1,7 +1,7 @@
 [workspace]
 members = ["engine", "server", "search_space_visualization"]
 
-[profile.dev]
-opt-level = 3
+# [profile.dev]
+# opt-level = 3
 # [profile.release]
 # debug = true
