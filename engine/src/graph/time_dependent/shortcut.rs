@@ -104,8 +104,10 @@ impl Shortcut {
 
             let intersection = (d1 * dx + dx - 1) / (d1 + d2);
 
-            (intersection % period, is_self_better)
+            ((first_at + intersection) % period, is_self_better)
         }).collect();
+
+        println!("{:?}", intersections);
 
         if intersections[c - 2].1 > intersections[c - 1].1 {
             let last = intersections[c - 1];
@@ -119,6 +121,8 @@ impl Shortcut {
             intersections.push(first);
         }
 
+        println!("{:?}", intersections);
+
         let mut new_shortcut = Shortcut { source_data: vec![], time_data: vec![] };
 
         let mut intersections = intersections.into_iter().peekable();
@@ -126,22 +130,20 @@ impl Shortcut {
         let mut prev_source = self.source_data.last().unwrap();
 
         for (&time, source) in self.time_data.iter().zip(self.source_data.iter()) {
-            let &(mut next_intersection_ipp, mut next_segment_self_better) = intersections.peek().unwrap();
+            while time >= intersections.peek().unwrap().0 {
+                let (peeked_ipp, self_better_at_peeked) = intersections.next().unwrap();
 
-            while time >= next_intersection_ipp {
-                let next = intersections.next().unwrap();
-                next_intersection_ipp = next.0;
-                next_segment_self_better = next.1;
-
-                if next_segment_self_better {
-                    new_shortcut.time_data.push(next_intersection_ipp);
-                    new_shortcut.source_data.push(*prev_source);
+                if self_better_at_peeked {
+                    if time > peeked_ipp {
+                        new_shortcut.time_data.push(peeked_ipp);
+                        new_shortcut.source_data.push(*prev_source);
+                    }
                 } else {
-                    new_shortcut.time_data.push(next_intersection_ipp);
+                    new_shortcut.time_data.push(peeked_ipp);
                     new_shortcut.source_data.push(other.as_shortcut_data());
                 }
 
-                is_self_currently_better = next_segment_self_better;
+                is_self_currently_better = self_better_at_peeked;
             }
 
             if is_self_currently_better {
@@ -151,6 +153,18 @@ impl Shortcut {
 
             prev_source = source;
         }
+
+        for (intersection_ipp, segment_self_better) in intersections {
+            if segment_self_better {
+                new_shortcut.time_data.push(intersection_ipp);
+                new_shortcut.source_data.push(*prev_source);
+            } else {
+                new_shortcut.time_data.push(intersection_ipp);
+                new_shortcut.source_data.push(other.as_shortcut_data());
+            }
+        }
+        new_shortcut.time_data.pop();
+        new_shortcut.source_data.pop();
 
         new_shortcut
     }
@@ -211,27 +225,20 @@ impl<'a, 'b> Iterator for MergingIter<'a, 'b> {
         // TODO both on same ipp
         match (self.shortcut_iter.peek(), self.linked_iter.peek()) {
             (Some(&(self_next_ipp_at, self_next_ipp_value)), Some(&(other_next_ipp_at, other_next_ipp_value))) => {
-                println!("both {:?} {:?}", self_next_ipp_at, other_next_ipp_at);
                 if self_next_ipp_at <= other_next_ipp_at {
                     self.shortcut_iter.next();
-                    println!("both {:?} {:?}", self_next_ipp_at, other_next_ipp_at);
                     Some((self_next_ipp_at, IppSource::Shortcut(self_next_ipp_value)))
                 } else {
                     self.linked_iter.next();
-                    println!("both {:?} {:?}", self_next_ipp_at, other_next_ipp_at);
                     Some((other_next_ipp_at, IppSource::Linked(other_next_ipp_value)))
                 }
             },
             (None, Some(&(other_next_ipp_at, other_next_ipp_value))) => {
-                println!("other {:?}", other_next_ipp_at);
                 self.linked_iter.next();
-                println!("other {:?}", other_next_ipp_at);
                 Some((other_next_ipp_at, IppSource::Linked(other_next_ipp_value)))
             },
             (Some(&(self_next_ipp_at, self_next_ipp_value)), None) => {
-                println!("self {:?}", self_next_ipp_at);
                 self.shortcut_iter.next();
-                println!("self {:?}", self_next_ipp_at);
                 Some((self_next_ipp_at, IppSource::Shortcut(self_next_ipp_value)))
             },
             (None, None) => None
