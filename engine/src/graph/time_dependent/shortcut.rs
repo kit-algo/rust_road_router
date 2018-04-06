@@ -1,6 +1,9 @@
 use super::*;
 use benchmark::measure;
-use std::iter::Peekable;
+use std::{
+    iter::Peekable,
+    cmp::{min, max}
+};
 
 #[derive(Debug, Clone)]
 pub struct Shortcut {
@@ -44,6 +47,7 @@ impl Shortcut {
             shortcut_iter: self.ipp_iter(range.clone(), shortcut_graph).peekable(),
             linked_iter: other.ipp_iter(range, shortcut_graph).peekable()
         }.map(|(ipp, value)| {
+            println!("ipp: {:?}", ipp);
             let (self_value, other_value) = match value {
                 IppSource::Shortcut(value) => (value, other.evaluate(ipp, shortcut_graph)),
                 IppSource::Linked(value) => (self.evaluate(ipp, shortcut_graph), value),
@@ -60,6 +64,7 @@ impl Shortcut {
         measure("combined ipp iteration", || {
             for ipp in ipp_iter {
                 if (ipp.1 <= ipp.2) != (prev_ipp.1 <= prev_ipp.2) {
+                    println!("intersection before {:?}", ipp.0);
                     intersections.push((prev_ipp, ipp));
                 }
 
@@ -68,6 +73,7 @@ impl Shortcut {
             }
 
             if (prev_ipp.1 <= prev_ipp.2) != (first_ipp.1 <= first_ipp.2) {
+                println!("intersection before {:?}", first_ipp.0);
                 intersections.push((prev_ipp, first_ipp));
             }
         });
@@ -85,10 +91,20 @@ impl Shortcut {
         let c = intersections.len();
         debug_assert_eq!(c % 2, 0);
 
-        let mut intersections: Vec<(Timestamp, bool)> = intersections.into_iter().map(|((first_at, first_self_value, first_other_value), (second_at, second_self_value, second_other_value))| {
+        let period = shortcut_graph.original_graph().period();
+        let mut intersections: Vec<(Timestamp, bool)> = intersections.into_iter().map(|((first_at, first_self_value, first_other_value), (mut second_at, second_self_value, second_other_value))| {
             let is_self_better = second_self_value <= second_other_value;
             // TODO calc intersection
-            (second_at, is_self_better)
+            if second_at < first_at {
+                second_at += period;
+            }
+            let d1 = abs_diff(first_self_value, first_other_value);
+            let d2 = abs_diff(second_self_value, second_other_value);
+            let dx = second_at - first_at;
+
+            let intersection = (d1 * dx + dx - 1) / (d1 + d2);
+
+            (intersection % period, is_self_better)
         }).collect();
 
         if intersections[c - 2].1 > intersections[c - 1].1 {
@@ -173,6 +189,10 @@ impl Shortcut {
     }
 }
 
+fn abs_diff(x: Weight, y: Weight) -> Weight {
+    max(x, y) - min(x, y)
+}
+
 #[derive(Debug)]
 enum IppSource {
     Shortcut(Weight),
@@ -188,25 +208,33 @@ impl<'a, 'b> Iterator for MergingIter<'a, 'b> {
     type Item = (Timestamp, IppSource);
 
     fn next(&mut self) -> Option<Self::Item> {
+        // TODO both on same ipp
         match (self.shortcut_iter.peek(), self.linked_iter.peek()) {
-            (Some((self_next_ipp_at, self_next_ipp_value)), Some((other_next_ipp_at, other_next_ipp_value))) => {
+            (Some(&(self_next_ipp_at, self_next_ipp_value)), Some(&(other_next_ipp_at, other_next_ipp_value))) => {
+                println!("both {:?} {:?}", self_next_ipp_at, other_next_ipp_at);
                 if self_next_ipp_at <= other_next_ipp_at {
                     self.shortcut_iter.next();
-                    Some((*self_next_ipp_at, IppSource::Shortcut(*self_next_ipp_value)))
+                    println!("both {:?} {:?}", self_next_ipp_at, other_next_ipp_at);
+                    Some((self_next_ipp_at, IppSource::Shortcut(self_next_ipp_value)))
                 } else {
                     self.linked_iter.next();
-                    Some((*other_next_ipp_at, IppSource::Linked(*other_next_ipp_value)))
+                    println!("both {:?} {:?}", self_next_ipp_at, other_next_ipp_at);
+                    Some((other_next_ipp_at, IppSource::Linked(other_next_ipp_value)))
                 }
             },
-            (None, Some((other_next_ipp_at, other_next_ipp_value))) => {
+            (None, Some(&(other_next_ipp_at, other_next_ipp_value))) => {
+                println!("other {:?}", other_next_ipp_at);
                 self.linked_iter.next();
-                Some((*other_next_ipp_at, IppSource::Linked(*other_next_ipp_value)))
+                println!("other {:?}", other_next_ipp_at);
+                Some((other_next_ipp_at, IppSource::Linked(other_next_ipp_value)))
             },
-            (Some((self_next_ipp_at, self_next_ipp_value)), None) => {
+            (Some(&(self_next_ipp_at, self_next_ipp_value)), None) => {
+                println!("self {:?}", self_next_ipp_at);
                 self.shortcut_iter.next();
-                Some((*self_next_ipp_at, IppSource::Shortcut(*self_next_ipp_value)))
+                println!("self {:?}", self_next_ipp_at);
+                Some((self_next_ipp_at, IppSource::Shortcut(self_next_ipp_value)))
             },
-            (None, None) => panic!("while loop should have terminated")
+            (None, None) => None
         }
     }
 }
@@ -313,6 +341,11 @@ mod tests {
 
         let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
         let new_shortcut = shortcut_graph.get_upward(2).merge(Linked::new(1, 0), &shortcut_graph);
+
+        let all_ipps: Vec<(Timestamp, Weight)> = shortcut_graph.get_upward(2).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 8), &shortcut_graph).collect();
+        assert_eq!(all_ipps, vec![(2,6), (6,2)]);
+        let all_ipps: Vec<(Timestamp, Weight)> = Linked::new(1, 0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 8), &shortcut_graph).collect();
+        assert_eq!(all_ipps, vec![(2,2), (6,6)]);
 
         assert_eq!(new_shortcut.time_data, vec![0, 4]);
         assert_eq!(new_shortcut.source_data, vec![ShortcutData::new(ShortcutSource::Shortcut(1, 0)), ShortcutData::new(ShortcutSource::OriginalEdge(2))]);
