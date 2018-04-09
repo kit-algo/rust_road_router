@@ -335,7 +335,7 @@ impl<'a, 'b> Iterator for Iter<'a, 'b> {
                 // TODO move borrow into Some(...) match once NLL are more stable
                 match self.current_source_iter.as_mut().unwrap().next() {
                     Some(ipp) => {
-                        debug_assert!(abs_diff(ipp.1, self.shortcut.evaluate(ipp.0, self.shortcut_graph)) < 5, "at: {} was: {} but should have been: {}. Shortcut {}", ipp.0, ipp.1, self.shortcut.evaluate(ipp.0, self.shortcut_graph), self.shortcut.debug_to_s(self.shortcut_graph, 0));
+                        debug_assert!(abs_diff(ipp.1, self.shortcut.evaluate(ipp.0, self.shortcut_graph)) < 5, "at: {} was: {} but should have been: {}. {}", ipp.0, ipp.1, self.shortcut.evaluate(ipp.0, self.shortcut_graph), self.shortcut.debug_to_s(self.shortcut_graph, 0));
                         if self.range.contains(ipp.0) {
                             // println!("shortcut result {}", ipp);
                             Some(ipp)
