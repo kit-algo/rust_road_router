@@ -29,6 +29,7 @@ impl ShortcutData {
     }
 
     pub fn evaluate(&self, departure: Timestamp, shortcut_graph: &ShortcutGraph) -> Weight {
+        debug_assert!(departure < shortcut_graph.original_graph().period());
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
                 Linked::new(down_shortcut_id, self.up_arc).evaluate(departure, shortcut_graph)

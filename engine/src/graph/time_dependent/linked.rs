@@ -12,10 +12,11 @@ impl Linked {
     }
 
     pub fn evaluate(&self, departure: Timestamp, shortcut_graph: &ShortcutGraph) -> Weight {
+        debug_assert!(departure < shortcut_graph.original_graph().period());
         let first_edge = shortcut_graph.get_downward(self.first);
         let second_edge = shortcut_graph.get_upward(self.second);
         let first_edge_value = first_edge.evaluate(departure, shortcut_graph);
-        first_edge_value + second_edge.evaluate(departure + first_edge_value, shortcut_graph)
+        first_edge_value + second_edge.evaluate((departure + first_edge_value) % shortcut_graph.original_graph().period(), shortcut_graph)
     }
 
     pub fn bounds(&self, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
@@ -108,7 +109,7 @@ impl<'a> Iter<'a> {
                     // println!("next first edge ipp is earlier: {:?}", self.first_edge_next_ipp);
                     if let Some((first_edge_next_ipp_at, first_edge_next_ipp_value)) = self.first_edge_next_ipp {
                         self.first_edge_prev_ipp = Some((first_edge_next_ipp_at, first_edge_next_ipp_value));
-                        let second_edge_value = self.second_edge.evaluate(first_edge_next_ipp_at + first_edge_next_ipp_value, self.shortcut_graph);
+                        let second_edge_value = self.second_edge.evaluate((first_edge_next_ipp_at + first_edge_next_ipp_value) % self.shortcut_graph.original_graph().period(), self.shortcut_graph);
                         self.first_edge_next_ipp = self.first_iter.next();
                         Some((first_edge_next_ipp_at, first_edge_next_ipp_value + second_edge_value))
                     } else {
@@ -121,7 +122,7 @@ impl<'a> Iter<'a> {
                 // println!("next first edge ipp: {:?}", self.first_edge_next_ipp);
                 if let Some((first_edge_next_ipp_at, first_edge_next_ipp_value)) = self.first_edge_next_ipp {
                     self.first_edge_prev_ipp = Some((first_edge_next_ipp_at, first_edge_next_ipp_value));
-                    let second_edge_value = self.second_edge.evaluate(first_edge_next_ipp_at + first_edge_next_ipp_value, self.shortcut_graph);
+                    let second_edge_value = self.second_edge.evaluate((first_edge_next_ipp_at + first_edge_next_ipp_value) % self.shortcut_graph.original_graph().period(), self.shortcut_graph);
                     self.first_edge_next_ipp = self.first_iter.next();
                     Some((first_edge_next_ipp_at, first_edge_next_ipp_value + second_edge_value))
                 } else {

@@ -37,6 +37,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     pub fn evaluate(&self, departure: Timestamp) -> Weight {
+        debug_assert!(departure < self.period);
         if self.departure_time.len() == 1 {
             return self.travel_time[0]
         }

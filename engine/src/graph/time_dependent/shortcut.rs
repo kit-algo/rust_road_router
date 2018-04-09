@@ -174,6 +174,7 @@ impl Shortcut {
     }
 
     pub fn evaluate(&self, departure: Timestamp, shortcut_graph: &ShortcutGraph) -> Weight {
+        debug_assert!(departure < shortcut_graph.original_graph().period());
         if self.source_data.is_empty() { return INFINITY }
         match self.time_data.binary_search(&departure) {
             Ok(index) => self.source_data[index].evaluate(departure, shortcut_graph),
