@@ -66,12 +66,12 @@ impl<'a> Iter<'a> {
         let mut first_iter = first_edge.ipp_iter(range.clone(), shortcut_graph);
         let first_edge_next_ipp = first_iter.next();
 
-        let first_edge_initial_value = if first_edge_next_ipp.unwrap().0 == *range.start() {
+        let first_edge_initial_value = if first_edge_next_ipp.is_some() && first_edge_next_ipp.unwrap().0 == *range.start() {
             first_edge_next_ipp.unwrap().1
         } else {
             first_edge.evaluate(*range.start(), shortcut_graph)
         };
-        let first_edge_prev_ipp = if first_edge_next_ipp.unwrap().0 == *range.start() {
+        let first_edge_prev_ipp = if first_edge_next_ipp.is_some() && first_edge_next_ipp.unwrap().0 == *range.start() {
             None
         } else {
             Some((*range.start(), first_edge_initial_value))
