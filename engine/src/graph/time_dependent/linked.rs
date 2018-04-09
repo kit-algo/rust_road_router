@@ -170,9 +170,9 @@ fn invert(first_ipp: (Timestamp, Timestamp), second_ipp: (Timestamp, Timestamp),
     } else {
         (second_ipp.0, second_ipp.0 + second_ipp.1)
     };
+    let target_time = if target_time < first_ipp.1 { target_time + period } else { target_time };
     debug_assert!(target_time >= first_ipp.1);
     debug_assert!(target_time <= second_ipp.1);
-    let target_time = if target_time < first_ipp.0 { target_time + period } else { target_time };
 
     let delta_x = second_ipp.0 - first_ipp.0;
     let delta_x = delta_x as u64;
@@ -270,6 +270,7 @@ mod tests {
         assert_eq!(invert((0,2), (5,1), 2, 10), 0);
         assert_eq!(invert((0,2), (5,1), 3, 10), 2);
         assert_eq!(invert((0,1), (4,1), 3, 10), 2);
+        assert_eq!(invert((9,1), (1,3), 2, 10), 0);
     }
 
     #[test]
