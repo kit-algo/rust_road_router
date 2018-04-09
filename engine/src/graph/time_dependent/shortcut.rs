@@ -104,11 +104,37 @@ impl Shortcut {
             let dx = (second_at - first_at) as u64;
 
             debug_assert_ne!(dx, 0);
-            let intersection = (d1 * dx + dx - 1) / (d1 + d2);
+            let intersection = (d1 * dx + d1 + d2 - 1) / (d1 + d2);
+            debug_assert!(intersection <= dx);
             debug_assert!(intersection < std::u32::MAX as u64);
-            let intersection = intersection as u32;
+            let intersection = (intersection as u32 + first_at) % period;
 
-            ((first_at + intersection) % period, is_self_better)
+            let debug_output = || {
+                let collected: Vec<(Timestamp, Weight)> = other.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.original_graph().period()), shortcut_graph).collect();
+                format!("first ipp: {} {} {}, second ipp: {} {} {}, intersection: {} {} {}, other: {} \n collected: {:?}",
+                    first_at, first_self_value, first_other_value,
+                    second_at, second_self_value, second_other_value,
+                    intersection, self.evaluate(intersection, shortcut_graph), other.evaluate(intersection, shortcut_graph),
+                    other.debug_to_s(shortcut_graph, 0), collected)
+            };
+
+            if is_self_better {
+                debug_assert!(self.evaluate(intersection, shortcut_graph) <= other.evaluate(intersection, shortcut_graph), "{}", debug_output());
+                if intersection != 0 {
+                    debug_assert!(self.evaluate(intersection - 1, shortcut_graph) >= other.evaluate(intersection - 1, shortcut_graph), "{}", debug_output());
+                } else {
+                    debug_assert!(self.evaluate(intersection + period - 1, shortcut_graph) >= other.evaluate(intersection + period - 1, shortcut_graph), "{}", debug_output());
+                }
+            } else {
+                debug_assert!(self.evaluate(intersection, shortcut_graph) >= other.evaluate(intersection, shortcut_graph), "{}", debug_output());
+                if intersection != 0 {
+                    debug_assert!(self.evaluate(intersection - 1, shortcut_graph) <= other.evaluate(intersection - 1, shortcut_graph), "{}", debug_output());
+                } else {
+                    debug_assert!(self.evaluate(intersection + period - 1, shortcut_graph) <= other.evaluate(intersection + period - 1, shortcut_graph), "{}", debug_output());
+                }
+            }
+
+            (intersection, is_self_better)
         }).collect();
 
         // println!("{:?}", intersections);
