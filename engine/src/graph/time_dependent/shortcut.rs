@@ -51,6 +51,7 @@ impl Shortcut {
             let (self_value, other_value) = match value {
                 IppSource::Shortcut(value) => (value, other.evaluate(ipp, shortcut_graph)),
                 IppSource::Linked(value) => (self.evaluate(ipp, shortcut_graph), value),
+                IppSource::Both(self_value, other_value) => (self_value, other_value),
             };
             (ipp, self_value, other_value)
         });
@@ -63,6 +64,7 @@ impl Shortcut {
 
         measure("combined ipp iteration", || {
             for ipp in ipp_iter {
+                debug_assert_ne!(ipp.0, prev_ipp.0);
                 if (ipp.1 <= ipp.2) != (prev_ipp.1 <= prev_ipp.2) {
                     // println!("intersection before {:?}", ipp.0);
                     intersections.push((prev_ipp, ipp));
@@ -102,6 +104,7 @@ impl Shortcut {
             let d2 = abs_diff(second_self_value, second_other_value) as u64;
             let dx = (second_at - first_at) as u64;
 
+            debug_assert_ne!(dx, 0);
             let intersection = (d1 * dx + dx - 1) / (d1 + d2);
             debug_assert!(intersection < std::u32::MAX as u64);
             let intersection = intersection as u32;
@@ -213,6 +216,7 @@ fn abs_diff(x: Weight, y: Weight) -> Weight {
 enum IppSource {
     Shortcut(Weight),
     Linked(Weight),
+    Both(Weight, Weight),
 }
 
 struct MergingIter<'a, 'b: 'a> {
@@ -227,7 +231,11 @@ impl<'a, 'b> Iterator for MergingIter<'a, 'b> {
         // TODO both on same ipp
         match (self.shortcut_iter.peek(), self.linked_iter.peek()) {
             (Some(&(self_next_ipp_at, self_next_ipp_value)), Some(&(other_next_ipp_at, other_next_ipp_value))) => {
-                if self_next_ipp_at <= other_next_ipp_at {
+                if self_next_ipp_at == other_next_ipp_at {
+                    self.shortcut_iter.next();
+                    self.linked_iter.next();
+                    Some((self_next_ipp_at, IppSource::Both(self_next_ipp_value, other_next_ipp_value)))
+                } else if self_next_ipp_at <= other_next_ipp_at {
                     self.shortcut_iter.next();
                     Some((self_next_ipp_at, IppSource::Shortcut(self_next_ipp_value)))
                 } else {
