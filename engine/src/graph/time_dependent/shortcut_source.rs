@@ -60,6 +60,17 @@ impl ShortcutData {
             },
         }
     }
+
+    pub fn debug_to_s<'a>(&self, shortcut_graph: &'a ShortcutGraph, indent: usize) -> String {
+        match self.down_arc.value() {
+            Some(down_shortcut_id) => {
+                Linked::new(down_shortcut_id, self.up_arc).debug_to_s(shortcut_graph, indent)
+            },
+            None => {
+                shortcut_graph.original_graph().travel_time_function(self.up_arc).debug_to_s(indent)
+            },
+        }
+    }
 }
 
 pub enum ShortcutSourceIter<'a> {

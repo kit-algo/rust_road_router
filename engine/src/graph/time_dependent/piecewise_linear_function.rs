@@ -62,6 +62,19 @@ impl<'a> PiecewiseLinearFunction<'a> {
     fn subtract_wrapping(&self, x: Weight, y: Weight) -> Weight {
         (self.period + x - y) % self.period
     }
+
+    pub fn debug_to_s(&self, indent: usize) -> String {
+        let mut s = String::from("PLF: ");
+        for data in self.departure_time.iter().zip(self.travel_time.iter()) {
+            s.push('\n');
+            for _ in 0..indent {
+                s.push(' ');
+                s.push(' ');
+            }
+            s = s + &format!("{:?}", data);
+        }
+        s
+    }
 }
 
 fn interpolate(delta_x: Weight, y1: Weight, y2: Weight, x: Timestamp) -> Weight {

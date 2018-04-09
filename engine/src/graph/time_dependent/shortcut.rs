@@ -96,7 +96,6 @@ impl Shortcut {
         let period = shortcut_graph.original_graph().period();
         let mut intersections: Vec<(Timestamp, bool)> = intersections.into_iter().map(|((first_at, first_self_value, first_other_value), (mut second_at, second_self_value, second_other_value))| {
             let is_self_better = second_self_value <= second_other_value;
-            // TODO calc intersection
             if second_at < first_at {
                 second_at += period;
             }
@@ -205,6 +204,19 @@ impl Shortcut {
     fn segment_range(&self, segment: usize) -> Range<Timestamp> {
         let next_index = (segment + 1) % self.source_data.len();
         Range { start: self.time_data[segment], end: self.time_data[next_index] }
+    }
+
+    pub fn debug_to_s<'a>(&self, shortcut_graph: &'a ShortcutGraph, indent: usize) -> String {
+        let mut s = String::from("Shortcut: ");
+        for (time, source) in self.time_data.iter().zip(self.source_data.iter()) {
+            s.push('\n');
+            for _ in 0..indent {
+                s.push(' ');
+                s.push(' ');
+            }
+            s = s + &format!("{}: ", time) + &source.debug_to_s(shortcut_graph, indent + 1);
+        }
+        s
     }
 }
 

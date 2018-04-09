@@ -38,6 +38,12 @@ impl Linked {
     pub fn is_valid_path(&self, shortcut_graph: &ShortcutGraph) -> bool {
         shortcut_graph.get_downward(self.first).is_valid_path() && shortcut_graph.get_upward(self.second).is_valid_path()
     }
+
+    pub fn debug_to_s<'a>(&self, shortcut_graph: &'a ShortcutGraph, indent: usize) -> String {
+        let first_edge = shortcut_graph.get_downward(self.first);
+        let second_edge = shortcut_graph.get_upward(self.second);
+        format!("Linked:\n{}first: {}\n{}second: {}", String::from(" ").repeat(indent * 2), first_edge.debug_to_s(shortcut_graph, indent + 1), String::from(" ").repeat(indent * 2), second_edge.debug_to_s(shortcut_graph, indent + 1))
+    }
 }
 
 pub struct Iter<'a> {
@@ -171,8 +177,8 @@ fn invert(first_ipp: (Timestamp, Timestamp), second_ipp: (Timestamp, Timestamp),
         (second_ipp.0, second_ipp.0 + second_ipp.1)
     };
     let target_time = if target_time < first_ipp.1 { target_time + period } else { target_time };
-    debug_assert!(target_time >= first_ipp.1);
-    debug_assert!(target_time <= second_ipp.1);
+    debug_assert!(target_time >= first_ipp.1, "{:?} {:?} {}", first_ipp, second_ipp, target_time);
+    debug_assert!(target_time <= second_ipp.1, "{:?} {:?} {}", first_ipp, second_ipp, target_time);
 
     let delta_x = second_ipp.0 - first_ipp.0;
     let delta_x = delta_x as u64;
