@@ -47,7 +47,7 @@ impl Shortcut {
             shortcut_iter: self.ipp_iter(range.clone(), shortcut_graph).peekable(),
             linked_iter: other.ipp_iter(range, shortcut_graph).peekable()
         }.map(|(ipp, value)| {
-            // println!("ipp: {:?}", ipp);
+            // println!("ipp: {} {:?}", ipp, value);
             let (self_value, other_value) = match value {
                 IppSource::Shortcut(value) => (value, other.evaluate(ipp, shortcut_graph)),
                 IppSource::Linked(value) => (self.evaluate(ipp, shortcut_graph), value),
@@ -64,6 +64,9 @@ impl Shortcut {
 
         measure("combined ipp iteration", || {
             for ipp in ipp_iter {
+                debug_assert!(abs_diff(ipp.1, self.evaluate(ipp.0, shortcut_graph)) < 5, "at: {} was: {} but should have been: {}. {}", ipp.0, ipp.1, self.evaluate(ipp.0, shortcut_graph), self.debug_to_s(shortcut_graph, 0));
+                debug_assert!(abs_diff(ipp.2, other.evaluate(ipp.0, shortcut_graph)) < 5, "at: {} was: {} but should have been: {}. {}", ipp.0, ipp.2, other.evaluate(ipp.0, shortcut_graph), other.debug_to_s(shortcut_graph, 0));
+
                 debug_assert_ne!(ipp.0, prev_ipp.0);
                 if (ipp.1 <= ipp.2) != (prev_ipp.1 <= prev_ipp.2) {
                     // println!("intersection before {:?}", ipp.0);
@@ -332,7 +335,7 @@ impl<'a, 'b> Iterator for Iter<'a, 'b> {
                 // TODO move borrow into Some(...) match once NLL are more stable
                 match self.current_source_iter.as_mut().unwrap().next() {
                     Some(ipp) => {
-                        debug_assert_eq!(ipp.1, self.shortcut.evaluate(ipp.0, self.shortcut_graph));
+                        debug_assert!(abs_diff(ipp.1, self.shortcut.evaluate(ipp.0, self.shortcut_graph)) < 5, "at: {} was: {} but should have been: {}. Shortcut {}", ipp.0, ipp.1, self.shortcut.evaluate(ipp.0, self.shortcut_graph), self.shortcut.debug_to_s(self.shortcut_graph, 0));
                         if self.range.contains(ipp.0) {
                             // println!("shortcut result {}", ipp);
                             Some(ipp)
