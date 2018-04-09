@@ -139,7 +139,7 @@ impl<'a> Iter<'a> {
         let (first_edge_prev_ipp_at, first_edge_prev_ipp_value) = self.first_edge_prev_ipp.unwrap();
         let start = (first_edge_prev_ipp_at + first_edge_prev_ipp_value) % wrap;
         let mut end = (first_edge_next_ipp.0 + first_edge_next_ipp.1) % wrap;
-        if start == end { end += 1; } // happens in the case of ascent -1
+        if start == end && first_edge_prev_ipp_at != first_edge_next_ipp.0 { end += 1; } // happens in the case of ascent -1
         WrappingRange::new(Range { start , end }, wrap)
     }
 
@@ -366,5 +366,29 @@ mod tests {
 
         let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 4, end: 1 }, 10), &shortcut_graph).collect();
         assert_eq!(all_ipps, vec![(5,5), (8,4), (0,3)]);
+    }
+
+    #[test]
+    fn test_linked_with_static_first_edge() {
+        let graph = TDGraph::new(
+            vec![0, 1, 2, 2],
+            vec![2, 0],
+            vec![0, 3, 4],
+            vec![1, 3, 9,  0],
+            vec![2, 5, 3,  1],
+            10
+        );
+
+        let cch_first_out = vec![0, 1, 3, 3];
+        let cch_head =      vec![2, 0, 2];
+
+        let outgoing = vec![Shortcut::new(Some(0)), Shortcut::new(None), Shortcut::new(None)];
+        let incoming = vec![Shortcut::new(None), Shortcut::new(Some(1)), Shortcut::new(None)];
+
+        let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
+        let linked = Linked::new(1, 0);
+
+        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).collect();
+        assert_eq!(all_ipps, vec![(0,3), (2,6), (8,4)]);
     }
 }
