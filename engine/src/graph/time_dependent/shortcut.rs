@@ -123,18 +123,12 @@ impl Shortcut {
 
             if is_self_better {
                 debug_assert!(self.evaluate(intersection, shortcut_graph) <= other.evaluate(intersection, shortcut_graph), "{}", debug_output());
-                if intersection != 0 {
-                    debug_assert!(self.evaluate(intersection - 1, shortcut_graph) >= other.evaluate(intersection - 1, shortcut_graph), "{}", debug_output());
-                } else {
-                    debug_assert!(self.evaluate(intersection + period - 1, shortcut_graph) >= other.evaluate(intersection + period - 1, shortcut_graph), "{}", debug_output());
-                }
+                let before_intersection = if intersection == 0 { intersection + period - 1 } else { intersection - 1 };
+                debug_assert!(self.evaluate(before_intersection, shortcut_graph) >= other.evaluate(before_intersection, shortcut_graph), "{}", debug_output());
             } else {
                 debug_assert!(self.evaluate(intersection, shortcut_graph) >= other.evaluate(intersection, shortcut_graph), "{}", debug_output());
-                if intersection != 0 {
-                    debug_assert!(self.evaluate(intersection - 1, shortcut_graph) <= other.evaluate(intersection - 1, shortcut_graph), "{}", debug_output());
-                } else {
-                    debug_assert!(self.evaluate(intersection + period - 1, shortcut_graph) <= other.evaluate(intersection + period - 1, shortcut_graph), "{}", debug_output());
-                }
+                let before_intersection = if intersection == 0 { intersection + period - 1 } else { intersection - 1 };
+                debug_assert!(self.evaluate(before_intersection, shortcut_graph) <= other.evaluate(before_intersection, shortcut_graph), "{}", debug_output());
             }
 
             (intersection, is_self_better)
@@ -154,8 +148,6 @@ impl Shortcut {
             intersections.push(first);
         }
 
-        // println!("{:?}", intersections);
-
         let mut new_shortcut = Shortcut { source_data: vec![], time_data: vec![] };
 
         let mut intersections = intersections.into_iter().peekable();
@@ -163,15 +155,20 @@ impl Shortcut {
         let mut prev_source = self.source_data.last().unwrap();
 
         for (&time, source) in self.time_data.iter().zip(self.source_data.iter()) {
+            // println!("time: {}, source: {:?}", time, source);
             while time >= intersections.peek().unwrap().0 {
                 let (peeked_ipp, self_better_at_peeked) = intersections.next().unwrap();
+                // println!("peeked {} {}", peeked_ipp, self_better_at_peeked);
 
                 if self_better_at_peeked {
+                    // println!("self better");
                     if time > peeked_ipp {
+                        // println!("pushing prev source {:?}", prev_source);
                         new_shortcut.time_data.push(peeked_ipp);
                         new_shortcut.source_data.push(*prev_source);
                     }
                 } else {
+                    // println!("other better - pushing other {:?}", other.as_shortcut_data());
                     new_shortcut.time_data.push(peeked_ipp);
                     new_shortcut.source_data.push(other.as_shortcut_data());
                 }
@@ -180,6 +177,7 @@ impl Shortcut {
             }
 
             if is_self_currently_better {
+                // println!("applying current source: {:?}", *source);
                 new_shortcut.source_data.push(*source);
                 new_shortcut.time_data.push(time);
             }
@@ -189,9 +187,11 @@ impl Shortcut {
 
         for (intersection_ipp, segment_self_better) in intersections {
             if segment_self_better {
+                // println!("adding rest self {} {:?}", intersection_ipp, *prev_source);
                 new_shortcut.time_data.push(intersection_ipp);
                 new_shortcut.source_data.push(*prev_source);
             } else {
+                // println!("adding rest other {} {:?}", intersection_ipp, other.as_shortcut_data());
                 new_shortcut.time_data.push(intersection_ipp);
                 new_shortcut.source_data.push(other.as_shortcut_data());
             }
@@ -307,25 +307,30 @@ pub struct Iter<'a, 'b: 'a> {
     shortcut_graph: &'a ShortcutGraph<'a>,
     range: WrappingRange<Timestamp>,
     current_index: usize,
-    initial_index: usize,
+    segment_iter_state: SegmentIterState,
     current_source_iter: Option<Box<Iterator<Item = (Timestamp, Weight)> + 'a>>
 }
 
 impl<'a, 'b> Iter<'a, 'b> {
     fn new(shortcut: &'b Shortcut, range: WrappingRange<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> Iter<'a, 'b> {
-        let (current_index, current_source_iter) = match shortcut.time_data.binary_search(range.start()) {
-            Ok(index) => (index, None),
+        let (current_index, segment_iter_state, current_source_iter) = match shortcut.time_data.binary_search(range.start()) {
+            Ok(index) => (index, SegmentIterState::InitialCompleted(index), None),
             Err(index) => {
                 let current_index = (index + shortcut.source_data.len() - 1) % shortcut.source_data.len();
                 let mut segment_range = WrappingRange::new(shortcut.segment_range(current_index), *range.wrap_around());
+                let segment_iter_state = if segment_range.full_range() {
+                    SegmentIterState::InitialCompleted(current_index)
+                } else {
+                    SegmentIterState::InitialPartialyCompleted(current_index)
+                };
                 segment_range.shift_start(*range.start());
                 // println!("shortcut segment iter range {:?}", segment_range);
-                (current_index, Some(Box::new(shortcut.source_data[current_index].ipp_iter(segment_range, shortcut_graph)) as Box<Iterator<Item = (Timestamp, Weight)>>))
+                (current_index, segment_iter_state, Some(Box::new(shortcut.source_data[current_index].ipp_iter(segment_range, shortcut_graph)) as Box<Iterator<Item = (Timestamp, Weight)>>))
             },
         };
 
         // println!("new shortcut iter range {:?}, index: {}, iter created? {}", range, current_index, current_source_iter.is_some());
-        Iter { shortcut, shortcut_graph, range, current_index, initial_index: current_index, current_source_iter }
+        Iter { shortcut, shortcut_graph, range, current_index, segment_iter_state, current_source_iter }
     }
 }
 
@@ -349,11 +354,25 @@ impl<'a, 'b> Iterator for Iter<'a, 'b> {
                     },
                     None => {
                         self.current_source_iter = None;
-                        self.current_index = (self.current_index + 1) % self.shortcut.source_data.len();
-                        if self.current_index != self.initial_index {
-                            self.next()
-                        } else {
-                            None
+                        match self.segment_iter_state {
+                            SegmentIterState::InitialCompleted(initial_index) => {
+                                self.current_index = (self.current_index + 1) % self.shortcut.source_data.len();
+                                if self.current_index != initial_index {
+                                    self.next()
+                                } else {
+                                    None
+                                }
+                            },
+                            SegmentIterState::InitialPartialyCompleted(initial_index) => {
+                                self.current_index = (self.current_index + 1) % self.shortcut.source_data.len();
+                                if self.current_index == initial_index {
+                                    self.segment_iter_state = SegmentIterState::Done;
+                                    self.next()
+                                } else {
+                                    self.next()
+                                }
+                            },
+                            SegmentIterState::Done => None,
                         }
                     },
                 }
@@ -379,6 +398,13 @@ impl<'a, 'b> Iterator for Iter<'a, 'b> {
             },
         }
     }
+}
+
+#[derive(Debug)]
+enum SegmentIterState {
+    InitialCompleted(usize),
+    InitialPartialyCompleted(usize),
+    Done,
 }
 
 #[cfg(test)]
@@ -412,6 +438,9 @@ mod tests {
 
         assert_eq!(new_shortcut.time_data, vec![0, 4]);
         assert_eq!(new_shortcut.source_data, vec![ShortcutData::new(ShortcutSource::Shortcut(1, 0)), ShortcutData::new(ShortcutSource::OriginalEdge(2))]);
+
+        let all_merged_ipps: Vec<(Timestamp, Weight)> = new_shortcut.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 8), &shortcut_graph).collect();
+        assert_eq!(all_merged_ipps, vec![(0,4), (2,2), (4,4), (6,2)]);
     }
 
     #[test]
@@ -480,6 +509,28 @@ mod tests {
         let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
 
         let all_ipps: Vec<(Timestamp, Weight)> = shortcut_graph.get_upward(0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).collect();
-        assert_eq!(all_ipps, vec![(0,2)]);
+        assert_eq!(all_ipps, vec![]);
+    }
+
+    #[test]
+    fn test_two_static_segments_iter() {
+        let graph = TDGraph::new(
+            vec![0, 1],
+            vec![0],
+            vec![0, 1],
+            vec![0],
+            vec![2],
+            10
+        );
+
+        let cch_first_out = vec![0, 1];
+        let cch_head =      vec![0];
+        let outgoing = vec![Shortcut { time_data: vec![2, 6], source_data: vec![ShortcutData::new(ShortcutSource::OriginalEdge(0)), ShortcutData::new(ShortcutSource::OriginalEdge(0))] }];
+        let incoming = vec![Shortcut::new(Some(0))];
+
+        let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
+
+        let all_ipps: Vec<(Timestamp, Weight)> = shortcut_graph.get_upward(0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).collect();
+        assert_eq!(all_ipps, vec![(2,2), (6,2)]);
     }
 }

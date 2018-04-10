@@ -47,7 +47,7 @@ impl<Idx: PartialOrd + Copy> WrappingRange<Idx> {
         self.range.start = start;
     }
 
-    fn full_range(&self) -> bool {
+    pub fn full_range(&self) -> bool {
         self.range.start == self.range.end
     }
 }

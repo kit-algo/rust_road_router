@@ -98,6 +98,10 @@ pub struct Iter<'a> {
 
 impl<'a> Iter<'a> {
     fn new(departure_time: &'a [Timestamp], travel_time: &'a [Weight], range: WrappingRange<Timestamp>) -> Iter<'a> {
+        if departure_time.len() <= 1 {
+            return Iter { departure_time, travel_time, range, current_index: 0, initial_index: 0, done: true }
+        }
+
         let current_index = match departure_time.binary_search(range.start()) {
             Ok(index) => index,
             Err(index) => index
@@ -201,6 +205,6 @@ mod tests {
         let travel_time =    vec![2];
         let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time, 24);
         let all_ipps: Vec<(Timestamp, Weight)> = ttf.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 24)).collect();
-        assert_eq!(all_ipps, vec![(0,2)]);
+        assert_eq!(all_ipps, vec![]);
     }
 }
