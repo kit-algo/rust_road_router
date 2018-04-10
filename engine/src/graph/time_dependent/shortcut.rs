@@ -142,7 +142,7 @@ impl Shortcut {
 
         // println!("{:?}", intersections);
 
-        if intersections[c - 2].1 > intersections[c - 1].1 {
+        if intersections[c - 2].0 > intersections[c - 1].0 {
             let last = intersections[c - 1];
             let second_last = intersections[c - 2];
             intersections.insert(0, last);
@@ -198,6 +198,10 @@ impl Shortcut {
         }
         new_shortcut.time_data.pop();
         new_shortcut.source_data.pop();
+
+        for values in new_shortcut.time_data.windows(2) {
+            debug_assert!(values[0] < values[1]);
+        }
 
         new_shortcut
     }
