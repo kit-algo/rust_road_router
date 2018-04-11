@@ -312,6 +312,10 @@ pub struct Iter<'a, 'b: 'a> {
 
 impl<'a, 'b> Iter<'a, 'b> {
     fn new(shortcut: &'b Shortcut, range: WrappingRange<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> Iter<'a, 'b> {
+        if !shortcut.is_valid_path() {
+            return Iter { shortcut, shortcut_graph, range, current_index: 0, segment_iter_state: InitialSegmentIterState::Finishing, current_source_iter: None, cached_iter: None }
+        }
+
         let (current_index, segment_iter_state, current_source_iter) = match shortcut.time_data.binary_search(range.start()) {
             Ok(index) => (index, InitialSegmentIterState::InitialCompleted(index), None),
             Err(index) => {
@@ -377,6 +381,8 @@ impl<'a, 'b> Iterator for Iter<'a, 'b> {
                 }
             },
             None => {
+                if !self.shortcut.is_valid_path() { return None }
+
                 let ipp = self.shortcut.time_data[self.current_index];
 
                 if self.range.contains(ipp) {
