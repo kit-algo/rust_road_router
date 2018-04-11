@@ -1,6 +1,16 @@
 use super::*;
+use std::{
+    iter::Peekable,
+    cmp::{min, max}
+};
 
 pub type Timestamp = Weight;
+
+const TOLERANCE: Weight = 10;
+
+fn abs_diff(x: Weight, y: Weight) -> Weight {
+    max(x, y) - min(x, y)
+}
 
 mod piecewise_linear_function;
 use self::piecewise_linear_function::*;
