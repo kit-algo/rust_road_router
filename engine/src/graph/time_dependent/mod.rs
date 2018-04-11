@@ -32,3 +32,6 @@ pub use self::graph::Graph as TDGraph;
 
 pub mod shortcut_graph;
 pub use self::shortcut_graph::ShortcutGraph;
+
+mod wrapping_slice_iter;
+use self::wrapping_slice_iter::WrappingSliceIter;

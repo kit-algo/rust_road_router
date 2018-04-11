@@ -4,7 +4,8 @@ use benchmark::measure;
 #[derive(Debug, Clone)]
 pub struct Shortcut {
     source_data: Vec<ShortcutData>,
-    time_data: Vec<Timestamp>
+    time_data: Vec<Timestamp>,
+    cache: Option<Vec<(Timestamp, Weight)>>
 }
 
 impl Shortcut {
@@ -16,7 +17,7 @@ impl Shortcut {
             source_data.push(ShortcutData::new(ShortcutSource::OriginalEdge(edge)));
             time_data.push(0);
         }
-        Shortcut { source_data, time_data }
+        Shortcut { source_data, time_data, cache: None }
     }
 
     pub fn merge(&self, other: Linked, shortcut_graph: &ShortcutGraph) -> Shortcut {
@@ -24,14 +25,14 @@ impl Shortcut {
             return self.clone()
         }
         if self.source_data.is_empty() {
-            return Shortcut { source_data: vec![other.as_shortcut_data()], time_data: vec![0] }
+            return Shortcut { source_data: vec![other.as_shortcut_data()], time_data: vec![0], cache: None }
         }
 
         // TODO bounds for range
         let (current_lower_bound, current_upper_bound) = self.bounds(shortcut_graph);
         let (other_lower_bound, other_upper_bound) = other.bounds(shortcut_graph);
         if current_lower_bound >= other_upper_bound {
-            return Shortcut { source_data: vec![other.as_shortcut_data()], time_data: vec![0] }
+            return Shortcut { source_data: vec![other.as_shortcut_data()], time_data: vec![0], cache: None }
         } else if other_lower_bound >= current_upper_bound {
             return self.clone()
         }
@@ -85,7 +86,7 @@ impl Shortcut {
             if first_ipp.1 <= first_ipp.2 {
                 return self.clone()
             } else {
-                return Shortcut { source_data: vec![other.as_shortcut_data()], time_data: vec![0] }
+                return Shortcut { source_data: vec![other.as_shortcut_data()], time_data: vec![0], cache: None }
             }
         }
 
@@ -148,7 +149,7 @@ impl Shortcut {
         }
         intersections.last_mut().unwrap().0 += period;
 
-        let mut new_shortcut = Shortcut { source_data: vec![], time_data: vec![] };
+        let mut new_shortcut = Shortcut { source_data: vec![], time_data: vec![], cache: None };
 
         let mut intersections = intersections.into_iter().peekable();
         let (_, mut is_self_currently_better) = intersections.next().unwrap();
@@ -235,6 +236,16 @@ impl Shortcut {
         self.num_segments() > 0
     }
 
+    pub fn cache_ipps(&mut self, shortcut_graph: &ShortcutGraph) {
+        let range = WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.original_graph().period());
+        let ipps = self.ipp_iter(range, shortcut_graph).collect();
+        self.cache = Some(ipps);
+    }
+
+    pub fn clear_cache(&mut self) {
+        self.cache = None
+    }
+
     fn segment_range(&self, segment: usize) -> Range<Timestamp> {
         let next_index = (segment + 1) % self.source_data.len();
         Range { start: self.time_data[segment], end: self.time_data[next_index] }
@@ -307,13 +318,19 @@ pub struct Iter<'a, 'b: 'a> {
     range: WrappingRange<Timestamp>,
     current_index: usize,
     segment_iter_state: InitialSegmentIterState,
-    current_source_iter: Option<Box<Iterator<Item = (Timestamp, Weight)> + 'a>>
+    current_source_iter: Option<Box<Iterator<Item = (Timestamp, Weight)> + 'a>>,
+    cached_iter: Option<WrappingSliceIter<'b>>,
 }
 
 impl<'a, 'b> Iter<'a, 'b> {
     fn new(shortcut: &'b Shortcut, range: WrappingRange<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> Iter<'a, 'b> {
         if !shortcut.is_valid_path() {
             return Iter { shortcut, shortcut_graph, range, current_index: 0, segment_iter_state: InitialSegmentIterState::Finishing, current_source_iter: None, cached_iter: None }
+        }
+
+        if let Some(ref cache) = shortcut.cache {
+            let cached_iter = WrappingSliceIter::new(cache, range.clone());
+            return Iter { shortcut, shortcut_graph, range, current_index: 0, segment_iter_state: InitialSegmentIterState::Finishing, current_source_iter: None, cached_iter: Some(cached_iter) }
         }
 
         let (current_index, segment_iter_state, current_source_iter) = match shortcut.time_data.binary_search(range.start()) {
@@ -333,14 +350,10 @@ impl<'a, 'b> Iter<'a, 'b> {
         };
 
         // println!("new shortcut iter range {:?}, index: {}, iter created? {}", range, current_index, current_source_iter.is_some());
-        Iter { shortcut, shortcut_graph, range, current_index, segment_iter_state, current_source_iter }
+        Iter { shortcut, shortcut_graph, range, current_index, segment_iter_state, current_source_iter, cached_iter: None }
     }
-}
 
-impl<'a, 'b> Iterator for Iter<'a, 'b> {
-    type Item = (Timestamp, Weight);
-
-    fn next(&mut self) -> Option<Self::Item> {
+    fn calc_next(&mut self) -> Option<<Self as Iterator>::Item> {
         // println!("shortcut next");
         match self.current_source_iter {
             Some(_) => {
@@ -404,6 +417,18 @@ impl<'a, 'b> Iterator for Iter<'a, 'b> {
                     None
                 }
             },
+        }
+    }
+}
+
+impl<'a, 'b> Iterator for Iter<'a, 'b> {
+    type Item = (Timestamp, Weight);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(ref mut iter) = self.cached_iter {
+            iter.next().map(|it| *it)
+        } else {
+            self.calc_next()
         }
     }
 }
@@ -533,7 +558,7 @@ mod tests {
 
         let cch_first_out = vec![0, 1];
         let cch_head =      vec![0];
-        let outgoing = vec![Shortcut { time_data: vec![2, 6], source_data: vec![ShortcutData::new(ShortcutSource::OriginalEdge(0)), ShortcutData::new(ShortcutSource::OriginalEdge(0))] }];
+        let outgoing = vec![Shortcut { time_data: vec![2, 6], source_data: vec![ShortcutData::new(ShortcutSource::OriginalEdge(0)), ShortcutData::new(ShortcutSource::OriginalEdge(0))], cache: None }];
         let incoming = vec![Shortcut::new(Some(0))];
 
         let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
@@ -555,7 +580,7 @@ mod tests {
 
         let cch_first_out = vec![0, 1, 2];
         let cch_head =      vec![1, 0];
-        let outgoing = vec![Shortcut { time_data: vec![2, 5], source_data: vec![ShortcutData::new(ShortcutSource::OriginalEdge(0)), ShortcutData::new(ShortcutSource::OriginalEdge(1))] }, Shortcut::new(None)];
+        let outgoing = vec![Shortcut { time_data: vec![2, 5], source_data: vec![ShortcutData::new(ShortcutSource::OriginalEdge(0)), ShortcutData::new(ShortcutSource::OriginalEdge(1))], cache: None }, Shortcut::new(None)];
         let incoming = vec![Shortcut::new(None), Shortcut::new(None)];
 
         let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);

@@ -1,4 +1,5 @@
 use super::*;
+use std::mem::swap;
 
 #[derive(Debug)]
 pub struct ShortcutGraph<'a> {
@@ -32,8 +33,30 @@ impl<'a> ShortcutGraph<'a> {
         &self.outgoing[edge_id as usize]
     }
 
+    pub fn cache_upward_edge_ipps(&mut self, edge_id: EdgeId) {
+        let mut shortcut = Shortcut::new(None);
+        swap(&mut self.outgoing[edge_id as usize], &mut shortcut);
+        shortcut.cache_ipps(self);
+        swap(&mut self.outgoing[edge_id as usize], &mut shortcut);
+    }
+
+    pub fn clear_upward_edge_cache(&mut self, edge_id: EdgeId) {
+        self.outgoing[edge_id as usize].clear_cache();
+    }
+
     pub fn get_downward(&self, edge_id: EdgeId) -> &Shortcut {
         &self.incoming[edge_id as usize]
+    }
+
+    pub fn cache_downward_edge_ipps(&mut self, edge_id: EdgeId) {
+        let mut shortcut = Shortcut::new(None);
+        swap(&mut self.incoming[edge_id as usize], &mut shortcut);
+        shortcut.cache_ipps(self);
+        swap(&mut self.incoming[edge_id as usize], &mut shortcut);
+    }
+
+    pub fn clear_downward_edge_cache(&mut self, edge_id: EdgeId) {
+        self.outgoing[edge_id as usize].clear_cache();
     }
 
     pub fn original_graph(&self) -> &TDGraph {
