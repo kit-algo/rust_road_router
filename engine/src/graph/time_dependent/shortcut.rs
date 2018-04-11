@@ -150,6 +150,7 @@ impl Shortcut {
             intersections.insert(0, last);
             intersections.push(first);
         }
+        intersections.last_mut().unwrap().0 += period;
 
         let mut new_shortcut = Shortcut { source_data: vec![], time_data: vec![] };
 
