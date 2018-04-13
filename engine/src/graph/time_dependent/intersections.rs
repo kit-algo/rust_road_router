@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum IppSource {
     First(Weight),
     Second(Weight),
@@ -146,14 +146,14 @@ pub fn intersections<I, F, G>(iter: I, eval_first: F, eval_second: G, period: Ti
 fn intersect(((x1, y1), (x2, y2)): ((Timestamp, Weight), (Timestamp, Weight)), ((x3, y3), (x4, y4)): ((Timestamp, Weight), (Timestamp, Weight))) -> Option<Timestamp> {
     debug_assert!(x2 > x1);
     debug_assert!(x4 > x3);
-    let x1 = x1 as i64;
-    let x2 = x2 as i64;
-    let x3 = x3 as i64;
-    let x4 = x4 as i64;
-    let y1 = y1 as i64;
-    let y2 = y2 as i64;
-    let y3 = y3 as i64;
-    let y4 = y4 as i64;
+    let x1 = x1 as i128;
+    let x2 = x2 as i128;
+    let x3 = x3 as i128;
+    let x4 = x4 as i128;
+    let y1 = y1 as i128;
+    let y2 = y2 as i128;
+    let y3 = y3 as i128;
+    let y4 = y4 as i128;
 
     let numerator = (x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4);
     let denominator = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);

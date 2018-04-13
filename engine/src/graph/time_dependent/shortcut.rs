@@ -37,53 +37,40 @@ impl Shortcut {
             return self.clone()
         }
 
-        println!("actual work: {}", self.num_segments());
-
-        let range = WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.original_graph().period());
-        let mut ipp_iter = MergingIter {
-            shortcut_iter: self.ipp_iter(range.clone(), shortcut_graph).peekable(),
-            linked_iter: other.ipp_iter(range, shortcut_graph).peekable()
-        }.map(|(ipp, value)| {
-            // println!("ipp: {} {:?}", ipp, value);
-            let (self_value, other_value) = match value {
-                IppSource::Shortcut(value) => (value, other.evaluate(ipp, shortcut_graph)),
-                IppSource::Linked(value) => (self.evaluate(ipp, shortcut_graph), value),
-                IppSource::Both(self_value, other_value) => (self_value, other_value),
-            };
-            (ipp, self_value, other_value)
-        });
-
-        let first_ipp = ipp_iter.next().unwrap();
-        let mut prev_ipp = first_ipp;
-
-        let mut intersections = Vec::new();
         let mut ipp_counter = 0;
 
-        measure("combined ipp iteration", || {
-            for ipp in ipp_iter {
-                debug_assert!(abs_diff(ipp.1, self.evaluate(ipp.0, shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. {}", ipp.0, ipp.1, self.evaluate(ipp.0, shortcut_graph), self.debug_to_s(shortcut_graph, 0));
-                debug_assert!(abs_diff(ipp.2, other.evaluate(ipp.0, shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. {}", ipp.0, ipp.2, other.evaluate(ipp.0, shortcut_graph), other.debug_to_s(shortcut_graph, 0));
-
-                debug_assert!(ipp.0 > prev_ipp.0);
-                if (ipp.1 <= ipp.2) != (prev_ipp.1 <= prev_ipp.2) {
-                    // println!("intersection before {:?}", ipp.0);
-                    intersections.push((prev_ipp, ipp));
+        let mut intersections =
+            // measure("combined ipp iteration and intersecting", ||
+        {
+            let range = WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.original_graph().period());
+            let ipp_iter = MergingIter {
+                shortcut_iter: self.ipp_iter(range.clone(), shortcut_graph).peekable(),
+                linked_iter: other.ipp_iter(range, shortcut_graph).peekable()
+            }.inspect(|&(at, value)| {
+                match value {
+                    IppSource::First(value) => {
+                        debug_assert!(abs_diff(value, self.evaluate(at, shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. {}", at, value, self.evaluate(at, shortcut_graph), self.debug_to_s(shortcut_graph, 0));
+                    },
+                    IppSource::Second(value) => {
+                        debug_assert!(abs_diff(value, other.evaluate(at, shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. {}", at, value, other.evaluate(at, shortcut_graph), other.debug_to_s(shortcut_graph, 0));
+                    },
+                    IppSource::Both(first_value, second_value) => {
+                        debug_assert!(abs_diff(first_value, self.evaluate(at, shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. {}", at, first_value, self.evaluate(at, shortcut_graph), self.debug_to_s(shortcut_graph, 0));
+                        debug_assert!(abs_diff(second_value, other.evaluate(at, shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. {}", at, second_value, other.evaluate(at, shortcut_graph), other.debug_to_s(shortcut_graph, 0));
+                    }
                 }
-
-                prev_ipp = ipp;
                 ipp_counter += 1;
-            }
+            });
 
-            if (prev_ipp.1 <= prev_ipp.2) != (first_ipp.1 <= first_ipp.2) {
-                // println!("intersection before {:?}", first_ipp.0);
-                intersections.push((prev_ipp, first_ipp));
-            }
-        });
+            intersections(ipp_iter, || self.evaluate(0, shortcut_graph), || other.evaluate(0, shortcut_graph), shortcut_graph.original_graph().period())
+        }
+        // )
+        ;
 
-        println!("iterated ipps: {:?}", ipp_counter);
+        // println!("iterated ipps: {:?}", ipp_counter);
 
         if intersections.is_empty() {
-            if first_ipp.1 <= first_ipp.2 {
+            if self.evaluate(0, shortcut_graph) <= other.evaluate(0, shortcut_graph) {
                 return self.clone()
             } else {
                 return Shortcut { source_data: vec![other.as_shortcut_data()], time_data: vec![0], cache: None }
@@ -94,47 +81,31 @@ impl Shortcut {
         debug_assert_eq!(c % 2, 0);
 
         let period = shortcut_graph.original_graph().period();
-        let mut intersections: Vec<(Timestamp, bool)> = intersections.into_iter().map(|((first_at, first_self_value, first_other_value), (mut second_at, second_self_value, second_other_value))| {
-            let is_self_better = second_self_value <= second_other_value;
-            if second_at < first_at {
-                second_at += period;
-            }
-            let d1 = abs_diff(first_self_value, first_other_value) as u64;
-            let d2 = abs_diff(second_self_value, second_other_value) as u64;
-            let dx = (second_at - first_at) as u64;
 
-            debug_assert_ne!(dx, 0);
-            let intersection = (d1 * dx + d1 + d2 - 1) / (d1 + d2);
-            debug_assert!(intersection <= dx);
-            debug_assert!(intersection < std::u32::MAX as u64);
-            let intersection = (intersection as u32 + first_at) % period;
-
+        for &(intersection, is_self_better) in intersections.iter() {
+            let before_intersection = if intersection < 1 { intersection + period - 1 } else { intersection - 1 };
             let debug_output = || {
-                let collected: Vec<(Timestamp, IppSource)> = MergingIter {
-                    shortcut_iter: self.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.original_graph().period()), shortcut_graph).peekable(),
-                    linked_iter: other.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.original_graph().period()), shortcut_graph).peekable()
-                }.collect();
-                format!("first ipp: {} {} {}, second ipp: {} {} {}, intersection: {} {} {}, {} \n collected: {:?}",
-                    first_at, first_self_value, first_other_value,
-                    second_at, second_self_value, second_other_value,
+                // let collected: Vec<(Timestamp, IppSource)> = MergingIter {
+                //     shortcut_iter: self.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.original_graph().period()), shortcut_graph).peekable(),
+                //     linked_iter: other.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.original_graph().period()), shortcut_graph).peekable()
+                // }.collect();
+                // format!("intersection: {} {} {}, before intersection: {} {} {}, {} \n collected: {:?}",
+                format!("intersection: {} {} {}, before intersection: {} {} {}",
                     intersection, self.evaluate(intersection, shortcut_graph), other.evaluate(intersection, shortcut_graph),
-                    self.debug_to_s(shortcut_graph, 0), collected)
+                    before_intersection, self.evaluate(before_intersection, shortcut_graph), other.evaluate(before_intersection, shortcut_graph),
+                    // self.debug_to_s(shortcut_graph, 0), collected
+                    )
             };
 
             if is_self_better {
                 debug_assert!(self.evaluate(intersection, shortcut_graph) <= other.evaluate(intersection, shortcut_graph), "{}", debug_output());
-                let before_intersection = if intersection == 0 { intersection + period - 1 } else { intersection - 1 };
-                debug_assert!(self.evaluate(before_intersection, shortcut_graph) >= other.evaluate(before_intersection, shortcut_graph), "{}", debug_output());
+                // debug_assert!(self.evaluate(before_intersection, shortcut_graph) >= other.evaluate(before_intersection, shortcut_graph), "{}", debug_output());
             } else {
                 debug_assert!(self.evaluate(intersection, shortcut_graph) >= other.evaluate(intersection, shortcut_graph), "{}", debug_output());
-                let before_intersection = if intersection == 0 { intersection + period - 1 } else { intersection - 1 };
-                debug_assert!(self.evaluate(before_intersection, shortcut_graph) <= other.evaluate(before_intersection, shortcut_graph), "{}", debug_output());
+                // debug_assert!(self.evaluate(before_intersection, shortcut_graph) <= other.evaluate(before_intersection, shortcut_graph), "{}", debug_output());
             }
+        }
 
-            (intersection, is_self_better)
-        }).collect();
-
-        // println!("{:?}", intersections);
 
         if intersections[c - 2].0 > intersections[c - 1].0 {
             let last = intersections[c - 1];
@@ -265,17 +236,6 @@ impl Shortcut {
     }
 }
 
-fn abs_diff(x: Weight, y: Weight) -> Weight {
-    max(x, y) - min(x, y)
-}
-
-#[derive(Debug)]
-enum IppSource {
-    Shortcut(Weight),
-    Linked(Weight),
-    Both(Weight, Weight),
-}
-
 struct MergingIter<'a, 'b: 'a> {
     shortcut_iter: Peekable<Iter<'a, 'b>>,
     linked_iter: Peekable<linked::Iter<'a>>
@@ -293,19 +253,19 @@ impl<'a, 'b> Iterator for MergingIter<'a, 'b> {
                     Some((self_next_ipp_at, IppSource::Both(self_next_ipp_value, other_next_ipp_value)))
                 } else if self_next_ipp_at <= other_next_ipp_at {
                     self.shortcut_iter.next();
-                    Some((self_next_ipp_at, IppSource::Shortcut(self_next_ipp_value)))
+                    Some((self_next_ipp_at, IppSource::First(self_next_ipp_value)))
                 } else {
                     self.linked_iter.next();
-                    Some((other_next_ipp_at, IppSource::Linked(other_next_ipp_value)))
+                    Some((other_next_ipp_at, IppSource::Second(other_next_ipp_value)))
                 }
             },
             (None, Some(&(other_next_ipp_at, other_next_ipp_value))) => {
                 self.linked_iter.next();
-                Some((other_next_ipp_at, IppSource::Linked(other_next_ipp_value)))
+                Some((other_next_ipp_at, IppSource::Second(other_next_ipp_value)))
             },
             (Some(&(self_next_ipp_at, self_next_ipp_value)), None) => {
                 self.shortcut_iter.next();
-                Some((self_next_ipp_at, IppSource::Shortcut(self_next_ipp_value)))
+                Some((self_next_ipp_at, IppSource::First(self_next_ipp_value)))
             },
             (None, None) => None
         }

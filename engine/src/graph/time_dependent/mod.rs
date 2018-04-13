@@ -35,3 +35,6 @@ pub use self::shortcut_graph::ShortcutGraph;
 
 mod wrapping_slice_iter;
 use self::wrapping_slice_iter::WrappingSliceIter;
+
+mod intersections;
+use self::intersections::*;
