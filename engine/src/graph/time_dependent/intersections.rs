@@ -22,24 +22,15 @@ pub fn intersections<I, F, G>(iter: I, eval_first: F, eval_second: G, period: Ti
     let mut prev_second = None;
 
     for (time, values) in iter {
-        println!("");
-        println!("{} {:?}", time, values);
         match values {
             IppSource::First(value) => {
                 let ipp = (time, value);
 
-                if let Some(prev_first) = prev_first {
-                    if let Some(prev_second_check) = prev_second {
-                        if missing.last().map(|&((_, next_first), _)| next_first.is_none()).unwrap_or(false) {
-                            for ((prev_first, next_first), (prev_second, next_second)) in missing.drain(..) {
-                                debug_assert!(prev_first.is_some());
-                                debug_assert!(next_first.is_none());
-                                debug_assert!(prev_second.is_some());
-                                debug_assert_eq!(prev_second_check, prev_second.unwrap());
-                                debug_assert!(next_second.is_some());
-                                found_intersections.push(((prev_first, ipp), (prev_second, next_second.unwrap())));
-                            }
-                        }
+                if missing.last().map(|&((_, next_first), _)| next_first.is_none()).unwrap_or(false) {
+                    for ((prev_first, next_first), (prev_second, next_second)) in missing.drain(..) {
+                        debug_assert!(next_first.is_none());
+                        debug_assert!(next_second.is_some());
+                        found_intersections.push(((prev_first, ipp), (prev_second, next_second.unwrap())));
                     }
                 }
                 missing.push(((prev_first, Some(ipp)), (prev_second, None)));
@@ -52,18 +43,11 @@ pub fn intersections<I, F, G>(iter: I, eval_first: F, eval_second: G, period: Ti
             IppSource::Second(value) => {
                 let ipp = (time, value);
 
-                if let Some(prev_second) = prev_second {
-                    if let Some(prev_first_check) = prev_first {
-                        if missing.last().map(|&(_, (_, next_second))| next_second.is_none()).unwrap_or(false) {
-                            for ((prev_first, next_first), (prev_second, next_second)) in missing.drain(..) {
-                                debug_assert!(prev_first.is_some());
-                                debug_assert_eq!(prev_first_check, prev_first.unwrap());
-                                debug_assert!(next_first.is_some());
-                                debug_assert!(prev_second.is_some());
-                                debug_assert!(next_second.is_none());
-                                found_intersections.push(((prev_first, next_first.unwrap()), (prev_second, ipp)));
-                            }
-                        }
+                if missing.last().map(|&(_, (_, next_second))| next_second.is_none()).unwrap_or(false) {
+                    for ((prev_first, next_first), (prev_second, next_second)) in missing.drain(..) {
+                        debug_assert!(next_first.is_some());
+                        debug_assert!(next_second.is_none());
+                        found_intersections.push(((prev_first, next_first.unwrap()), (prev_second, ipp)));
                     }
                 }
                 missing.push(((prev_first, None), (prev_second, Some(ipp))));
@@ -77,28 +61,18 @@ pub fn intersections<I, F, G>(iter: I, eval_first: F, eval_second: G, period: Ti
                 let first_ipp = (time, first_value);
                 let second_ipp = (time, second_value);
 
-                if let Some(prev_first_check) = prev_first {
-                    if let Some(prev_second_check) = prev_second {
-                        if missing.last().map(|&((_, next_first), _)| next_first.is_none()).unwrap_or(false) {
-                            for ((prev_first, next_first), (prev_second, next_second)) in missing.drain(..) {
-                                debug_assert!(prev_first.is_some());
-                                debug_assert!(next_first.is_none());
-                                debug_assert!(prev_second.is_some());
-                                debug_assert_eq!(prev_second_check, prev_second.unwrap());
-                                debug_assert!(next_second.is_some());
-                                found_intersections.push(((prev_first, first_ipp), (prev_second, next_second.unwrap())));
-                            }
-                        }
-                        if missing.last().map(|&(_, (_, next_second))| next_second.is_none()).unwrap_or(false) {
-                            for ((prev_first, next_first), (prev_second, next_second)) in missing.drain(..) {
-                                debug_assert!(prev_first.is_some());
-                                debug_assert_eq!(prev_first_check, prev_first.unwrap());
-                                debug_assert!(next_first.is_some());
-                                debug_assert!(prev_second.is_some());
-                                debug_assert!(next_second.is_none());
-                                found_intersections.push(((prev_first, next_first.unwrap()), (prev_second, second_ipp)));
-                            }
-                        }
+                if missing.last().map(|&((_, next_first), _)| next_first.is_none()).unwrap_or(false) {
+                    for ((prev_first, next_first), (prev_second, next_second)) in missing.drain(..) {
+                        debug_assert!(next_first.is_none());
+                        debug_assert!(next_second.is_some());
+                        found_intersections.push(((prev_first, first_ipp), (prev_second, next_second.unwrap())));
+                    }
+                }
+                if missing.last().map(|&(_, (_, next_second))| next_second.is_none()).unwrap_or(false) {
+                    for ((prev_first, next_first), (prev_second, next_second)) in missing.drain(..) {
+                        debug_assert!(next_first.is_some());
+                        debug_assert!(next_second.is_none());
+                        found_intersections.push(((prev_first, next_first.unwrap()), (prev_second, second_ipp)));
                     }
                 }
                 found_intersections.push(((prev_first, first_ipp), (prev_second, second_ipp)));
@@ -113,9 +87,6 @@ pub fn intersections<I, F, G>(iter: I, eval_first: F, eval_second: G, period: Ti
                 }
             }
         }
-
-        println!("missing: {:?}", missing);
-        println!("found: {:?}", found_intersections);
     }
 
     if first_first.is_none() {
@@ -249,6 +220,13 @@ mod tests {
     fn test_intersections_with_two_complex_functions() {
         assert_eq!(
             intersections(vec![(0, First(3)), (5, First(8)), (6, Both(7, 2)), (7, First(8)), (9, First(6)), (10, First(10)), (16, Second(12))].into_iter(), || { 5 }, || { 5 }, 24),
-            vec![(3, false), (9, true), (10, false), (10, true)]); // or so
+            vec![(2, false), (13, true)]);
+    }
+
+    #[test]
+    fn test_intersections_with_two_complex_functions_2() {
+        assert_eq!(
+            intersections(vec![(0, First(3)), (5, First(8)), (6, Both(7, 2)), (7, First(8)), (9, First(4)), (10, First(10)), (16, Second(12))].into_iter(), || { 5 }, || { 5 }, 24),
+            vec![(2, false), (9, true), (10, false), (13, true)]);
     }
 }
