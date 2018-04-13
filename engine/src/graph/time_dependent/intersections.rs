@@ -160,7 +160,11 @@ pub fn intersections<I, F, G>(iter: I, eval_first: F, eval_second: G, period: Ti
     found_intersections.into_iter().map(|((first_first_ipp, first_second_ipp), (second_first_ipp, second_second_ipp))| {
         ((first_first_ipp.unwrap(), first_second_ipp), (second_first_ipp.unwrap(), second_second_ipp))
     }).map(|(first_line, second_line)| {
-        (intersect(first_line, second_line), (first_line.1).1 <= (second_line.1).1)
+        let dx1 = (first_line.1).0 - (first_line.0).0;
+        let dx2 = (second_line.1).0 - (second_line.0).0;
+        let dy1 = (first_line.1).1 as i64 - (first_line.0).1 as i64;
+        let dy2 = (second_line.1).1 as i64 - (second_line.0).1 as i64;
+        (intersect(first_line, second_line), dy1 * dx2 as i64 <= dy2 * dx1 as i64)
     }).filter(|(intersection, _)| {
         intersection.is_some()
     }).map(|(intersection, first_better)| {
