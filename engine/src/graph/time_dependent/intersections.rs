@@ -192,8 +192,9 @@ fn intersect(((x1, y1), (x2, y2)): ((Timestamp, Weight), (Timestamp, Weight)), (
     } else {
         (numerator + denominator + 1) / denominator
     };
+    let unrounded = numerator / denominator;
 
-    if result < x1 || result < x3 || result > x2 || result > x4 {
+    if result < x1 || result < x3 || result > x2 || result > x4 || unrounded < x1 || unrounded < x3 {
         return None
     }
 
@@ -212,6 +213,8 @@ mod tests {
         assert_eq!(intersect(((0,0), (2,2)), ((0,2), (2,0))), Some(1));
         assert_eq!(intersect(((0,0), (3,2)), ((0,2), (3,0))), Some(2));
         assert_eq!(intersect(((0,2), (3,0)), ((0,0), (3,2))), Some(2));
+        assert_eq!(intersect(((7, 8), (9, 6)), ((6, 2), (16, 12))), None);
+        assert_eq!(intersect(((9,6), (10,10)), ((6,2), (16,12))), None);
     }
 
     #[test]
