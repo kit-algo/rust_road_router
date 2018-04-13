@@ -78,7 +78,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 }
 
-fn interpolate(delta_x: Weight, y1: Weight, y2: Weight, x: Timestamp) -> Weight {
+pub fn interpolate(delta_x: Weight, y1: Weight, y2: Weight, x: Timestamp) -> Weight {
     debug_assert!(x <= delta_x);
     debug_assert_ne!(delta_x, 0);
     let delta_y = y2 + delta_x - y1;

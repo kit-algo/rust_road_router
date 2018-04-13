@@ -59,6 +59,7 @@ pub struct Iter<'a> {
 
     first_edge_prev_ipp: Option<(Timestamp, Weight)>,
     first_edge_next_ipp: Option<(Timestamp, Weight)>,
+    second_edge_prev_ipp: Option<(Timestamp, Weight)>
 }
 
 impl<'a> Iter<'a> {
@@ -85,7 +86,8 @@ impl<'a> Iter<'a> {
             range: range.clone(),
             prev_ipp_at: shortcut_graph.original_graph().period(),
             first_edge_prev_ipp,
-            first_edge_next_ipp
+            first_edge_next_ipp,
+            second_edge_prev_ipp: None
         }
     }
 
@@ -103,6 +105,7 @@ impl<'a> Iter<'a> {
                     // println!("first edge next or end ipp {:?}", self.first_edge_next_ipp_or_end());
                     let ipp = invert(self.first_edge_prev_ipp.unwrap(), self.first_edge_next_ipp_or_end(), second_edge_ipp.0, self.shortcut_graph.original_graph().period());
                     // println!("inverted {}", ipp);
+                    self.second_edge_prev_ipp = Some(second_edge_ipp);
                     self.second_iter.next();
                     Some((ipp, (self.range.wrap_around() + second_edge_ipp.0 - ipp + second_edge_ipp.1) % self.range.wrap_around()))
                 } else {
@@ -110,11 +113,10 @@ impl<'a> Iter<'a> {
                     if let Some((first_edge_next_ipp_at, first_edge_next_ipp_value)) = self.first_edge_next_ipp {
                         debug_assert!(abs_diff(first_edge_next_ipp_value, self.first_edge.evaluate(first_edge_next_ipp_at, self.shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. Shortcut {}", first_edge_next_ipp_at, first_edge_next_ipp_value, self.first_edge.evaluate(first_edge_next_ipp_at, self.shortcut_graph), self.first_edge.debug_to_s(self.shortcut_graph, 0));
                         self.first_edge_prev_ipp = Some((first_edge_next_ipp_at, first_edge_next_ipp_value));
-                        let second_edge_value = self.second_edge.evaluate((first_edge_next_ipp_at + first_edge_next_ipp_value) % self.shortcut_graph.original_graph().period(), self.shortcut_graph);
+                        let second_edge_value = self.eval_second_edge(first_edge_next_ipp_at + first_edge_next_ipp_value);
                         self.first_edge_next_ipp = self.first_iter.next();
                         Some((first_edge_next_ipp_at, first_edge_next_ipp_value + second_edge_value))
                     } else {
-                        // println!("      no first");
                         None
                     }
                 }
@@ -124,11 +126,10 @@ impl<'a> Iter<'a> {
                 if let Some((first_edge_next_ipp_at, first_edge_next_ipp_value)) = self.first_edge_next_ipp {
                     debug_assert!(abs_diff(first_edge_next_ipp_value, self.first_edge.evaluate(first_edge_next_ipp_at, self.shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. Shortcut {}", first_edge_next_ipp_at, first_edge_next_ipp_value, self.first_edge.evaluate(first_edge_next_ipp_at, self.shortcut_graph), self.first_edge.debug_to_s(self.shortcut_graph, 0));
                     self.first_edge_prev_ipp = Some((first_edge_next_ipp_at, first_edge_next_ipp_value));
-                    let second_edge_value = self.second_edge.evaluate((first_edge_next_ipp_at + first_edge_next_ipp_value) % self.shortcut_graph.original_graph().period(), self.shortcut_graph);
+                    let second_edge_value = self.eval_second_edge(first_edge_next_ipp_at + first_edge_next_ipp_value);
                     self.first_edge_next_ipp = self.first_iter.next();
                     Some((first_edge_next_ipp_at, first_edge_next_ipp_value + second_edge_value))
                 } else {
-                    // println!("    no first");
                     None
                 }
             },
@@ -155,6 +156,27 @@ impl<'a> Iter<'a> {
     // TODO memoize?
     fn first_edge_next_ipp_or_end(&self) -> (Timestamp, Weight) {
         self.first_edge_next_ipp.unwrap_or_else(|| (*self.range.end(), self.first_edge.evaluate(*self.range.end(), self.shortcut_graph)))
+    }
+
+    fn eval_second_edge(&mut self, at: Timestamp) -> Weight {
+        if let Some((second_edge_prev_ipp_at, second_edge_prev_ipp_value)) = self.second_edge_prev_ipp {
+            if let Some(&(second_edge_next_ipp_at, second_edge_next_ipp_value)) = self.second_iter.peek() {
+                let delta_x = if second_edge_next_ipp_at > second_edge_prev_ipp_at {
+                    second_edge_next_ipp_at - second_edge_prev_ipp_at
+                } else {
+                    second_edge_next_ipp_at + self.shortcut_graph.original_graph().period() - second_edge_prev_ipp_at
+                };
+
+                let relative_at = if at > second_edge_prev_ipp_at {
+                    at - second_edge_prev_ipp_at
+                } else {
+                    at + self.shortcut_graph.original_graph().period() - second_edge_prev_ipp_at
+                };
+
+                return interpolate(delta_x, second_edge_prev_ipp_value, second_edge_next_ipp_value, relative_at);
+            }
+        }
+        self.second_edge.evaluate(at % self.shortcut_graph.original_graph().period(), self.shortcut_graph)
     }
 }
 
