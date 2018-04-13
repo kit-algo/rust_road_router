@@ -154,7 +154,7 @@ impl<'a> Iter<'a> {
 
     // TODO memoize?
     fn first_edge_next_ipp_or_end(&self) -> (Timestamp, Weight) {
-        self.first_edge_next_ipp.unwrap_or((*self.range.end(), self.first_edge.evaluate(*self.range.end(), self.shortcut_graph)))
+        self.first_edge_next_ipp.unwrap_or_else(|| (*self.range.end(), self.first_edge.evaluate(*self.range.end(), self.shortcut_graph)))
     }
 }
 
