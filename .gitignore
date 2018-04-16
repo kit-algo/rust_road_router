@@ -2,3 +2,4 @@
 *.sublime-*
 **/.gdb_history
 target/
+callgrind.out*
