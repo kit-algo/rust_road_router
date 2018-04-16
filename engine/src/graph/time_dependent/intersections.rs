@@ -128,7 +128,7 @@ pub fn intersections<I, F, G>(iter: I, eval_first: F, eval_second: G, period: Ti
         }
     }
 
-    found_intersections.into_iter().map(|((first_first_ipp, first_second_ipp), (second_first_ipp, second_second_ipp))| {
+    let found_intersections: Vec<(Timestamp, bool)> = found_intersections.into_iter().map(|((first_first_ipp, first_second_ipp), (second_first_ipp, second_second_ipp))| {
         ((first_first_ipp.unwrap(), first_second_ipp), (second_first_ipp.unwrap(), second_second_ipp))
     }).map(|(first_line, second_line)| {
         let dx1 = (first_line.1).0 - (first_line.0).0;
@@ -140,7 +140,25 @@ pub fn intersections<I, F, G>(iter: I, eval_first: F, eval_second: G, period: Ti
         intersection.is_some()
     }).map(|(intersection, first_better)| {
         (intersection.unwrap() % period, first_better)
-    }).collect()
+    }).collect();
+
+    let mut final_intersections = Vec::with_capacity(found_intersections.len());
+    let last = found_intersections.last().cloned();
+
+    for (at, first_better) in found_intersections.into_iter() {
+        let (prev_at, prev_first_better) = final_intersections.last().cloned().unwrap_or(last.unwrap());
+        if prev_at != at {
+            if prev_first_better != first_better {
+                final_intersections.push((at, first_better))
+            }
+        } else {
+            if prev_first_better != first_better {
+                final_intersections.pop();
+            }
+        }
+    }
+
+    final_intersections
 }
 
 fn intersect(((x1, y1), (x2, y2)): ((Timestamp, Weight), (Timestamp, Weight)), ((x3, y3), (x4, y4)): ((Timestamp, Weight), (Timestamp, Weight))) -> Option<Timestamp> {
@@ -228,5 +246,43 @@ mod tests {
         assert_eq!(
             intersections(vec![(0, First(3)), (5, First(8)), (6, Both(7, 2)), (7, First(8)), (9, First(4)), (10, First(10)), (16, Second(12))].into_iter(), || { 5 }, || { 5 }, 24),
             vec![(2, false), (9, true), (10, false), (13, true)]);
+    }
+
+    #[test]
+    fn test_overlapping_segments() {
+        assert_eq!(
+            intersections(vec![(0, Both(1, 2)), (3, First(1)), (4, Both(4, 2)), (5, Second(4)), (6, Second(4)), (7, Both(4, 5)), (8, Both(1, 2))].into_iter(), || { 1 }, || { 2 }, 24),
+            vec![(4, false), (5, true)]);
+
+        assert_eq!(
+            intersections(vec![(0, Both(2, 1)), (3, Second(1)), (4, Both(2, 4)), (5, First(4)), (6, First(4)), (7, Both(5, 4)), (8, Both(2, 1))].into_iter(), || { 1 }, || { 2 }, 24),
+            vec![(4, true), (5, false)]);
+
+        assert_eq!(
+            intersections(vec![(0, Both(1, 2)), (3, Second(2)), (4, Both(1, 4)), (5, First(4)), (6, First(4)), (7, Both(1, 4)), (8, Both(1, 2))].into_iter(), || { 1 }, || { 2 }, 24),
+            vec![(5, false), (6, true)]); // TODO kill unneccessary
+
+        assert_eq!(
+            intersections(vec![(0, Both(2, 1)), (3, First(2)), (4, Both(4, 1)), (5, Second(4)), (6, Second(4)), (7, Both(4, 1)), (8, Both(2, 1))].into_iter(), || { 1 }, || { 2 }, 24),
+            vec![(5, true), (6, false)]); // TODO kill unneccessary
+    }
+
+    #[test]
+    fn test_intersection_on_ipps() {
+        assert_eq!(
+            intersections(vec![(0, First(1)), (2, First(2)), (3, First(1)), (5, First(3)), (7, First(1))].into_iter(), || { 1 }, || { 2 }, 24),
+            vec![(4, false), (6, true)]);
+
+        assert_eq!(
+            intersections(vec![(0, Second(1)), (2, Second(2)), (3, Second(1))].into_iter(), || { 2 }, || { 1 }, 24),
+            vec![]);
+
+        assert_eq!(
+            intersections(vec![(0, First(1)), (2, First(2)), (3, First(4)), (4, First(2)), (5, First(1))].into_iter(), || { 1 }, || { 2 }, 24),
+            vec![(2, false), (4, true)]);
+
+        assert_eq!(
+            intersections(vec![(0, Second(1)), (2, Second(2)), (3, Second(4)), (4, Second(2)), (5, Second(1))].into_iter(), || { 2 }, || { 1 }, 24),
+            vec![(2, true), (4, false)]);
     }
 }
