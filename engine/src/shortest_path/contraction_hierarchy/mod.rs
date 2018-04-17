@@ -198,11 +198,19 @@ impl<'a> Graph for ForwardWrapper<'a> {
     fn num_nodes(&self) -> usize {
         self.graph.nodes.len()
     }
+
+    fn num_arcs(&self) -> usize {
+        unimplemented!()
+    }
 }
 
 impl<'a> Graph for BackwardWrapper<'a> {
     fn num_nodes(&self) -> usize {
         self.graph.nodes.len()
+    }
+
+    fn num_arcs(&self) -> usize {
+        unimplemented!()
     }
 }
 

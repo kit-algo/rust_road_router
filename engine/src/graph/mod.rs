@@ -19,6 +19,7 @@ pub struct Link {
 
 pub trait Graph {
     fn num_nodes(&self) -> usize;
+    fn num_arcs(&self) -> usize;
 }
 
 pub trait LinkIterGraph<'a>: Graph {

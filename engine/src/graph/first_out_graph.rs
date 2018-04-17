@@ -40,10 +40,6 @@ impl<FirstOutContainer, HeadContainer, WeightContainer> FirstOutGraph<FirstOutCo
         FirstOutGraph { first_out, head, weight }
     }
 
-    pub fn num_arcs(&self) -> usize {
-        self.head().len()
-    }
-
     pub fn degree(&self, node: NodeId) -> usize {
         let range = self.neighbor_edge_indices_usize(node);
         range.end - range.start
@@ -99,6 +95,10 @@ impl<FirstOutContainer, HeadContainer, WeightContainer> Graph for FirstOutGraph<
 {
     fn num_nodes(&self) -> usize {
         self.first_out().len() - 1
+    }
+
+    fn num_arcs(&self) -> usize {
+        self.head().len()
     }
 }
 
