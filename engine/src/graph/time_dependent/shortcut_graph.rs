@@ -16,17 +16,17 @@ impl<'a> ShortcutGraph<'a> {
     }
 
     pub fn merge_upward(&mut self, shortcut_edge_id: EdgeId, alternative: Linked) {
-        self.outgoing[shortcut_edge_id as usize] = {
-            let shortcut = &self.outgoing[shortcut_edge_id as usize];
-            shortcut.merge(alternative, &self)
-        };
+        let mut shortcut = Shortcut::new(None);
+        swap(&mut self.outgoing[shortcut_edge_id as usize], &mut shortcut);
+        shortcut.merge(alternative, &self);
+        swap(&mut self.outgoing[shortcut_edge_id as usize], &mut shortcut);
     }
 
     pub fn merge_downward(&mut self, shortcut_edge_id: EdgeId, alternative: Linked) {
-        self.incoming[shortcut_edge_id as usize] = {
-            let shortcut = &self.incoming[shortcut_edge_id as usize];
-            shortcut.merge(alternative, &self)
-        };
+        let mut shortcut = Shortcut::new(None);
+        swap(&mut self.incoming[shortcut_edge_id as usize], &mut shortcut);
+        shortcut.merge(alternative, &self);
+        swap(&mut self.incoming[shortcut_edge_id as usize], &mut shortcut);
     }
 
     pub fn get_upward(&self, edge_id: EdgeId) -> &Shortcut {
