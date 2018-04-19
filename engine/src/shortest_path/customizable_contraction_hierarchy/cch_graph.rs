@@ -191,17 +191,21 @@ impl CCHGraph {
             let mut node_incoming_edge_ids = vec![InRangeOption::new(None); n as usize];
 
             for current_node in 0..n {
-                if current_node % 1000 == 0 || current_node > 39500 {
+                if current_node % 1000 == 0 || self.degree(current_node) > 20 {
                     println!("customizing from node {}, degree: {}, current_num_segements: {}", current_node, self.degree(current_node), shortcut_graph.total_num_segments());
                 }
                 for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
                     node_incoming_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
-                    // shortcut_graph.cache_downward_edge_ipps(edge_id);
+                    // if self.degree(current_node) > 5 {
+                    //     shortcut_graph.cache_downward_edge_ipps(edge_id);
+                    // }
                     // debug_assert_eq!(downward.link(edge_id).node, node);
                 }
                 for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
-                    // shortcut_graph.cache_upward_edge_ipps(edge_id);
                     node_outgoing_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
+                    // if self.degree(current_node) > 5 {
+                    //     shortcut_graph.cache_upward_edge_ipps(edge_id);
+                    // }
                     // debug_assert_eq!(upward.link(edge_id).node, node);
                 }
 
@@ -227,11 +231,11 @@ impl CCHGraph {
                 }
 
                 for node in self.neighbor_iter(current_node) {
-                    // shortcut_graph.clear_downward_edge_cache(node_incoming_edge_ids[node as usize].value().unwrap());
+                    shortcut_graph.clear_downward_edge_cache(node_incoming_edge_ids[node as usize].value().unwrap());
                     node_incoming_edge_ids[node as usize] = InRangeOption::new(None);
                 }
                 for node in self.neighbor_iter(current_node) {
-                    // shortcut_graph.clear_upward_edge_cache(node_outgoing_edge_ids[node as usize].value().unwrap());
+                    shortcut_graph.clear_upward_edge_cache(node_outgoing_edge_ids[node as usize].value().unwrap());
                     node_outgoing_edge_ids[node as usize] = InRangeOption::new(None);
                 }
             }
