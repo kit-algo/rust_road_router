@@ -68,4 +68,8 @@ impl<'a> ShortcutGraph<'a> {
         let b: usize = self.incoming.iter().map(|shortcut| shortcut.num_segments()).sum();
         a + b
     }
+
+    pub fn period(&self) -> Timestamp {
+        self.original_graph.period()
+    }
 }

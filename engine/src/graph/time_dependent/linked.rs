@@ -12,11 +12,11 @@ impl Linked {
     }
 
     pub fn evaluate(&self, departure: Timestamp, shortcut_graph: &ShortcutGraph) -> Weight {
-        debug_assert!(departure < shortcut_graph.original_graph().period());
+        debug_assert!(departure < shortcut_graph.period());
         let first_edge = shortcut_graph.get_downward(self.first);
         let second_edge = shortcut_graph.get_upward(self.second);
         let first_edge_value = first_edge.evaluate(departure, shortcut_graph);
-        first_edge_value + second_edge.evaluate((departure + first_edge_value) % shortcut_graph.original_graph().period(), shortcut_graph)
+        first_edge_value + second_edge.evaluate((departure + first_edge_value) % shortcut_graph.period(), shortcut_graph)
     }
 
     pub fn bounds(&self, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
@@ -78,13 +78,13 @@ impl<'a> Iter<'a> {
             Some((range.start(), first_edge_initial_value))
         };
 
-        let second_edge_range_begin = (range.start() + first_edge_initial_value) % shortcut_graph.original_graph().period();
-        let second_iter = second_edge.ipp_iter(WrappingRange::new(Range { start: second_edge_range_begin, end: second_edge_range_begin }, shortcut_graph.original_graph().period()), shortcut_graph).peekable();
+        let second_edge_range_begin = (range.start() + first_edge_initial_value) % shortcut_graph.period();
+        let second_iter = second_edge.ipp_iter(WrappingRange::new(Range { start: second_edge_range_begin, end: second_edge_range_begin }, shortcut_graph.period()), shortcut_graph).peekable();
 
         Iter {
             first_edge, second_edge, first_iter, second_iter, shortcut_graph,
             range: range.clone(),
-            prev_ipp_at: shortcut_graph.original_graph().period(),
+            prev_ipp_at: shortcut_graph.period(),
             first_edge_prev_ipp,
             first_edge_next_ipp,
             second_edge_prev_ipp: None
@@ -103,7 +103,7 @@ impl<'a> Iter<'a> {
                     // println!("target range {:?}", self.first_edge_target_range_to_next());
                     // println!("before next first edge ipp");
                     // println!("first edge next or end ipp {:?}", self.first_edge_next_ipp_or_end());
-                    let ipp = invert(self.first_edge_prev_ipp.unwrap(), self.first_edge_next_ipp_or_end(), second_edge_ipp.0, self.shortcut_graph.original_graph().period());
+                    let ipp = invert(self.first_edge_prev_ipp.unwrap(), self.first_edge_next_ipp_or_end(), second_edge_ipp.0, self.shortcut_graph.period());
                     // println!("inverted {}", ipp);
                     self.second_edge_prev_ipp = Some(second_edge_ipp);
                     self.second_iter.next();
@@ -164,19 +164,19 @@ impl<'a> Iter<'a> {
                 let delta_x = if second_edge_next_ipp_at > second_edge_prev_ipp_at {
                     second_edge_next_ipp_at - second_edge_prev_ipp_at
                 } else {
-                    second_edge_next_ipp_at + self.shortcut_graph.original_graph().period() - second_edge_prev_ipp_at
+                    second_edge_next_ipp_at + self.shortcut_graph.period() - second_edge_prev_ipp_at
                 };
 
                 let relative_at = if at > second_edge_prev_ipp_at {
                     at - second_edge_prev_ipp_at
                 } else {
-                    at + self.shortcut_graph.original_graph().period() - second_edge_prev_ipp_at
+                    at + self.shortcut_graph.period() - second_edge_prev_ipp_at
                 };
 
                 return interpolate(delta_x, second_edge_prev_ipp_value, second_edge_next_ipp_value, relative_at);
             }
         }
-        self.second_edge.evaluate(at % self.shortcut_graph.original_graph().period(), self.shortcut_graph)
+        self.second_edge.evaluate(at % self.shortcut_graph.period(), self.shortcut_graph)
     }
 }
 

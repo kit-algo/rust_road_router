@@ -49,7 +49,7 @@ impl Shortcut {
         let mut intersections =
             // measure("combined ipp iteration and intersecting", ||
         {
-            let range = WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.original_graph().period());
+            let range = WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.period());
             let ipp_iter = MergingIter {
                 shortcut_iter: self.ipp_iter(range.clone(), shortcut_graph).peekable(),
                 linked_iter: other.ipp_iter(range, shortcut_graph).peekable()
@@ -69,7 +69,7 @@ impl Shortcut {
                 ipp_counter += 1;
             });
 
-            intersections(ipp_iter, || self.evaluate(0, shortcut_graph), || other.evaluate(0, shortcut_graph), shortcut_graph.original_graph().period())
+            intersections(ipp_iter, || self.evaluate(0, shortcut_graph), || other.evaluate(0, shortcut_graph), shortcut_graph.period())
         }
         // )
         ;
@@ -89,21 +89,21 @@ impl Shortcut {
         {
             let collect = || -> Vec<(Timestamp, IppSource)> {
                 MergingIter {
-                    shortcut_iter: self.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.original_graph().period()), shortcut_graph).peekable(),
-                    linked_iter: other.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.original_graph().period()), shortcut_graph).peekable()
+                    shortcut_iter: self.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.period()), shortcut_graph).peekable(),
+                    linked_iter: other.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.period()), shortcut_graph).peekable()
                 }.collect()
             };
             debug_assert_eq!(c % 2, 0, "intersections: {:?}, ipps: {:?}", intersections, collect());
         }
 
-        let period = shortcut_graph.original_graph().period();
+        let period = shortcut_graph.period();
 
         for &(intersection, is_self_better) in intersections.iter() {
             let before_intersection = if intersection < 1 { intersection + period - 1 } else { intersection - 1 };
             let debug_output = || {
                 // let collected: Vec<(Timestamp, IppSource)> = MergingIter {
-                //     shortcut_iter: self.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.original_graph().period()), shortcut_graph).peekable(),
-                //     linked_iter: other.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.original_graph().period()), shortcut_graph).peekable()
+                //     shortcut_iter: self.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.period()), shortcut_graph).peekable(),
+                //     linked_iter: other.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.period()), shortcut_graph).peekable()
                 // }.collect();
                 // format!("intersection: {} {} {}, before intersection: {} {} {}, {} \n collected: {:?}",
                 format!("intersection: {} {} {}, before intersection: {} {} {}",
@@ -192,7 +192,7 @@ impl Shortcut {
     }
 
     pub fn evaluate(&self, departure: Timestamp, shortcut_graph: &ShortcutGraph) -> Weight {
-        debug_assert!(departure < shortcut_graph.original_graph().period());
+        debug_assert!(departure < shortcut_graph.period());
         match self.data {
             ShortcutPaths::None => INFINITY,
             ShortcutPaths::One(data) => data.evaluate(departure, shortcut_graph),
@@ -230,7 +230,7 @@ impl Shortcut {
     }
 
     pub fn cache_ipps(&mut self, _shortcut_graph: &ShortcutGraph) {
-        // let range = WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.original_graph().period());
+        // let range = WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.period());
         // let ipps = self.ipp_iter(range, shortcut_graph).collect();
         // self.cache = Some(ipps);
     }
