@@ -187,6 +187,7 @@ impl Shortcut {
             debug_assert!(values[0].0 < values[1].0);
         }
 
+        debug_assert!(new_shortcut_data.len() > 1);
         self.data = ShortcutPaths::Multi(new_shortcut_data); // TODO can be one???
     }
 

@@ -25,7 +25,7 @@ mod linked;
 pub use self::linked::*;
 
 mod wrapping_range;
-use self::wrapping_range::*;
+pub use self::wrapping_range::*;
 
 mod graph;
 pub use self::graph::Graph as TDGraph;
