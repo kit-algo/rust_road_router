@@ -17,25 +17,25 @@ impl<Idx: PartialOrd + Copy> WrappingRange<Idx> {
         WrappingRange { range, wrap_around_at }
     }
 
-    pub fn start(&self) -> &Idx {
-        &self.range.start
+    pub fn start(&self) -> Idx {
+        self.range.start
     }
 
-    pub fn end(&self) -> &Idx {
-        &self.range.end
+    pub fn end(&self) -> Idx {
+        self.range.end
     }
 
-    pub fn wrap_around(&self) -> &Idx {
-        &self.wrap_around_at
+    pub fn wrap_around(&self) -> Idx {
+        self.wrap_around_at
     }
 
     pub fn contains(&self, item: Idx) -> bool {
         debug_assert!(item < self.wrap_around_at);
 
         if self.start() < self.end() {
-            item >= *self.start() && item < *self.end()
+            item >= self.start() && item < self.end()
         } else {
-            item >= *self.start() || item < *self.end()
+            item >= self.start() || item < self.end()
         }
     }
 

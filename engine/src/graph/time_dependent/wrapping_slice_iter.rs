@@ -15,13 +15,13 @@ impl<'a> WrappingSliceIter<'a> {
         }
 
         if let Some((last, _)) = slice.last() {
-            debug_assert!(last < range.wrap_around());
+            debug_assert!(*last < range.wrap_around());
         }
         for values in slice.windows(2) {
             debug_assert!(values[0].0 < values[1].0);
         }
 
-        let next_index = match slice.binary_search_by_key(range.start(), |&(at, _)| at) {
+        let next_index = match slice.binary_search_by_key(&range.start(), |&(at, _)| at) {
             Ok(index) => index,
             Err(index) => index,
         };

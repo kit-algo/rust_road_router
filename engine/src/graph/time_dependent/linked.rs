@@ -67,18 +67,18 @@ impl<'a> Iter<'a> {
         let mut first_iter = first_edge.ipp_iter(range.clone(), shortcut_graph);
         let first_edge_next_ipp = first_iter.next();
 
-        let first_edge_initial_value = if first_edge_next_ipp.is_some() && first_edge_next_ipp.unwrap().0 == *range.start() {
+        let first_edge_initial_value = if first_edge_next_ipp.is_some() && first_edge_next_ipp.unwrap().0 == range.start() {
             first_edge_next_ipp.unwrap().1
         } else {
-            first_edge.evaluate(*range.start(), shortcut_graph)
+            first_edge.evaluate(range.start(), shortcut_graph)
         };
-        let first_edge_prev_ipp = if first_edge_next_ipp.is_some() && first_edge_next_ipp.unwrap().0 == *range.start() {
+        let first_edge_prev_ipp = if first_edge_next_ipp.is_some() && first_edge_next_ipp.unwrap().0 == range.start() {
             None
         } else {
-            Some((*range.start(), first_edge_initial_value))
+            Some((range.start(), first_edge_initial_value))
         };
 
-        let second_edge_range_begin = (*range.start() + first_edge_initial_value) % shortcut_graph.original_graph().period();
+        let second_edge_range_begin = (range.start() + first_edge_initial_value) % shortcut_graph.original_graph().period();
         let second_iter = second_edge.ipp_iter(WrappingRange::new(Range { start: second_edge_range_begin, end: second_edge_range_begin }, shortcut_graph.original_graph().period()), shortcut_graph).peekable();
 
         Iter {
@@ -139,7 +139,7 @@ impl<'a> Iter<'a> {
     fn first_edge_target_range_to_next(&self) -> WrappingRange<Timestamp> {
         let first_edge_next_ipp = self.first_edge_next_ipp_or_end();
         debug_assert!(abs_diff(first_edge_next_ipp.1, self.first_edge.evaluate(first_edge_next_ipp.0, self.shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. Shortcut {}", first_edge_next_ipp.0, first_edge_next_ipp.1, self.first_edge.evaluate(first_edge_next_ipp.0, self.shortcut_graph), self.first_edge.debug_to_s(self.shortcut_graph, 0));
-        let wrap = *self.range.wrap_around();
+        let wrap = self.range.wrap_around();
         let (first_edge_prev_ipp_at, first_edge_prev_ipp_value) = self.first_edge_prev_ipp.unwrap();
         debug_assert!(abs_diff(first_edge_prev_ipp_value, self.first_edge.evaluate(first_edge_prev_ipp_at, self.shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. Shortcut {}", first_edge_prev_ipp_at, first_edge_prev_ipp_value, self.first_edge.evaluate(first_edge_prev_ipp_at, self.shortcut_graph), self.first_edge.debug_to_s(self.shortcut_graph, 0));
         if first_edge_prev_ipp_at > first_edge_next_ipp.0 {
@@ -155,7 +155,7 @@ impl<'a> Iter<'a> {
 
     // TODO memoize?
     fn first_edge_next_ipp_or_end(&self) -> (Timestamp, Weight) {
-        self.first_edge_next_ipp.unwrap_or_else(|| (*self.range.end(), self.first_edge.evaluate(*self.range.end(), self.shortcut_graph)))
+        self.first_edge_next_ipp.unwrap_or_else(|| (self.range.end(), self.first_edge.evaluate(self.range.end(), self.shortcut_graph)))
     }
 
     fn eval_second_edge(&mut self, at: Timestamp) -> Weight {

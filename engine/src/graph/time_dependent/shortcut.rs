@@ -360,8 +360,8 @@ impl<'a, 'b> Iter<'a, 'b> {
         match shortcut.data {
             ShortcutPaths::None => Iter { shortcut, shortcut_graph, range, current_index: 0, segment_iter_state: InitialSegmentIterState::Finishing, current_source_iter: None, cached_iter: None },
             ShortcutPaths::One(data) => {
-                let mut segment_range = WrappingRange::new(shortcut.segment_range(0), *range.wrap_around());
-                segment_range.shift_start(*range.start());
+                let mut segment_range = WrappingRange::new(shortcut.segment_range(0), range.wrap_around());
+                segment_range.shift_start(range.start());
 
                 Iter {
                     shortcut, shortcut_graph, range, current_index: 0, cached_iter: None,
@@ -370,13 +370,13 @@ impl<'a, 'b> Iter<'a, 'b> {
                 }
             },
             ShortcutPaths::Multi(ref data) => {
-                let (current_index, segment_iter_state, current_source_iter) = match data.binary_search_by_key(range.start(), |&(time, _)| time) {
+                let (current_index, segment_iter_state, current_source_iter) = match data.binary_search_by_key(&range.start(), |&(time, _)| time) {
                     Ok(index) => (index, InitialSegmentIterState::InitialCompleted(index), None),
                     Err(index) => {
                         let current_index = (index + data.len() - 1) % data.len();
-                        let mut segment_range = WrappingRange::new(shortcut.segment_range(current_index), *range.wrap_around());
+                        let mut segment_range = WrappingRange::new(shortcut.segment_range(current_index), range.wrap_around());
                         let segment_iter_state = InitialSegmentIterState::InitialPartialyCompleted(current_index);
-                        segment_range.shift_start(*range.start());
+                        segment_range.shift_start(range.start());
                         // println!("shortcut segment iter range {:?}", segment_range);
                         (current_index, segment_iter_state, Some(Box::new(data[current_index].1.ipp_iter(segment_range, shortcut_graph)) as Box<Iterator<Item = (Timestamp, Weight)>>))
                     },
@@ -435,9 +435,9 @@ impl<'a, 'b> Iter<'a, 'b> {
                         if self.range.contains(0) {
                             let mut segment_range = self.shortcut.segment_range(self.current_index);
                             if self.segment_iter_state == InitialSegmentIterState::Finishing {
-                                segment_range.end = *self.range.end()
+                                segment_range.end = self.range.end()
                             }
-                            let segment_range = WrappingRange::new(segment_range, *self.range.wrap_around());
+                            let segment_range = WrappingRange::new(segment_range, self.range.wrap_around());
                             self.current_source_iter = Some(Box::new(data.ipp_iter(segment_range, self.shortcut_graph)));
                             self.next()
                         } else {
@@ -449,11 +449,11 @@ impl<'a, 'b> Iter<'a, 'b> {
 
                         if self.range.contains(ipp) {
                             let mut segment_range = self.shortcut.segment_range(self.current_index);
-                            segment_range.start = (segment_range.start + 1) % *self.range.wrap_around();
+                            segment_range.start = (segment_range.start + 1) % self.range.wrap_around();
                             if self.segment_iter_state == InitialSegmentIterState::Finishing {
-                                segment_range.end = *self.range.end()
+                                segment_range.end = self.range.end()
                             }
-                            let segment_range = WrappingRange::new(segment_range, *self.range.wrap_around());
+                            let segment_range = WrappingRange::new(segment_range, self.range.wrap_around());
                             self.current_source_iter = Some(Box::new(data[self.current_index].1.ipp_iter(segment_range, self.shortcut_graph)));
                             Some((ipp, data[self.current_index].1.evaluate(ipp, self.shortcut_graph))) // TODO optimize?
                         } else {

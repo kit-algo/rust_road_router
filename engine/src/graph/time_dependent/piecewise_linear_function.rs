@@ -56,7 +56,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     pub fn ipp_iter(&self, range: WrappingRange<Timestamp>) -> Iter<'a> {
-        debug_assert_eq!(*range.wrap_around(), self.period);
+        debug_assert_eq!(range.wrap_around(), self.period);
         Iter::new(self.departure_time, self.travel_time, range)
     }
 
@@ -102,7 +102,7 @@ impl<'a> Iter<'a> {
             return Iter { departure_time, travel_time, range, current_index: 0, initial_index: 0, done: true }
         }
 
-        let current_index = match departure_time.binary_search(range.start()) {
+        let current_index = match departure_time.binary_search(&range.start()) {
             Ok(index) => index,
             Err(index) => index
         } % departure_time.len();
