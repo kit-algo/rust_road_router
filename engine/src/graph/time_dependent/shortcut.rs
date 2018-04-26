@@ -213,8 +213,13 @@ impl Shortcut {
     }
 
     pub fn bounds(&self, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
-        let (mins, maxs): (Vec<Weight>, Vec<Weight>) = SegmentIter::new(self).map(|(_, source)| source.bounds(shortcut_graph)).unzip();
-        (mins.into_iter().min().unwrap_or(INFINITY), maxs.into_iter().max().unwrap_or(INFINITY))
+        if !self.is_valid_path() {
+            return (INFINITY, INFINITY);
+        }
+
+        SegmentIter::new(self)
+            .map(|(_, source)| source.bounds(shortcut_graph))
+            .fold((INFINITY, 0), |(acc_min, acc_max), (seg_min, seg_max)| (min(acc_min, seg_min), max(acc_max, seg_max)))
     }
 
     pub fn num_segments(&self) -> usize {
