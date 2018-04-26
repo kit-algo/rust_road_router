@@ -6,7 +6,7 @@ use std::iter::{once, Once};
 #[derive(Debug, Clone)]
 pub struct Shortcut {
     data: ShortcutPaths,
-    // cache: Option<Vec<(Timestamp, Weight)>>
+    cache: Option<Vec<(Timestamp, Weight)>>
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -22,7 +22,7 @@ impl Shortcut {
             Some(edge) => ShortcutPaths::One(ShortcutData::new(ShortcutSource::OriginalEdge(edge))),
             None => ShortcutPaths::None,
         };
-        Shortcut { data }
+        Shortcut { data, cache: None }
     }
 
     pub fn merge(&mut self, other: Linked, shortcut_graph: &ShortcutGraph) {
@@ -234,14 +234,16 @@ impl Shortcut {
         self.num_segments() > 0
     }
 
-    pub fn cache_ipps(&mut self, _shortcut_graph: &ShortcutGraph) {
-        // let range = WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.period());
-        // let ipps = self.ipp_iter(range, shortcut_graph).collect();
-        // self.cache = Some(ipps);
+    pub fn cache_ipps(&mut self, shortcut_graph: &ShortcutGraph) {
+        if self.is_valid_path() {
+            let range = WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.period());
+            let ipps = self.ipp_iter(range, shortcut_graph).collect();
+            self.cache = Some(ipps);
+        }
     }
 
     pub fn clear_cache(&mut self) {
-        // self.cache = None
+        self.cache = None
     }
 
     fn segment_range(&self, segment: usize) -> Range<Timestamp> {
@@ -357,10 +359,10 @@ pub struct Iter<'a, 'b: 'a> {
 
 impl<'a, 'b> Iter<'a, 'b> {
     fn new(shortcut: &'b Shortcut, range: WrappingRange<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> Iter<'a, 'b> {
-        // if let Some(ref cache) = shortcut.cache {
-        //     let cached_iter = WrappingSliceIter::new(cache, range.clone());
-        //     return Iter { shortcut, shortcut_graph, range, current_index: 0, segment_iter_state: InitialSegmentIterState::Finishing, current_source_iter: None, cached_iter: Some(cached_iter) }
-        // }
+        if let Some(ref cache) = shortcut.cache {
+            let cached_iter = WrappingSliceIter::new(cache, range.clone());
+            return Iter { shortcut, shortcut_graph, range, current_index: 0, segment_iter_state: InitialSegmentIterState::Finishing, current_source_iter: None, cached_iter: Some(cached_iter) }
+        }
 
         match shortcut.data {
             ShortcutPaths::None => Iter { shortcut, shortcut_graph, range, current_index: 0, segment_iter_state: InitialSegmentIterState::Finishing, current_source_iter: None, cached_iter: None },

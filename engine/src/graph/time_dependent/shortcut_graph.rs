@@ -56,7 +56,7 @@ impl<'a> ShortcutGraph<'a> {
     }
 
     pub fn clear_downward_edge_cache(&mut self, edge_id: EdgeId) {
-        self.outgoing[edge_id as usize].clear_cache();
+        self.incoming[edge_id as usize].clear_cache();
     }
 
     pub fn original_graph(&self) -> &TDGraph {
