@@ -1,7 +1,7 @@
 use super::*;
 use shortest_path::node_order::NodeOrder;
 use in_range_option::InRangeOption;
-use benchmark::measure;
+use benchmark::{measure, Timer};
 use self::first_out_graph::degrees_to_first_out;
 use graph::link_id_to_tail_mapper::*;
 use graph::time_dependent::*;
@@ -190,9 +190,11 @@ impl CCHGraph {
             let mut node_outgoing_edge_ids = vec![InRangeOption::new(None); n as usize];
             let mut node_incoming_edge_ids = vec![InRangeOption::new(None); n as usize];
 
+            let timer = Timer::new();
+
             for current_node in 0..n {
                 if current_node % 1000 == 0 || self.degree(current_node) > 20 {
-                    println!("customizing from node {}, degree: {}, current_num_segements: {}", current_node, self.degree(current_node), shortcut_graph.total_num_segments());
+                    println!("t: {}s customizing from node {}, degree: {}, current_num_segements: {}", timer.get_passed_ms() / 1000, current_node, self.degree(current_node), shortcut_graph.total_num_segments());
                 }
                 for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
                     node_incoming_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
