@@ -62,6 +62,11 @@ impl<'a> PiecewiseLinearFunction<'a> {
         Iter::new(self.departure_time, self.travel_time, range)
     }
 
+    pub(super) fn seg_iter(&self, range: WrappingRange<Timestamp>) -> SegmentIter<'a> {
+        debug_assert_eq!(range.wrap_around(), self.period);
+        SegmentIter::new(self.departure_time, self.travel_time, range)
+    }
+
     fn subtract_wrapping(&self, x: Weight, y: Weight) -> Weight {
         (self.period + x - y) % self.period
     }
@@ -126,6 +131,59 @@ impl<'a> Iterator for Iter<'a> {
                 self.done = true;
             }
             Some((ipp, tt))
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a> SegmentIter<'a> {
+    fn new(departure_time: &'a [Timestamp], travel_time: &'a [Weight], range: WrappingRange<Timestamp>) -> SegmentIter<'a> {
+        if departure_time.len() <= 1 {
+            return SegmentIter { departure_time, travel_time, range, current_index: 0, initial_index: 0, done: true, done_after_next: true }
+        }
+
+        let current_index = match departure_time.binary_search(&range.start()) {
+            Ok(index) => index,
+            Err(index) => index + departure_time.len() - 1
+        } % departure_time.len();
+
+        SegmentIter { departure_time, travel_time, range, current_index, initial_index: current_index, done: false, done_after_next: false }
+    }
+}
+
+#[derive(Debug)]
+pub(super) struct SegmentIter<'a> {
+    departure_time: &'a [Timestamp],
+    travel_time: &'a [Weight],
+    range: WrappingRange<Timestamp>,
+    current_index: usize,
+    initial_index: usize,
+    done: bool,
+    done_after_next: bool
+}
+
+impl<'a> Iterator for SegmentIter<'a> {
+    type Item = Segment;
+
+    fn next(&mut self) -> Option<Segment> {
+        let ipp = unsafe { *self.departure_time.get_unchecked(self.current_index) };
+        let next_index = (self.current_index + 1) % self.departure_time.len();
+        let next_ipp = unsafe { *self.departure_time.get_unchecked(next_index) };
+
+        if !self.done && (self.range.contains(ipp) || self.range.contains(next_ipp)) {
+            let tt = unsafe { *self.travel_time.get_unchecked(self.current_index) };
+            self.current_index = next_index;
+            if self.done_after_next {
+                self.done = true;
+            }
+            if self.current_index == self.initial_index {
+                self.done_after_next = true;
+                if next_ipp == self.range.start() {
+                    self.done = true;
+                }
+            }
+            Some(Segment::new((ipp, tt), (next_ipp, unsafe { *self.travel_time.get_unchecked(self.current_index) })))
         } else {
             None
         }
@@ -207,6 +265,42 @@ mod tests {
         let travel_time =    vec![2];
         let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time, 24);
         let all_ipps: Vec<(Timestamp, Weight)> = ttf.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 24)).collect();
+        assert_eq!(all_ipps, vec![]);
+    }
+
+    #[test]
+    fn test_full_range_seg_iter() {
+        let departure_time = vec![0, 5, 14, 20];
+        let travel_time =    vec![2, 1, 2,  1];
+        let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time, 24);
+        let all_segments: Vec<Segment> = ttf.seg_iter(WrappingRange::new(Range { start: 0, end: 0 }, 24)).collect();
+        assert_eq!(all_segments, vec![Segment::new((0,2), (5,1)), Segment::new((5,1), (14,2)), Segment::new((14,2), (20,1)), Segment::new((20,1), (0,2))]);
+    }
+
+    #[test]
+    fn test_wrapping_range_seg_iter() {
+        let departure_time = vec![0, 5, 14, 20];
+        let travel_time =    vec![2, 1, 2,  1];
+        let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time, 24);
+        let all_ipps: Vec<Segment> = ttf.seg_iter(WrappingRange::new(Range { start: 17, end: 17 }, 24)).collect();
+        assert_eq!(all_ipps, vec![Segment::new((14,2), (20,1)), Segment::new((20,1), (0,2)), Segment::new((0,2), (5,1)), Segment::new((5,1), (14,2)), Segment::new((14,2), (20,1))]);
+    }
+
+    #[test]
+    fn test_partial_range_seg_iter() {
+        let departure_time = vec![0, 5, 14, 20];
+        let travel_time =    vec![2, 1, 2,  1];
+        let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time, 24);
+        let all_ipps: Vec<Segment> = ttf.seg_iter(WrappingRange::new(Range { start: 10, end: 21 }, 24)).collect();
+        assert_eq!(all_ipps, vec![Segment::new((5,1), (14,2)), Segment::new((14,2), (20,1)), Segment::new((20,1), (0,2))]);
+    }
+
+    #[test]
+    fn test_static_weight_seg_iter() {
+        let departure_time = vec![0];
+        let travel_time =    vec![2];
+        let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time, 24);
+        let all_ipps: Vec<Segment> = ttf.seg_iter(WrappingRange::new(Range { start: 0, end: 0 }, 24)).collect();
         assert_eq!(all_ipps, vec![]);
     }
 }

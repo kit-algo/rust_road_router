@@ -12,6 +12,30 @@ fn abs_diff(x: Weight, y: Weight) -> Weight {
     max(x, y) - min(x, y)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Ipp {
+    at: Timestamp,
+    val: Weight,
+}
+
+impl Ipp {
+    fn new(at: Timestamp, val: Weight) -> Ipp {
+        Ipp { at, val }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct Segment {
+    from: Ipp,
+    to: Ipp,
+}
+
+impl Segment {
+    fn new((from_at, from_val): (Timestamp, Weight), (to_at, to_val): (Timestamp, Weight)) -> Segment {
+        Segment { from: Ipp::new(from_at, from_val), to: Ipp::new(to_at, to_val) }
+    }
+}
+
 mod piecewise_linear_function;
 use self::piecewise_linear_function::*;
 
