@@ -39,18 +39,20 @@ impl<'a> PiecewiseLinearFunction<'a> {
     pub fn evaluate(&self, departure: Timestamp) -> Weight {
         debug_assert!(departure < self.period);
         if self.departure_time.len() == 1 {
-            return self.travel_time[0]
+            return unsafe { *self.travel_time.get_unchecked(0) }
         }
 
         let departure = departure % self.period;
         match self.departure_time.binary_search(&departure) {
-            Ok(departure_index) => self.travel_time[departure_index],
+            Ok(departure_index) => unsafe { *self.travel_time.get_unchecked(departure_index) },
             Err(upper_index) => {
                 let upper_index = upper_index % self.departure_time.len();
                 let lower_index = if upper_index > 0 { upper_index - 1 } else { self.departure_time.len() - 1 };
-                let delta_dt = self.subtract_wrapping(self.departure_time[upper_index], self.departure_time[lower_index]);
-                let relative_x = self.subtract_wrapping(departure, self.departure_time[lower_index]);
-                interpolate(delta_dt, self.travel_time[lower_index], self.travel_time[upper_index], relative_x)
+                unsafe {
+                    let delta_dt = self.subtract_wrapping(*self.departure_time.get_unchecked(upper_index), *self.departure_time.get_unchecked(lower_index));
+                    let relative_x = self.subtract_wrapping(departure, *self.departure_time.get_unchecked(lower_index));
+                    interpolate(delta_dt, *self.travel_time.get_unchecked(lower_index), *self.travel_time.get_unchecked(upper_index), relative_x)
+                }
             },
         }
     }
@@ -115,10 +117,10 @@ impl<'a> Iterator for Iter<'a> {
     type Item = (Timestamp, Weight);
 
     fn next(&mut self) -> Option<(Timestamp, Weight)> {
-        let ipp = self.departure_time[self.current_index];
+        let ipp = unsafe { *self.departure_time.get_unchecked(self.current_index) };
 
         if !self.done && self.range.contains(ipp) {
-            let tt = self.travel_time[self.current_index];
+            let tt = unsafe { *self.travel_time.get_unchecked(self.current_index) };
             self.current_index = (self.current_index + 1) % self.departure_time.len();
             if self.current_index == self.initial_index {
                 self.done = true;
