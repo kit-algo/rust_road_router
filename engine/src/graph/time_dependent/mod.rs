@@ -28,11 +28,13 @@ impl Ipp {
 struct Segment {
     from: Ipp,
     to: Ipp,
+    valid_from: Timestamp,
+    valid_to: Timestamp
 }
 
 impl Segment {
     fn new((from_at, from_val): (Timestamp, Weight), (to_at, to_val): (Timestamp, Weight)) -> Segment {
-        Segment { from: Ipp::new(from_at, from_val), to: Ipp::new(to_at, to_val) }
+        Segment { from: Ipp::new(from_at, from_val), to: Ipp::new(to_at, to_val), valid_from: from_at, valid_to: to_at }
     }
 }
 

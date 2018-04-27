@@ -172,18 +172,28 @@ impl<'a> Iterator for SegmentIter<'a> {
         let next_ipp = unsafe { *self.departure_time.get_unchecked(next_index) };
 
         if !self.done && (self.range.contains(ipp) || self.range.contains(next_ipp)) {
+            let apply_valid_from = self.current_index == self.initial_index && !self.done_after_next;
+
             let tt = unsafe { *self.travel_time.get_unchecked(self.current_index) };
             self.current_index = next_index;
-            if self.done_after_next {
+
+            let mut segment = Segment::new((ipp, tt), (next_ipp, unsafe { *self.travel_time.get_unchecked(self.current_index) }));
+
+            if self.done_after_next || !self.range.contains(next_ipp) {
                 self.done = true;
+                segment.valid_to = self.range.end();
             }
+
             if self.current_index == self.initial_index {
                 self.done_after_next = true;
                 if next_ipp == self.range.start() {
                     self.done = true;
                 }
             }
-            Some(Segment::new((ipp, tt), (next_ipp, unsafe { *self.travel_time.get_unchecked(self.current_index) })))
+
+            if apply_valid_from { segment.valid_from = self.range.start() }
+
+            Some(segment)
         } else {
             None
         }
@@ -283,7 +293,11 @@ mod tests {
         let travel_time =    vec![2, 1, 2,  1];
         let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time, 24);
         let all_ipps: Vec<Segment> = ttf.seg_iter(WrappingRange::new(Range { start: 17, end: 17 }, 24)).collect();
-        assert_eq!(all_ipps, vec![Segment::new((14,2), (20,1)), Segment::new((20,1), (0,2)), Segment::new((0,2), (5,1)), Segment::new((5,1), (14,2)), Segment::new((14,2), (20,1))]);
+        let mut first_segment = Segment::new((14,2), (20,1));
+        first_segment.valid_from = 17;
+        let mut last_segment = Segment::new((14,2), (20,1));
+        last_segment.valid_to = 17;
+        assert_eq!(all_ipps, vec![first_segment, Segment::new((20,1), (0,2)), Segment::new((0,2), (5,1)), Segment::new((5,1), (14,2)), last_segment]);
     }
 
     #[test]
@@ -292,7 +306,11 @@ mod tests {
         let travel_time =    vec![2, 1, 2,  1];
         let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time, 24);
         let all_ipps: Vec<Segment> = ttf.seg_iter(WrappingRange::new(Range { start: 10, end: 21 }, 24)).collect();
-        assert_eq!(all_ipps, vec![Segment::new((5,1), (14,2)), Segment::new((14,2), (20,1)), Segment::new((20,1), (0,2))]);
+        let mut first_segment = Segment::new((5,1), (14,2));
+        first_segment.valid_from = 10;
+        let mut last_segment = Segment::new((20,1), (0,2));
+        last_segment.valid_to = 21;
+        assert_eq!(all_ipps, vec![first_segment, Segment::new((14,2), (20,1)), last_segment]);
     }
 
     #[test]
