@@ -616,7 +616,7 @@ mod tests {
 
         let cch_first_out = vec![0, 1];
         let cch_head =      vec![0];
-        let outgoing = vec![Shortcut { data: ShortcutPaths::Multi(vec![(2, ShortcutData::new(ShortcutSource::OriginalEdge(0))), (6, ShortcutData::new(ShortcutSource::OriginalEdge(0)))]) }];
+        let outgoing = vec![Shortcut { data: ShortcutPaths::Multi(vec![(2, ShortcutData::new(ShortcutSource::OriginalEdge(0))), (6, ShortcutData::new(ShortcutSource::OriginalEdge(0)))]), cache: None }];
         let incoming = vec![Shortcut::new(Some(0))];
 
         let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
@@ -638,7 +638,7 @@ mod tests {
 
         let cch_first_out = vec![0, 1, 2];
         let cch_head =      vec![1, 0];
-        let outgoing = vec![Shortcut { data: ShortcutPaths::Multi(vec![(2, ShortcutData::new(ShortcutSource::OriginalEdge(0))), (5, ShortcutData::new(ShortcutSource::OriginalEdge(1)))]) }, Shortcut::new(None)];
+        let outgoing = vec![Shortcut { data: ShortcutPaths::Multi(vec![(2, ShortcutData::new(ShortcutSource::OriginalEdge(0))), (5, ShortcutData::new(ShortcutSource::OriginalEdge(1)))]), cache: None }, Shortcut::new(None)];
         let incoming = vec![Shortcut::new(None), Shortcut::new(None)];
 
         let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
