@@ -198,14 +198,14 @@ impl CCHGraph {
                 }
                 for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
                     node_incoming_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
-                    if self.degree(current_node) > 20 {
+                    if self.degree(current_node) > 15 {
                         shortcut_graph.cache_downward_edge_ipps(edge_id);
                     }
                     // debug_assert_eq!(downward.link(edge_id).node, node);
                 }
                 for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
                     node_outgoing_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
-                    if self.degree(current_node) > 20 {
+                    if self.degree(current_node) > 15 {
                         shortcut_graph.cache_upward_edge_ipps(edge_id);
                     }
                     // debug_assert_eq!(upward.link(edge_id).node, node);

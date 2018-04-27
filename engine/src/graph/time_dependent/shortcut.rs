@@ -217,6 +217,12 @@ impl Shortcut {
             return (INFINITY, INFINITY);
         }
 
+        if let Some(ref ipps) = self.cache {
+            if ipps.len() > 0 {
+                return ipps.iter().fold((INFINITY, 0), |(acc_min, acc_max), &(_, val)| (min(acc_min, val), max(acc_max, val)))
+            }
+        }
+
         SegmentIter::new(self)
             .map(|(_, source)| source.bounds(shortcut_graph))
             .fold((INFINITY, 0), |(acc_min, acc_max), (seg_min, seg_max)| (min(acc_min, seg_min), max(acc_max, seg_max)))
