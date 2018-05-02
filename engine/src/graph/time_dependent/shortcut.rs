@@ -491,6 +491,138 @@ impl<'a, 'b> Iterator for Iter<'a, 'b> {
     }
 }
 
+pub(super) struct SegmentIter<'a, 'b: 'a> {
+    shortcut: &'b Shortcut,
+    shortcut_graph: &'a ShortcutGraph<'a>,
+    range: WrappingRange<Timestamp>,
+    current_index: usize,
+    segment_iter_state: InitialPathSegmentIterState,
+    current_source_iter: Option<Box<Iterator<Item = Segment> + 'a>>,
+    source_contained_segments: bool,
+    cached_iter: Option<WrappingSliceIter<'b>>,
+}
+
+impl<'a, 'b> SegmentIter<'a, 'b> {
+    fn new(shortcut: &'b Shortcut, range: WrappingRange<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> SegmentIter<'a, 'b> {
+        // if let Some(ref cache) = shortcut.cache {
+        //     let cached_iter = WrappingSliceIter::new(cache, range.clone());
+        //     return SegmentIter { shortcut, shortcut_graph, range, current_index: 0, segment_iter_state: InitialPathSegmentIterState::Finishing, current_source_iter: None, cached_iter: Some(cached_iter) }
+        // }
+
+        match shortcut.data {
+            ShortcutPaths::None => SegmentIter { shortcut, shortcut_graph, range, current_index: 0, segment_iter_state: InitialPathSegmentIterState::Finishing, current_source_iter: None, source_contained_segments: false, cached_iter: None },
+            ShortcutPaths::One(data) => {
+                SegmentIter {
+                    shortcut, shortcut_graph, range: range.clone(), current_index: 0, source_contained_segments: false, cached_iter: None,
+                    segment_iter_state: InitialPathSegmentIterState::InitialCompleted(0),
+                    current_source_iter: Some(Box::new(data.seg_iter(range, shortcut_graph)) as Box<Iterator<Item = Segment>>)
+                }
+            },
+            ShortcutPaths::Multi(ref data) => {
+                let (current_index, segment_iter_state, current_source_iter) = match data.binary_search_by_key(&range.start(), |&(time, _)| time) {
+                    Ok(index) => (index, InitialPathSegmentIterState::InitialCompleted(index), None),
+                    Err(index) => {
+                        let current_index = (index + data.len() - 1) % data.len();
+                        let mut segment_range = WrappingRange::new(shortcut.segment_range(current_index), range.wrap_around());
+                        let segment_iter_state = InitialPathSegmentIterState::InitialPartialyCompleted(current_index);
+                        segment_range.shift_start(range.start());
+                        // println!("shortcut segment iter range {:?}", segment_range);
+                        (current_index, segment_iter_state, Some(Box::new(data[current_index].1.seg_iter(segment_range, shortcut_graph)) as Box<Iterator<Item = Segment>>))
+                    },
+                };
+
+                SegmentIter { shortcut, shortcut_graph, range, current_index, segment_iter_state, current_source_iter, source_contained_segments: false, cached_iter: None }
+            }
+        }
+        // println!("new shortcut iter range {:?}, index: {}, iter created? {}", range, current_index, current_source_iter.is_some());
+    }
+
+    fn calc_next(&mut self) -> Option<<Self as Iterator>::Item> {
+        // println!("shortcut next");
+        match self.current_source_iter {
+            Some(_) => {
+                // TODO move borrow into Some(...) match once NLL are more stable
+                match self.current_source_iter.as_mut().unwrap().next() {
+                    Some(segment) => {
+                        // debug_assert!(abs_diff(ipp.1, self.shortcut.evaluate(ipp.0, self.shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. {}", ipp.0, ipp.1, self.shortcut.evaluate(ipp.0, self.shortcut_graph), self.shortcut.debug_to_s(self.shortcut_graph, 0));
+                        debug_assert!(self.range.contains(segment.valid_from));
+                        debug_assert!(self.range.contains(segment.valid_to) || segment.valid_to == self.range.end());
+                        self.source_contained_segments = true;
+                        Some(segment)
+                    },
+                    None => {
+                        if !self.source_contained_segments {
+                            if let ShortcutPaths::Multi(_) = self.shortcut.data {
+                                let segment_range = self.shortcut.segment_range(self.current_index);
+                                let value = self.shortcut.evaluate(segment_range.start, self.shortcut_graph);
+                                self.source_contained_segments = true;
+                                return Some(Segment::new((segment_range.start, value), (segment_range.end, value)))
+                            }
+                        }
+
+                        self.current_source_iter = None;
+
+                        match self.segment_iter_state {
+                            InitialPathSegmentIterState::InitialCompleted(initial_index) => {
+                                self.current_index = (self.current_index + 1) % self.shortcut.num_segments();
+                                if self.current_index != initial_index {
+                                    self.next()
+                                } else {
+                                    None
+                                }
+                            },
+                            InitialPathSegmentIterState::InitialPartialyCompleted(initial_index) => {
+                                self.current_index = (self.current_index + 1) % self.shortcut.num_segments();
+                                if self.current_index == initial_index {
+                                    self.segment_iter_state = InitialPathSegmentIterState::Finishing;
+                                    self.next()
+                                } else {
+                                    self.next()
+                                }
+                            },
+                            InitialPathSegmentIterState::Finishing => None,
+                        }
+                    },
+                }
+            },
+            None => {
+                match self.shortcut.data {
+                    ShortcutPaths::None => None,
+                    ShortcutPaths::One(data) => None,
+                    ShortcutPaths::Multi(ref data) => {
+                        let ipp = data[self.current_index].0;
+
+                        if self.range.contains(ipp) {
+                            let mut segment_range = self.shortcut.segment_range(self.current_index);
+                            if self.segment_iter_state == InitialPathSegmentIterState::Finishing {
+                                segment_range.end = self.range.end()
+                            }
+                            let segment_range = WrappingRange::new(segment_range, self.range.wrap_around());
+                            self.current_source_iter = Some(Box::new(data[self.current_index].1.seg_iter(segment_range, self.shortcut_graph)));
+                            self.source_contained_segments = false;
+                            self.next()
+                        } else {
+                            None
+                        }
+                    }
+                }
+            },
+        }
+    }
+}
+
+impl<'a, 'b> Iterator for SegmentIter<'a, 'b> {
+    type Item = Segment;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // if let Some(ref mut iter) = self.cached_iter {
+        //     iter.next().map(|it| *it)
+        // } else {
+            self.calc_next()
+        // }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 enum InitialPathSegmentIterState {
     InitialCompleted(usize),
