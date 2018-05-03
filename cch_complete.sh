@@ -10,4 +10,4 @@ if [ ! -f /data/cch_perm ]; then
   ./flow_cutter_cch_order.sh /data
 fi
 
-cd server && cargo run --release --bin bmw_routing_server -- /data
+cd server && exec cargo run --release --bin bmw_routing_server -- /data
