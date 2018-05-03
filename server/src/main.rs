@@ -225,11 +225,7 @@ fn main() {
         }
     });
 
-    let config = rocket::config::Config::build(rocket::config::Environment::Staging)
-        .port(8888)
-        .finalize().expect("Could not create config");
-
-    rocket::custom(config, false)
+    rocket::ignite()
         .mount("/", routes![index, files, query, here_query])
         .manage(Mutex::new(tx_query))
         .launch();
