@@ -16,7 +16,5 @@ EXPOSE 80
 # Define environment variable
 ENV ROCKET_ENV prod
 
-WORKDIR /app/server
-
 # Run server when the container launches
-CMD ["cargo", "run", "--release", "--bin", "bmw_routing_server", "--", "/data"]
+CMD ["bash", "cch_complete.sh"]
