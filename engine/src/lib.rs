@@ -3,7 +3,6 @@
 #![feature(allocator_api)]
 #![feature(const_size_of)]
 #![feature(mpsc_select)]
-#![feature(conservative_impl_trait)]
 
 extern crate nav_types;
 extern crate postgres;
