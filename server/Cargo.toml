@@ -5,12 +5,14 @@ authors = ["Tim \"S.D.Eagle\" Zeitz <dev.tim.zeitz@gmail.com>"]
 
 [dependencies]
 bmw_routing_engine = { path = "../engine" }
-rocket = "^0.3.3"
-rocket_codegen = "^0.3.3"
+rocket = { git = "https://github.com/SDEagle/Rocket", branch = "backport_nightly_fix" }
+rocket_codegen = { git = "https://github.com/SDEagle/Rocket", branch = "backport_nightly_fix" }
 serde = "^1.0.5"
 serde_derive = "^1.0.5"
 serde_json = "^1.0.5"
+# kdtree = "^0.5.1"
 [dependencies.rocket_contrib]
-version = "^0.3.3"
+git = "https://github.com/SDEagle/Rocket"
+branch = "backport_nightly_fix"
 default-features = false
 features = ["json"]
