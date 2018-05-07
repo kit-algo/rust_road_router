@@ -100,8 +100,8 @@ pub struct RdfNode {
 impl RdfNode {
     fn as_wgs84(&self) -> WGS84<f64> {
         WGS84::new(
-            (self.lat as f64) / 100000.,
-            (self.lon as f64) / 100000.,
+            (self.lat as f64) / 10000000.,
+            (self.lon as f64) / 10000000.,
             (self.z_coord.unwrap_or(0) as f64) / 100.)
     }
 }
@@ -118,8 +118,8 @@ pub struct RdfLinkGeometry {
 impl RdfLinkGeometry {
     fn as_wgs84(&self) -> WGS84<f64> {
         WGS84::new(
-            (self.lat as f64) / 100000.,
-            (self.lon as f64) / 100000.,
+            (self.lat as f64) / 10000000.,
+            (self.lon as f64) / 10000000.,
             (self.z_coord.unwrap_or(0) as f64) / 100.)
     }
 }
