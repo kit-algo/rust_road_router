@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 
-./flow_cutter_console \
+./lib/flow-cutter/console \
   load_routingkit_unweighted_graph "$1/first_out" "$1/head" \
   remove_multi_arcs \
   remove_loops \

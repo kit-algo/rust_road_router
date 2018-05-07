@@ -1,0 +1,3 @@
+[submodule "lib/flow-cutter"]
+	path = lib/flow-cutter
+	url = https://github.com/kit-algo/flow-cutter.git
