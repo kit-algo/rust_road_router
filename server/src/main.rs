@@ -20,7 +20,6 @@ use std::sync::mpsc;
 use mpsc::Sender;
 use std::sync::Mutex;
 
-use std::cmp::Ordering;
 use rocket::response::NamedFile;
 use rocket::State;
 use rocket_contrib::Json;
@@ -48,27 +47,6 @@ impl KdtreePointTrait for NodeCoord {
     #[inline] // the inline on this method is important! as without it there is ~25% speed loss on the tree when cross-crate usage.
     fn dims(&self) -> &[f64] {
         return &self.coords;
-    }
-}
-
-#[derive(PartialEq,PartialOrd)]
-struct NonNan(f32);
-
-impl NonNan {
-    fn new(val: f32) -> Option<NonNan> {
-        if val.is_nan() {
-            None
-        } else {
-            Some(NonNan(val))
-        }
-    }
-}
-
-impl Eq for NonNan {}
-
-impl Ord for NonNan {
-    fn cmp(&self, other: &NonNan) -> Ordering {
-        self.partial_cmp(other).unwrap()
     }
 }
 
@@ -177,7 +155,9 @@ fn main() {
         let mut coords: Vec<NodeCoord> = lat.iter().zip(lng.iter()).enumerate().map(|(node_id, (&lat, &lng))| {
             NodeCoord { node_id: node_id as NodeId, coords: [lat as f64, lng as f64] }
         }).collect();
-        let tree = Kdtree::new(&mut coords);
+        let tree = measure("build kd tree", || {
+             Kdtree::new(&mut coords)
+        });
 
         let link_id_mapping = BitVec::load_from(path.join("link_id_mapping").to_str().unwrap()).expect("could not read link_id_mapping");
         let link_id_mapping = InvertableRankSelectMap::new(RankSelectMap::new(link_id_mapping));
