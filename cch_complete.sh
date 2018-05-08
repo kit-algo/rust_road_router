@@ -3,6 +3,7 @@
 if [ ! -f /data/first_out ]; then
   echo "importing here data from /import"
   cargo run --release -p bmw_routing_engine --bin import_here -- /import /data
+  mv /data/weights /data/travel_time
 fi
 
 if [ ! -f /data/cch_perm ]; then
