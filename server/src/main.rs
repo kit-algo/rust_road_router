@@ -7,6 +7,8 @@ extern crate serde_derive;
 
 extern crate rocket;
 extern crate rocket_contrib;
+
+extern crate kdtree;
 extern crate bmw_routing_engine;
 
 use std::path::{Path, PathBuf};
@@ -23,6 +25,8 @@ use rocket::response::NamedFile;
 use rocket::State;
 use rocket_contrib::Json;
 
+use kdtree::kdtree::{KdtreePointTrait, Kdtree};
+
 use bmw_routing_engine::*;
 use graph::*;
 use rank_select_map::*;
@@ -33,6 +37,19 @@ use shortest_path::query::customizable_contraction_hierarchy::Server;
 use io::*;
 use bmw_routing_engine::benchmark::measure;
 use graph::link_id_to_tail_mapper::*;
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+struct NodeCoord {
+    coords: [f64; 2],
+    node_id: NodeId,
+}
+
+impl KdtreePointTrait for NodeCoord {
+    #[inline] // the inline on this method is important! as without it there is ~25% speed loss on the tree when cross-crate usage.
+    fn dims(&self) -> &[f64] {
+        return &self.coords;
+    }
+}
 
 #[derive(PartialEq,PartialOrd)]
 struct NonNan(f32);
@@ -157,6 +174,11 @@ fn main() {
         let lat = Vec::load_from(path.join("latitude").to_str().unwrap()).expect("could not read latitude");
         let lng = Vec::load_from(path.join("longitude").to_str().unwrap()).expect("could not read longitude");
 
+        let mut coords: Vec<NodeCoord> = lat.iter().zip(lng.iter()).enumerate().map(|(node_id, (&lat, &lng))| {
+            NodeCoord { node_id: node_id as NodeId, coords: [lat as f64, lng as f64] }
+        }).collect();
+        let tree = Kdtree::new(&mut coords);
+
         let link_id_mapping = BitVec::load_from(path.join("link_id_mapping").to_str().unwrap()).expect("could not read link_id_mapping");
         let link_id_mapping = InvertableRankSelectMap::new(RankSelectMap::new(link_id_mapping));
         let here_rank_to_link_id = Vec::load_from(path.join("here_rank_to_link_id").to_str().unwrap()).expect("could not read here_rank_to_link_id");
@@ -176,9 +198,7 @@ fn main() {
         };
 
         let closest_node = |(p_lat, p_lng): (f32, f32)| -> NodeId {
-            lat.iter().zip(lng.iter()).enumerate().min_by_key(|&(_, (lat, lon))| {
-                NonNan::new(((lat - p_lat) * (lat - p_lat) + (lon - p_lng) * (lon - p_lng)).sqrt())
-            }).map(|(id, _)| id).unwrap() as NodeId
+            tree.nearest_search(&NodeCoord { coords: [p_lat as f64, p_lng as f64], node_id: 0 }).node_id
         };
 
         for query_params in rx_query {
