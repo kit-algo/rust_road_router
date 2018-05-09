@@ -11,7 +11,7 @@ ADD . /app
 RUN cargo build --release --all
 
 # Build flow cutter
-RUN cd lib/flow-cutter/ && ./build.py --clean --ignore-warnings && cd ../..
+RUN cd lib/flow-cutter/ && ./build.py --clean --ignore-warnings --no-gpl && cd ../..
 
 # Make port 80 available to the world outside this container
 EXPOSE 80
