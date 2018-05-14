@@ -130,7 +130,7 @@ fn here_query(query_params: HereQuery, state: State<Mutex<Sender<Request>>>) -> 
 }
 
 #[post("/customize", data = "<updates>")]
-fn new(updates: Json<Vec<(u64, Weight)>>, state: State<Mutex<Sender<Request>>>) {
+fn customize(updates: Json<Vec<(u64, Weight)>>, state: State<Mutex<Sender<Request>>>) {
     let tx_query = state.lock().unwrap();
     tx_query.send(Request::Customize(updates.0)).expect("routing engine crashed or hung up");
 }
@@ -244,7 +244,7 @@ fn main() {
     });
 
     rocket::ignite()
-        .mount("/", routes![index, files, query, here_query])
+        .mount("/", routes![index, files, query, here_query, customize])
         .manage(Mutex::new(tx_query))
         .launch();
 }
