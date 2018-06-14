@@ -49,6 +49,10 @@ impl GraphTrait for Graph {
     fn num_nodes(&self) -> usize {
         self.first_out.len() - 1
     }
+
+    fn num_arcs(&self) -> usize {
+        self.head.len()
+    }
 }
 
 impl<'a> LinkIterGraph<'a> for Graph {
