@@ -40,10 +40,6 @@ impl<FirstOutContainer, HeadContainer, WeightContainer> FirstOutGraph<FirstOutCo
         FirstOutGraph { first_out, head, weight }
     }
 
-    pub fn num_arcs(&self) -> usize {
-        self.head().len()
-    }
-
     pub fn degree(&self, node: NodeId) -> usize {
         let range = self.neighbor_edge_indices_usize(node);
         range.end - range.start
@@ -100,6 +96,10 @@ impl<FirstOutContainer, HeadContainer, WeightContainer> Graph for FirstOutGraph<
     fn num_nodes(&self) -> usize {
         self.first_out().len() - 1
     }
+
+    fn num_arcs(&self) -> usize {
+        self.head().len()
+    }
 }
 
 impl<'a, FirstOutContainer, HeadContainer, WeightContainer> LinkIterGraph<'a> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> where
@@ -113,7 +113,7 @@ impl<'a, FirstOutContainer, HeadContainer, WeightContainer> LinkIterGraph<'a> fo
         let range = self.neighbor_edge_indices_usize(node);
         self.head()[range.clone()].iter()
             .zip(self.weight()[range].iter())
-            .map( |(&neighbor, &weight)| Link { node: neighbor, weight: weight } )
+            .map( |(&neighbor, &weight)| Link { node: neighbor, weight } )
     }
 }
 
@@ -151,7 +151,7 @@ impl<FirstOutContainer, HeadContainer, WeightContainer> RandomLinkAccessGraph fo
 
 pub fn degrees_to_first_out<I: Iterator<Item = EdgeId>>(degrees: I) -> impl Iterator<Item = EdgeId> {
     std::iter::once(0).chain(degrees.scan(0, |state, degree| {
-        *state = *state + degree as EdgeId;
+        *state += degree as EdgeId;
         Some(*state)
     }))
 }

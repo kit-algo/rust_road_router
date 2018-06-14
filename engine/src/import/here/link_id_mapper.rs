@@ -1,6 +1,7 @@
 use super::*;
 use rank_select_map::*;
 
+#[derive(Debug, Clone, Copy)]
 pub enum LinkDirection {
     FromRef,
     ToRef,

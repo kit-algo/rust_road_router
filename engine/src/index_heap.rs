@@ -39,7 +39,7 @@ impl<T: Ord + Indexing> IndexdMinHeap<T> {
     }
 
     pub fn clear(&mut self) {
-        for element in self.data.iter() {
+        for element in &self.data {
             self.positions[element.as_index()] = INVALID_POSITION;
         }
         self.data.clear();

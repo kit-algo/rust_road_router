@@ -17,7 +17,7 @@ impl<T: Copy> TimestampedVector<T> {
             data: vec![default; size],
             current: 0,
             timestamps: vec![0; size],
-            default: default
+            default
         }
     }
 
@@ -27,7 +27,7 @@ impl<T: Copy> TimestampedVector<T> {
 
         if old > self.current {
             // overflow, need to reinit
-            for element in self.data.iter_mut() {
+            for element in &mut self.data {
                 *element = self.default;
             }
         }

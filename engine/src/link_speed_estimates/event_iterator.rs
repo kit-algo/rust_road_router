@@ -27,8 +27,8 @@ impl<'a> EventIterator<'a> {
         let next_trace = traces.next().ok_or("no traces given")?;
 
         Ok(EventIterator {
-            links: links,
-            traces: traces,
+            links,
+            traces,
             iterator_to_poll: IteratorToPoll::Links,
             next_link: Some(next_link),
             next_trace,

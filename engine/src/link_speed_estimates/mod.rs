@@ -20,7 +20,7 @@ pub struct LinkData {
 
 impl LinkData {
     pub fn free_flow_traversal_time(&self) -> f64 {
-        self.length as f64 * 3.6 / self.speed_limit as f64
+        f64::from(self.length) * 3.6 / f64::from(self.speed_limit)
     }
 }
 

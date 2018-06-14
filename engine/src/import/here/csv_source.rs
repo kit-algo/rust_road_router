@@ -19,7 +19,7 @@ impl<'a> RdfDataSource for CSVSource<'a> {
     fn links(&self) -> Vec<RdfLink> {
         let mut elements = vec![];
 
-        for entry in glob(self.directory.join("rdf_link.txt*").to_str().unwrap()).unwrap() {
+        for entry in glob(self.directory.join("rdf_link/rdf_link.txt*").to_str().unwrap()).unwrap() {
             match entry {
                 Ok(path) => {
                     let file = File::open(path.clone()).unwrap();
@@ -51,7 +51,7 @@ impl<'a> RdfDataSource for CSVSource<'a> {
     fn nav_links(&self) -> Vec<RdfNavLink> {
         let mut elements = vec![];
 
-        for entry in glob(self.directory.join("rdf_nav_link.txt*").to_str().unwrap()).unwrap() {
+        for entry in glob(self.directory.join("rdf_nav_link/rdf_nav_link.txt*").to_str().unwrap()).unwrap() {
             match entry {
                 Ok(path) => {
                     let file = File::open(path.clone()).unwrap();
@@ -86,7 +86,7 @@ impl<'a> RdfDataSource for CSVSource<'a> {
     fn nodes(&self) -> Vec<RdfNode> {
         let mut elements = vec![];
 
-        for entry in glob(self.directory.join("rdf_node.txt*").to_str().unwrap()).unwrap() {
+        for entry in glob(self.directory.join("rdf_node/rdf_node.txt*").to_str().unwrap()).unwrap() {
             match entry {
                 Ok(path) => {
                     let file = File::open(path.clone()).unwrap();
@@ -119,7 +119,7 @@ impl<'a> RdfDataSource for CSVSource<'a> {
     fn link_geometries(&self) -> Vec<RdfLinkGeometry> {
         let mut elements = vec![];
 
-        for entry in glob(self.directory.join("rdf_link_geometry.txt*").to_str().unwrap()).unwrap() {
+        for entry in glob(self.directory.join("adas_link_geometry/adas_link_geometry.txt*").to_str().unwrap()).unwrap() {
             match entry {
                 Ok(path) => {
                     let file = File::open(path.clone()).unwrap();

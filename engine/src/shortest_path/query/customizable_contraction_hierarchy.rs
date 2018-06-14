@@ -99,7 +99,7 @@ impl<'a> Server<'a> {
 
         forwad_path.pop_back();
         forwad_path.append(&mut backward_path);
-        for node in forwad_path.iter_mut() {
+        for node in &mut forwad_path {
             *node = self.cch_graph.node_order().node(*node);
         }
         forwad_path
@@ -149,7 +149,7 @@ impl<'a> Server<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum Direction {
     Up,
     Down,
