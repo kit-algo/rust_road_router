@@ -57,7 +57,7 @@ struct ContractionGraph {
 }
 
 impl ContractionGraph {
-    fn new<Graph: for<'a> LinkIterGraph<'a>>(graph: Graph, node_order: Vec<NodeId>) -> ContractionGraph {
+    fn new<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, node_order: Vec<NodeId>) -> ContractionGraph {
         let n = graph.num_nodes();
         let mut node_ranks = vec![0; n];
         for (i, &node) in node_order.iter().enumerate() {
@@ -89,8 +89,8 @@ impl ContractionGraph {
         let mut graph = self.partial_graph();
 
         while let Some((node, mut subgraph)) = graph.remove_lowest() {
-            for &(Link { node: from, weight: from_weight }, _) in node.incoming.iter() {
-                for &(Link { node: to, weight: to_weight }, _) in node.outgoing.iter() {
+            for &(Link { node: from, weight: from_weight }, _) in &node.incoming {
+                for &(Link { node: to, weight: to_weight }, _) in &node.outgoing {
                     if subgraph.shortcut_required(from, to, from_weight + to_weight) {
                         let node_id = subgraph.id_offset - 1;
                         subgraph.insert_or_decrease(from, to, from_weight + to_weight, node_id);
@@ -109,7 +109,7 @@ impl ContractionGraph {
         }
     }
 
-    fn as_first_out_graphs(self) -> ((OwnedGraph, OwnedGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
+    fn into_first_out_graphs(self) -> ((OwnedGraph, OwnedGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
         let (outgoing, incoming): (Vec<(Vec<Link>, Vec<NodeId>)>, Vec<(Vec<Link>, Vec<NodeId>)>) = self.nodes.into_iter()
             .map(|node| {
                 (node.outgoing.into_iter().unzip(), node.incoming.into_iter().unzip())
@@ -145,10 +145,10 @@ impl<'a> PartialContractionGraph<'a> {
     }
 
     fn remove_edges_to_removed(&mut self, node: &Node) {
-        for &(Link { node: from, .. }, _) in node.incoming.iter() {
+        for &(Link { node: from, .. }, _) in &node.incoming {
             self.nodes[(from - self.id_offset) as usize].remove_outgoing(self.id_offset - 1);
         }
-        for &(Link { node: to, .. }, _) in node.outgoing.iter() {
+        for &(Link { node: to, .. }, _) in &node.outgoing {
             self.nodes[(to - self.id_offset) as usize].remove_incmoing(self.id_offset - 1);
         }
     }
@@ -178,10 +178,10 @@ impl<'a> PartialContractionGraph<'a> {
     }
 }
 
-pub fn contract<Graph: for<'a> LinkIterGraph<'a>>(graph: Graph, node_order: Vec<NodeId>) -> ((OwnedGraph, OwnedGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
+pub fn contract<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, node_order: Vec<NodeId>) -> ((OwnedGraph, OwnedGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
     let mut graph = ContractionGraph::new(graph, node_order);
     graph.contract();
-    graph.as_first_out_graphs()
+    graph.into_first_out_graphs()
 }
 
 #[derive(Debug)]

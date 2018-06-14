@@ -41,7 +41,7 @@ pub trait LinkIterGraph<'a>: Graph {
         OwnedGraph::from_adjancecy_lists(reversed)
     }
 
-    fn ch_split(&'a self, node_ranks: &Vec<u32>) -> (OwnedGraph, OwnedGraph) {
+    fn ch_split(&'a self, node_ranks: &[u32]) -> (OwnedGraph, OwnedGraph) {
         let mut up: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new() ).collect();
         let mut down: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new() ).collect();
 

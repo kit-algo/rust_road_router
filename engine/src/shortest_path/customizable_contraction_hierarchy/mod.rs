@@ -20,7 +20,7 @@ struct Node {
 
 impl Node {
     fn insert(&mut self, node: NodeId) -> ShortcutResult {
-        for &other in self.edges.iter() {
+        for &other in &self.edges {
             if node == other {
                 return ShortcutResult::Existed
             }
@@ -66,7 +66,7 @@ impl<'a, Graph: for<'b> LinkIterGraph<'b>> ContractionGraph<'a, Graph> {
             debug_assert_eq!(nodes_before.len(), node_id as usize);
             debug_assert_eq!(nodes_after.len(), (n - node_id - 1) as usize);
 
-            for &neighbor in node.edges.iter() {
+            for &neighbor in &node.edges {
                 debug_assert_ne!(node_id, neighbor);
                 if neighbor < node_id {
                     nodes_before[neighbor as usize].insert(node_id);
@@ -89,8 +89,8 @@ impl<'a, Graph: for<'b> LinkIterGraph<'b>> ContractionGraph<'a, Graph> {
             let mut graph = self.partial_graph();
 
             while let Some((node, mut subgraph)) = graph.remove_lowest() {
-                for &from in node.edges.iter() {
-                    for &to in node.edges.iter() {
+                for &from in &node.edges {
+                    for &to in &node.edges {
                         if from != to {
                             match subgraph.insert(from, to) {
                                 ShortcutResult::NewShortcut => num_shortcut_arcs += 1,
@@ -137,7 +137,7 @@ impl<'a> PartialContractionGraph<'a> {
 
     fn remove_edges_to_removed(&mut self, node: &Node) {
         let node_id = self.id_offset - 1;
-        for &from in node.edges.iter() {
+        for &from in &node.edges {
             debug_assert!(from > node_id);
             self.nodes[(from - self.id_offset) as usize].remove(node_id);
         }

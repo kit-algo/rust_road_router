@@ -113,7 +113,7 @@ impl<'a, FirstOutContainer, HeadContainer, WeightContainer> LinkIterGraph<'a> fo
         let range = self.neighbor_edge_indices_usize(node);
         self.head()[range.clone()].iter()
             .zip(self.weight()[range].iter())
-            .map( |(&neighbor, &weight)| Link { node: neighbor, weight: weight } )
+            .map( |(&neighbor, &weight)| Link { node: neighbor, weight } )
     }
 }
 
@@ -151,7 +151,7 @@ impl<FirstOutContainer, HeadContainer, WeightContainer> RandomLinkAccessGraph fo
 
 pub fn degrees_to_first_out<I: Iterator<Item = EdgeId>>(degrees: I) -> impl Iterator<Item = EdgeId> {
     std::iter::once(0).chain(degrees.scan(0, |state, degree| {
-        *state = *state + degree as EdgeId;
+        *state += degree as EdgeId;
         Some(*state)
     }))
 }

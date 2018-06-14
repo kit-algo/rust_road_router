@@ -48,7 +48,7 @@ fn main() {
         inverted_order[node as usize] = i as u32;
     }
     let mut ch_server = CHServer::new((Graph::new(ch_first_out, ch_head, ch_weight).ch_split(&inverted_order), None));
-    let mut ch_server_with_own_ch = CHServer::new(contraction_hierarchy::contract(graph, ch_order));
+    let mut ch_server_with_own_ch = CHServer::new(contraction_hierarchy::contract(&graph, ch_order));
 
     for ((&from, &to), &ground_truth) in from.iter().zip(to.iter()).zip(ground_truth.iter()).take(100) {
         let ground_truth = match ground_truth {

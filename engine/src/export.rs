@@ -15,12 +15,12 @@ pub fn write_graph_to_gr<G: for<'a> LinkIterGraph<'a>>(graph: &G, filename: &str
     Ok(())
 }
 
-pub fn write_coords_to_co(lat: &Vec<f32>, lng: &Vec<f32>, filename: &str) -> Result<()> {
+pub fn write_coords_to_co(lat: &[f32], lng: &[f32], filename: &str) -> Result<()> {
     assert_eq!(lat.len(), lng.len());
     let mut file  = File::create(filename)?;
     writeln!(&mut file, "p aux sp co {}", lat.len())?;
     for (i, (lat, lng)) in lat.iter().zip(lng.iter()).enumerate() {
-        writeln!(&mut file, "v {} {} {}", i + 1, (lat * 1000000.0) as i32, (lng * 1000000.0) as i32)?;
+        writeln!(&mut file, "v {} {} {}", i + 1, (lat * 1_000_000.0) as i32, (lng * 1_000_000.0) as i32)?;
     }
     Ok(())
 }
