@@ -5,7 +5,7 @@ use std::mem::size_of;
 use std::cmp::min;
 use std::ops::Deref;
 
-use std::heap::{Global, Alloc, Layout};
+use std::alloc::{Global, Alloc, Layout};
 
 use io::*;
 
