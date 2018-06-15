@@ -98,7 +98,7 @@ impl Shortcut {
 
         let period = shortcut_graph.period();
 
-        for &(intersection, is_self_better) in intersections.iter() {
+        for &(intersection, is_self_better) in &intersections {
             let before_intersection = if intersection < 1 { intersection + period - 1 } else { intersection - 1 };
             let debug_output = || {
                 // let collected: Vec<(Timestamp, IppSource)> = MergingIter {
@@ -218,7 +218,7 @@ impl Shortcut {
         }
 
         if let Some(ref ipps) = self.cache {
-            if ipps.len() > 0 {
+            if !ipps.is_empty() {
                 return ipps.iter().fold((INFINITY, 0), |(acc_min, acc_max), &(_, val)| (min(acc_min, val), max(acc_max, val)))
             }
         }
@@ -484,7 +484,7 @@ impl<'a, 'b> Iterator for Iter<'a, 'b> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(ref mut iter) = self.cached_iter {
-            iter.next().map(|it| *it)
+            iter.next().cloned()
         } else {
             self.calc_next()
         }
@@ -588,7 +588,7 @@ impl<'a, 'b> SegmentIter<'a, 'b> {
             None => {
                 match self.shortcut.data {
                     ShortcutPaths::None => None,
-                    ShortcutPaths::One(data) => None,
+                    ShortcutPaths::One(_data) => None,
                     ShortcutPaths::Multi(ref data) => {
                         let ipp = data[self.current_index].0;
 

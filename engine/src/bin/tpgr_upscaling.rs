@@ -21,7 +21,7 @@ fn main() {
 
     let header = lines.next().unwrap().unwrap();
     // let mut header = header.split_whitespace().map(|number| number.parse::<usize>().unwrap());
-    write!(output, "{}0\n", header).unwrap();
+    writeln!(output, "{}0", header).unwrap();
 
     for line in lines {
         let line = line.unwrap();
@@ -37,6 +37,6 @@ fn main() {
             write!(output, " {}", num).unwrap();
         }
 
-        write!(output, "\n").unwrap();
+        writeln!(output).unwrap();
     }
 }

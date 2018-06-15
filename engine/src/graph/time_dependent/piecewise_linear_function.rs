@@ -89,7 +89,7 @@ pub fn interpolate(delta_x: Weight, y1: Weight, y2: Weight, x: Timestamp) -> Wei
     debug_assert!(x <= delta_x);
     debug_assert_ne!(delta_x, 0);
     let delta_y = y2 + delta_x - y1;
-    let result = y1 as u64 + (x as u64 * delta_y as u64 / delta_x as u64);
+    let result = u64::from(y1) + (u64::from(x) * u64::from(delta_y) / u64::from(delta_x));
     result as Weight - x
 }
 

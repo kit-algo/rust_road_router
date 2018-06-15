@@ -96,9 +96,9 @@ impl<'a> Iterator for ShortcutSourceIter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         // println!("shortcut src next");
-        match self {
-            &mut ShortcutSourceIter::Shortcut(ref mut iter) => iter.next(),
-            &mut ShortcutSourceIter::OriginalEdge(ref mut iter) => iter.next(),
+        match *self {
+            ShortcutSourceIter::Shortcut(ref mut iter) => iter.next(),
+            ShortcutSourceIter::OriginalEdge(ref mut iter) => iter.next(),
         }
     }
 }
@@ -113,9 +113,9 @@ impl<'a> Iterator for ShortcutSourceSegmentIter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         // println!("shortcut src next");
-        match self {
+        match *self {
             // &mut ShortcutSourceSegmentIter::Shortcut(ref mut iter) => iter.next(),
-            &mut ShortcutSourceSegmentIter::OriginalEdge(ref mut iter) => iter.next(),
+            ShortcutSourceSegmentIter::OriginalEdge(ref mut iter) => iter.next(),
         }
     }
 }

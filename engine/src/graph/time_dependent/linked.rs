@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Linked {
     first: EdgeId,
     second: EdgeId
@@ -83,7 +83,7 @@ impl<'a> Iter<'a> {
 
         Iter {
             first_edge, second_edge, first_iter, second_iter, shortcut_graph,
-            range: range.clone(),
+            range,
             prev_ipp_at: shortcut_graph.period(),
             first_edge_prev_ipp,
             first_edge_next_ipp,
@@ -108,17 +108,14 @@ impl<'a> Iter<'a> {
                     self.second_edge_prev_ipp = Some(second_edge_ipp);
                     self.second_iter.next();
                     Some((ipp, (self.range.wrap_around() + second_edge_ipp.0 - ipp + second_edge_ipp.1) % self.range.wrap_around()))
+                } else if let Some((first_edge_next_ipp_at, first_edge_next_ipp_value)) = self.first_edge_next_ipp {
+                    debug_assert!(abs_diff(first_edge_next_ipp_value, self.first_edge.evaluate(first_edge_next_ipp_at, self.shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. Shortcut {}", first_edge_next_ipp_at, first_edge_next_ipp_value, self.first_edge.evaluate(first_edge_next_ipp_at, self.shortcut_graph), self.first_edge.debug_to_s(self.shortcut_graph, 0));
+                    self.first_edge_prev_ipp = Some((first_edge_next_ipp_at, first_edge_next_ipp_value));
+                    let second_edge_value = self.eval_second_edge(first_edge_next_ipp_at + first_edge_next_ipp_value);
+                    self.first_edge_next_ipp = self.first_iter.next();
+                    Some((first_edge_next_ipp_at, first_edge_next_ipp_value + second_edge_value))
                 } else {
-                    // println!("next first edge ipp is earlier: {:?}", self.first_edge_next_ipp);
-                    if let Some((first_edge_next_ipp_at, first_edge_next_ipp_value)) = self.first_edge_next_ipp {
-                        debug_assert!(abs_diff(first_edge_next_ipp_value, self.first_edge.evaluate(first_edge_next_ipp_at, self.shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. Shortcut {}", first_edge_next_ipp_at, first_edge_next_ipp_value, self.first_edge.evaluate(first_edge_next_ipp_at, self.shortcut_graph), self.first_edge.debug_to_s(self.shortcut_graph, 0));
-                        self.first_edge_prev_ipp = Some((first_edge_next_ipp_at, first_edge_next_ipp_value));
-                        let second_edge_value = self.eval_second_edge(first_edge_next_ipp_at + first_edge_next_ipp_value);
-                        self.first_edge_next_ipp = self.first_iter.next();
-                        Some((first_edge_next_ipp_at, first_edge_next_ipp_value + second_edge_value))
-                    } else {
-                        None
-                    }
+                    None
                 }
             },
             None => {
@@ -213,9 +210,9 @@ fn invert(first_ipp: (Timestamp, Timestamp), second_ipp: (Timestamp, Timestamp),
     debug_assert!(target_time <= second_ipp.1, "{:?} {:?} {}", first_ipp, second_ipp, target_time);
 
     let delta_x = second_ipp.0 - first_ipp.0;
-    let delta_x = delta_x as u64;
+    let delta_x = u64::from(delta_x);
     let delta_y = second_ipp.1 - first_ipp.1;
-    let delta_y = delta_y as u64;
+    let delta_y = u64::from(delta_y);
 
     if delta_y == 0 {
         debug_assert_eq!(first_ipp.1, target_time);
@@ -223,7 +220,7 @@ fn invert(first_ipp: (Timestamp, Timestamp), second_ipp: (Timestamp, Timestamp),
     }
 
     let delta_y_to_target = target_time - first_ipp.1;
-    let delta_x_to_target = (delta_y - 1 + delta_y_to_target as u64 * delta_x) / delta_y;
+    let delta_x_to_target = (delta_y - 1 + u64::from(delta_y_to_target) * delta_x) / delta_y;
 
     (first_ipp.0 + delta_x_to_target as u32) % period
 }

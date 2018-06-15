@@ -98,7 +98,7 @@ pub fn intersections<I, F, G>(iter: I, eval_first: F, eval_second: G, period: Ti
         prev_second = first_second;
     }
 
-    for ((prev_first, next_first), (prev_second, next_second)) in missing.into_iter() {
+    for ((prev_first, next_first), (prev_second, next_second)) in missing {
         debug_assert!((next_first.is_none() && next_second.is_some()) || (next_first.is_some() && next_second.is_none()));
         if next_first.is_none() {
             let (first_first_at, first_first_value) = first_first.unwrap();
@@ -109,7 +109,7 @@ pub fn intersections<I, F, G>(iter: I, eval_first: F, eval_second: G, period: Ti
         }
     }
 
-    for &mut ((ref mut first_first_ipp, (ref mut first_second_ipp_at, _)), (ref mut second_first_ipp, (ref mut second_second_ipp_at, _))) in found_intersections.iter_mut() {
+    for &mut ((ref mut first_first_ipp, (ref mut first_second_ipp_at, _)), (ref mut second_first_ipp, (ref mut second_second_ipp_at, _))) in &mut found_intersections {
         if first_first_ipp.is_some() && second_first_ipp.is_some() {
             break;
         } else {
@@ -133,9 +133,9 @@ pub fn intersections<I, F, G>(iter: I, eval_first: F, eval_second: G, period: Ti
     }).map(|(first_line, second_line)| {
         let dx1 = (first_line.1).0 - (first_line.0).0;
         let dx2 = (second_line.1).0 - (second_line.0).0;
-        let dy1 = (first_line.1).1 as i64 - (first_line.0).1 as i64;
-        let dy2 = (second_line.1).1 as i64 - (second_line.0).1 as i64;
-        (intersect(first_line, second_line), dy1 * dx2 as i64 <= dy2 * dx1 as i64)
+        let dy1 = i64::from((first_line.1).1) - i64::from((first_line.0).1);
+        let dy2 = i64::from((second_line.1).1) - i64::from((second_line.0).1);
+        (intersect(first_line, second_line), dy1 * i64::from(dx2) <= dy2 * i64::from(dx1))
     }).filter(|(intersection, _)| {
         intersection.is_some()
     }).map(|(intersection, first_better)| {
@@ -145,16 +145,14 @@ pub fn intersections<I, F, G>(iter: I, eval_first: F, eval_second: G, period: Ti
     let mut final_intersections = Vec::with_capacity(found_intersections.len());
     let last = found_intersections.last().cloned();
 
-    for (at, first_better) in found_intersections.into_iter() {
-        let (prev_at, prev_first_better) = final_intersections.last().cloned().unwrap_or(last.unwrap());
+    for (at, first_better) in found_intersections {
+        let (prev_at, prev_first_better) = final_intersections.last().cloned().unwrap_or_else(|| last.unwrap());
         if prev_at != at {
             if prev_first_better != first_better {
                 final_intersections.push((at, first_better))
             }
-        } else {
-            if prev_first_better != first_better {
-                final_intersections.pop();
-            }
+        } else if prev_first_better != first_better {
+            final_intersections.pop();
         }
     }
 
@@ -164,14 +162,14 @@ pub fn intersections<I, F, G>(iter: I, eval_first: F, eval_second: G, period: Ti
 fn intersect(((x1, y1), (x2, y2)): ((Timestamp, Weight), (Timestamp, Weight)), ((x3, y3), (x4, y4)): ((Timestamp, Weight), (Timestamp, Weight))) -> Option<Timestamp> {
     debug_assert!(x2 > x1);
     debug_assert!(x4 > x3);
-    let x1 = x1 as i128;
-    let x2 = x2 as i128;
-    let x3 = x3 as i128;
-    let x4 = x4 as i128;
-    let y1 = y1 as i128;
-    let y2 = y2 as i128;
-    let y3 = y3 as i128;
-    let y4 = y4 as i128;
+    let x1 = i128::from(x1);
+    let x2 = i128::from(x2);
+    let x3 = i128::from(x3);
+    let x4 = i128::from(x4);
+    let y1 = i128::from(y1);
+    let y2 = i128::from(y2);
+    let y3 = i128::from(y3);
+    let y4 = i128::from(y4);
 
     let numerator = (x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4);
     let denominator = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
