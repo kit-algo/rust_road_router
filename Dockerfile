@@ -8,7 +8,8 @@ WORKDIR /app
 ADD . /app
 
 # Install any needed dependencies and compile
-RUN cargo build --release --all
+RUN cargo build --release -p bmw_routing_engine --bin import_here
+RUN cargo build --release -p bmw_routing_server --bin bmw_routing_server
 
 # Build flow cutter
 RUN cd lib/flow-cutter/ && ./build.py --clean --ignore-warnings --no-gpl && cd ../..
