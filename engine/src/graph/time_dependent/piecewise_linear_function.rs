@@ -43,7 +43,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
 
         let departure = departure % self.period;
-        match self.departure_time.binary_search(&departure) {
+        match self.departure_time.sorted_search(&departure) {
             Ok(departure_index) => unsafe { *self.travel_time.get_unchecked(departure_index) },
             Err(upper_index) => {
                 let upper_index = upper_index % self.departure_time.len();
@@ -109,7 +109,7 @@ impl<'a> Iter<'a> {
             return Iter { departure_time, travel_time, range, current_index: 0, initial_index: 0, done: true }
         }
 
-        let current_index = match departure_time.binary_search(&range.start()) {
+        let current_index = match departure_time.sorted_search(&range.start()) {
             Ok(index) => index,
             Err(index) => index
         } % departure_time.len();
@@ -143,7 +143,7 @@ impl<'a> SegmentIter<'a> {
             return SegmentIter { departure_time, travel_time, range, current_index: 0, initial_index: 0, done: true, done_after_next: true }
         }
 
-        let current_index = match departure_time.binary_search(&range.start()) {
+        let current_index = match departure_time.sorted_search(&range.start()) {
             Ok(index) => index,
             Err(index) => index + departure_time.len() - 1
         } % departure_time.len();

@@ -197,7 +197,7 @@ impl Shortcut {
             ShortcutPaths::None => INFINITY,
             ShortcutPaths::One(data) => data.evaluate(departure, shortcut_graph),
             ShortcutPaths::Multi(ref data) => {
-                match data.binary_search_by_key(&departure, |&(time, _)| time) {
+                match data.sorted_search_by_key(&departure, |&(time, _)| time) {
                     Ok(index) => data[index].1.evaluate(departure, shortcut_graph),
                     Err(index) => {
                         let index = (index + data.len() - 1) % data.len();
@@ -383,7 +383,7 @@ impl<'a, 'b> Iter<'a, 'b> {
                 }
             },
             ShortcutPaths::Multi(ref data) => {
-                let (current_index, segment_iter_state, current_source_iter) = match data.binary_search_by_key(&range.start(), |&(time, _)| time) {
+                let (current_index, segment_iter_state, current_source_iter) = match data.sorted_search_by_key(&range.start(), |&(time, _)| time) {
                     Ok(index) => (index, InitialPathSegmentIterState::InitialCompleted(index), None),
                     Err(index) => {
                         let current_index = (index + data.len() - 1) % data.len();
@@ -519,7 +519,7 @@ impl<'a, 'b> SegmentIter<'a, 'b> {
                 }
             },
             ShortcutPaths::Multi(ref data) => {
-                let (current_index, segment_iter_state, current_source_iter) = match data.binary_search_by_key(&range.start(), |&(time, _)| time) {
+                let (current_index, segment_iter_state, current_source_iter) = match data.sorted_search_by_key(&range.start(), |&(time, _)| time) {
                     Ok(index) => (index, InitialPathSegmentIterState::InitialCompleted(index), None),
                     Err(index) => {
                         let current_index = (index + data.len() - 1) % data.len();
