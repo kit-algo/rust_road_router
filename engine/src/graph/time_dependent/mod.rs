@@ -22,6 +22,10 @@ impl Ipp {
     fn new(at: Timestamp, val: Weight) -> Ipp {
         Ipp { at, val }
     }
+
+    fn as_tuple(&self) -> (Timestamp, Weight) {
+        (self.at, self.val)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -36,7 +40,13 @@ impl Segment {
     fn new((from_at, from_val): (Timestamp, Weight), (to_at, to_val): (Timestamp, Weight)) -> Segment {
         Segment { from: Ipp::new(from_at, from_val), to: Ipp::new(to_at, to_val), valid_from: from_at, valid_to: to_at }
     }
+
+    fn valid_range(&self) -> Range<Timestamp> {
+        Range { start: self.valid_from, end: self.valid_to }
+    }
 }
+
+use ::sorted_search_slice_ext::SortedSearchSliceExt;
 
 mod piecewise_linear_function;
 use self::piecewise_linear_function::*;

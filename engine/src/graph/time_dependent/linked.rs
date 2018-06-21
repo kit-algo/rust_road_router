@@ -207,7 +207,7 @@ fn invert(first_ipp: (Timestamp, Timestamp), second_ipp: (Timestamp, Timestamp),
     };
     let target_time = if target_time < first_ipp.1 { target_time + period } else { target_time };
     debug_assert!(target_time >= first_ipp.1, "{:?} {:?} {}", first_ipp, second_ipp, target_time);
-    debug_assert!(target_time <= second_ipp.1, "{:?} {:?} {}", first_ipp, second_ipp, target_time);
+    // debug_assert!(target_time <= second_ipp.1, "{:?} {:?} {}", first_ipp, second_ipp, target_time);
 
     let delta_x = second_ipp.0 - first_ipp.0;
     let delta_x = u64::from(delta_x);
@@ -225,9 +225,72 @@ fn invert(first_ipp: (Timestamp, Timestamp), second_ipp: (Timestamp, Timestamp),
     (first_ipp.0 + delta_x_to_target as u32) % period
 }
 
+fn link_segments(first_segment: &Segment, second_segment: &Segment, period: Timestamp) -> Segment {
+    // TODO only invert if necessary, check with result range of first segment
+    let start_of_second = invert(first_segment.from.as_tuple(), first_segment.to.as_tuple(), second_segment.valid_from, period);
+    let start_of_range = if WrappingRange::new(first_segment.valid_range(), period).contains(start_of_second) {
+        start_of_second
+    } else {
+        first_segment.valid_from
+    };
+    let end_of_second = invert(first_segment.from.as_tuple(), first_segment.to.as_tuple(), second_segment.valid_to, period);
+    let end_of_range = if WrappingRange::new(first_segment.valid_range(), period).contains(end_of_second) {
+        end_of_second
+    } else {
+        first_segment.valid_to
+    };
+    // ((start_of_range, first_segment.from.val + second_segment.from.val), (end_of_range, first_segment.to.val + second_segment.to.val))
+    Segment {
+        from: Ipp::new(first_segment.from.at, first_segment.from.val + second_segment.from.val),
+        to: Ipp::new(first_segment.to.at, first_segment.to.val + second_segment.to.val),
+        valid_from: start_of_range,
+        valid_to: end_of_range
+    }
+}
+
+fn foo() {
+    // in arrival time
+    // calc linked steigung
+    // reduce with gcd
+    // anchor = eval second at first.first.val
+    //  als bruch: (val - second.first.at) / (second.second.at - second.first.at)
+    //      * (second.second.val - second.first.val)
+    //      + second.first.val
+    // anchor + linked steigung * x == ganze zahl?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_linking_static_segments() {
+        assert_eq!(link_segments(&Segment::new((0, 2), (5, 2)), &Segment::new((1, 2), (8, 2)), 10), Segment::new((0, 4), (5, 4)));
+    }
+
+    #[test]
+    fn test_linking_one_static_one_var_segments() {
+        assert_eq!(link_segments(&Segment::new((0, 2), (5, 2)), &Segment::new((2, 2), (7, 3)), 10), Segment::new((0, 4), (5, 5)));
+        assert_eq!(link_segments(&Segment::new((0, 2), (5, 3)), &Segment::new((2, 2), (8, 2)), 10), Segment::new((0, 4), (5, 5)));
+    }
+
+    #[test]
+    #[ignore]
+    fn test_linking_non_fitting_length_segments() {
+        for s in 0..10 {
+            assert_eq!(link_segments(&Segment::new((s, 2), ((s + 5) % 10 , 2)), &Segment::new(((s + 2) % 10, 2), ((s + 6) % 10, 3)), 10),
+                Segment::new((s, 4), ((s + 4) % 10, 5)));
+            assert_eq!(link_segments(&Segment::new((s, 2), ((s + 4) % 10 , 2)), &Segment::new(((s + 3) % 10, 2), ((s + 5) % 10, 3)), 10),
+                Segment::new(((s + 1) % 10, 4), ((s + 3) % 10, 5)));
+        }
+    }
+
+    #[test]
+    fn test_linking_different_slopes() {
+        assert_eq!(
+            link_segments(&Segment { from: Ipp::new(0, 2), to: Ipp::new(4, 4), valid_from: 1, valid_to: 3 }, &Segment { from: Ipp::new(2, 2), to: Ipp::new(8, 1), valid_from: 3, valid_to: 7 }, 10),
+            Segment { from: Ipp::new(0, 4), to: Ipp::new(4, 5), valid_from: 1, valid_to: 3 });
+    }
 
     #[test]
     fn test_bounds() {
