@@ -23,4 +23,5 @@ mod index_heap;
 mod in_range_option;
 mod as_slice;
 mod as_mut_slice;
+mod math;
 mod sorted_search_slice_ext;
