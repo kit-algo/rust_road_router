@@ -225,26 +225,27 @@ fn invert(first_ipp: (Timestamp, Timestamp), second_ipp: (Timestamp, Timestamp),
     (first_ipp.0 + delta_x_to_target as u32) % period
 }
 
-fn link_segments(first_segment: &Segment, second_segment: &Segment, period: Timestamp) -> Segment {
+fn link_segments(first_segment: &TTFSeg, second_segment: &TTFSeg, period: Timestamp) -> TTFSeg {
     // TODO only invert if necessary, check with result range of first segment
-    let start_of_second = invert(first_segment.from.as_tuple(), first_segment.to.as_tuple(), second_segment.valid_from, period);
-    let start_of_range = if WrappingRange::new(first_segment.valid_range(), period).contains(start_of_second) {
+    let start_of_second = invert(first_segment.line.from.as_tuple(), first_segment.line.to.as_tuple(), second_segment.valid.start, period);
+    let start_of_range = if WrappingRange::new(first_segment.valid.clone(), period).contains(start_of_second) {
         start_of_second
     } else {
-        first_segment.valid_from
+        first_segment.valid.start
     };
-    let end_of_second = invert(first_segment.from.as_tuple(), first_segment.to.as_tuple(), second_segment.valid_to, period);
-    let end_of_range = if WrappingRange::new(first_segment.valid_range(), period).contains(end_of_second) {
+    let end_of_second = invert(first_segment.line.from.as_tuple(), first_segment.line.to.as_tuple(), second_segment.valid.end, period);
+    let end_of_range = if WrappingRange::new(first_segment.valid.clone(), period).contains(end_of_second) {
         end_of_second
     } else {
-        first_segment.valid_to
+        first_segment.valid.end
     };
     // ((start_of_range, first_segment.from.val + second_segment.from.val), (end_of_range, first_segment.to.val + second_segment.to.val))
     Segment {
-        from: Ipp::new(first_segment.from.at, first_segment.from.val + second_segment.from.val),
-        to: Ipp::new(first_segment.to.at, first_segment.to.val + second_segment.to.val),
-        valid_from: start_of_range,
-        valid_to: end_of_range
+        line: Line {
+            from: Ipp::new(first_segment.line.from.at, first_segment.line.from.val + second_segment.line.from.val),
+            to: Ipp::new(first_segment.line.to.at, first_segment.line.to.val + second_segment.line.to.val),
+        },
+        valid: Range { start: start_of_range, end: end_of_range }
     }
 }
 
@@ -265,31 +266,31 @@ mod tests {
 
     #[test]
     fn test_linking_static_segments() {
-        assert_eq!(link_segments(&Segment::new((0, 2), (5, 2)), &Segment::new((1, 2), (8, 2)), 10), Segment::new((0, 4), (5, 4)));
+        assert_eq!(link_segments(&TTFSeg::new((0, 2), (5, 2)), &TTFSeg::new((1, 2), (8, 2)), 10), TTFSeg::new((0, 4), (5, 4)));
     }
 
     #[test]
     fn test_linking_one_static_one_var_segments() {
-        assert_eq!(link_segments(&Segment::new((0, 2), (5, 2)), &Segment::new((2, 2), (7, 3)), 10), Segment::new((0, 4), (5, 5)));
-        assert_eq!(link_segments(&Segment::new((0, 2), (5, 3)), &Segment::new((2, 2), (8, 2)), 10), Segment::new((0, 4), (5, 5)));
+        assert_eq!(link_segments(&TTFSeg::new((0, 2), (5, 2)), &TTFSeg::new((2, 2), (7, 3)), 10), TTFSeg::new((0, 4), (5, 5)));
+        assert_eq!(link_segments(&TTFSeg::new((0, 2), (5, 3)), &TTFSeg::new((2, 2), (8, 2)), 10), TTFSeg::new((0, 4), (5, 5)));
     }
 
     #[test]
     #[ignore]
     fn test_linking_non_fitting_length_segments() {
         for s in 0..10 {
-            assert_eq!(link_segments(&Segment::new((s, 2), ((s + 5) % 10 , 2)), &Segment::new(((s + 2) % 10, 2), ((s + 6) % 10, 3)), 10),
-                Segment::new((s, 4), ((s + 4) % 10, 5)));
-            assert_eq!(link_segments(&Segment::new((s, 2), ((s + 4) % 10 , 2)), &Segment::new(((s + 3) % 10, 2), ((s + 5) % 10, 3)), 10),
-                Segment::new(((s + 1) % 10, 4), ((s + 3) % 10, 5)));
+            assert_eq!(link_segments(&TTFSeg::new((s, 2), ((s + 5) % 10 , 2)), &TTFSeg::new(((s + 2) % 10, 2), ((s + 6) % 10, 3)), 10),
+                TTFSeg::new((s, 4), ((s + 4) % 10, 5)));
+            assert_eq!(link_segments(&TTFSeg::new((s, 2), ((s + 4) % 10 , 2)), &TTFSeg::new(((s + 3) % 10, 2), ((s + 5) % 10, 3)), 10),
+                TTFSeg::new(((s + 1) % 10, 4), ((s + 3) % 10, 5)));
         }
     }
 
     #[test]
     fn test_linking_different_slopes() {
         assert_eq!(
-            link_segments(&Segment { from: Ipp::new(0, 2), to: Ipp::new(4, 4), valid_from: 1, valid_to: 3 }, &Segment { from: Ipp::new(2, 2), to: Ipp::new(8, 1), valid_from: 3, valid_to: 7 }, 10),
-            Segment { from: Ipp::new(0, 4), to: Ipp::new(4, 5), valid_from: 1, valid_to: 3 });
+            link_segments(&Segment { line: Line { from: Ipp::new(0, 2), to: Ipp::new(4, 4) }, valid: Range { start: 1, end: 3 } }, &Segment { line: Line { from: Ipp::new(2, 2), to: Ipp::new(8, 1) }, valid: Range { start: 3, end: 7 } }, 10),
+            Segment { line: Line { from: Ipp::new(0, 4), to: Ipp::new(4, 5) }, valid: Range { start: 1, end: 3 } });
     }
 
     #[test]

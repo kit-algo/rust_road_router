@@ -497,7 +497,7 @@ pub(super) struct SegmentIter<'a, 'b: 'a> {
     range: WrappingRange<Timestamp>,
     current_index: usize,
     segment_iter_state: InitialPathSegmentIterState,
-    current_source_iter: Option<Box<Iterator<Item = Segment> + 'a>>,
+    current_source_iter: Option<Box<Iterator<Item = TTFSeg> + 'a>>,
     source_contained_segments: bool,
     cached_iter: Option<WrappingSliceIter<'b>>,
 }
@@ -515,7 +515,7 @@ impl<'a, 'b> SegmentIter<'a, 'b> {
                 SegmentIter {
                     shortcut, shortcut_graph, range: range.clone(), current_index: 0, source_contained_segments: false, cached_iter: None,
                     segment_iter_state: InitialPathSegmentIterState::InitialCompleted(0),
-                    current_source_iter: Some(Box::new(data.seg_iter(range, shortcut_graph)) as Box<Iterator<Item = Segment>>)
+                    current_source_iter: Some(Box::new(data.seg_iter(range, shortcut_graph)) as Box<Iterator<Item = TTFSeg>>)
                 }
             },
             ShortcutPaths::Multi(ref data) => {
@@ -527,7 +527,7 @@ impl<'a, 'b> SegmentIter<'a, 'b> {
                         let segment_iter_state = InitialPathSegmentIterState::InitialPartialyCompleted(current_index);
                         segment_range.shift_start(range.start());
                         // println!("shortcut segment iter range {:?}", segment_range);
-                        (current_index, segment_iter_state, Some(Box::new(data[current_index].1.seg_iter(segment_range, shortcut_graph)) as Box<Iterator<Item = Segment>>))
+                        (current_index, segment_iter_state, Some(Box::new(data[current_index].1.seg_iter(segment_range, shortcut_graph)) as Box<Iterator<Item = TTFSeg>>))
                     },
                 };
 
@@ -545,8 +545,8 @@ impl<'a, 'b> SegmentIter<'a, 'b> {
                 match self.current_source_iter.as_mut().unwrap().next() {
                     Some(segment) => {
                         // debug_assert!(abs_diff(ipp.1, self.shortcut.evaluate(ipp.0, self.shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. {}", ipp.0, ipp.1, self.shortcut.evaluate(ipp.0, self.shortcut_graph), self.shortcut.debug_to_s(self.shortcut_graph, 0));
-                        debug_assert!(self.range.contains(segment.valid_from));
-                        debug_assert!(self.range.contains(segment.valid_to) || segment.valid_to == self.range.end());
+                        debug_assert!(self.range.contains(segment.valid.start));
+                        debug_assert!(self.range.contains(segment.valid.end) || segment.valid.end == self.range.end());
                         self.source_contained_segments = true;
                         Some(segment)
                     },
@@ -556,7 +556,7 @@ impl<'a, 'b> SegmentIter<'a, 'b> {
                                 let segment_range = self.shortcut.segment_range(self.current_index);
                                 let value = self.shortcut.evaluate(segment_range.start, self.shortcut_graph);
                                 self.source_contained_segments = true;
-                                return Some(Segment::new((segment_range.start, value), (segment_range.end, value)))
+                                return Some(TTFSeg::new((segment_range.start, value), (segment_range.end, value)))
                             }
                         }
 
@@ -612,7 +612,7 @@ impl<'a, 'b> SegmentIter<'a, 'b> {
 }
 
 impl<'a, 'b> Iterator for SegmentIter<'a, 'b> {
-    type Item = Segment;
+    type Item = TTFSeg;
 
     fn next(&mut self) -> Option<Self::Item> {
         // if let Some(ref mut iter) = self.cached_iter {

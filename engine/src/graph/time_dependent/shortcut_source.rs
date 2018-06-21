@@ -109,7 +109,7 @@ pub(super) enum ShortcutSourceSegmentIter<'a> {
 }
 
 impl<'a> Iterator for ShortcutSourceSegmentIter<'a> {
-    type Item = Segment;
+    type Item = TTFSeg;
 
     fn next(&mut self) -> Option<Self::Item> {
         // println!("shortcut src next");
