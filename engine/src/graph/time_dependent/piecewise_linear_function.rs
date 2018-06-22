@@ -122,9 +122,9 @@ impl<'a> Iter<'a> {
 }
 
 impl<'a> Iterator for Iter<'a> {
-    type Item = (Timestamp, Weight);
+    type Item = TTIpp;
 
-    fn next(&mut self) -> Option<(Timestamp, Weight)> {
+    fn next(&mut self) -> Option<Self::Item> {
         let ipp = unsafe { *self.departure_time.get_unchecked(self.current_index) };
 
         if !self.done && self.range.contains(ipp) {
@@ -133,7 +133,7 @@ impl<'a> Iterator for Iter<'a> {
             if self.current_index == self.initial_index {
                 self.done = true;
             }
-            Some((ipp, tt))
+            Some(TTIpp::new(ipp, tt))
         } else {
             None
         }
@@ -250,7 +250,7 @@ mod tests {
         let departure_time = vec![0, 5, 14, 20];
         let travel_time =    vec![2, 1, 2,  1];
         let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time, 24);
-        let all_ipps: Vec<(Timestamp, Weight)> = ttf.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 24)).collect();
+        let all_ipps: Vec<(Timestamp, Weight)> = ttf.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 24)).map(TTIpp::as_tuple).collect();
         assert_eq!(all_ipps, vec![(0,2), (5,1), (14,2), (20,1)]);
     }
 
@@ -259,7 +259,7 @@ mod tests {
         let departure_time = vec![0, 5, 14, 20];
         let travel_time =    vec![2, 1, 2,  1];
         let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time, 24);
-        let all_ipps: Vec<(Timestamp, Weight)> = ttf.ipp_iter(WrappingRange::new(Range { start: 17, end: 17 }, 24)).collect();
+        let all_ipps: Vec<(Timestamp, Weight)> = ttf.ipp_iter(WrappingRange::new(Range { start: 17, end: 17 }, 24)).map(TTIpp::as_tuple).collect();
         assert_eq!(all_ipps, vec![(20,1), (0,2), (5,1), (14,2)]);
     }
 
@@ -268,7 +268,7 @@ mod tests {
         let departure_time = vec![0, 5, 14, 20];
         let travel_time =    vec![2, 1, 2,  1];
         let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time, 24);
-        let all_ipps: Vec<(Timestamp, Weight)> = ttf.ipp_iter(WrappingRange::new(Range { start: 10, end: 21 }, 24)).collect();
+        let all_ipps: Vec<(Timestamp, Weight)> = ttf.ipp_iter(WrappingRange::new(Range { start: 10, end: 21 }, 24)).map(TTIpp::as_tuple).collect();
         assert_eq!(all_ipps, vec![(14,2), (20,1)]);
     }
 
@@ -277,7 +277,7 @@ mod tests {
         let departure_time = vec![0];
         let travel_time =    vec![2];
         let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time, 24);
-        let all_ipps: Vec<(Timestamp, Weight)> = ttf.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 24)).collect();
+        let all_ipps: Vec<_> = ttf.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 24)).collect();
         assert_eq!(all_ipps, vec![]);
     }
 

@@ -98,7 +98,7 @@ impl<'a> Iterator for ShortcutSourceIter<'a> {
         // println!("shortcut src next");
         match *self {
             ShortcutSourceIter::Shortcut(ref mut iter) => iter.next(),
-            ShortcutSourceIter::OriginalEdge(ref mut iter) => iter.next(),
+            ShortcutSourceIter::OriginalEdge(ref mut iter) => iter.next().map(TTIpp::as_tuple),
         }
     }
 }

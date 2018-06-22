@@ -43,7 +43,7 @@ fn abs_diff(x: Weight, y: Weight) -> Weight {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-struct TTIpp {
+pub struct TTIpp {
     at: Timestamp,
     val: Weight,
 }
