@@ -43,12 +43,12 @@ fn abs_diff(x: Weight, y: Weight) -> Weight {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-struct Ipp {
+struct TTIpp {
     at: Timestamp,
     val: Weight,
 }
 
-impl Ipp {
+impl TTIpp {
     fn new(at: Timestamp, val: Weight) -> Ipp {
         Ipp { at, val }
     }
@@ -58,16 +58,29 @@ impl Ipp {
     }
 }
 
+type Ipp = TTIpp;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
-struct TTIpp(Ipp);
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct ATIpp(Ipp);
+struct ATIpp {
+    at: Timestamp,
+    val: Timestamp,
+}
+
+impl ATIpp {
+    fn new(at: Timestamp, val: Weight) -> ATIpp {
+        ATIpp { at, val }
+    }
+
+    fn as_tuple(self) -> (Timestamp, Weight) {
+        (self.at, self.val)
+    }
+}
 
 impl TTIpp {
     fn into_atipp(self, period: Timestamp) -> ATIpp {
-        let TTIpp(Ipp { at, val }) = self;
+        let TTIpp { at, val } = self;
         debug_assert!(at < period);
-        ATIpp(Ipp { at, val: (at + val) % period })
+        ATIpp{ at, val: (at + val) % period }
     }
 }
 
@@ -91,6 +104,16 @@ impl TTFSeg {
     }
 }
 
+impl Line<TTIpp> {
+    fn into_monotone_at_line(self, period: Timestamp) -> MonotoneLine<ATIpp> {
+        let Line { from, mut to } = self;
+        if to.at < from.at {
+            to.at += period;
+        }
+        MonotoneLine(Line { from: ATIpp { at: from.at, val: from.at + from.val }, to: ATIpp { at: to.at, val: to.at + to.val } })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 struct MonotoneLine<Point>(Line<Point>);
 
@@ -100,11 +123,17 @@ mod tests {
 
     #[test]
     fn test_ttipp_to_atipp() {
-        assert_eq!(TTIpp(Ipp::new(2, 2)).into_atipp(10), ATIpp(Ipp::new(2, 4)));
-        assert_eq!(TTIpp(Ipp::new(6, 5)).into_atipp(10), ATIpp(Ipp::new(6, 1)));
+        assert_eq!(TTIpp::new(2, 2).into_atipp(10), ATIpp::new(2, 4));
+        assert_eq!(TTIpp::new(6, 5).into_atipp(10), ATIpp::new(6, 1));
     }
 
     #[test]
     fn test_tt_line_to_monotone_at_line() {
+        assert_eq!(Line { from: TTIpp::new(2, 2), to: TTIpp::new(4, 5) }.into_monotone_at_line(10),
+            MonotoneLine(Line { from: ATIpp::new(2, 4), to: ATIpp::new(4, 9) }));
+        assert_eq!(Line { from: TTIpp::new(4, 5), to: TTIpp::new(2, 2) }.into_monotone_at_line(10),
+            MonotoneLine(Line { from: ATIpp::new(4, 9), to: ATIpp::new(12, 14) }));
+        assert_eq!(Line { from: TTIpp::new(8, 3), to: TTIpp::new(2, 2) }.into_monotone_at_line(10),
+            MonotoneLine(Line { from: ATIpp::new(8, 11), to: ATIpp::new(12, 14) }));
     }
 }
