@@ -155,22 +155,16 @@ impl<'a> Iter<'a> {
         self.first_edge_next_ipp.unwrap_or_else(|| (self.range.end(), self.first_edge.evaluate(self.range.end(), self.shortcut_graph)))
     }
 
-    fn eval_second_edge(&mut self, at: Timestamp) -> Weight {
+    fn eval_second_edge(&mut self, mut at: Timestamp) -> Weight {
         if let Some((second_edge_prev_ipp_at, second_edge_prev_ipp_value)) = self.second_edge_prev_ipp {
             if let Some(&(second_edge_next_ipp_at, second_edge_next_ipp_value)) = self.second_iter.peek() {
-                let delta_x = if second_edge_next_ipp_at > second_edge_prev_ipp_at {
-                    second_edge_next_ipp_at - second_edge_prev_ipp_at
-                } else {
-                    second_edge_next_ipp_at + self.shortcut_graph.period() - second_edge_prev_ipp_at
-                };
-
-                let relative_at = if at > second_edge_prev_ipp_at {
-                    at - second_edge_prev_ipp_at
-                } else {
-                    at + self.shortcut_graph.period() - second_edge_prev_ipp_at
-                };
-
-                return interpolate(delta_x, second_edge_prev_ipp_value, second_edge_next_ipp_value, relative_at);
+                let lf = Line::new(
+                    TTIpp::new(second_edge_prev_ipp_at, second_edge_prev_ipp_value),
+                    TTIpp::new(second_edge_next_ipp_at, second_edge_next_ipp_value));
+                if at < lf.from.at {
+                    at += self.shortcut_graph.period();
+                }
+                return lf.into_monotone_at_line(self.shortcut_graph.period()).interpolate_tt(at)
             }
         }
         self.second_edge.evaluate(at % self.shortcut_graph.period(), self.shortcut_graph)

@@ -90,6 +90,12 @@ struct Line<Point> {
     to: Point,
 }
 
+impl<Point> Line<Point> {
+    fn new(from: Point, to: Point) -> Self {
+        Line { from, to }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 struct Segment<LineType> {
     line: LineType,
@@ -114,8 +120,24 @@ impl Line<TTIpp> {
     }
 }
 
+
 #[derive(Debug, Clone, PartialEq)]
 struct MonotoneLine<Point>(Line<Point>);
+
+impl MonotoneLine<ATIpp> {
+    #[inline]
+    fn interpolate_tt(&self, x: Timestamp) -> Weight {
+        debug_assert!(x >= self.0.from.at);
+        debug_assert!(x <= self.0.to.at);
+        debug_assert!(self.0.from.at < self.0.to.at);
+        debug_assert!(self.0.from.val <= self.0.to.val);
+        let delta_x = self.0.to.at - self.0.from.at;
+        let delta_y = self.0.to.val - self.0.from.val;
+        let relative_x = x - self.0.from.at;
+        let result = u64::from(self.0.from.val) + (u64::from(relative_x) * u64::from(delta_y) / u64::from(delta_x));
+        result as Weight - x
+    }
+}
 
 #[cfg(test)]
 mod tests {

@@ -36,23 +36,26 @@ impl<'a> PiecewiseLinearFunction<'a> {
         (self.lower_bound(), self.upper_bound())
     }
 
-    pub fn evaluate(&self, departure: Timestamp) -> Weight {
+    pub fn evaluate(&self, mut departure: Timestamp) -> Weight {
         debug_assert!(departure < self.period);
         if self.departure_time.len() == 1 {
             return unsafe { *self.travel_time.get_unchecked(0) }
         }
 
-        let departure = departure % self.period;
         match self.departure_time.sorted_search(&departure) {
             Ok(departure_index) => unsafe { *self.travel_time.get_unchecked(departure_index) },
             Err(upper_index) => {
                 let upper_index = upper_index % self.departure_time.len();
                 let lower_index = if upper_index > 0 { upper_index - 1 } else { self.departure_time.len() - 1 };
-                unsafe {
-                    let delta_dt = self.subtract_wrapping(*self.departure_time.get_unchecked(upper_index), *self.departure_time.get_unchecked(lower_index));
-                    let relative_x = self.subtract_wrapping(departure, *self.departure_time.get_unchecked(lower_index));
-                    interpolate(delta_dt, *self.travel_time.get_unchecked(lower_index), *self.travel_time.get_unchecked(upper_index), relative_x)
+                let lf = unsafe {
+                    Line::new(
+                        TTIpp::new(*self.departure_time.get_unchecked(lower_index), *self.travel_time.get_unchecked(lower_index)),
+                        TTIpp::new(*self.departure_time.get_unchecked(upper_index), *self.travel_time.get_unchecked(upper_index)))
+                };
+                if departure < lf.from.at {
+                    departure += self.period;
                 }
+                lf.into_monotone_at_line(self.period).interpolate_tt(departure)
             },
         }
     }
