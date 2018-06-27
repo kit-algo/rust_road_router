@@ -92,13 +92,13 @@ pub enum ShortcutSourceIter<'a> {
 }
 
 impl<'a> Iterator for ShortcutSourceIter<'a> {
-    type Item = (Timestamp, Weight);
+    type Item = TTIpp;
 
     fn next(&mut self) -> Option<Self::Item> {
         // println!("shortcut src next");
         match *self {
-            ShortcutSourceIter::Shortcut(ref mut iter) => iter.next(),
-            ShortcutSourceIter::OriginalEdge(ref mut iter) => iter.next().map(TTIpp::as_tuple),
+            ShortcutSourceIter::Shortcut(ref mut iter) => iter.next().map(|(at, val)| TTIpp::new(at, val)),
+            ShortcutSourceIter::OriginalEdge(ref mut iter) => iter.next(),
         }
     }
 }

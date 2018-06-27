@@ -57,9 +57,9 @@ pub struct Iter<'a> {
 
     shortcut_graph: &'a ShortcutGraph<'a>,
 
-    first_edge_prev_ipp: Option<(Timestamp, Weight)>,
-    first_edge_next_ipp: Option<(Timestamp, Weight)>,
-    second_edge_prev_ipp: Option<(Timestamp, Weight)>
+    first_edge_prev_ipp: Option<TTIpp>,
+    first_edge_next_ipp: Option<TTIpp>,
+    second_edge_prev_ipp: Option<TTIpp>
 }
 
 impl<'a> Iter<'a> {
@@ -67,15 +67,15 @@ impl<'a> Iter<'a> {
         let mut first_iter = first_edge.ipp_iter(range.clone(), shortcut_graph);
         let first_edge_next_ipp = first_iter.next();
 
-        let first_edge_initial_value = if first_edge_next_ipp.is_some() && first_edge_next_ipp.unwrap().0 == range.start() {
-            first_edge_next_ipp.unwrap().1
+        let first_edge_initial_value = if first_edge_next_ipp.is_some() && first_edge_next_ipp.unwrap().at == range.start() {
+            first_edge_next_ipp.unwrap().val
         } else {
             first_edge.evaluate(range.start(), shortcut_graph)
         };
-        let first_edge_prev_ipp = if first_edge_next_ipp.is_some() && first_edge_next_ipp.unwrap().0 == range.start() {
+        let first_edge_prev_ipp = if first_edge_next_ipp.is_some() && first_edge_next_ipp.unwrap().at == range.start() {
             None
         } else {
-            Some((range.start(), first_edge_initial_value))
+            Some(TTIpp::new(range.start(), first_edge_initial_value))
         };
 
         let second_edge_range_begin = (range.start() + first_edge_initial_value) % shortcut_graph.period();
@@ -99,33 +99,33 @@ impl<'a> Iter<'a> {
         // println!("first_edge_next_ipp {:?}", self.first_edge_next_ipp);
         match self.second_iter.peek().cloned() {
             Some(second_edge_ipp) => {
-                if self.first_edge_prev_ipp.is_some() && self.first_edge_target_range_to_next().contains(second_edge_ipp.0) {
+                if self.first_edge_prev_ipp.is_some() && self.first_edge_target_range_to_next().contains(second_edge_ipp.at) {
                     // println!("target range {:?}", self.first_edge_target_range_to_next());
                     // println!("before next first edge ipp");
                     // println!("first edge next or end ipp {:?}", self.first_edge_next_ipp_or_end());
-                    let ipp = invert(self.first_edge_prev_ipp.unwrap(), self.first_edge_next_ipp_or_end(), second_edge_ipp.0, self.shortcut_graph.period());
+                    let ipp = invert(self.first_edge_prev_ipp.unwrap().as_tuple(), self.first_edge_next_ipp_or_end().as_tuple(), second_edge_ipp.at, self.shortcut_graph.period());
                     // println!("inverted {}", ipp);
                     self.second_edge_prev_ipp = Some(second_edge_ipp);
                     self.second_iter.next();
-                    Some((ipp, (self.range.wrap_around() + second_edge_ipp.0 - ipp + second_edge_ipp.1) % self.range.wrap_around()))
-                } else if let Some((first_edge_next_ipp_at, first_edge_next_ipp_value)) = self.first_edge_next_ipp {
-                    debug_assert!(abs_diff(first_edge_next_ipp_value, self.first_edge.evaluate(first_edge_next_ipp_at, self.shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. Shortcut {}", first_edge_next_ipp_at, first_edge_next_ipp_value, self.first_edge.evaluate(first_edge_next_ipp_at, self.shortcut_graph), self.first_edge.debug_to_s(self.shortcut_graph, 0));
-                    self.first_edge_prev_ipp = Some((first_edge_next_ipp_at, first_edge_next_ipp_value));
-                    let second_edge_value = self.eval_second_edge(first_edge_next_ipp_at + first_edge_next_ipp_value);
+                    Some((ipp, (self.range.wrap_around() + second_edge_ipp.at - ipp + second_edge_ipp.val) % self.range.wrap_around()))
+                } else if let Some(first_edge_next_ipp) = self.first_edge_next_ipp {
+                    debug_assert!(abs_diff(first_edge_next_ipp.val, self.first_edge.evaluate(first_edge_next_ipp.at, self.shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. Shortcut {}", first_edge_next_ipp.at, first_edge_next_ipp.val, self.first_edge.evaluate(first_edge_next_ipp.at, self.shortcut_graph), self.first_edge.debug_to_s(self.shortcut_graph, 0));
+                    self.first_edge_prev_ipp = self.first_edge_next_ipp;
+                    let second_edge_value = self.eval_second_edge(first_edge_next_ipp.at + first_edge_next_ipp.val);
                     self.first_edge_next_ipp = self.first_iter.next();
-                    Some((first_edge_next_ipp_at, first_edge_next_ipp_value + second_edge_value))
+                    Some((first_edge_next_ipp.at, first_edge_next_ipp.val + second_edge_value))
                 } else {
                     None
                 }
             },
             None => {
                 // println!("next first edge ipp: {:?}", self.first_edge_next_ipp);
-                if let Some((first_edge_next_ipp_at, first_edge_next_ipp_value)) = self.first_edge_next_ipp {
-                    debug_assert!(abs_diff(first_edge_next_ipp_value, self.first_edge.evaluate(first_edge_next_ipp_at, self.shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. Shortcut {}", first_edge_next_ipp_at, first_edge_next_ipp_value, self.first_edge.evaluate(first_edge_next_ipp_at, self.shortcut_graph), self.first_edge.debug_to_s(self.shortcut_graph, 0));
-                    self.first_edge_prev_ipp = Some((first_edge_next_ipp_at, first_edge_next_ipp_value));
-                    let second_edge_value = self.eval_second_edge(first_edge_next_ipp_at + first_edge_next_ipp_value);
+                if let Some(first_edge_next_ipp) = self.first_edge_next_ipp {
+                    debug_assert!(abs_diff(first_edge_next_ipp.val, self.first_edge.evaluate(first_edge_next_ipp.at, self.shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. Shortcut {}", first_edge_next_ipp.at, first_edge_next_ipp.val, self.first_edge.evaluate(first_edge_next_ipp.at, self.shortcut_graph), self.first_edge.debug_to_s(self.shortcut_graph, 0));
+                    self.first_edge_prev_ipp = self.first_edge_next_ipp;
+                    let second_edge_value = self.eval_second_edge(first_edge_next_ipp.at + first_edge_next_ipp.val);
                     self.first_edge_next_ipp = self.first_iter.next();
-                    Some((first_edge_next_ipp_at, first_edge_next_ipp_value + second_edge_value))
+                    Some((first_edge_next_ipp.at, first_edge_next_ipp.val + second_edge_value))
                 } else {
                     None
                 }
@@ -135,32 +135,30 @@ impl<'a> Iter<'a> {
 
     fn first_edge_target_range_to_next(&self) -> WrappingRange<Timestamp> {
         let first_edge_next_ipp = self.first_edge_next_ipp_or_end();
-        debug_assert!(abs_diff(first_edge_next_ipp.1, self.first_edge.evaluate(first_edge_next_ipp.0, self.shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. Shortcut {}", first_edge_next_ipp.0, first_edge_next_ipp.1, self.first_edge.evaluate(first_edge_next_ipp.0, self.shortcut_graph), self.first_edge.debug_to_s(self.shortcut_graph, 0));
+        debug_assert!(abs_diff(first_edge_next_ipp.val, self.first_edge.evaluate(first_edge_next_ipp.at, self.shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. Shortcut {}", first_edge_next_ipp.at, first_edge_next_ipp.val, self.first_edge.evaluate(first_edge_next_ipp.at, self.shortcut_graph), self.first_edge.debug_to_s(self.shortcut_graph, 0));
         let wrap = self.range.wrap_around();
-        let (first_edge_prev_ipp_at, first_edge_prev_ipp_value) = self.first_edge_prev_ipp.unwrap();
-        debug_assert!(abs_diff(first_edge_prev_ipp_value, self.first_edge.evaluate(first_edge_prev_ipp_at, self.shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. Shortcut {}", first_edge_prev_ipp_at, first_edge_prev_ipp_value, self.first_edge.evaluate(first_edge_prev_ipp_at, self.shortcut_graph), self.first_edge.debug_to_s(self.shortcut_graph, 0));
-        if first_edge_prev_ipp_at > first_edge_next_ipp.0 {
-            debug_assert!(first_edge_prev_ipp_at + first_edge_prev_ipp_value <= first_edge_next_ipp.0 + first_edge_next_ipp.1 + wrap);
+        let first_edge_prev_ipp = self.first_edge_prev_ipp.unwrap();
+        debug_assert!(abs_diff(first_edge_prev_ipp.val, self.first_edge.evaluate(first_edge_prev_ipp.at, self.shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. Shortcut {}", first_edge_prev_ipp.at, first_edge_prev_ipp.val, self.first_edge.evaluate(first_edge_prev_ipp.at, self.shortcut_graph), self.first_edge.debug_to_s(self.shortcut_graph, 0));
+        if first_edge_prev_ipp.at > first_edge_next_ipp.at {
+            debug_assert!(first_edge_prev_ipp.at + first_edge_prev_ipp.val <= first_edge_next_ipp.at + first_edge_next_ipp.val + wrap);
         } else {
-            debug_assert!(first_edge_prev_ipp_at + first_edge_prev_ipp_value <= first_edge_next_ipp.0 + first_edge_next_ipp.1);
+            debug_assert!(first_edge_prev_ipp.at + first_edge_prev_ipp.val <= first_edge_next_ipp.at + first_edge_next_ipp.val);
         }
-        let start = (first_edge_prev_ipp_at + first_edge_prev_ipp_value) % wrap;
-        let mut end = (first_edge_next_ipp.0 + first_edge_next_ipp.1) % wrap;
-        if start == end && first_edge_prev_ipp_at != first_edge_next_ipp.0 { end += 1; } // happens in the case of ascent -1
+        let start = (first_edge_prev_ipp.at + first_edge_prev_ipp.val) % wrap;
+        let mut end = (first_edge_next_ipp.at + first_edge_next_ipp.val) % wrap;
+        if start == end && first_edge_prev_ipp.at != first_edge_next_ipp.at { end += 1; } // happens in the case of ascent -1
         WrappingRange::new(Range { start , end }, wrap)
     }
 
     // TODO memoize?
-    fn first_edge_next_ipp_or_end(&self) -> (Timestamp, Weight) {
-        self.first_edge_next_ipp.unwrap_or_else(|| (self.range.end(), self.first_edge.evaluate(self.range.end(), self.shortcut_graph)))
+    fn first_edge_next_ipp_or_end(&self) -> TTIpp {
+        self.first_edge_next_ipp.unwrap_or_else(|| TTIpp::new(self.range.end(), self.first_edge.evaluate(self.range.end(), self.shortcut_graph)))
     }
 
     fn eval_second_edge(&mut self, mut at: Timestamp) -> Weight {
-        if let Some((second_edge_prev_ipp_at, second_edge_prev_ipp_value)) = self.second_edge_prev_ipp {
-            if let Some(&(second_edge_next_ipp_at, second_edge_next_ipp_value)) = self.second_iter.peek() {
-                let lf = Line::new(
-                    TTIpp::new(second_edge_prev_ipp_at, second_edge_prev_ipp_value),
-                    TTIpp::new(second_edge_next_ipp_at, second_edge_next_ipp_value));
+        if let Some(second_edge_prev_ipp) = self.second_edge_prev_ipp {
+            if let Some(second_edge_next_ipp) = self.second_iter.peek() {
+                let lf = Line::new(second_edge_prev_ipp, *second_edge_next_ipp);
                 if at < lf.from.at {
                     at += self.shortcut_graph.period();
                 }

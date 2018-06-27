@@ -243,7 +243,7 @@ impl Shortcut {
     pub fn cache_ipps(&mut self, shortcut_graph: &ShortcutGraph) {
         if self.is_valid_path() {
             let range = WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.period());
-            let ipps = self.ipp_iter(range, shortcut_graph).collect();
+            let ipps = self.ipp_iter(range, shortcut_graph).map(TTIpp::as_tuple).collect();
             self.cache = Some(ipps);
         }
     }
@@ -326,15 +326,15 @@ impl<'a, 'b> Iterator for MergingIter<'a, 'b> {
     type Item = (Timestamp, IppSource);
 
     fn next(&mut self) -> Option<Self::Item> {
-        match (self.shortcut_iter.peek(), self.linked_iter.peek()) {
-            (Some(&(self_next_ipp_at, self_next_ipp_value)), Some(&(other_next_ipp_at, other_next_ipp_value))) => {
-                if self_next_ipp_at == other_next_ipp_at {
+        match (self.shortcut_iter.peek().cloned(), self.linked_iter.peek()) {
+            (Some(self_next_ipp), Some(&(other_next_ipp_at, other_next_ipp_value))) => {
+                if self_next_ipp.at == other_next_ipp_at {
                     self.shortcut_iter.next();
                     self.linked_iter.next();
-                    Some((self_next_ipp_at, IppSource::Both(self_next_ipp_value, other_next_ipp_value)))
-                } else if self_next_ipp_at <= other_next_ipp_at {
+                    Some((self_next_ipp.at, IppSource::Both(self_next_ipp.val, other_next_ipp_value)))
+                } else if self_next_ipp.at <= other_next_ipp_at {
                     self.shortcut_iter.next();
-                    Some((self_next_ipp_at, IppSource::First(self_next_ipp_value)))
+                    Some((self_next_ipp.at, IppSource::First(self_next_ipp.val)))
                 } else {
                     self.linked_iter.next();
                     Some((other_next_ipp_at, IppSource::Second(other_next_ipp_value)))
@@ -344,9 +344,9 @@ impl<'a, 'b> Iterator for MergingIter<'a, 'b> {
                 self.linked_iter.next();
                 Some((other_next_ipp_at, IppSource::Second(other_next_ipp_value)))
             },
-            (Some(&(self_next_ipp_at, self_next_ipp_value)), None) => {
+            (Some(self_next_ipp), None) => {
                 self.shortcut_iter.next();
-                Some((self_next_ipp_at, IppSource::First(self_next_ipp_value)))
+                Some((self_next_ipp.at, IppSource::First(self_next_ipp.val)))
             },
             (None, None) => None
         }
@@ -359,7 +359,7 @@ pub struct Iter<'a, 'b: 'a> {
     range: WrappingRange<Timestamp>,
     current_index: usize,
     segment_iter_state: InitialPathSegmentIterState,
-    current_source_iter: Option<Box<Iterator<Item = (Timestamp, Weight)> + 'a>>,
+    current_source_iter: Option<Box<Iterator<Item = TTIpp> + 'a>>,
     cached_iter: Option<WrappingSliceIter<'b>>,
 }
 
@@ -379,7 +379,7 @@ impl<'a, 'b> Iter<'a, 'b> {
                 Iter {
                     shortcut, shortcut_graph, range, current_index: 0, cached_iter: None,
                     segment_iter_state: InitialPathSegmentIterState::InitialCompleted(0),
-                    current_source_iter: Some(Box::new(data.ipp_iter(segment_range, shortcut_graph)) as Box<Iterator<Item = (Timestamp, Weight)>>)
+                    current_source_iter: Some(Box::new(data.ipp_iter(segment_range, shortcut_graph)) as Box<Iterator<Item = TTIpp>>)
                 }
             },
             ShortcutPaths::Multi(ref data) => {
@@ -391,7 +391,7 @@ impl<'a, 'b> Iter<'a, 'b> {
                         let segment_iter_state = InitialPathSegmentIterState::InitialPartialyCompleted(current_index);
                         segment_range.shift_start(range.start());
                         // println!("shortcut segment iter range {:?}", segment_range);
-                        (current_index, segment_iter_state, Some(Box::new(data[current_index].1.ipp_iter(segment_range, shortcut_graph)) as Box<Iterator<Item = (Timestamp, Weight)>>))
+                        (current_index, segment_iter_state, Some(Box::new(data[current_index].1.ipp_iter(segment_range, shortcut_graph)) as Box<Iterator<Item = TTIpp>>))
                     },
                 };
 
@@ -408,8 +408,8 @@ impl<'a, 'b> Iter<'a, 'b> {
                 // TODO move borrow into Some(...) match once NLL are more stable
                 match self.current_source_iter.as_mut().unwrap().next() {
                     Some(ipp) => {
-                        debug_assert!(abs_diff(ipp.1, self.shortcut.evaluate(ipp.0, self.shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. {}", ipp.0, ipp.1, self.shortcut.evaluate(ipp.0, self.shortcut_graph), self.shortcut.debug_to_s(self.shortcut_graph, 0));
-                        if self.range.contains(ipp.0) {
+                        debug_assert!(abs_diff(ipp.val, self.shortcut.evaluate(ipp.at, self.shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. {}", ipp.at, ipp.val, self.shortcut.evaluate(ipp.at, self.shortcut_graph), self.shortcut.debug_to_s(self.shortcut_graph, 0));
+                        if self.range.contains(ipp.at) {
                             // println!("shortcut result {}", ipp);
                             Some(ipp)
                         } else {
@@ -468,7 +468,7 @@ impl<'a, 'b> Iter<'a, 'b> {
                             }
                             let segment_range = WrappingRange::new(segment_range, self.range.wrap_around());
                             self.current_source_iter = Some(Box::new(data[self.current_index].1.ipp_iter(segment_range, self.shortcut_graph)));
-                            Some((ipp, data[self.current_index].1.evaluate(ipp, self.shortcut_graph))) // TODO optimize?
+                            Some(TTIpp::new(ipp, data[self.current_index].1.evaluate(ipp, self.shortcut_graph))) // TODO optimize?
                         } else {
                             None
                         }
@@ -480,11 +480,11 @@ impl<'a, 'b> Iter<'a, 'b> {
 }
 
 impl<'a, 'b> Iterator for Iter<'a, 'b> {
-    type Item = (Timestamp, Weight);
+    type Item = TTIpp;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(ref mut iter) = self.cached_iter {
-            iter.next().cloned()
+            iter.next().map(|&(at, val)| TTIpp::new(at, val))
         } else {
             self.calc_next()
         }
@@ -653,7 +653,7 @@ mod tests {
 
         let mut shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
 
-        let all_ipps: Vec<(Timestamp, Weight)> = shortcut_graph.get_upward(2).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 8), &shortcut_graph).collect();
+        let all_ipps: Vec<(Timestamp, Weight)> = shortcut_graph.get_upward(2).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 8), &shortcut_graph).map(TTIpp::as_tuple).collect();
         assert_eq!(all_ipps, vec![(2,6), (6,2)]);
         let all_ipps: Vec<(Timestamp, Weight)> = Linked::new(1, 0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 8), &shortcut_graph).collect();
         assert_eq!(all_ipps, vec![(2,2), (6,6)]);
@@ -662,7 +662,7 @@ mod tests {
 
         assert_eq!(shortcut_graph.get_upward(2).data, ShortcutPaths::Multi(vec![(0, ShortcutData::new(ShortcutSource::Shortcut(1, 0))), (4, ShortcutData::new(ShortcutSource::OriginalEdge(2)))]));
 
-        let all_merged_ipps: Vec<(Timestamp, Weight)> = shortcut_graph.get_upward(2).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 8), &shortcut_graph).collect();
+        let all_merged_ipps: Vec<(Timestamp, Weight)> = shortcut_graph.get_upward(2).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 8), &shortcut_graph).map(TTIpp::as_tuple).collect();
         assert_eq!(all_merged_ipps, vec![(0,4), (2,2), (4,4), (6,2)]);
     }
 
@@ -708,7 +708,7 @@ mod tests {
 
         let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
 
-        let all_ipps: Vec<(Timestamp, Weight)> = shortcut_graph.get_upward(0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).collect();
+        let all_ipps: Vec<_> = shortcut_graph.get_upward(0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).map(TTIpp::as_tuple).collect();
         assert_eq!(all_ipps, vec![(1,2), (3,5), (9,3)]);
     }
 
@@ -731,7 +731,7 @@ mod tests {
 
         let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
 
-        let all_ipps: Vec<(Timestamp, Weight)> = shortcut_graph.get_upward(0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).collect();
+        let all_ipps: Vec<_> = shortcut_graph.get_upward(0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).collect();
         assert_eq!(all_ipps, vec![]);
     }
 
@@ -753,7 +753,7 @@ mod tests {
 
         let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
 
-        let all_ipps: Vec<(Timestamp, Weight)> = shortcut_graph.get_upward(0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).collect();
+        let all_ipps: Vec<(Timestamp, Weight)> = shortcut_graph.get_upward(0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).map(TTIpp::as_tuple).collect();
         assert_eq!(all_ipps, vec![(2,2), (6,2)]);
     }
 
@@ -775,7 +775,7 @@ mod tests {
 
         let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
 
-        let all_ipps: Vec<(Timestamp, Weight)> = shortcut_graph.get_upward(0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).collect();
+        let all_ipps: Vec<(Timestamp, Weight)> = shortcut_graph.get_upward(0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).map(TTIpp::as_tuple).collect();
         assert_eq!(all_ipps, vec![(0,1), (2,1), (5,2), (6,3), (7,2)]);
     }
 }
