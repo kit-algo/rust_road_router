@@ -107,13 +107,13 @@ impl<'a> Iter<'a> {
                     // println!("inverted {}", ipp);
                     self.second_edge_prev_ipp = Some(second_edge_ipp);
                     self.second_iter.next();
-                    Some((ipp, (self.range.wrap_around() + second_edge_ipp.at - ipp + second_edge_ipp.val) % self.range.wrap_around()))
+                    Some(TTIpp::new(ipp, (self.range.wrap_around() + second_edge_ipp.at - ipp + second_edge_ipp.val) % self.range.wrap_around()))
                 } else if let Some(first_edge_next_ipp) = self.first_edge_next_ipp {
                     debug_assert!(abs_diff(first_edge_next_ipp.val, self.first_edge.evaluate(first_edge_next_ipp.at, self.shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. Shortcut {}", first_edge_next_ipp.at, first_edge_next_ipp.val, self.first_edge.evaluate(first_edge_next_ipp.at, self.shortcut_graph), self.first_edge.debug_to_s(self.shortcut_graph, 0));
                     self.first_edge_prev_ipp = self.first_edge_next_ipp;
                     let second_edge_value = self.eval_second_edge(first_edge_next_ipp.at + first_edge_next_ipp.val);
                     self.first_edge_next_ipp = self.first_iter.next();
-                    Some((first_edge_next_ipp.at, first_edge_next_ipp.val + second_edge_value))
+                    Some(TTIpp::new(first_edge_next_ipp.at, first_edge_next_ipp.val + second_edge_value))
                 } else {
                     None
                 }
@@ -125,7 +125,7 @@ impl<'a> Iter<'a> {
                     self.first_edge_prev_ipp = self.first_edge_next_ipp;
                     let second_edge_value = self.eval_second_edge(first_edge_next_ipp.at + first_edge_next_ipp.val);
                     self.first_edge_next_ipp = self.first_iter.next();
-                    Some((first_edge_next_ipp.at, first_edge_next_ipp.val + second_edge_value))
+                    Some(TTIpp::new(first_edge_next_ipp.at, first_edge_next_ipp.val + second_edge_value))
                 } else {
                     None
                 }
@@ -170,14 +170,14 @@ impl<'a> Iter<'a> {
 }
 
 impl<'a> Iterator for Iter<'a> {
-    type Item = (Timestamp, Weight);
+    type Item = TTIpp;
 
     fn next(&mut self) -> Option<Self::Item> {
         let next = self.get_next();
-        if let Some((next_at, _)) = next {
-            if next_at != self.prev_ipp_at {
-                self.prev_ipp_at = next_at;
-                next
+        if let Some(next) = next {
+            if next.at != self.prev_ipp_at {
+                self.prev_ipp_at = next.at;
+                Some(next)
             } else {
                 self.next()
             }
@@ -384,7 +384,7 @@ mod tests {
         let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
         let linked = Linked::new(1, 0);
 
-        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).collect();
+        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).map(TTIpp::as_tuple).collect();
         assert_eq!(all_ipps, vec![(0,3), (2,6), (5,5), (8,4)]); // TODO ipp at 5,5 is correct, but its 5 on 3 and 4, too. Is that a problem???
     }
 
@@ -408,23 +408,23 @@ mod tests {
         let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
         let linked = Linked::new(1, 0);
 
-        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 1, end: 1 }, 10), &shortcut_graph).collect();
+        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 1, end: 1 }, 10), &shortcut_graph).map(TTIpp::as_tuple).collect();
         assert_eq!(all_ipps, vec![(2,6), (5,5), (8,4), (0,3)]);
-        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 2, end: 2 }, 10), &shortcut_graph).collect();
+        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 2, end: 2 }, 10), &shortcut_graph).map(TTIpp::as_tuple).collect();
         assert_eq!(all_ipps, vec![(2,6), (5,5), (8,4), (0,3)]);
-        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 3, end: 3 }, 10), &shortcut_graph).collect();
+        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 3, end: 3 }, 10), &shortcut_graph).map(TTIpp::as_tuple).collect();
         assert_eq!(all_ipps, vec![(5,5), (8,4), (0,3), (2,6)]);
-        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 4, end: 4 }, 10), &shortcut_graph).collect();
+        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 4, end: 4 }, 10), &shortcut_graph).map(TTIpp::as_tuple).collect();
         assert_eq!(all_ipps, vec![(5,5), (8,4), (0,3), (2,6)]);
-        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 5, end: 5 }, 10), &shortcut_graph).collect();
+        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 5, end: 5 }, 10), &shortcut_graph).map(TTIpp::as_tuple).collect();
         assert_eq!(all_ipps, vec![(5,5), (8,4), (0,3), (2,6)]);
-        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 6, end: 6 }, 10), &shortcut_graph).collect();
+        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 6, end: 6 }, 10), &shortcut_graph).map(TTIpp::as_tuple).collect();
         assert_eq!(all_ipps, vec![(8,4), (0,3), (2,6), (5,5)]);
-        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 7, end: 7 }, 10), &shortcut_graph).collect();
+        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 7, end: 7 }, 10), &shortcut_graph).map(TTIpp::as_tuple).collect();
         assert_eq!(all_ipps, vec![(8,4), (0,3), (2,6), (5,5)]);
-        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 8, end: 8 }, 10), &shortcut_graph).collect();
+        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 8, end: 8 }, 10), &shortcut_graph).map(TTIpp::as_tuple).collect();
         assert_eq!(all_ipps, vec![(8,4), (0,3), (2,6), (5,5)]);
-        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 9, end: 9 }, 10), &shortcut_graph).collect();
+        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 9, end: 9 }, 10), &shortcut_graph).map(TTIpp::as_tuple).collect();
         assert_eq!(all_ipps, vec![(0,3), (2,6), (5,5), (8,4)]);
     }
 
@@ -448,7 +448,7 @@ mod tests {
         let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
         let linked = Linked::new(1, 0);
 
-        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 4, end: 1 }, 10), &shortcut_graph).collect();
+        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 4, end: 1 }, 10), &shortcut_graph).map(TTIpp::as_tuple).collect();
         assert_eq!(all_ipps, vec![(5,5), (8,4), (0,3)]);
     }
 
@@ -472,7 +472,7 @@ mod tests {
         let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
         let linked = Linked::new(1, 0);
 
-        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).collect();
+        let all_ipps: Vec<(Timestamp, Weight)> = linked.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).map(TTIpp::as_tuple).collect();
         assert_eq!(all_ipps, vec![(0,3), (2,6), (8,4)]);
     }
 }

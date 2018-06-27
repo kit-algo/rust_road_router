@@ -326,23 +326,23 @@ impl<'a, 'b> Iterator for MergingIter<'a, 'b> {
     type Item = (Timestamp, IppSource);
 
     fn next(&mut self) -> Option<Self::Item> {
-        match (self.shortcut_iter.peek().cloned(), self.linked_iter.peek()) {
-            (Some(self_next_ipp), Some(&(other_next_ipp_at, other_next_ipp_value))) => {
-                if self_next_ipp.at == other_next_ipp_at {
+        match (self.shortcut_iter.peek().cloned(), self.linked_iter.peek().cloned()) {
+            (Some(self_next_ipp), Some(other_next_ipp)) => {
+                if self_next_ipp.at == other_next_ipp.at {
                     self.shortcut_iter.next();
                     self.linked_iter.next();
-                    Some((self_next_ipp.at, IppSource::Both(self_next_ipp.val, other_next_ipp_value)))
-                } else if self_next_ipp.at <= other_next_ipp_at {
+                    Some((self_next_ipp.at, IppSource::Both(self_next_ipp.val, other_next_ipp.val)))
+                } else if self_next_ipp.at <= other_next_ipp.at {
                     self.shortcut_iter.next();
                     Some((self_next_ipp.at, IppSource::First(self_next_ipp.val)))
                 } else {
                     self.linked_iter.next();
-                    Some((other_next_ipp_at, IppSource::Second(other_next_ipp_value)))
+                    Some((other_next_ipp.at, IppSource::Second(other_next_ipp.val)))
                 }
             },
-            (None, Some(&(other_next_ipp_at, other_next_ipp_value))) => {
+            (None, Some(other_next_ipp)) => {
                 self.linked_iter.next();
-                Some((other_next_ipp_at, IppSource::Second(other_next_ipp_value)))
+                Some((other_next_ipp.at, IppSource::Second(other_next_ipp.val)))
             },
             (Some(self_next_ipp), None) => {
                 self.shortcut_iter.next();
@@ -655,7 +655,7 @@ mod tests {
 
         let all_ipps: Vec<(Timestamp, Weight)> = shortcut_graph.get_upward(2).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 8), &shortcut_graph).map(TTIpp::as_tuple).collect();
         assert_eq!(all_ipps, vec![(2,6), (6,2)]);
-        let all_ipps: Vec<(Timestamp, Weight)> = Linked::new(1, 0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 8), &shortcut_graph).collect();
+        let all_ipps: Vec<(Timestamp, Weight)> = Linked::new(1, 0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 8), &shortcut_graph).map(TTIpp::as_tuple).collect();
         assert_eq!(all_ipps, vec![(2,2), (6,6)]);
 
         shortcut_graph.merge_upward(2, Linked::new(1, 0));
