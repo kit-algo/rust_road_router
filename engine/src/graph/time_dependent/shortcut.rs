@@ -6,7 +6,7 @@ use std::iter::{once, Once};
 #[derive(Debug, Clone)]
 pub struct Shortcut {
     data: ShortcutPaths,
-    cache: Option<Vec<(Timestamp, Weight)>>
+    cache: Option<Vec<TTIpp>>
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -219,7 +219,7 @@ impl Shortcut {
 
         if let Some(ref ipps) = self.cache {
             if !ipps.is_empty() {
-                return ipps.iter().fold((INFINITY, 0), |(acc_min, acc_max), &(_, val)| (min(acc_min, val), max(acc_max, val)))
+                return ipps.iter().fold((INFINITY, 0), |(acc_min, acc_max), ipp| (min(acc_min, ipp.val), max(acc_max, ipp.val)))
             }
         }
 
@@ -243,7 +243,7 @@ impl Shortcut {
     pub fn cache_ipps(&mut self, shortcut_graph: &ShortcutGraph) {
         if self.is_valid_path() {
             let range = WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.period());
-            let ipps = self.ipp_iter(range, shortcut_graph).map(TTIpp::as_tuple).collect();
+            let ipps = self.ipp_iter(range, shortcut_graph).collect();
             self.cache = Some(ipps);
         }
     }
@@ -484,7 +484,7 @@ impl<'a, 'b> Iterator for Iter<'a, 'b> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(ref mut iter) = self.cached_iter {
-            iter.next().map(|&(at, val)| TTIpp::new(at, val))
+            iter.next().cloned()
         } else {
             self.calc_next()
         }
@@ -653,16 +653,16 @@ mod tests {
 
         let mut shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
 
-        let all_ipps: Vec<(Timestamp, Weight)> = shortcut_graph.get_upward(2).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 8), &shortcut_graph).map(TTIpp::as_tuple).collect();
+        let all_ipps: Vec<_> = shortcut_graph.get_upward(2).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 8), &shortcut_graph).map(TTIpp::as_tuple).collect();
         assert_eq!(all_ipps, vec![(2,6), (6,2)]);
-        let all_ipps: Vec<(Timestamp, Weight)> = Linked::new(1, 0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 8), &shortcut_graph).map(TTIpp::as_tuple).collect();
+        let all_ipps: Vec<_> = Linked::new(1, 0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 8), &shortcut_graph).map(TTIpp::as_tuple).collect();
         assert_eq!(all_ipps, vec![(2,2), (6,6)]);
 
         shortcut_graph.merge_upward(2, Linked::new(1, 0));
 
         assert_eq!(shortcut_graph.get_upward(2).data, ShortcutPaths::Multi(vec![(0, ShortcutData::new(ShortcutSource::Shortcut(1, 0))), (4, ShortcutData::new(ShortcutSource::OriginalEdge(2)))]));
 
-        let all_merged_ipps: Vec<(Timestamp, Weight)> = shortcut_graph.get_upward(2).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 8), &shortcut_graph).map(TTIpp::as_tuple).collect();
+        let all_merged_ipps: Vec<_> = shortcut_graph.get_upward(2).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 8), &shortcut_graph).map(TTIpp::as_tuple).collect();
         assert_eq!(all_merged_ipps, vec![(0,4), (2,2), (4,4), (6,2)]);
     }
 
@@ -753,7 +753,7 @@ mod tests {
 
         let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
 
-        let all_ipps: Vec<(Timestamp, Weight)> = shortcut_graph.get_upward(0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).map(TTIpp::as_tuple).collect();
+        let all_ipps: Vec<_> = shortcut_graph.get_upward(0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).map(TTIpp::as_tuple).collect();
         assert_eq!(all_ipps, vec![(2,2), (6,2)]);
     }
 
@@ -775,7 +775,7 @@ mod tests {
 
         let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
 
-        let all_ipps: Vec<(Timestamp, Weight)> = shortcut_graph.get_upward(0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).map(TTIpp::as_tuple).collect();
+        let all_ipps: Vec<_> = shortcut_graph.get_upward(0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).map(TTIpp::as_tuple).collect();
         assert_eq!(all_ipps, vec![(0,1), (2,1), (5,2), (6,3), (7,2)]);
     }
 }
