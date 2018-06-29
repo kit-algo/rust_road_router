@@ -1,7 +1,9 @@
+use num_traits::Unsigned;
+
 type Num = u32;
 
-pub fn gcd(mut a: Num, mut b: Num) -> Num {
-    while b != 0 {
+pub fn gcd<Num: Unsigned + Copy>(mut a: Num, mut b: Num) -> Num {
+    while b != Num::zero() {
         let tmp = a % b;
         a = b;
         b = tmp;
@@ -11,31 +13,30 @@ pub fn gcd(mut a: Num, mut b: Num) -> Num {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LinearCongruenceSolution {
-    pub solution: Num,
-    pub modulus: Num
+    pub solution: i64,
+    pub modulus: u64
 }
 
-pub fn solve_linear_congruence(factor: Num, rest: Num, modulus: Num) -> Option<LinearCongruenceSolution> {
+pub fn solve_linear_congruence(factor: i64, rest: i64, modulus: i64) -> Option<LinearCongruenceSolution> {
     let (gcd, s, _t) = extended_euklid(factor, modulus);
     if rest % gcd != 0 { return None };
-    let mut solution = s * i64::from(rest) / i64::from(gcd);
+    let mut solution = s * rest / gcd;
     let modulus = modulus / gcd;
 
-    if solution < 0 {
-        solution += (1 - (solution / i64::from(modulus))) * i64::from(modulus);
-    }
+    debug_assert!(modulus > 0);
+    solution = solution.mod_euc(modulus);
 
-    let solution = solution as Num;
-    Some(LinearCongruenceSolution { solution, modulus })
+    debug_assert!(solution >= 0);
+    Some(LinearCongruenceSolution { solution, modulus: modulus as u64 })
 }
 
-fn extended_euklid(a: Num, b: Num) -> (Num, i64, i64) {
+fn extended_euklid(a: i64, b: i64) -> (i64, i64, i64) {
     let mut s: i64 = 0;
     let mut old_s: i64 = 1;
     let mut t: i64 = 1;
     let mut old_t: i64 = 0;
-    let mut remainder = i64::from(b);
-    let mut old_remainder = i64::from(a);
+    let mut remainder = b;
+    let mut old_remainder = a;
     let mut tmp;
     while remainder != 0 {
         let quotient = old_remainder / remainder;
@@ -52,8 +53,14 @@ fn extended_euklid(a: Num, b: Num) -> (Num, i64, i64) {
         old_t = t;
         t = tmp;
     }
-    debug_assert_eq!(old_remainder, i64::from(a) * old_s + i64::from(b) * old_t);
-    (old_remainder as Num, old_s, old_t)
+    debug_assert_eq!(old_remainder, a * old_s + b * old_t);
+    (old_remainder, old_s, old_t)
+}
+
+use std::ops::Range;
+
+pub fn is_intersection_empty<T: PartialOrd>(a: &Range<T>, b: &Range<T>) -> bool {
+    !a.contains(&b.start) && !a.contains(&b.end) && !b.contains(&a.start) && !b.contains(&a.end)
 }
 
 #[cfg(test)]
@@ -62,11 +69,11 @@ mod tests {
 
     #[test]
     fn test_gcd() {
-        assert_eq!(gcd(6, 9), 3);
-        assert_eq!(gcd(2, 3), 1);
-        assert_eq!(gcd(4, 2), 2);
-        assert_eq!(gcd(4, 8), 4);
-        assert_eq!(gcd(20, 12), 4);
+        assert_eq!(gcd::<u32>(6, 9), 3);
+        assert_eq!(gcd::<u32>(2, 3), 1);
+        assert_eq!(gcd::<u32>(4, 2), 2);
+        assert_eq!(gcd::<u32>(4, 8), 4);
+        assert_eq!(gcd::<u32>(20, 12), 4);
     }
 
     #[test]

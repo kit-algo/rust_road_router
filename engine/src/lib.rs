@@ -3,12 +3,15 @@
 #![feature(allocator_api)]
 #![feature(const_size_of)]
 #![feature(mpsc_select)]
+#![feature(euclidean_division)]
+#![feature(range_contains)]
 
 extern crate nav_types;
 extern crate postgres;
 extern crate csv;
 extern crate glob;
 extern crate time;
+extern crate num_traits;
 
 pub mod shortest_path;
 pub mod graph;

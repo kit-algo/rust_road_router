@@ -231,25 +231,76 @@ fn link_segments(first_segment: &TTFSeg, second_segment: &TTFSeg, period: Timest
     } else {
         first_segment.valid.end
     };
+
+    let first_segment = first_segment.clone().into_monotone_at_segment(period);
+    let mut second_segment = second_segment.clone().into_monotone_at_segment(period);
+
+    println!("{:?}", first_segment);
+    println!("{:?}", second_segment);
+
+    let first_value_range = first_segment.valid_value_range();
+    println!("{:?}", first_value_range);
+    let needs_shifting = is_intersection_empty(&first_value_range, &second_segment.valid);
+    if needs_shifting {
+        println!("shifting");
+        second_segment.shift(period);
+        println!("{:?}", second_segment);
+    }
+    debug_assert!(!is_intersection_empty(&first_value_range, &second_segment.valid));
+
+    let line = link_monotone(&first_segment.line, &second_segment.line, if needs_shifting { first_segment.line.0.from.at } else { 0 });
+
+    println!("before periodicity {:?}", line);
     // ((start_of_range, first_segment.from.val + second_segment.from.val), (end_of_range, first_segment.to.val + second_segment.to.val))
     Segment {
-        line: Line {
-            from: Ipp::new(first_segment.line.from.at, first_segment.line.from.val + second_segment.line.from.val),
-            to: Ipp::new(first_segment.line.to.at, first_segment.line.to.val + second_segment.line.to.val),
-        },
+        line: line.into_monotone_tt_line().apply_periodicity(period),
         valid: Range { start: start_of_range, end: end_of_range }
     }
 }
 
-fn foo() {
-    // in arrival time
+use ::math::*;
+
+fn link_monotone(first_line: &MonotoneLine<ATIpp>, second_line: &MonotoneLine<ATIpp>, min_x: Timestamp) -> MonotoneLine<ATIpp> {
+    println!("f {:?}", first_line);
+    println!("g {:?}", second_line);
     // calc linked steigung
-    // reduce with gcd
-    // anchor = eval second at first.first.val
-    //  als bruch: (val - second.first.at) / (second.second.at - second.first.at)
-    //      * (second.second.val - second.first.val)
-    //      + second.first.val
-    // anchor + linked steigung * x == ganze zahl?
+    let linked_delta_x = i64::from(first_line.delta_x()) * i64::from(second_line.delta_x());
+    let linked_delta_y = i64::from(first_line.delta_y()) * i64::from(second_line.delta_y());
+
+    println!("{}y/{}x", linked_delta_y, linked_delta_x);
+
+    let rest_first_term = i64::from(first_line.0.from.at) * linked_delta_y;
+    let rest_second_term = i64::from(second_line.0.from.at) * i64::from(second_line.delta_y()) * i64::from(first_line.delta_x());
+    let rest_third_term = i64::from(first_line.0.from.val) * i64::from(second_line.delta_y()) * i64::from(first_line.delta_x());
+    let rest_fourth_term = i64::from(second_line.0.from.val) * linked_delta_x;
+    let rest = rest_first_term + rest_second_term - rest_third_term - rest_fourth_term;
+    println!("rest: {}", rest);
+    let result = solve_linear_congruence(linked_delta_y as i64, rest, linked_delta_x as i64).expect("🤯 math is broken");
+
+    println!("{:?}", result);
+
+    let min_x = max(i64::from(min_x), (rest + linked_delta_y - 1) / linked_delta_y);
+    let first_at = max(result.solution, result.solution + (min_x - result.solution + result.modulus as i64 - 1) / result.modulus as i64 * result.modulus as i64);
+
+    println!("{:?}", min_x);
+    println!("{:?}", first_at);
+
+    let first_val = (linked_delta_y * first_at - rest) / linked_delta_x;
+    println!("{:?}", first_val);
+    debug_assert_eq!((linked_delta_y * first_at - rest) % linked_delta_x, 0);
+    let second_at = first_at + result.modulus as i64;
+    let second_val = (linked_delta_y * second_at - rest) / linked_delta_x;
+    debug_assert_eq!((linked_delta_y * second_at - rest) % linked_delta_x, 0);
+
+    // println!("{:?}", Line::new(ATIpp::new(first_at as Timestamp, first_val as Timestamp), ATIpp::new(second_at as Timestamp, second_val as Timestamp)));
+
+    debug_assert!(first_at >= 0);
+    debug_assert!(first_val >= first_at);
+    debug_assert!(second_at > first_at);
+    debug_assert!(second_val >= second_at);
+    debug_assert!(second_val >= first_val);
+
+    MonotoneLine(Line::new(ATIpp::new(first_at as Timestamp, first_val as Timestamp), ATIpp::new(second_at as Timestamp, second_val as Timestamp)))
 }
 
 #[cfg(test)]
@@ -258,7 +309,10 @@ mod tests {
 
     #[test]
     fn test_linking_static_segments() {
-        assert_eq!(link_segments(&TTFSeg::new((0, 2), (5, 2)), &TTFSeg::new((1, 2), (8, 2)), 10), TTFSeg::new((0, 4), (5, 4)));
+        assert_eq!(link_segments(&TTFSeg::new((0, 2), (5, 2)), &TTFSeg::new((1, 2), (8, 2)), 10),
+            Segment { line: Line { from: Ipp::new(0, 4), to: Ipp::new(1, 4) }, valid: Range { start: 0, end: 5 } });
+        assert_eq!(link_segments(&TTFSeg::new((1, 2), (6, 2)), &TTFSeg::new((2, 2), (9, 2)), 10),
+            Segment { line: Line { from: Ipp::new(0, 4), to: Ipp::new(1, 4) }, valid: Range { start: 1, end: 6 } });
     }
 
     #[test]
@@ -268,13 +322,14 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_linking_non_fitting_length_segments() {
         for s in 0..10 {
-            assert_eq!(link_segments(&TTFSeg::new((s, 2), ((s + 5) % 10 , 2)), &TTFSeg::new(((s + 2) % 10, 2), ((s + 6) % 10, 3)), 10),
-                TTFSeg::new((s, 4), ((s + 4) % 10, 5)));
-            assert_eq!(link_segments(&TTFSeg::new((s, 2), ((s + 4) % 10 , 2)), &TTFSeg::new(((s + 3) % 10, 2), ((s + 5) % 10, 3)), 10),
-                TTFSeg::new(((s + 1) % 10, 4), ((s + 3) % 10, 5)));
+            let linked = link_segments(&TTFSeg::new((s, 2), ((s + 5) % 10 , 2)), &TTFSeg::new(((s + 2) % 10, 2), ((s + 6) % 10, 3)), 10);
+            let expect = TTFSeg::new((s, 4), ((s + 4) % 10, 5));
+            assert!(linked.is_equivalent_to(&expect, 10), "Got: {:?}\nExpected: {:?}", linked, expect);
+            let linked = link_segments(&TTFSeg::new((s, 2), ((s + 4) % 10 , 2)), &TTFSeg::new(((s + 3) % 10, 2), ((s + 5) % 10, 3)), 10);
+            let expect = TTFSeg::new(((s + 1) % 10, 4), ((s + 3) % 10, 5));
+            assert!(linked.is_equivalent_to(&expect, 10), "Got: {:?}\nExpected: {:?}", linked, expect);
         }
     }
 
