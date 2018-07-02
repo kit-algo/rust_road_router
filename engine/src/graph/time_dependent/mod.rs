@@ -33,8 +33,53 @@ use self::wrapping_slice_iter::WrappingSliceIter;
 mod intersections;
 use self::intersections::*;
 
-
 pub type Timestamp = Weight;
+
+#[cfg(test)]
+use std::cell::Cell;
+
+#[cfg(test)]
+thread_local! {
+    static TEST_PERIOD_MOCK: Cell<Option<Timestamp>> = Cell::new(None);
+}
+
+#[cfg(test)]
+unsafe fn set_period(period: Timestamp) {
+    TEST_PERIOD_MOCK.with(|period_cell| period_cell.set(Some(period)))
+}
+
+#[cfg(test)]
+unsafe fn reset_period() {
+    TEST_PERIOD_MOCK.with(|period_cell| period_cell.set(None))
+}
+
+#[cfg(test)] use std::panic;
+#[cfg(test)]
+fn run_test_with_periodicity<T>(period: Timestamp, test: T) -> ()
+    where T: FnOnce() -> () + panic::UnwindSafe
+{
+    unsafe { set_period(period) };
+
+    let result = panic::catch_unwind(|| {
+        test()
+    });
+
+    unsafe { reset_period() };
+
+    assert!(result.is_ok())
+}
+
+#[cfg(test)]
+fn period() -> Timestamp {
+    return TEST_PERIOD_MOCK.with(|period_cell| period_cell.get().expect("period() used but not set"));
+}
+
+#[cfg(not(test))]
+#[inline]
+const fn period() -> Timestamp {
+    86_400_000
+}
+
 
 const TOLERANCE: Weight = 10;
 
@@ -59,10 +104,10 @@ impl TTIpp {
         (self.at, self.val)
     }
 
-    fn into_atipp(self, period: Timestamp) -> ATIpp {
+    fn into_atipp(self) -> ATIpp {
         let TTIpp { at, val } = self;
-        debug_assert!(at < period);
-        ATIpp { at, val: (at + val) % period }
+        debug_assert!(at < period());
+        ATIpp { at, val: (at + val) % period() }
     }
 }
 
@@ -102,9 +147,9 @@ impl ATIpp {
         TTIpp { at, val: val - at }
     }
 
-    fn shift(&mut self, period: Timestamp) {
-        self.at += period;
-        self.val += period;
+    fn shift(&mut self) {
+        self.at += period();
+        self.val += period();
     }
 }
 
@@ -133,11 +178,11 @@ impl TTFSeg {
         Segment { line: Line { from: Ipp::new(from_at, from_val), to: Ipp::new(to_at, to_val) }, valid: Range { start: from_at, end: to_at } }
     }
 
-    fn is_equivalent_to(&self, other: &Self, period: Timestamp) -> bool {
+    fn is_equivalent_to(&self, other: &Self) -> bool {
         if self == other { return true }
         if self.valid != other.valid { return false }
-        let self_line = self.line.clone().into_monotone_tt_line(period);
-        let other_line = other.line.clone().into_monotone_tt_line(period);
+        let self_line = self.line.clone().into_monotone_tt_line();
+        let other_line = other.line.clone().into_monotone_tt_line();
         if self_line.delta_x() * other_line.delta_y() != self_line.delta_y() * other_line.delta_x()  { return false }
         let delta = if self.line.from != other.line.from {
             self.line.from - other.line.from
@@ -148,11 +193,11 @@ impl TTFSeg {
         true
     }
 
-    fn into_monotone_at_segment(self, period: Timestamp) -> Segment<MonotoneLine<ATIpp>> {
+    fn into_monotone_at_segment(self) -> Segment<MonotoneLine<ATIpp>> {
         let Segment { line, mut valid } = self;
-        let line = line.into_monotone_at_line(period);
+        let line = line.into_monotone_at_line();
         if valid.end < valid.start { // TODO <= ?
-            valid.end += period;
+            valid.end += period();
         }
         Segment { line, valid }
     }
@@ -166,26 +211,26 @@ impl Segment<MonotoneLine<ATIpp>> {
         }
     }
 
-    fn shift(&mut self, period: Timestamp) {
-        self.valid.start += period;
-        self.valid.end += period;
-        self.line.shift(period);
+    fn shift(&mut self) {
+        self.valid.start += period();
+        self.valid.end += period();
+        self.line.shift();
     }
 }
 
 impl Line<TTIpp> {
-    fn into_monotone_tt_line(self, period: Timestamp) -> MonotoneLine<TTIpp> {
+    fn into_monotone_tt_line(self) -> MonotoneLine<TTIpp> {
         let Line { from, mut to } = self;
         if to.at < from.at {
-            to.at += period;
+            to.at += period();
         }
         MonotoneLine(Line { from, to })
     }
 
-    fn into_monotone_at_line(self, period: Timestamp) -> MonotoneLine<ATIpp> {
+    fn into_monotone_at_line(self) -> MonotoneLine<ATIpp> {
         let Line { from, mut to } = self;
         if to.at < from.at {
-            to.at += period;
+            to.at += period();
         }
         MonotoneLine(Line { from: ATIpp { at: from.at, val: from.at + from.val }, to: ATIpp { at: to.at, val: to.at + to.val } })
     }
@@ -208,9 +253,9 @@ impl Line<ATIpp> {
         self.to.val - self.from.val
     }
 
-    fn shift(&mut self, period: Timestamp) {
-        self.from.shift(period);
-        self.to.shift(period);
+    fn shift(&mut self) {
+        self.from.shift();
+        self.to.shift();
     }
 }
 
@@ -250,8 +295,8 @@ impl MonotoneLine<ATIpp> {
         MonotoneLine(Line { from, to })
     }
 
-    fn shift(&mut self, period: Timestamp) {
-        self.0.shift(period);
+    fn shift(&mut self) {
+        self.0.shift();
     }
 }
 
@@ -280,17 +325,21 @@ mod tests {
 
     #[test]
     fn test_ttipp_to_atipp() {
-        assert_eq!(TTIpp::new(2, 2).into_atipp(10), ATIpp::new(2, 4));
-        assert_eq!(TTIpp::new(6, 5).into_atipp(10), ATIpp::new(6, 1));
+        run_test_with_periodicity(10, || {
+            assert_eq!(TTIpp::new(2, 2).into_atipp(), ATIpp::new(2, 4));
+            assert_eq!(TTIpp::new(6, 5).into_atipp(), ATIpp::new(6, 1));
+        });
     }
 
     #[test]
     fn test_tt_line_to_monotone_at_line() {
-        assert_eq!(Line { from: TTIpp::new(2, 2), to: TTIpp::new(4, 5) }.into_monotone_at_line(10),
-            MonotoneLine(Line { from: ATIpp::new(2, 4), to: ATIpp::new(4, 9) }));
-        assert_eq!(Line { from: TTIpp::new(4, 5), to: TTIpp::new(2, 2) }.into_monotone_at_line(10),
-            MonotoneLine(Line { from: ATIpp::new(4, 9), to: ATIpp::new(12, 14) }));
-        assert_eq!(Line { from: TTIpp::new(8, 3), to: TTIpp::new(2, 2) }.into_monotone_at_line(10),
-            MonotoneLine(Line { from: ATIpp::new(8, 11), to: ATIpp::new(12, 14) }));
+        run_test_with_periodicity(10, || {
+            assert_eq!(Line { from: TTIpp::new(2, 2), to: TTIpp::new(4, 5) }.into_monotone_at_line(),
+                MonotoneLine(Line { from: ATIpp::new(2, 4), to: ATIpp::new(4, 9) }));
+            assert_eq!(Line { from: TTIpp::new(4, 5), to: TTIpp::new(2, 2) }.into_monotone_at_line(),
+                MonotoneLine(Line { from: ATIpp::new(4, 9), to: ATIpp::new(12, 14) }));
+            assert_eq!(Line { from: TTIpp::new(8, 3), to: TTIpp::new(2, 2) }.into_monotone_at_line(),
+                MonotoneLine(Line { from: ATIpp::new(8, 11), to: ATIpp::new(12, 14) }));
+        });
     }
 }

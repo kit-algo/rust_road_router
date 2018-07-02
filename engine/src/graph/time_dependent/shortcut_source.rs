@@ -29,7 +29,7 @@ impl ShortcutData {
     }
 
     pub fn evaluate(&self, departure: Timestamp, shortcut_graph: &ShortcutGraph) -> Weight {
-        debug_assert!(departure < shortcut_graph.period());
+        debug_assert!(departure < period());
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
                 Linked::new(down_shortcut_id, self.up_arc).evaluate(departure, shortcut_graph)
@@ -40,7 +40,7 @@ impl ShortcutData {
         }
     }
 
-    pub(super) fn seg_iter<'a>(&self, range: WrappingRange<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> ShortcutSourceSegmentIter<'a> {
+    pub(super) fn seg_iter<'a>(&self, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> ShortcutSourceSegmentIter<'a> {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
                 // ShortcutSourceIter::Shortcut(Linked::new(down_shortcut_id, self.up_arc).ipp_iter(range, shortcut_graph))
@@ -52,7 +52,7 @@ impl ShortcutData {
         }
     }
 
-    pub fn ipp_iter<'a>(&self, range: WrappingRange<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> ShortcutSourceIter<'a> {
+    pub fn ipp_iter<'a>(&self, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> ShortcutSourceIter<'a> {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
                 ShortcutSourceIter::Shortcut(Linked::new(down_shortcut_id, self.up_arc).ipp_iter(range, shortcut_graph))

@@ -10,7 +10,6 @@ pub struct Graph {
     first_ipp_of_arc: Vec<IPPIndex>,
     ipp_departure_time: Vec<Timestamp>,
     ipp_travel_time: Vec<Weight>,
-    period: Timestamp
 }
 
 impl Graph {
@@ -18,21 +17,15 @@ impl Graph {
                head: Vec<NodeId>,
                first_ipp_of_arc: Vec<IPPIndex>,
                ipp_departure_time: Vec<Timestamp>,
-               ipp_travel_time: Vec<Weight>,
-               period: Timestamp) -> Graph {
-        Graph { first_out, head, first_ipp_of_arc, ipp_departure_time, ipp_travel_time, period }
+               ipp_travel_time: Vec<Weight>) -> Graph {
+        Graph { first_out, head, first_ipp_of_arc, ipp_departure_time, ipp_travel_time }
     }
 
     pub fn travel_time_function(&self, edge_id: EdgeId) -> PiecewiseLinearFunction {
         let edge_id = edge_id as usize;
         PiecewiseLinearFunction::new(
             &self.ipp_departure_time[self.first_ipp_of_arc[edge_id] as usize .. self.first_ipp_of_arc[edge_id + 1] as usize],
-            &self.ipp_travel_time[self.first_ipp_of_arc[edge_id] as usize .. self.first_ipp_of_arc[edge_id + 1] as usize],
-            self.period)
-    }
-
-    pub fn period(&self) -> Timestamp {
-        self.period
+            &self.ipp_travel_time[self.first_ipp_of_arc[edge_id] as usize .. self.first_ipp_of_arc[edge_id + 1] as usize])
     }
 
     pub fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {

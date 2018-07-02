@@ -49,7 +49,7 @@ impl Shortcut {
         let mut intersections =
             // measure("combined ipp iteration and intersecting", ||
         {
-            let range = WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.period());
+            let range = WrappingRange::new(Range { start: 0, end: 0 });
             let ipp_iter = MergingIter {
                 shortcut_iter: self.ipp_iter(range.clone(), shortcut_graph).peekable(),
                 linked_iter: other.ipp_iter(range, shortcut_graph).peekable()
@@ -69,7 +69,7 @@ impl Shortcut {
                 ipp_counter += 1;
             });
 
-            intersections(ipp_iter, || self.evaluate(0, shortcut_graph), || other.evaluate(0, shortcut_graph), shortcut_graph.period())
+            intersections(ipp_iter, || self.evaluate(0, shortcut_graph), || other.evaluate(0, shortcut_graph), period())
         }
         // )
         ;
@@ -89,17 +89,15 @@ impl Shortcut {
         {
             let collect = || -> Vec<(Timestamp, IppSource)> {
                 MergingIter {
-                    shortcut_iter: self.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.period()), shortcut_graph).peekable(),
-                    linked_iter: other.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.period()), shortcut_graph).peekable()
+                    shortcut_iter: self.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }), shortcut_graph).peekable(),
+                    linked_iter: other.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }), shortcut_graph).peekable()
                 }.collect()
             };
             debug_assert_eq!(c % 2, 0, "intersections: {:?}, ipps: {:?}", intersections, collect());
         }
 
-        let period = shortcut_graph.period();
-
         for &(intersection, is_self_better) in &intersections {
-            let before_intersection = if intersection < 1 { intersection + period - 1 } else { intersection - 1 };
+            let before_intersection = if intersection < 1 { intersection + period() - 1 } else { intersection - 1 };
             let debug_output = || {
                 // let collected: Vec<(Timestamp, IppSource)> = MergingIter {
                 //     shortcut_iter: self.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.period()), shortcut_graph).peekable(),
@@ -134,7 +132,7 @@ impl Shortcut {
             intersections.insert(0, last);
             intersections.push(first);
         }
-        intersections.last_mut().unwrap().0 += period;
+        intersections.last_mut().unwrap().0 += period();
 
         let mut new_shortcut_data = vec![];
 
@@ -192,7 +190,7 @@ impl Shortcut {
     }
 
     pub fn evaluate(&self, departure: Timestamp, shortcut_graph: &ShortcutGraph) -> Weight {
-        debug_assert!(departure < shortcut_graph.period());
+        debug_assert!(departure < period());
         match self.data {
             ShortcutPaths::None => INFINITY,
             ShortcutPaths::One(data) => data.evaluate(departure, shortcut_graph),
@@ -208,7 +206,7 @@ impl Shortcut {
         }
     }
 
-    pub fn ipp_iter<'a, 'b: 'a>(&'b self, range: WrappingRange<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> Iter<'a, 'b> {
+    pub fn ipp_iter<'a, 'b: 'a>(&'b self, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> Iter<'a, 'b> {
         Iter::new(&self, range, shortcut_graph)
     }
 
@@ -242,7 +240,7 @@ impl Shortcut {
 
     pub fn cache_ipps(&mut self, shortcut_graph: &ShortcutGraph) {
         if self.is_valid_path() {
-            let range = WrappingRange::new(Range { start: 0, end: 0 }, shortcut_graph.period());
+            let range = WrappingRange::new(Range { start: 0, end: 0 });
             let ipps = self.ipp_iter(range, shortcut_graph).collect();
             self.cache = Some(ipps);
         }
@@ -356,7 +354,7 @@ impl<'a, 'b> Iterator for MergingIter<'a, 'b> {
 pub struct Iter<'a, 'b: 'a> {
     shortcut: &'b Shortcut,
     shortcut_graph: &'a ShortcutGraph<'a>,
-    range: WrappingRange<Timestamp>,
+    range: WrappingRange,
     current_index: usize,
     segment_iter_state: InitialPathSegmentIterState,
     current_source_iter: Option<Box<Iterator<Item = TTIpp> + 'a>>,
@@ -364,7 +362,7 @@ pub struct Iter<'a, 'b: 'a> {
 }
 
 impl<'a, 'b> Iter<'a, 'b> {
-    fn new(shortcut: &'b Shortcut, range: WrappingRange<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> Iter<'a, 'b> {
+    fn new(shortcut: &'b Shortcut, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> Iter<'a, 'b> {
         if let Some(ref cache) = shortcut.cache {
             let cached_iter = WrappingSliceIter::new(cache, range.clone());
             return Iter { shortcut, shortcut_graph, range, current_index: 0, segment_iter_state: InitialPathSegmentIterState::Finishing, current_source_iter: None, cached_iter: Some(cached_iter) }
@@ -373,7 +371,7 @@ impl<'a, 'b> Iter<'a, 'b> {
         match shortcut.data {
             ShortcutPaths::None => Iter { shortcut, shortcut_graph, range, current_index: 0, segment_iter_state: InitialPathSegmentIterState::Finishing, current_source_iter: None, cached_iter: None },
             ShortcutPaths::One(data) => {
-                let mut segment_range = WrappingRange::new(shortcut.segment_range(0), range.wrap_around());
+                let mut segment_range = WrappingRange::new(shortcut.segment_range(0));
                 segment_range.shift_start(range.start());
 
                 Iter {
@@ -387,7 +385,7 @@ impl<'a, 'b> Iter<'a, 'b> {
                     Ok(index) => (index, InitialPathSegmentIterState::InitialCompleted(index), None),
                     Err(index) => {
                         let current_index = (index + data.len() - 1) % data.len();
-                        let mut segment_range = WrappingRange::new(shortcut.segment_range(current_index), range.wrap_around());
+                        let mut segment_range = WrappingRange::new(shortcut.segment_range(current_index));
                         let segment_iter_state = InitialPathSegmentIterState::InitialPartialyCompleted(current_index);
                         segment_range.shift_start(range.start());
                         // println!("shortcut segment iter range {:?}", segment_range);
@@ -450,7 +448,7 @@ impl<'a, 'b> Iter<'a, 'b> {
                             if self.segment_iter_state == InitialPathSegmentIterState::Finishing {
                                 segment_range.end = self.range.end()
                             }
-                            let segment_range = WrappingRange::new(segment_range, self.range.wrap_around());
+                            let segment_range = WrappingRange::new(segment_range);
                             self.current_source_iter = Some(Box::new(data.ipp_iter(segment_range, self.shortcut_graph)));
                             self.next()
                         } else {
@@ -462,11 +460,11 @@ impl<'a, 'b> Iter<'a, 'b> {
 
                         if self.range.contains(ipp) {
                             let mut segment_range = self.shortcut.segment_range(self.current_index);
-                            segment_range.start = (segment_range.start + 1) % self.range.wrap_around();
+                            segment_range.start = (segment_range.start + 1) % period();
                             if self.segment_iter_state == InitialPathSegmentIterState::Finishing {
                                 segment_range.end = self.range.end()
                             }
-                            let segment_range = WrappingRange::new(segment_range, self.range.wrap_around());
+                            let segment_range = WrappingRange::new(segment_range);
                             self.current_source_iter = Some(Box::new(data[self.current_index].1.ipp_iter(segment_range, self.shortcut_graph)));
                             Some(TTIpp::new(ipp, data[self.current_index].1.evaluate(ipp, self.shortcut_graph))) // TODO optimize?
                         } else {
@@ -494,7 +492,7 @@ impl<'a, 'b> Iterator for Iter<'a, 'b> {
 pub(super) struct SegmentIter<'a, 'b: 'a> {
     shortcut: &'b Shortcut,
     shortcut_graph: &'a ShortcutGraph<'a>,
-    range: WrappingRange<Timestamp>,
+    range: WrappingRange,
     current_index: usize,
     segment_iter_state: InitialPathSegmentIterState,
     current_source_iter: Option<Box<Iterator<Item = TTFSeg> + 'a>>,
@@ -503,7 +501,7 @@ pub(super) struct SegmentIter<'a, 'b: 'a> {
 }
 
 impl<'a, 'b> SegmentIter<'a, 'b> {
-    fn new(shortcut: &'b Shortcut, range: WrappingRange<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> SegmentIter<'a, 'b> {
+    fn new(shortcut: &'b Shortcut, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> SegmentIter<'a, 'b> {
         // if let Some(ref cache) = shortcut.cache {
         //     let cached_iter = WrappingSliceIter::new(cache, range.clone());
         //     return SegmentIter { shortcut, shortcut_graph, range, current_index: 0, segment_iter_state: InitialPathSegmentIterState::Finishing, current_source_iter: None, cached_iter: Some(cached_iter) }
@@ -523,7 +521,7 @@ impl<'a, 'b> SegmentIter<'a, 'b> {
                     Ok(index) => (index, InitialPathSegmentIterState::InitialCompleted(index), None),
                     Err(index) => {
                         let current_index = (index + data.len() - 1) % data.len();
-                        let mut segment_range = WrappingRange::new(shortcut.segment_range(current_index), range.wrap_around());
+                        let mut segment_range = WrappingRange::new(shortcut.segment_range(current_index));
                         let segment_iter_state = InitialPathSegmentIterState::InitialPartialyCompleted(current_index);
                         segment_range.shift_start(range.start());
                         // println!("shortcut segment iter range {:?}", segment_range);
@@ -597,7 +595,7 @@ impl<'a, 'b> SegmentIter<'a, 'b> {
                             if self.segment_iter_state == InitialPathSegmentIterState::Finishing {
                                 segment_range.end = self.range.end()
                             }
-                            let segment_range = WrappingRange::new(segment_range, self.range.wrap_around());
+                            let segment_range = WrappingRange::new(segment_range);
                             self.current_source_iter = Some(Box::new(data[self.current_index].1.seg_iter(segment_range, self.shortcut_graph)));
                             self.source_contained_segments = false;
                             self.next()
@@ -636,146 +634,152 @@ mod tests {
 
     #[test]
     fn test_merging() {
-        let graph = TDGraph::new(
-            vec![0, 1,    3, 3],
-            vec![2, 0, 2],
-            vec![0,  1,     3,     5],
-            vec![0,  2, 6,  2, 6],
-            vec![1,  1, 5,  6, 2],
-            8
-        );
+        run_test_with_periodicity(8, || {
+            let graph = TDGraph::new(
+                vec![0, 1,    3, 3],
+                vec![2, 0, 2],
+                vec![0,  1,     3,     5],
+                vec![0,  2, 6,  2, 6],
+                vec![1,  1, 5,  6, 2],
+            );
 
-        let cch_first_out = vec![0, 1, 3, 3];
-        let cch_head =      vec![2, 0, 2];
+            let cch_first_out = vec![0, 1, 3, 3];
+            let cch_head =      vec![2, 0, 2];
 
-        let outgoing = vec![Shortcut::new(Some(0)), Shortcut::new(None), Shortcut::new(Some(2))];
-        let incoming = vec![Shortcut::new(None), Shortcut::new(Some(1)), Shortcut::new(None)];
+            let outgoing = vec![Shortcut::new(Some(0)), Shortcut::new(None), Shortcut::new(Some(2))];
+            let incoming = vec![Shortcut::new(None), Shortcut::new(Some(1)), Shortcut::new(None)];
 
-        let mut shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
+            let mut shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
 
-        let all_ipps: Vec<_> = shortcut_graph.get_upward(2).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 8), &shortcut_graph).map(TTIpp::as_tuple).collect();
-        assert_eq!(all_ipps, vec![(2,6), (6,2)]);
-        let all_ipps: Vec<_> = Linked::new(1, 0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 8), &shortcut_graph).map(TTIpp::as_tuple).collect();
-        assert_eq!(all_ipps, vec![(2,2), (6,6)]);
+            let all_ipps: Vec<_> = shortcut_graph.get_upward(2).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }), &shortcut_graph).map(TTIpp::as_tuple).collect();
+            assert_eq!(all_ipps, vec![(2,6), (6,2)]);
+            let all_ipps: Vec<_> = Linked::new(1, 0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }), &shortcut_graph).map(TTIpp::as_tuple).collect();
+            assert_eq!(all_ipps, vec![(2,2), (6,6)]);
 
-        shortcut_graph.merge_upward(2, Linked::new(1, 0));
+            shortcut_graph.merge_upward(2, Linked::new(1, 0));
 
-        assert_eq!(shortcut_graph.get_upward(2).data, ShortcutPaths::Multi(vec![(0, ShortcutData::new(ShortcutSource::Shortcut(1, 0))), (4, ShortcutData::new(ShortcutSource::OriginalEdge(2)))]));
+            assert_eq!(shortcut_graph.get_upward(2).data, ShortcutPaths::Multi(vec![(0, ShortcutData::new(ShortcutSource::Shortcut(1, 0))), (4, ShortcutData::new(ShortcutSource::OriginalEdge(2)))]));
 
-        let all_merged_ipps: Vec<_> = shortcut_graph.get_upward(2).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 8), &shortcut_graph).map(TTIpp::as_tuple).collect();
-        assert_eq!(all_merged_ipps, vec![(0,4), (2,2), (4,4), (6,2)]);
+            let all_merged_ipps: Vec<_> = shortcut_graph.get_upward(2).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }), &shortcut_graph).map(TTIpp::as_tuple).collect();
+            assert_eq!(all_merged_ipps, vec![(0,4), (2,2), (4,4), (6,2)]);
+        });
     }
 
     #[test]
     fn test_eval() {
-        let graph = TDGraph::new(
-            vec![0, 1, 2, 2],
-            vec![2, 0],
-            vec![0, 3, 6],
-            vec![1, 3, 9,  0, 5, 8],
-            vec![2, 5, 3,  1, 2, 1],
-            10
-        );
+        run_test_with_periodicity(10, || {
+            let graph = TDGraph::new(
+                vec![0, 1, 2, 2],
+                vec![2, 0],
+                vec![0, 3, 6],
+                vec![1, 3, 9,  0, 5, 8],
+                vec![2, 5, 3,  1, 2, 1],
+            );
 
-        let cch_first_out = vec![0, 1, 3, 3];
-        let cch_head =      vec![2, 0, 2];
+            let cch_first_out = vec![0, 1, 3, 3];
+            let cch_head =      vec![2, 0, 2];
 
-        let outgoing = vec![Shortcut::new(Some(0)), Shortcut::new(None), Shortcut::new(None)];
-        let incoming = vec![Shortcut::new(None), Shortcut::new(Some(1)), Shortcut::new(None)];
+            let outgoing = vec![Shortcut::new(Some(0)), Shortcut::new(None), Shortcut::new(None)];
+            let incoming = vec![Shortcut::new(None), Shortcut::new(Some(1)), Shortcut::new(None)];
 
-        let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
+            let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
 
-        assert_eq!(shortcut_graph.get_downward(1).evaluate(0, &shortcut_graph), 1);
-        assert_eq!(shortcut_graph.get_upward(0).evaluate(1, &shortcut_graph), 2);
+            assert_eq!(shortcut_graph.get_downward(1).evaluate(0, &shortcut_graph), 1);
+            assert_eq!(shortcut_graph.get_upward(0).evaluate(1, &shortcut_graph), 2);
+        });
     }
 
     #[test]
     fn test_iter() {
-        let graph = TDGraph::new(
-            vec![0, 1, 2, 2],
-            vec![2, 0],
-            vec![0, 3, 6],
-            vec![1, 3, 9,  0, 5, 8],
-            vec![2, 5, 3,  1, 2, 1],
-            10
-        );
+        run_test_with_periodicity(10, || {
+            let graph = TDGraph::new(
+                vec![0, 1, 2, 2],
+                vec![2, 0],
+                vec![0, 3, 6],
+                vec![1, 3, 9,  0, 5, 8],
+                vec![2, 5, 3,  1, 2, 1],
+            );
 
-        let cch_first_out = vec![0, 1, 3, 3];
-        let cch_head =      vec![2, 0, 2];
+            let cch_first_out = vec![0, 1, 3, 3];
+            let cch_head =      vec![2, 0, 2];
 
-        let outgoing = vec![Shortcut::new(Some(0)), Shortcut::new(None), Shortcut::new(None)];
-        let incoming = vec![Shortcut::new(None), Shortcut::new(Some(1)), Shortcut::new(None)];
+            let outgoing = vec![Shortcut::new(Some(0)), Shortcut::new(None), Shortcut::new(None)];
+            let incoming = vec![Shortcut::new(None), Shortcut::new(Some(1)), Shortcut::new(None)];
 
-        let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
+            let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
 
-        let all_ipps: Vec<_> = shortcut_graph.get_upward(0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).map(TTIpp::as_tuple).collect();
-        assert_eq!(all_ipps, vec![(1,2), (3,5), (9,3)]);
+            let all_ipps: Vec<_> = shortcut_graph.get_upward(0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }), &shortcut_graph).map(TTIpp::as_tuple).collect();
+            assert_eq!(all_ipps, vec![(1,2), (3,5), (9,3)]);
+        });
     }
 
     #[test]
     fn test_static_weight_iter() {
-        let graph = TDGraph::new(
-            vec![0, 1],
-            vec![0],
-            vec![0, 1],
-            vec![0],
-            vec![2],
-            10
-        );
+        run_test_with_periodicity(10, || {
+            let graph = TDGraph::new(
+                vec![0, 1],
+                vec![0],
+                vec![0, 1],
+                vec![0],
+                vec![2],
+            );
 
-        let cch_first_out = vec![0, 1];
-        let cch_head =      vec![0];
+            let cch_first_out = vec![0, 1];
+            let cch_head =      vec![0];
 
-        let outgoing = vec![Shortcut::new(Some(0))];
-        let incoming = vec![Shortcut::new(Some(0))];
+            let outgoing = vec![Shortcut::new(Some(0))];
+            let incoming = vec![Shortcut::new(Some(0))];
 
-        let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
+            let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
 
-        let all_ipps: Vec<_> = shortcut_graph.get_upward(0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).collect();
-        assert_eq!(all_ipps, vec![]);
+            let all_ipps: Vec<_> = shortcut_graph.get_upward(0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }), &shortcut_graph).collect();
+            assert_eq!(all_ipps, vec![]);
+        });
     }
 
     #[test]
     fn test_two_static_segments_iter() {
-        let graph = TDGraph::new(
-            vec![0, 1],
-            vec![0],
-            vec![0, 1],
-            vec![0],
-            vec![2],
-            10
-        );
+        run_test_with_periodicity(10, || {
+            let graph = TDGraph::new(
+                vec![0, 1],
+                vec![0],
+                vec![0, 1],
+                vec![0],
+                vec![2],
+            );
 
-        let cch_first_out = vec![0, 1];
-        let cch_head =      vec![0];
-        let outgoing = vec![Shortcut { data: ShortcutPaths::Multi(vec![(2, ShortcutData::new(ShortcutSource::OriginalEdge(0))), (6, ShortcutData::new(ShortcutSource::OriginalEdge(0)))]), cache: None }];
-        let incoming = vec![Shortcut::new(Some(0))];
+            let cch_first_out = vec![0, 1];
+            let cch_head =      vec![0];
+            let outgoing = vec![Shortcut { data: ShortcutPaths::Multi(vec![(2, ShortcutData::new(ShortcutSource::OriginalEdge(0))), (6, ShortcutData::new(ShortcutSource::OriginalEdge(0)))]), cache: None }];
+            let incoming = vec![Shortcut::new(Some(0))];
 
-        let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
+            let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
 
-        let all_ipps: Vec<_> = shortcut_graph.get_upward(0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).map(TTIpp::as_tuple).collect();
-        assert_eq!(all_ipps, vec![(2,2), (6,2)]);
+            let all_ipps: Vec<_> = shortcut_graph.get_upward(0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }), &shortcut_graph).map(TTIpp::as_tuple).collect();
+            assert_eq!(all_ipps, vec![(2,2), (6,2)]);
+        });
     }
 
     #[test]
     fn test_wrapping_segments_iter() {
-        let graph = TDGraph::new(
-            vec![0, 1, 2],
-            vec![1, 0],
-            vec![0, 1, 4],
-            vec![0, 0, 6, 7],
-            vec![1, 1, 3, 2],
-            10
-        );
+        run_test_with_periodicity(10, || {
+            let graph = TDGraph::new(
+                vec![0, 1, 2],
+                vec![1, 0],
+                vec![0, 1, 4],
+                vec![0, 0, 6, 7],
+                vec![1, 1, 3, 2],
+            );
 
-        let cch_first_out = vec![0, 1, 2];
-        let cch_head =      vec![1, 0];
-        let outgoing = vec![Shortcut { data: ShortcutPaths::Multi(vec![(2, ShortcutData::new(ShortcutSource::OriginalEdge(0))), (5, ShortcutData::new(ShortcutSource::OriginalEdge(1)))]), cache: None }, Shortcut::new(None)];
-        let incoming = vec![Shortcut::new(None), Shortcut::new(None)];
+            let cch_first_out = vec![0, 1, 2];
+            let cch_head =      vec![1, 0];
+            let outgoing = vec![Shortcut { data: ShortcutPaths::Multi(vec![(2, ShortcutData::new(ShortcutSource::OriginalEdge(0))), (5, ShortcutData::new(ShortcutSource::OriginalEdge(1)))]), cache: None }, Shortcut::new(None)];
+            let incoming = vec![Shortcut::new(None), Shortcut::new(None)];
 
-        let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
+            let shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
 
-        let all_ipps: Vec<_> = shortcut_graph.get_upward(0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }, 10), &shortcut_graph).map(TTIpp::as_tuple).collect();
-        assert_eq!(all_ipps, vec![(0,1), (2,1), (5,2), (6,3), (7,2)]);
+            let all_ipps: Vec<_> = shortcut_graph.get_upward(0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }), &shortcut_graph).map(TTIpp::as_tuple).collect();
+            assert_eq!(all_ipps, vec![(0,1), (2,1), (5,2), (6,3), (7,2)]);
+        });
     }
 }
