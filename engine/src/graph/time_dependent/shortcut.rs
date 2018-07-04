@@ -210,6 +210,10 @@ impl Shortcut {
         Iter::new(&self, range, shortcut_graph)
     }
 
+    pub(super) fn seg_iter<'a, 'b: 'a>(&'b self, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> SegmentIter<'a, 'b> {
+        SegmentIter::new(&self, range, shortcut_graph)
+    }
+
     pub fn bounds(&self, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
         if !self.is_valid_path() {
             return (INFINITY, INFINITY);

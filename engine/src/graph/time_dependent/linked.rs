@@ -1,4 +1,5 @@
 use super::*;
+use std::iter::Peekable;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Linked {
@@ -32,6 +33,12 @@ impl Linked {
         Iter::new(first_edge, second_edge, range, shortcut_graph)
     }
 
+    pub(super) fn seg_iter<'a>(self, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> SegmentIter<'a> {
+        let first_edge = shortcut_graph.get_downward(self.first);
+        let second_edge = shortcut_graph.get_upward(self.second);
+        SegmentIter::new(first_edge, second_edge, range, shortcut_graph)
+    }
+
     pub fn as_shortcut_data(self) -> ShortcutData {
         ShortcutData::new(ShortcutSource::Shortcut(self.first, self.second))
     }
@@ -40,7 +47,7 @@ impl Linked {
         shortcut_graph.get_downward(self.first).is_valid_path() && shortcut_graph.get_upward(self.second).is_valid_path()
     }
 
-    pub fn debug_to_s<'a>(self, shortcut_graph: &'a ShortcutGraph, indent: usize) -> String {
+    pub fn debug_to_s(self, shortcut_graph: &ShortcutGraph, indent: usize) -> String {
         let first_edge = shortcut_graph.get_downward(self.first);
         let second_edge = shortcut_graph.get_upward(self.second);
         format!("Linked:\n{}first: {}\n{}second: {}", String::from(" ").repeat(indent * 2), first_edge.debug_to_s(shortcut_graph, indent + 1), String::from(" ").repeat(indent * 2), second_edge.debug_to_s(shortcut_graph, indent + 1))
@@ -51,7 +58,7 @@ pub struct Iter<'a> {
     first_edge: &'a Shortcut,
     second_edge: &'a Shortcut,
     first_iter: shortcut::Iter<'a, 'a>,
-    second_iter: std::iter::Peekable<shortcut::Iter<'a, 'a>>,
+    second_iter: Peekable<shortcut::Iter<'a, 'a>>,
     range: WrappingRange,
     prev_ipp_at: Timestamp,
 
@@ -186,6 +193,52 @@ impl<'a> Iterator for Iter<'a> {
     }
 }
 
+pub(super) struct SegmentIter<'a> {
+    first_edge: &'a Shortcut,
+    second_edge: &'a Shortcut,
+    first_iter: Peekable<shortcut::SegmentIter<'a, 'a>>,
+    second_iter: Peekable<shortcut::SegmentIter<'a, 'a>>,
+    range: WrappingRange,
+    shortcut_graph: &'a ShortcutGraph<'a>,
+}
+
+impl<'a> SegmentIter<'a> {
+    fn new(first_edge: &'a Shortcut, second_edge: &'a Shortcut, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> SegmentIter<'a> {
+        let mut first_iter = first_edge.seg_iter(range.clone(), shortcut_graph).peekable();
+        let start_of_second = first_iter.peek().unwrap().start_of_valid_at_val();
+        let start_of_second = start_of_second % period();
+        let second_iter = second_edge.seg_iter(WrappingRange::new(Range { start: start_of_second, end: start_of_second }), shortcut_graph).peekable();
+
+        SegmentIter { first_edge, second_edge, first_iter, second_iter, shortcut_graph, range }
+    }
+}
+
+impl<'a> Iterator for SegmentIter<'a> {
+    type Item = TTFSeg;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let first_iter = &mut self.first_iter;
+        let second_iter = &mut self.second_iter;
+        first_iter.peek().map(|first_segment| {
+            let second_segment = second_iter.peek().unwrap();
+
+            let linked = link_segments(first_segment, second_segment);
+
+            let first_end_of_valid_at_val = first_segment.end_of_valid_at_val();
+            if second_segment.valid.contains(&first_end_of_valid_at_val) {
+                first_iter.next();
+            } else if second_segment.valid.end == first_end_of_valid_at_val {
+                first_iter.next();
+                second_iter.next();
+            } else {
+                second_iter.next();
+            }
+
+            linked
+        })
+    }
+}
+
 fn invert(first_ipp: (Timestamp, Timestamp), second_ipp: (Timestamp, Timestamp), target_time: Timestamp) -> Timestamp {
     if first_ipp.1 == second_ipp.1 {
         return (target_time + period() - first_ipp.1) % period()
@@ -234,23 +287,22 @@ fn link_segments(first_segment: &TTFSeg, second_segment: &TTFSeg) -> TTFSeg {
     let first_segment = first_segment.clone().into_monotone_at_segment();
     let mut second_segment = second_segment.clone().into_monotone_at_segment();
 
-    println!("{:?}", first_segment);
-    println!("{:?}", second_segment);
+    // println!("{:?}", first_segment);
+    // println!("{:?}", second_segment);
 
     let first_value_range = first_segment.valid_value_range();
-    println!("{:?}", first_value_range);
+    // println!("{:?}", first_value_range);
     let needs_shifting = is_intersection_empty(&first_value_range, &second_segment.valid);
     if needs_shifting {
-        println!("shifting");
+        // println!("shifting");
         second_segment.shift();
-        println!("{:?}", second_segment);
+        // println!("{:?}", second_segment);
     }
     debug_assert!(!is_intersection_empty(&first_value_range, &second_segment.valid));
 
     let line = link_monotone(&first_segment.line, &second_segment.line, if needs_shifting { first_segment.line.0.from.at } else { 0 });
 
-    println!("before periodicity {:?}", line);
-    // ((start_of_range, first_segment.from.val + second_segment.from.val), (end_of_range, first_segment.to.val + second_segment.to.val))
+    // println!("before periodicity {:?}", line);
     Segment {
         line: line.into_monotone_tt_line().apply_periodicity(period()),
         valid: Range { start: start_of_range, end: end_of_range }
@@ -260,32 +312,32 @@ fn link_segments(first_segment: &TTFSeg, second_segment: &TTFSeg) -> TTFSeg {
 use ::math::*;
 
 fn link_monotone(first_line: &MonotoneLine<ATIpp>, second_line: &MonotoneLine<ATIpp>, min_x: Timestamp) -> MonotoneLine<ATIpp> {
-    println!("f {:?}", first_line);
-    println!("g {:?}", second_line);
+    // println!("f {:?}", first_line);
+    // println!("g {:?}", second_line);
     // calc linked steigung
     let linked_delta_x = i64::from(first_line.delta_x()) * i64::from(second_line.delta_x());
     let linked_delta_y = i64::from(first_line.delta_y()) * i64::from(second_line.delta_y());
 
-    println!("{}y/{}x", linked_delta_y, linked_delta_x);
+    // println!("{}y/{}x", linked_delta_y, linked_delta_x);
 
     let rest_first_term = i64::from(first_line.0.from.at) * linked_delta_y;
     let rest_second_term = i64::from(second_line.0.from.at) * i64::from(second_line.delta_y()) * i64::from(first_line.delta_x());
     let rest_third_term = i64::from(first_line.0.from.val) * i64::from(second_line.delta_y()) * i64::from(first_line.delta_x());
     let rest_fourth_term = i64::from(second_line.0.from.val) * linked_delta_x;
     let rest = rest_first_term + rest_second_term - rest_third_term - rest_fourth_term;
-    println!("rest: {}", rest);
+    // println!("rest: {}", rest);
     let result = solve_linear_congruence(linked_delta_y as i64, rest, linked_delta_x as i64).expect("🤯 math is broken");
 
-    println!("{:?}", result);
+    // println!("{:?}", result);
 
     let min_x = max(i64::from(min_x), (rest + linked_delta_y - 1) / linked_delta_y);
     let first_at = max(result.solution, result.solution + (min_x - result.solution + result.modulus as i64 - 1) / result.modulus as i64 * result.modulus as i64);
 
-    println!("{:?}", min_x);
-    println!("{:?}", first_at);
+    // println!("{:?}", min_x);
+    // println!("{:?}", first_at);
 
     let first_val = (linked_delta_y * first_at - rest) / linked_delta_x;
-    println!("{:?}", first_val);
+    // println!("{:?}", first_val);
     debug_assert_eq!((linked_delta_y * first_at - rest) % linked_delta_x, 0);
     let second_at = first_at + result.modulus as i64;
     let second_val = (linked_delta_y * second_at - rest) / linked_delta_x;

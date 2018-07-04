@@ -1,7 +1,7 @@
 use super::*;
 use in_range_option::InRangeOption;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum ShortcutSource {
     Shortcut(EdgeId, EdgeId),
     OriginalEdge(EdgeId),
@@ -21,14 +21,14 @@ impl ShortcutData {
         }
     }
 
-    pub fn source(&self) -> ShortcutSource {
+    pub fn source(self) -> ShortcutSource {
         match self.down_arc.value() {
             Some(down_shortcut_id) => ShortcutSource::Shortcut(down_shortcut_id, self.up_arc),
             None => ShortcutSource::OriginalEdge(self.up_arc),
         }
     }
 
-    pub fn evaluate(&self, departure: Timestamp, shortcut_graph: &ShortcutGraph) -> Weight {
+    pub fn evaluate(self, departure: Timestamp, shortcut_graph: &ShortcutGraph) -> Weight {
         debug_assert!(departure < period());
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
@@ -40,11 +40,10 @@ impl ShortcutData {
         }
     }
 
-    pub(super) fn seg_iter<'a>(&self, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> ShortcutSourceSegmentIter<'a> {
+    pub(super) fn seg_iter<'a>(self, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> ShortcutSourceSegmentIter<'a> {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
-                // ShortcutSourceIter::Shortcut(Linked::new(down_shortcut_id, self.up_arc).ipp_iter(range, shortcut_graph))
-                unimplemented!()
+                ShortcutSourceSegmentIter::Shortcut(Linked::new(down_shortcut_id, self.up_arc).seg_iter(range, shortcut_graph))
             },
             None => {
                 ShortcutSourceSegmentIter::OriginalEdge(shortcut_graph.original_graph().travel_time_function(self.up_arc).seg_iter(range))
@@ -52,7 +51,7 @@ impl ShortcutData {
         }
     }
 
-    pub fn ipp_iter<'a>(&self, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> ShortcutSourceIter<'a> {
+    pub fn ipp_iter<'a>(self, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> ShortcutSourceIter<'a> {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
                 ShortcutSourceIter::Shortcut(Linked::new(down_shortcut_id, self.up_arc).ipp_iter(range, shortcut_graph))
@@ -63,7 +62,7 @@ impl ShortcutData {
         }
     }
 
-    pub fn bounds(&self, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
+    pub fn bounds(self, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
                 Linked::new(down_shortcut_id, self.up_arc).bounds(shortcut_graph)
@@ -74,7 +73,7 @@ impl ShortcutData {
         }
     }
 
-    pub fn debug_to_s<'a>(&self, shortcut_graph: &'a ShortcutGraph, indent: usize) -> String {
+    pub fn debug_to_s(self, shortcut_graph: &ShortcutGraph, indent: usize) -> String {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
                 Linked::new(down_shortcut_id, self.up_arc).debug_to_s(shortcut_graph, indent)
@@ -104,7 +103,7 @@ impl<'a> Iterator for ShortcutSourceIter<'a> {
 }
 
 pub(super) enum ShortcutSourceSegmentIter<'a> {
-    // Shortcut(linked::Iter<'a>),
+    Shortcut(linked::SegmentIter<'a>),
     OriginalEdge(piecewise_linear_function::SegmentIter<'a>),
 }
 
@@ -114,7 +113,7 @@ impl<'a> Iterator for ShortcutSourceSegmentIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         // println!("shortcut src next");
         match *self {
-            // &mut ShortcutSourceSegmentIter::Shortcut(ref mut iter) => iter.next(),
+            ShortcutSourceSegmentIter::Shortcut(ref mut iter) => iter.next(),
             ShortcutSourceSegmentIter::OriginalEdge(ref mut iter) => iter.next(),
         }
     }
