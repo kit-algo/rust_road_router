@@ -216,6 +216,14 @@ impl TTFSeg {
         let x = if self.valid.end <= self.valid.start { self.valid.end + period() } else { self.valid.end };
         (self.line.clone().into_monotone_tt_line().interpolate_tt(x) + x) % period()
     }
+
+    fn combine(&mut self, other: &TTFSeg) -> bool {
+        if self.line == other.line && self.valid.end == other.valid.start {
+            self.valid.end = other.valid.end;
+            return true
+        }
+        false
+    }
 }
 
 impl Segment<MonotoneLine<ATIpp>> {

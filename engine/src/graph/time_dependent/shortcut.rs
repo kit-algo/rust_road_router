@@ -13,7 +13,7 @@ pub struct Shortcut {
 enum ShortcutPaths {
     None,
     One(ShortcutData),
-    Multi(Vec<(Timestamp, ShortcutData)>)
+    Multi(Vec<(Timestamp, ShortcutData)>) // TODO wasting space?
 }
 
 impl Shortcut {
@@ -189,6 +189,44 @@ impl Shortcut {
         self.data = ShortcutPaths::Multi(new_shortcut_data); // TODO can be one???
     }
 
+    pub fn merge2(&mut self, other: Linked, shortcut_graph: &ShortcutGraph) {
+        if !other.is_valid_path(shortcut_graph) {
+            return
+        }
+        if !self.is_valid_path() {
+            self.data = ShortcutPaths::One(other.as_shortcut_data());
+            return
+        }
+
+        // TODO bounds for range
+        let (current_lower_bound, current_upper_bound) = self.bounds(shortcut_graph);
+        let (other_lower_bound, other_upper_bound) = other.bounds(shortcut_graph);
+        if current_lower_bound >= other_upper_bound {
+            self.data = ShortcutPaths::One(other.as_shortcut_data());
+            return
+        } else if other_lower_bound >= current_upper_bound {
+            return
+        }
+
+        let range = WrappingRange::new(Range { start: 0, end: 0 });
+        let data = merge(CooccuringSegIter {
+            shortcut_iter: self.seg_iter(range.clone(), shortcut_graph).peekable(),
+            linked_iter: other.seg_iter(range, shortcut_graph).peekable(),
+        }).fold(SegmentAggregator {
+            shortcut_path_segments: PathSegmentIter::new(self).peekable(),
+            merged_path_segments: Vec::new(),
+            merged_ttf_segments: Vec::new(),
+            linked_shortcut_data: other.as_shortcut_data(),
+        }, |mut acc, better_segment| { acc.integrate_segment(better_segment); acc });
+
+        debug_assert!(!data.merged_path_segments.is_empty());
+        if data.merged_path_segments.len() > 1 {
+            self.data = ShortcutPaths::Multi(data.merged_path_segments);
+        } else {
+            self.data = ShortcutPaths::One(data.merged_path_segments[0].1);
+        }
+    }
+
     pub fn evaluate(&self, departure: Timestamp, shortcut_graph: &ShortcutGraph) -> Weight {
         debug_assert!(departure < period());
         match self.data {
@@ -286,6 +324,111 @@ impl Shortcut {
             ShortcutPaths::None => None,
             ShortcutPaths::One(ref data) => Some(data),
             ShortcutPaths::Multi(ref data) => data.last().map(|&(_, ref data)| data)
+        }
+    }
+}
+
+#[derive(Debug)]
+struct SegmentAggregator<'a> {
+    shortcut_path_segments: Peekable<PathSegmentIter<'a>>,
+    merged_path_segments: Vec<(Timestamp, ShortcutData)>,
+    merged_ttf_segments: Vec<TTFSeg>,
+    linked_shortcut_data: ShortcutData
+}
+
+impl<'a> SegmentAggregator<'a> {
+    fn integrate_segment(&mut self, segment: BetterSegment) {
+        match self.merged_ttf_segments.last_mut() {
+            Some(prev_segment) => {
+                match segment {
+                    BetterSegment::Shortcut(segment) => {
+                        if self.merged_path_segments.last().unwrap().1 == self.linked_shortcut_data {
+                            let mut prev = if self.merged_path_segments.len() > 1 {
+                                Some(self.merged_path_segments[self.merged_path_segments.len() - 2].1)
+                            } else {
+                                None
+                            };
+                            while self.shortcut_path_segments.peek().unwrap().0 < segment.valid.start {
+                                prev = Some(*self.shortcut_path_segments.peek().unwrap().1);
+                                self.shortcut_path_segments.next();
+                            }
+
+                            self.merged_path_segments.push((segment.valid.start, prev.unwrap()));
+                        }
+
+                        while let Some(next) = self.shortcut_path_segments.peek() {
+                            if next.0 < segment.valid.end {
+                                self.merged_path_segments.push((next.0, *next.1));
+                                self.shortcut_path_segments.next();
+                            } else {
+                                break;
+                            }
+                        }
+
+                        if !prev_segment.combine(&segment) {
+                            self.merged_ttf_segments.push(segment);
+                        }
+                    },
+                    BetterSegment::Linked(segment) => {
+                        if self.merged_path_segments.last().unwrap().1 != self.linked_shortcut_data {
+                            self.merged_path_segments.push((segment.valid.start, self.linked_shortcut_data));
+                        }
+                        if !prev_segment.combine(&segment) {
+                            self.merged_ttf_segments.push(segment);
+                        }
+                    },
+                    BetterSegment::Equal(shortcut_seg, linked_seg) => {
+                        if self.merged_path_segments.last().unwrap().1 == self.linked_shortcut_data {
+                            if !prev_segment.combine(&linked_seg) {
+                                self.merged_ttf_segments.push(linked_seg);
+                            }
+                        } else {
+                            if self.merged_path_segments.last().unwrap().1 == self.linked_shortcut_data {
+                                let mut prev = if self.merged_path_segments.len() > 1 {
+                                    Some(self.merged_path_segments[self.merged_path_segments.len() - 2].1)
+                                } else {
+                                    None
+                                };
+                                while self.shortcut_path_segments.peek().unwrap().0 < shortcut_seg.valid.start {
+                                    prev = Some(*self.shortcut_path_segments.peek().unwrap().1);
+                                    self.shortcut_path_segments.next();
+                                }
+
+                                self.merged_path_segments.push((shortcut_seg.valid.start, prev.unwrap()));
+                            }
+
+                            while let Some(next) = self.shortcut_path_segments.peek() {
+                                if next.0 < shortcut_seg.valid.end {
+                                    self.merged_path_segments.push((next.0, *next.1));
+                                    self.shortcut_path_segments.next();
+                                } else {
+                                    break;
+                                }
+                            }
+
+                            if !prev_segment.combine(&shortcut_seg) {
+                                self.merged_ttf_segments.push(shortcut_seg);
+                            }
+                        }
+                    },
+                }
+            },
+            None => {
+                match segment {
+                    BetterSegment::Shortcut(segment) => {
+                        self.merged_ttf_segments.push(segment);
+                        self.merged_path_segments.push(self.shortcut_path_segments.next().map(|(at, data)| (at, *data)).unwrap());
+                    },
+                    BetterSegment::Linked(segment) => {
+                        self.merged_ttf_segments.push(segment);
+                        self.merged_path_segments.push((0, self.linked_shortcut_data));
+                    },
+                    BetterSegment::Equal(shortcut_seg, _linked_seg) => {
+                        self.merged_ttf_segments.push(shortcut_seg);
+                        self.merged_path_segments.push(self.shortcut_path_segments.next().map(|(at, data)| (at, *data)).unwrap());
+                    },
+                }
+            },
         }
     }
 }

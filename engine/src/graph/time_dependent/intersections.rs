@@ -217,7 +217,7 @@ fn intersect_segments(first_segment: &TTFSeg, second_segment: &TTFSeg) -> Option
     };
     let unrounded = numerator / denominator;
 
-    if result >= INFINITY as i128 {
+    if result >= i128::from(INFINITY) {
         return None
     }
 
@@ -249,7 +249,7 @@ impl<T, X: Iterator<Item = T>, Y: Iterator<Item = T>> Iterator for TwoTypeIter<T
 }
 
 #[derive(Debug)]
-enum BetterSegment {
+pub(super) enum BetterSegment {
     Shortcut(TTFSeg),
     Linked(TTFSeg),
     Equal(TTFSeg, TTFSeg)
@@ -257,7 +257,7 @@ enum BetterSegment {
 
 use math::RangeExtensions;
 
-fn merge(iter: impl Iterator<Item = (TTFSeg, TTFSeg)>) -> impl Iterator<Item = BetterSegment> {
+pub(super) fn merge(iter: impl Iterator<Item = (TTFSeg, TTFSeg)>) -> impl Iterator<Item = BetterSegment> {
     use std::iter::once;
     use std::cmp::Ordering;
 
