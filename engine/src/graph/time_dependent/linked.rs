@@ -219,10 +219,13 @@ impl<'a> Iterator for SegmentIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         let first_iter = &mut self.first_iter;
         let second_iter = &mut self.second_iter;
-        first_iter.peek().map(|first_segment| {
-            let second_segment = second_iter.peek().unwrap();
+        let linked = first_iter.peek().map(|first_segment| {
+            link_segments(first_segment, second_iter.peek().unwrap())
+        });
 
-            let linked = link_segments(first_segment, second_segment);
+        // might be nicer to do this in the map but the borrow checker won't let me
+        if let Some(first_segment) = first_iter.peek() {
+            let second_segment = second_iter.peek().unwrap();
 
             let first_end_of_valid_at_val = first_segment.end_of_valid_at_val();
             if second_segment.valid.contains(&first_end_of_valid_at_val) {
@@ -233,9 +236,9 @@ impl<'a> Iterator for SegmentIter<'a> {
             } else {
                 second_iter.next();
             }
+        }
 
-            linked
-        })
+        linked
     }
 }
 

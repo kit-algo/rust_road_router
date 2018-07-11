@@ -5,6 +5,7 @@
 #![feature(mpsc_select)]
 #![feature(euclidean_division)]
 #![feature(range_contains)]
+#![feature(nll)]
 
 extern crate nav_types;
 extern crate postgres;

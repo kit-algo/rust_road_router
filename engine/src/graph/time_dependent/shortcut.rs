@@ -406,9 +406,8 @@ impl<'a, 'b> Iter<'a, 'b> {
     fn calc_next(&mut self) -> Option<<Self as Iterator>::Item> {
         // println!("shortcut next");
         match self.current_source_iter {
-            Some(_) => {
-                // TODO move borrow into Some(...) match once NLL are more stable
-                match self.current_source_iter.as_mut().unwrap().next() {
+            Some(ref mut current_source_iter) => {
+                match current_source_iter.next() {
                     Some(ipp) => {
                         debug_assert!(abs_diff(ipp.val, self.shortcut.evaluate(ipp.at, self.shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. {}", ipp.at, ipp.val, self.shortcut.evaluate(ipp.at, self.shortcut_graph), self.shortcut.debug_to_s(self.shortcut_graph, 0));
                         if self.range.contains(ipp.at) {

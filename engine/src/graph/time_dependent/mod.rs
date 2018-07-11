@@ -168,7 +168,7 @@ impl<Point> Line<Point> {
 #[derive(Debug, Clone, PartialEq)]
 struct Segment<LineType> {
     line: LineType,
-    valid: Range<Timestamp>,
+    valid: Range<Timestamp>, // TODO Wrapping?
 }
 
 type TTFSeg = Segment<Line<Ipp>>;
@@ -200,6 +200,15 @@ impl TTFSeg {
             valid.end += period();
         }
         Segment { line, valid }
+    }
+
+    fn start_of_valid_at_val(&self) -> Timestamp {
+        (self.line.clone().into_monotone_tt_line().interpolate_tt(self.valid.start) + self.valid.start) % period()
+    }
+
+    fn end_of_valid_at_val(&self) -> Timestamp {
+        let x = if self.valid.end <= self.valid.start { self.valid.end + period() } else { self.valid.end };
+        (self.line.clone().into_monotone_tt_line().interpolate_tt(x) + x) % period()
     }
 }
 
@@ -259,10 +268,6 @@ impl Line<ATIpp> {
     }
 }
 
-impl Line<TTIpp> {
-}
-
-
 #[derive(Debug, Clone, PartialEq)]
 struct MonotoneLine<Point>(Line<Point>);
 
@@ -301,6 +306,18 @@ impl MonotoneLine<ATIpp> {
 }
 
 impl MonotoneLine<TTIpp> {
+    #[inline]
+    fn interpolate_tt(&self, x: Timestamp) -> Weight {
+        debug_assert!(self.0.from.at < self.0.to.at, "self: {:?}", self);
+        let delta_x = self.0.to.at - self.0.from.at;
+        let delta_y = i64::from(self.0.to.val) - i64::from(self.0.from.val);
+        let relative_x = i64::from(x) - i64::from(self.0.from.at);
+        let result = i64::from(self.0.from.val) + (relative_x * delta_y / i64::from(delta_x));
+        debug_assert!(result >= 0);
+        debug_assert!(result <= i64::from(INFINITY));
+        result as Weight
+    }
+
     fn apply_periodicity(self, period: Timestamp) -> Line<TTIpp> {
         let MonotoneLine(Line { mut from, mut to }) = self;
         from.at %= period;
