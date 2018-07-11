@@ -58,9 +58,26 @@ fn extended_euklid(a: i64, b: i64) -> (i64, i64, i64) {
 }
 
 use std::ops::Range;
+use std::cmp::{max, min};
 
-pub fn is_intersection_empty<T: PartialOrd>(a: &Range<T>, b: &Range<T>) -> bool {
+fn is_intersection_empty<T: PartialOrd>(a: &Range<T>, b: &Range<T>) -> bool {
     !a.contains(&b.start) && !a.contains(&b.end) && !b.contains(&a.start) && !b.contains(&a.end)
+}
+
+pub trait RangeExtensions {
+    fn intersection(&self, other: &Self) -> Self;
+    fn is_intersection_empty(&self, other: &Self) -> bool;
+}
+
+impl<T: Ord + Copy> RangeExtensions for Range<T> {
+    fn intersection(&self, other: &Self) -> Self {
+        Range { start: max(self.start, other.start), end: min(self.end, other.end) }
+    }
+
+    fn is_intersection_empty(&self, other: &Self) -> bool {
+        let intersection = self.intersection(other);
+        intersection.start >= intersection.end
+    }
 }
 
 #[cfg(test)]

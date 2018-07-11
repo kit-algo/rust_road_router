@@ -295,13 +295,13 @@ fn link_segments(first_segment: &TTFSeg, second_segment: &TTFSeg) -> TTFSeg {
 
     let first_value_range = first_segment.valid_value_range();
     // println!("{:?}", first_value_range);
-    let needs_shifting = is_intersection_empty(&first_value_range, &second_segment.valid);
+    let needs_shifting = first_value_range.is_intersection_empty(&second_segment.valid);
     if needs_shifting {
         // println!("shifting");
         second_segment.shift();
         // println!("{:?}", second_segment);
     }
-    debug_assert!(!is_intersection_empty(&first_value_range, &second_segment.valid));
+    debug_assert!(!first_value_range.is_intersection_empty(&second_segment.valid));
 
     let line = link_monotone(&first_segment.line, &second_segment.line, if needs_shifting { first_segment.line.0.from.at } else { 0 });
 

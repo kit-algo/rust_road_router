@@ -355,6 +355,33 @@ impl<'a, 'b> Iterator for MergingIter<'a, 'b> {
     }
 }
 
+struct CooccuringSegIter<'a, 'b: 'a> {
+    shortcut_iter: Peekable<SegmentIter<'a, 'b>>,
+    linked_iter: Peekable<linked::SegmentIter<'a>>
+}
+
+impl<'a, 'b> Iterator for CooccuringSegIter<'a, 'b> {
+    type Item = (TTFSeg, TTFSeg);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match (self.shortcut_iter.peek().cloned(), self.linked_iter.peek().cloned()) {
+            (Some(shortcut_next_seg), Some(linked_next_seg)) => {
+                if shortcut_next_seg.valid.end == linked_next_seg.valid.end {
+                    self.shortcut_iter.next();
+                    self.linked_iter.next();
+                } else if shortcut_next_seg.valid.end <= linked_next_seg.valid.end {
+                    self.shortcut_iter.next();
+                } else {
+                    self.linked_iter.next();
+                }
+                Some((shortcut_next_seg, linked_next_seg))
+            },
+            (None, None) => None,
+            _ => panic!("broken valid ranges in parallel iteration")
+        }
+    }
+}
+
 pub struct Iter<'a, 'b: 'a> {
     shortcut: &'b Shortcut,
     shortcut_graph: &'a ShortcutGraph<'a>,

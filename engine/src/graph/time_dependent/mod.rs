@@ -168,10 +168,10 @@ impl<Point> Line<Point> {
 #[derive(Debug, Clone, PartialEq)]
 struct Segment<LineType> {
     line: LineType,
-    valid: Range<Timestamp>, // TODO Wrapping?
+    valid: Range<Timestamp>, // TODO Wrapping - NO
 }
 
-type TTFSeg = Segment<Line<Ipp>>;
+type TTFSeg = Segment<Line<Ipp>>; // TODO always monotone
 
 impl TTFSeg {
     fn new((from_at, from_val): (Timestamp, Weight), (to_at, to_val): (Timestamp, Weight)) -> Self {
@@ -200,6 +200,12 @@ impl TTFSeg {
             valid.end += period();
         }
         Segment { line, valid }
+    }
+
+    fn eval(&self, x: Timestamp) -> Weight {
+        debug_assert!(self.valid.contains(&x));
+        // TODO optimize
+        self.line.clone().into_monotone_tt_line().interpolate_tt(x)
     }
 
     fn start_of_valid_at_val(&self) -> Timestamp {
