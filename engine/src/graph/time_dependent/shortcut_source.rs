@@ -51,17 +51,6 @@ impl ShortcutData {
         }
     }
 
-    pub fn ipp_iter<'a>(self, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> ShortcutSourceIter<'a> {
-        match self.down_arc.value() {
-            Some(down_shortcut_id) => {
-                ShortcutSourceIter::Shortcut(Linked::new(down_shortcut_id, self.up_arc).ipp_iter(range, shortcut_graph))
-            },
-            None => {
-                ShortcutSourceIter::OriginalEdge(shortcut_graph.original_graph().travel_time_function(self.up_arc).ipp_iter(range))
-            },
-        }
-    }
-
     pub fn bounds(self, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
@@ -81,23 +70,6 @@ impl ShortcutData {
             None => {
                 shortcut_graph.original_graph().travel_time_function(self.up_arc).debug_to_s(indent)
             },
-        }
-    }
-}
-
-pub enum ShortcutSourceIter<'a> {
-    Shortcut(linked::Iter<'a>),
-    OriginalEdge(piecewise_linear_function::Iter<'a>),
-}
-
-impl<'a> Iterator for ShortcutSourceIter<'a> {
-    type Item = TTIpp;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        // println!("shortcut src next");
-        match *self {
-            ShortcutSourceIter::Shortcut(ref mut iter) => iter.next(),
-            ShortcutSourceIter::OriginalEdge(ref mut iter) => iter.next(),
         }
     }
 }

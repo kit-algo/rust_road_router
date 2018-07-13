@@ -27,9 +27,6 @@ pub use self::graph::Graph as TDGraph;
 pub mod shortcut_graph;
 pub use self::shortcut_graph::ShortcutGraph;
 
-mod wrapping_slice_iter;
-use self::wrapping_slice_iter::WrappingSliceIter;
-
 mod intersections;
 use self::intersections::*;
 
@@ -80,13 +77,6 @@ const fn period() -> Timestamp {
     86_400_000
 }
 
-
-const TOLERANCE: Weight = 10;
-
-fn abs_diff(x: Weight, y: Weight) -> Weight {
-    max(x, y) - min(x, y)
-}
-
 use std::ops::Sub;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -104,6 +94,7 @@ impl TTIpp {
         (self.at, self.val)
     }
 
+    #[cfg(test)]
     fn into_atipp(self) -> ATIpp {
         let TTIpp { at, val } = self;
         debug_assert!(at < period());
@@ -135,10 +126,6 @@ struct ATIpp {
 impl ATIpp {
     fn new(at: Timestamp, val: Weight) -> ATIpp {
         ATIpp { at, val }
-    }
-
-    fn as_tuple(self) -> (Timestamp, Weight) {
-        (self.at, self.val)
     }
 
     fn into_ttipp(self) -> TTIpp {
@@ -178,6 +165,7 @@ impl TTFSeg {
         Segment { line: Line { from: Ipp::new(from_at, from_val), to: Ipp::new(to_at, to_val) }, valid: Range { start: from_at, end: to_at } }
     }
 
+    #[cfg(test)]
     fn is_equivalent_to(&self, other: &Self) -> bool {
         if self == other { return true }
         if self.valid != other.valid { return false }
@@ -258,10 +246,12 @@ impl Line<TTIpp> {
         MonotoneLine(Line { from: ATIpp { at: from.at, val: from.at + from.val }, to: ATIpp { at: to.at, val: to.at + to.val } })
     }
 
+    #[cfg(test)]
     fn delta_x(&self) -> Weight {
         self.to.at - self.from.at
     }
 
+    #[cfg(test)]
     fn delta_y(&self) -> Weight {
         self.to.val - self.from.val
     }
@@ -341,10 +331,12 @@ impl MonotoneLine<TTIpp> {
         Line { from, to }
     }
 
+    #[cfg(test)]
     fn delta_x(&self) -> Weight {
         self.0.delta_x()
     }
 
+    #[cfg(test)]
     fn delta_y(&self) -> Weight {
         self.0.delta_y()
     }

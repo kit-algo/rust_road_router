@@ -59,16 +59,8 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
-    pub fn ipp_iter(&self, range: WrappingRange) -> Iter<'a> {
-        Iter::new(self.departure_time, self.travel_time, range)
-    }
-
     pub(super) fn seg_iter(&self, range: WrappingRange) -> SegmentIter<'a> {
         SegmentIter::new(self.departure_time, self.travel_time, range)
-    }
-
-    fn subtract_wrapping(&self, x: Weight, y: Weight) -> Weight {
-        (period() + x - y) % period()
     }
 
     pub fn debug_to_s(&self, indent: usize) -> String {
@@ -82,58 +74,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
             s = s + &format!("{:?}", data);
         }
         s
-    }
-}
-
-pub fn interpolate(delta_x: Weight, y1: Weight, y2: Weight, x: Timestamp) -> Weight {
-    debug_assert!(x <= delta_x);
-    debug_assert_ne!(delta_x, 0);
-    let delta_y = y2 + delta_x - y1;
-    let result = u64::from(y1) + (u64::from(x) * u64::from(delta_y) / u64::from(delta_x));
-    result as Weight - x
-}
-
-#[derive(Debug)]
-pub struct Iter<'a> {
-    departure_time: &'a [Timestamp],
-    travel_time: &'a [Weight],
-    range: WrappingRange,
-    current_index: usize,
-    initial_index: usize,
-    done: bool
-}
-
-impl<'a> Iter<'a> {
-    fn new(departure_time: &'a [Timestamp], travel_time: &'a [Weight], range: WrappingRange) -> Iter<'a> {
-        if departure_time.len() <= 1 {
-            return Iter { departure_time, travel_time, range, current_index: 0, initial_index: 0, done: true }
-        }
-
-        let current_index = match departure_time.sorted_search(&range.start()) {
-            Ok(index) => index,
-            Err(index) => index
-        } % departure_time.len();
-
-        Iter { departure_time, travel_time, range, current_index, initial_index: current_index, done: false }
-    }
-}
-
-impl<'a> Iterator for Iter<'a> {
-    type Item = TTIpp;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let ipp = unsafe { *self.departure_time.get_unchecked(self.current_index) };
-
-        if !self.done && self.range.contains(ipp) {
-            let tt = unsafe { *self.travel_time.get_unchecked(self.current_index) };
-            self.current_index = (self.current_index + 1) % self.departure_time.len();
-            if self.current_index == self.initial_index {
-                self.done = true;
-            }
-            Some(TTIpp::new(ipp, tt))
-        } else {
-            None
-        }
     }
 }
 
@@ -251,50 +191,6 @@ mod tests {
             assert_eq!(ttf.evaluate(23), 1);
         });
         run_test_with_periodicity(24, || {
-        });
-    }
-
-    #[test]
-    fn test_full_range_ipp_iter() {
-        run_test_with_periodicity(24, || {
-            let departure_time = vec![0, 5, 14, 20];
-            let travel_time =    vec![2, 1, 2,  1];
-            let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time);
-            let all_ipps: Vec<_> = ttf.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 })).map(TTIpp::as_tuple).collect();
-            assert_eq!(all_ipps, vec![(0,2), (5,1), (14,2), (20,1)]);
-        });
-    }
-
-    #[test]
-    fn test_wrapping_range_ipp_iter() {
-        run_test_with_periodicity(24, || {
-            let departure_time = vec![0, 5, 14, 20];
-            let travel_time =    vec![2, 1, 2,  1];
-            let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time);
-            let all_ipps: Vec<_> = ttf.ipp_iter(WrappingRange::new(Range { start: 17, end: 17 })).map(TTIpp::as_tuple).collect();
-            assert_eq!(all_ipps, vec![(20,1), (0,2), (5,1), (14,2)]);
-        });
-    }
-
-    #[test]
-    fn test_partial_range_ipp_iter() {
-        run_test_with_periodicity(24, || {
-            let departure_time = vec![0, 5, 14, 20];
-            let travel_time =    vec![2, 1, 2,  1];
-            let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time);
-            let all_ipps: Vec<_> = ttf.ipp_iter(WrappingRange::new(Range { start: 10, end: 21 })).map(TTIpp::as_tuple).collect();
-            assert_eq!(all_ipps, vec![(14,2), (20,1)]);
-        });
-    }
-
-    #[test]
-    fn test_static_weight_iter() {
-        run_test_with_periodicity(24, || {
-            let departure_time = vec![0];
-            let travel_time =    vec![2];
-            let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time);
-            let all_ipps: Vec<_> = ttf.ipp_iter(WrappingRange::new(Range { start: 0, end: 0 })).collect();
-            assert_eq!(all_ipps, vec![]);
         });
     }
 

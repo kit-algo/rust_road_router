@@ -1,7 +1,7 @@
+#[cfg(test)]
 use num_traits::Unsigned;
 
-type Num = u32;
-
+#[cfg(test)]
 pub fn gcd<Num: Unsigned + Copy>(mut a: Num, mut b: Num) -> Num {
     while b != Num::zero() {
         let tmp = a % b;
@@ -59,10 +59,6 @@ fn extended_euklid(a: i64, b: i64) -> (i64, i64, i64) {
 
 use std::ops::Range;
 use std::cmp::{max, min};
-
-fn is_intersection_empty<T: PartialOrd>(a: &Range<T>, b: &Range<T>) -> bool {
-    !a.contains(&b.start) && !a.contains(&b.end) && !b.contains(&a.start) && !b.contains(&a.end)
-}
 
 pub trait RangeExtensions {
     fn intersection(&self, other: &Self) -> Self;
