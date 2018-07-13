@@ -103,7 +103,7 @@ impl<'a> Iterator for ShortcutSourceIter<'a> {
 }
 
 pub(super) enum ShortcutSourceSegmentIter<'a> {
-    Shortcut(linked::SegmentIter<'a>),
+    Shortcut(linked::SegmentIter<'a>), // TODO move Box here?
     OriginalEdge(piecewise_linear_function::SegmentIter<'a>),
 }
 

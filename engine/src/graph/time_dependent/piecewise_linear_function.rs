@@ -139,9 +139,7 @@ impl<'a> Iterator for Iter<'a> {
 
 impl<'a> SegmentIter<'a> {
     fn new(departure_time: &'a [Timestamp], travel_time: &'a [Weight], range: WrappingRange) -> SegmentIter<'a> {
-        if departure_time.len() <= 1 {
-            return SegmentIter { departure_time, travel_time, range, current_index: 0, initial_index: 0, done: true, done_after_next: true }
-        }
+        debug_assert!(!departure_time.is_empty());
 
         let current_index = match departure_time.sorted_search(&range.start()) {
             Ok(index) => index,
@@ -167,14 +165,20 @@ impl<'a> Iterator for SegmentIter<'a> {
     type Item = TTFSeg;
 
     fn next(&mut self) -> Option<Self::Item> {
+
         let ipp = unsafe { *self.departure_time.get_unchecked(self.current_index) };
         let next_index = (self.current_index + 1) % self.departure_time.len();
         let next_ipp = unsafe { *self.departure_time.get_unchecked(next_index) };
 
         if !self.done && (self.range.contains(ipp) || self.range.contains(next_ipp)) {
+
             let apply_valid_from = self.current_index == self.initial_index && !self.done_after_next;
 
             let tt = unsafe { *self.travel_time.get_unchecked(self.current_index) };
+            if self.departure_time.len() == 1 {
+                self.done = true;
+                return Some(TTFSeg { line: Line { from: Ipp::new(0, tt), to: Ipp::new(1, tt) }, valid: Range { start: 0, end: period() } })
+            }
             self.current_index = next_index;
 
             let mut segment = TTFSeg::new((ipp, tt), (next_ipp, unsafe { *self.travel_time.get_unchecked(self.current_index) }));
@@ -342,7 +346,7 @@ mod tests {
             let travel_time =    vec![2];
             let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time);
             let all_ipps: Vec<TTFSeg> = ttf.seg_iter(WrappingRange::new(Range { start: 0, end: 0 })).collect();
-            assert_eq!(all_ipps, vec![]);
+            assert_eq!(all_ipps, vec![TTFSeg { line: Line { from: Ipp::new(0, 2), to: Ipp::new(1, 2) }, valid: Range { start: 0, end: 24 } }]);
         });
     }
 }

@@ -110,7 +110,7 @@ impl<'a> Iter<'a> {
                     // println!("target range {:?}", self.first_edge_target_range_to_next());
                     // println!("before next first edge ipp");
                     // println!("first edge next or end ipp {:?}", self.first_edge_next_ipp_or_end());
-                    let ipp = invert(self.first_edge_prev_ipp.unwrap().as_tuple(), self.first_edge_next_ipp_or_end().as_tuple(), second_edge_ipp.at);
+                    let ipp = invert(self.first_edge_prev_ipp.unwrap().as_tuple(), self.first_edge_next_ipp_or_end().as_tuple(), second_edge_ipp.at).unwrap();
                     // println!("inverted {}", ipp);
                     self.second_edge_prev_ipp = Some(second_edge_ipp);
                     self.second_iter.next();
@@ -194,22 +194,18 @@ impl<'a> Iterator for Iter<'a> {
 }
 
 pub(super) struct SegmentIter<'a> {
-    first_edge: &'a Shortcut,
-    second_edge: &'a Shortcut,
     first_iter: Peekable<shortcut::SegmentIter<'a, 'a>>,
     second_iter: Peekable<shortcut::SegmentIter<'a, 'a>>,
-    range: WrappingRange,
-    shortcut_graph: &'a ShortcutGraph<'a>,
 }
 
 impl<'a> SegmentIter<'a> {
     fn new(first_edge: &'a Shortcut, second_edge: &'a Shortcut, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> SegmentIter<'a> {
-        let mut first_iter = first_edge.seg_iter(range.clone(), shortcut_graph).peekable();
+        let mut first_iter = first_edge.seg_iter(range, shortcut_graph).peekable();
         let start_of_second = first_iter.peek().unwrap().start_of_valid_at_val();
         let start_of_second = start_of_second % period();
         let second_iter = second_edge.seg_iter(WrappingRange::new(Range { start: start_of_second, end: start_of_second }), shortcut_graph).peekable();
 
-        SegmentIter { first_edge, second_edge, first_iter, second_iter, shortcut_graph, range }
+        SegmentIter { first_iter, second_iter }
     }
 }
 
@@ -219,6 +215,7 @@ impl<'a> Iterator for SegmentIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         let first_iter = &mut self.first_iter;
         let second_iter = &mut self.second_iter;
+
         let linked = first_iter.peek().map(|first_segment| {
             link_segments(first_segment, second_iter.peek().unwrap())
         });
@@ -242,9 +239,9 @@ impl<'a> Iterator for SegmentIter<'a> {
     }
 }
 
-fn invert(first_ipp: (Timestamp, Timestamp), second_ipp: (Timestamp, Timestamp), target_time: Timestamp) -> Timestamp {
+fn invert(first_ipp: (Timestamp, Timestamp), second_ipp: (Timestamp, Timestamp), target_time: Timestamp) -> Option<Timestamp> {
     if first_ipp.1 == second_ipp.1 {
-        return (target_time + period() - first_ipp.1) % period()
+        return Some((target_time + period() - first_ipp.1) % period())
     }
     let first_ipp = (first_ipp.0, first_ipp.0 + first_ipp.1);
     let second_ipp = if second_ipp.0 < first_ipp.0 {
@@ -253,8 +250,10 @@ fn invert(first_ipp: (Timestamp, Timestamp), second_ipp: (Timestamp, Timestamp),
         (second_ipp.0, second_ipp.0 + second_ipp.1)
     };
     let target_time = if target_time < first_ipp.1 { target_time + period() } else { target_time };
-    debug_assert!(target_time >= first_ipp.1, "{:?} {:?} {}", first_ipp, second_ipp, target_time);
-    // debug_assert!(target_time <= second_ipp.1, "{:?} {:?} {}", first_ipp, second_ipp, target_time);
+    if target_time < first_ipp.1 {
+        println!("{:?} {:?} {}", first_ipp, second_ipp, target_time);
+        return None
+    }
 
     let delta_x = second_ipp.0 - first_ipp.0;
     let delta_x = u64::from(delta_x);
@@ -262,28 +261,45 @@ fn invert(first_ipp: (Timestamp, Timestamp), second_ipp: (Timestamp, Timestamp),
     let delta_y = u64::from(delta_y);
 
     if delta_y == 0 {
-        debug_assert_eq!(first_ipp.1, target_time);
-        return first_ipp.0
+        if first_ipp.1 == target_time {
+            return Some(first_ipp.0)
+        } else {
+            return None
+        }
     }
 
     let delta_y_to_target = target_time - first_ipp.1;
     let delta_x_to_target = (delta_y - 1 + u64::from(delta_y_to_target) * delta_x) / delta_y;
 
-    (first_ipp.0 + delta_x_to_target as u32) % period()
+    Some((first_ipp.0 + delta_x_to_target as u32) % period())
 }
 
 fn link_segments(first_segment: &TTFSeg, second_segment: &TTFSeg) -> TTFSeg {
     // TODO only invert if necessary, check with result range of first segment
-    let start_of_second = invert(first_segment.line.from.as_tuple(), first_segment.line.to.as_tuple(), second_segment.valid.start);
-    let start_of_range = if WrappingRange::new(first_segment.valid.clone()).contains(start_of_second) {
-        start_of_second
+    println!("{:?}", first_segment);
+    println!("{:?}", second_segment);
+    // TODO one or both full range
+    // TODO first slope -1 / constant arrival time
+    let start_of_range = if let Some(start_of_second) = invert(first_segment.line.from.as_tuple(), first_segment.line.to.as_tuple(), second_segment.valid.start) {
+        if WrappingRange::new(first_segment.valid.clone()).contains(start_of_second) {
+            start_of_second
+        } else {
+            first_segment.valid.start
+        }
     } else {
+        debug_assert!(second_segment.valid.contains(&first_segment.start_of_valid_at_val()));
         first_segment.valid.start
     };
-    let end_of_second = invert(first_segment.line.from.as_tuple(), first_segment.line.to.as_tuple(), second_segment.valid.end);
-    let end_of_range = if WrappingRange::new(first_segment.valid.clone()).contains(end_of_second) {
-        end_of_second
+
+
+    let end_of_range = if let Some(end_of_second) = invert(first_segment.line.from.as_tuple(), first_segment.line.to.as_tuple(), second_segment.valid.end) {
+        if WrappingRange::new(first_segment.valid.clone()).contains(end_of_second) {
+            end_of_second
+        } else {
+            first_segment.valid.end
+        }
     } else {
+        debug_assert!(second_segment.valid.contains(&first_segment.end_of_valid_at_val()));
         first_segment.valid.end
     };
 
@@ -478,12 +494,12 @@ mod tests {
     #[test]
     fn test_inversion() {
         run_test_with_periodicity(10, || {
-            assert_eq!(invert((0,1), (5,2), 1), 0);
-            assert_eq!(invert((0,1), (5,2), 3), 2);
-            assert_eq!(invert((0,2), (5,1), 2), 0);
-            assert_eq!(invert((0,2), (5,1), 3), 2);
-            assert_eq!(invert((0,1), (4,1), 3), 2);
-            assert_eq!(invert((9,1), (1,3), 2), 0);
+            assert_eq!(invert((0,1), (5,2), 1), Some(0));
+            assert_eq!(invert((0,1), (5,2), 3), Some(2));
+            assert_eq!(invert((0,2), (5,1), 2), Some(0));
+            assert_eq!(invert((0,2), (5,1), 3), Some(2));
+            assert_eq!(invert((0,1), (4,1), 3), Some(2));
+            assert_eq!(invert((9,1), (1,3), 2), Some(0));
         });
     }
 

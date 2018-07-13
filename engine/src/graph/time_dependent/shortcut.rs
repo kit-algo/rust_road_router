@@ -670,7 +670,6 @@ pub(super) struct SegmentIter<'a, 'b: 'a> {
     segment_iter_state: InitialPathSegmentIterState,
     current_source_iter: Option<Box<Iterator<Item = TTFSeg> + 'a>>,
     source_contained_segments: bool,
-    cached_iter: Option<WrappingSliceIter<'b>>,
 }
 
 impl<'a, 'b> SegmentIter<'a, 'b> {
@@ -681,10 +680,10 @@ impl<'a, 'b> SegmentIter<'a, 'b> {
         // }
 
         match shortcut.data {
-            ShortcutPaths::None => SegmentIter { shortcut, shortcut_graph, range, current_index: 0, segment_iter_state: InitialPathSegmentIterState::Finishing, current_source_iter: None, source_contained_segments: false, cached_iter: None },
+            ShortcutPaths::None => SegmentIter { shortcut, shortcut_graph, range, current_index: 0, segment_iter_state: InitialPathSegmentIterState::Finishing, current_source_iter: None, source_contained_segments: false },
             ShortcutPaths::One(data) => {
                 SegmentIter {
-                    shortcut, shortcut_graph, range: range.clone(), current_index: 0, source_contained_segments: false, cached_iter: None,
+                    shortcut, shortcut_graph, range: range.clone(), current_index: 0, source_contained_segments: false,
                     segment_iter_state: InitialPathSegmentIterState::InitialCompleted(0),
                     current_source_iter: Some(Box::new(data.seg_iter(range, shortcut_graph)) as Box<Iterator<Item = TTFSeg>>)
                 }
@@ -702,7 +701,7 @@ impl<'a, 'b> SegmentIter<'a, 'b> {
                     },
                 };
 
-                SegmentIter { shortcut, shortcut_graph, range, current_index, segment_iter_state, current_source_iter, source_contained_segments: false, cached_iter: None }
+                SegmentIter { shortcut, shortcut_graph, range, current_index, segment_iter_state, current_source_iter, source_contained_segments: false }
             }
         }
         // println!("new shortcut iter range {:?}, index: {}, iter created? {}", range, current_index, current_source_iter.is_some());
@@ -717,7 +716,8 @@ impl<'a, 'b> SegmentIter<'a, 'b> {
                     Some(segment) => {
                         // debug_assert!(abs_diff(ipp.1, self.shortcut.evaluate(ipp.0, self.shortcut_graph)) < TOLERANCE, "at: {} was: {} but should have been: {}. {}", ipp.0, ipp.1, self.shortcut.evaluate(ipp.0, self.shortcut_graph), self.shortcut.debug_to_s(self.shortcut_graph, 0));
                         debug_assert!(self.range.contains(segment.valid.start));
-                        debug_assert!(self.range.contains(segment.valid.end) || segment.valid.end == self.range.end());
+                        debug_assert!(segment.valid.end <= period());
+                        debug_assert!(self.range.contains(segment.valid.end % period()) || segment.valid.end == self.range.end());
                         self.source_contained_segments = true;
                         Some(segment)
                     },
