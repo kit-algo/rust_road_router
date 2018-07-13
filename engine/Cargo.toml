@@ -10,3 +10,10 @@ postgres = "0.15"
 csv = "^1.0.0-beta.4"
 glob = "0.2.11"
 num-traits = "^0.2.5"
+
+[dev-dependencies]
+criterion = { version = "0.2", features=['real_blackbox'] }
+
+[[bench]]
+name = "mod_benchmark"
+harness = false
