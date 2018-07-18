@@ -35,6 +35,20 @@ impl<'a> PiecewiseLinearFunction<'a> {
         (self.lower_bound(), self.upper_bound())
     }
 
+    pub fn average(&self, range: WrappingRange) -> Weight {
+        let mut prev = TTIpp::new(range.start(), self.evaluate(range.start()));
+        let end = TTIpp::new(range.end(), self.evaluate(range.end()));
+        let mut sum: u64 = 0;
+        let total_time = self.subtract_wrapping(range.end(), range.start());
+        for ipp in self.ipp_iter(range).chain(std::iter::once(end)) {
+            let delta = self.subtract_wrapping(ipp.at, prev.at);
+            sum += prev.val as u64 * delta as u64;
+            sum += ipp.val as u64 * delta as u64;
+            prev = ipp;
+        }
+        (sum / 2 / total_time as u64) as Weight
+    }
+
     pub fn eval(&self, departure: Timestamp) -> Weight {
         self.evaluate(departure % period())
     }

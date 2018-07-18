@@ -8,6 +8,7 @@ use rank_select_map::BitVec;
 use super::td_stepped_dijkstra::QueryProgress;
 
 use std::collections::LinkedList;
+use std::ops::Range;
 
 #[derive(Debug)]
 pub struct Server<'a> {
@@ -17,14 +18,26 @@ pub struct Server<'a> {
 
 impl<'a> Server<'a> {
     pub fn new(graph: TDGraph, cch: &'a CCHGraph) -> Server<'a> {
-        let lower = (0..graph.num_arcs() as EdgeId).map(|edge_id| graph.travel_time_function(edge_id).lower_bound()).collect::<Vec<Weight>>();
-        let upper = (0..graph.num_arcs() as EdgeId).map(|edge_id| graph.travel_time_function(edge_id).upper_bound()).collect::<Vec<Weight>>();
-        let lower_server = CCHServer::new(cch, &FirstOutGraph::new(graph.first_out(), graph.head(), lower));
-        let upper_server = CCHServer::new(cch, &FirstOutGraph::new(graph.first_out(), graph.head(), upper));
+        let hour = period() / 24;
+        let samples = vec![
+            Range { start: 22, end: 5 },
+            Range { start: 7, end: 10 },
+            Range { start: 11, end: 15 },
+            Range { start: 16, end: 19 },
+        ].into_iter().map(|range| {
+            let range = Range { start: range.start * hour, end: range.end * hour };
+            WrappingRange::new(range)
+        }).map(|range| {
+            (0..graph.num_arcs() as EdgeId)
+                .map(|edge_id| graph.travel_time_function(edge_id).average(range.clone()))
+                .collect::<Vec<Weight>>()
+        }).map(|metric| {
+            CCHServer::new(cch, &FirstOutGraph::new(graph.first_out(), graph.head(), metric))
+        }).collect();
 
         Server {
             dijkstra: TDSteppedDijkstra::new(graph),
-            samples: vec![lower_server, upper_server]
+            samples
         }
     }
 

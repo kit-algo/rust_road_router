@@ -70,13 +70,13 @@ fn run_test_with_periodicity<T>(period: Timestamp, test: T) -> ()
 }
 
 #[cfg(test)]
-fn period() -> Timestamp {
+pub fn period() -> Timestamp {
     return TEST_PERIOD_MOCK.with(|period_cell| period_cell.get().expect("period() used but not set"));
 }
 
 #[cfg(not(test))]
 #[inline]
-const fn period() -> Timestamp {
+pub const fn period() -> Timestamp {
     86_400_000
 }
 
