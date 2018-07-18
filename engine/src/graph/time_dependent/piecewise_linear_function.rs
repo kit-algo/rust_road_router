@@ -42,11 +42,11 @@ impl<'a> PiecewiseLinearFunction<'a> {
         let total_time = self.subtract_wrapping(range.end(), range.start());
         for ipp in self.ipp_iter(range).chain(std::iter::once(end)) {
             let delta = self.subtract_wrapping(ipp.at, prev.at);
-            sum += prev.val as u64 * delta as u64;
-            sum += ipp.val as u64 * delta as u64;
+            sum += u64::from(prev.val) * u64::from(delta);
+            sum += u64::from(ipp.val) * u64::from(delta);
             prev = ipp;
         }
-        (sum / 2 / total_time as u64) as Weight
+        (sum / 2 / u64::from(total_time)) as Weight
     }
 
     pub fn eval(&self, departure: Timestamp) -> Weight {
