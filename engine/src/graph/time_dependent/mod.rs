@@ -162,7 +162,7 @@ type TTFSeg = Segment<Line<Ipp>>; // TODO always monotone
 
 impl TTFSeg {
     fn new((from_at, from_val): (Timestamp, Weight), (to_at, to_val): (Timestamp, Weight)) -> Self {
-        Segment { line: Line { from: Ipp::new(from_at, from_val), to: Ipp::new(to_at, to_val) }, valid: Range { start: from_at, end: to_at } }
+        Segment { line: Line { from: Ipp::new(from_at, from_val), to: Ipp::new(to_at, to_val) }, valid: from_at..to_at }
     }
 
     #[cfg(test)]
@@ -339,6 +339,19 @@ impl MonotoneLine<TTIpp> {
     #[cfg(test)]
     fn delta_y(&self) -> Weight {
         self.0.delta_y()
+    }
+}
+
+type PLFSeg = Segment<MonotoneLine<TTIpp>>;
+
+impl PLFSeg {
+    fn new((from_at, from_val): (Timestamp, Weight), (to_at, to_val): (Timestamp, Weight)) -> Self {
+        Segment { line: MonotoneLine(Line { from: Ipp::new(from_at, from_val), to: Ipp::new(to_at, to_val) }), valid: from_at..to_at }
+    }
+
+    fn into_ttfseg(self) -> TTFSeg {
+        let MonotoneLine(line) = self.line;
+        TTFSeg { line, valid: self.valid }
     }
 }
 

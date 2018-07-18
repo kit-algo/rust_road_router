@@ -1,4 +1,5 @@
 use super::*;
+use math::RangeExtensions;
 
 #[derive(Debug)]
 pub struct PiecewiseLinearFunction<'a> {
@@ -10,13 +11,18 @@ impl<'a> PiecewiseLinearFunction<'a> {
     pub fn new(departure_time: &'a [Timestamp], travel_time: &'a [Weight]) -> PiecewiseLinearFunction<'a> {
         debug_assert_eq!(departure_time.len(), travel_time.len());
         debug_assert!(!departure_time.is_empty());
-        for dt in departure_time.iter() {
+        debug_assert_eq!(departure_time[0], 0, "{:?}", departure_time);
+        debug_assert_eq!(*departure_time.last().unwrap(), period());
+        debug_assert_eq!(*travel_time.last().unwrap(), travel_time[0]);
+        for dt in &departure_time[0..departure_time.len()-1] {
             debug_assert!(*dt < period());
         }
         for pair in departure_time.windows(2) {
             debug_assert!(pair[0] < pair[1]);
         }
-        // TODO FIFO
+        for (dts, tts) in departure_time.windows(2).zip(travel_time.windows(2)) {
+            debug_assert!(dts[0] + tts[0] <= dts[1] + tts[1]);
+        }
 
         PiecewiseLinearFunction {
             departure_time, travel_time
@@ -35,32 +41,43 @@ impl<'a> PiecewiseLinearFunction<'a> {
         (self.lower_bound(), self.upper_bound())
     }
 
-    pub fn evaluate(&self, mut departure: Timestamp) -> Weight {
+    pub fn evaluate(&self, departure: Timestamp) -> Weight {
         debug_assert!(departure < period());
-        if self.departure_time.len() == 1 {
+        if self.departure_time.len() == 2 {
             return unsafe { *self.travel_time.get_unchecked(0) }
         }
 
         match self.departure_time.sorted_search(&departure) {
             Ok(departure_index) => unsafe { *self.travel_time.get_unchecked(departure_index) },
             Err(upper_index) => {
-                let upper_index = upper_index % self.departure_time.len();
-                let lower_index = if upper_index > 0 { upper_index - 1 } else { self.departure_time.len() - 1 };
+                debug_assert!(upper_index > 0);
+                debug_assert!(upper_index < self.departure_time.len());
+                let lower_index = upper_index - 1;
                 let lf = unsafe {
                     Line::new(
                         TTIpp::new(*self.departure_time.get_unchecked(lower_index), *self.travel_time.get_unchecked(lower_index)),
                         TTIpp::new(*self.departure_time.get_unchecked(upper_index), *self.travel_time.get_unchecked(upper_index)))
                 };
-                if departure < lf.from.at {
-                    departure += period();
-                }
-                lf.into_monotone_at_line().interpolate_tt(departure)
+                lf.into_monotone_at_line().interpolate_tt(departure) // TODO optimize
             },
         }
     }
 
-    pub(super) fn seg_iter(&self, range: WrappingRange) -> SegmentIter<'a> {
-        SegmentIter::new(self.departure_time, self.travel_time, range)
+    pub(super) fn seg_iter(&self, range: WrappingRange) -> impl Iterator<Item = PLFSeg> + 'a {
+        let (first_index_range, second_index_range) = to_index_ranges(self.departure_time, &range);
+        let (first_range, mut second_range) = range.monotonize().split(period());
+        second_range.start -= period();
+        second_range.end -= period();
+
+        let first_iter = self.departure_time[first_index_range.clone()].windows(2).zip(self.travel_time[first_index_range].windows(2))
+            .map(move |(dts, tts)| {
+                PLFSeg { line: MonotoneLine(Line { from: Ipp::new(dts[0], tts[0]), to: Ipp::new(dts[1], tts[1]) }), valid: (dts[0]..dts[1]).intersection(&first_range) }
+            });
+        let second_iter = self.departure_time[second_index_range.clone()].windows(2).zip(self.travel_time[second_index_range].windows(2))
+            .map(move |(dts, tts)| {
+                PLFSeg { line: MonotoneLine(Line { from: Ipp::new(dts[0], tts[0]), to: Ipp::new(dts[1], tts[1]) }), valid: (dts[0]..dts[1]).intersection(&second_range) }
+            });
+        first_iter.chain(second_iter)
     }
 
     pub fn debug_to_s(&self, indent: usize) -> String {
@@ -77,69 +94,44 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 }
 
-impl<'a> SegmentIter<'a> {
-    fn new(departure_time: &'a [Timestamp], travel_time: &'a [Weight], range: WrappingRange) -> SegmentIter<'a> {
-        debug_assert!(!departure_time.is_empty());
-
-        let current_index = match departure_time.sorted_search(&range.start()) {
-            Ok(index) => index,
-            Err(index) => index + departure_time.len() - 1
-        } % departure_time.len();
-
-        SegmentIter { departure_time, travel_time, range, current_index, initial_index: current_index, done: false, done_after_next: false }
-    }
-}
-
-#[derive(Debug)]
-pub(super) struct SegmentIter<'a> {
-    departure_time: &'a [Timestamp],
-    travel_time: &'a [Weight],
-    range: WrappingRange,
-    current_index: usize,
-    initial_index: usize,
-    done: bool,
-    done_after_next: bool
-}
-
-impl<'a> Iterator for SegmentIter<'a> {
-    type Item = TTFSeg;
-
-    fn next(&mut self) -> Option<Self::Item> {
-
-        let ipp = unsafe { *self.departure_time.get_unchecked(self.current_index) };
-        let next_index = (self.current_index + 1) % self.departure_time.len();
-        let next_ipp = unsafe { *self.departure_time.get_unchecked(next_index) };
-
-        if !self.done && (self.range.contains(ipp) || self.range.contains(next_ipp)) {
-
-            let apply_valid_from = self.current_index == self.initial_index && !self.done_after_next;
-
-            let tt = unsafe { *self.travel_time.get_unchecked(self.current_index) };
-            if self.departure_time.len() == 1 {
-                self.done = true;
-                return Some(TTFSeg { line: Line { from: Ipp::new(0, tt), to: Ipp::new(1, tt) }, valid: Range { start: 0, end: period() } })
-            }
-            self.current_index = next_index;
-
-            let mut segment = TTFSeg::new((ipp, tt), (next_ipp, unsafe { *self.travel_time.get_unchecked(self.current_index) }));
-
-            if self.done_after_next || !self.range.contains(next_ipp) {
-                self.done = true;
-                segment.valid.end = self.range.end();
-            }
-
-            if self.current_index == self.initial_index {
-                self.done_after_next = true;
-                if next_ipp == self.range.start() {
-                    self.done = true;
-                }
-            }
-
-            if apply_valid_from { segment.valid.start = self.range.start() }
-
-            Some(segment)
+fn to_index_ranges<'a>(departure_time: &'a [Timestamp], range: &WrappingRange) -> (Range<usize>, Range<usize>) {
+    if range.full_range() {
+        if range.start() == 0 {
+            ((0..departure_time.len()), (0..0))
         } else {
-            None
+            debug_assert!(range.start() < period());
+            match departure_time.sorted_search(&range.start()) {
+                Ok(departure_index) => ((departure_index..departure_time.len()), (0..departure_index+1)),
+                Err(upper_index) => {
+                    debug_assert!(upper_index > 0);
+                    debug_assert!(upper_index < departure_time.len());
+                    let lower_index = upper_index - 1;
+                    ((lower_index..departure_time.len()), (0..upper_index+1))
+                },
+            }
+        }
+    } else {
+        let start_index = match departure_time.sorted_search(&range.start()) {
+            Ok(departure_index) => departure_index,
+            Err(upper_index) => {
+                debug_assert!(upper_index > 0);
+                debug_assert!(upper_index < departure_time.len());
+                upper_index - 1
+            },
+        };
+        let end_index = match departure_time.sorted_search(&range.end()) {
+            Ok(departure_index) => departure_index + 1,
+            Err(upper_index) => {
+                debug_assert!(upper_index > 0);
+                debug_assert!(upper_index < departure_time.len());
+                upper_index + 1
+            },
+        };
+
+        if range.end() < range.start() {
+            ((start_index..departure_time.len()), (0..end_index))
+        } else {
+            ((start_index..end_index), (0..0))
         }
     }
 }
@@ -151,8 +143,8 @@ mod tests {
     #[test]
     fn test_bounds() {
         run_test_with_periodicity(24, || {
-            let departure_time = vec![6, 9, 14, 17, 20];
-            let travel_time =    vec![1, 3, 2,  4,  1];
+            let departure_time = vec![0, 6, 9, 14, 17, 20, 24];
+            let travel_time =    vec![2, 1, 3, 2,  4,  1,  2];
             let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time);
             assert_eq!(ttf.lower_bound(), 1);
             assert_eq!(ttf.upper_bound(), 4);
@@ -162,8 +154,8 @@ mod tests {
     #[test]
     fn test_eval_on_ipp() {
         run_test_with_periodicity(24, || {
-            let departure_time = vec![6, 9, 14, 17, 20];
-            let travel_time =    vec![1, 3, 2,  4,  1];
+            let departure_time = vec![0, 6, 9, 14, 17, 20, 24];
+            let travel_time =    vec![2, 1, 3, 2,  4,  1,  2];
             let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time);
             assert_eq!(ttf.evaluate(14), 2);
             assert_eq!(ttf.evaluate(17), 4);
@@ -173,8 +165,8 @@ mod tests {
     #[test]
     fn test_interpolating_eval() {
         run_test_with_periodicity(24, || {
-            let departure_time = vec![5, 9, 14, 17, 20];
-            let travel_time =    vec![1, 3, 2,  4,  1];
+            let departure_time = vec![0, 5, 9, 14, 17, 20, 24];
+            let travel_time =    vec![1, 1, 3, 2,  4,  1,  1];
             let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time);
             assert_eq!(ttf.evaluate(0), 1);
             assert_eq!(ttf.evaluate(6), 1);
@@ -190,59 +182,64 @@ mod tests {
             assert_eq!(ttf.evaluate(19), 2);
             assert_eq!(ttf.evaluate(23), 1);
         });
-        run_test_with_periodicity(24, || {
-        });
     }
 
     #[test]
     fn test_full_range_seg_iter() {
         run_test_with_periodicity(24, || {
-            let departure_time = vec![0, 5, 14, 20];
-            let travel_time =    vec![2, 1, 2,  1];
+            let departure_time = vec![0, 5, 14, 20, 24];
+            let travel_time =    vec![2, 1, 2,  1,  2];
             let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time);
-            let all_segments: Vec<TTFSeg> = ttf.seg_iter(WrappingRange::new(Range { start: 0, end: 0 })).collect();
-            assert_eq!(all_segments, vec![TTFSeg::new((0,2), (5,1)), TTFSeg::new((5,1), (14,2)), TTFSeg::new((14,2), (20,1)), TTFSeg::new((20,1), (0,2))]);
+            let all_segments: Vec<PLFSeg> = ttf.seg_iter(WrappingRange::new(0..0)).collect();
+            assert_eq!(all_segments, vec![PLFSeg::new((0,2), (5,1)), PLFSeg::new((5,1), (14,2)), PLFSeg::new((14,2), (20,1)), PLFSeg::new((20,1), (24,2))]);
         });
     }
 
     #[test]
     fn test_wrapping_range_seg_iter() {
         run_test_with_periodicity(24, || {
-            let departure_time = vec![0, 5, 14, 20];
-            let travel_time =    vec![2, 1, 2,  1];
+            let departure_time = vec![0, 5, 14, 20, 24];
+            let travel_time =    vec![2, 1, 2,  1,  2];
             let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time);
-            let all_ipps: Vec<TTFSeg> = ttf.seg_iter(WrappingRange::new(Range { start: 17, end: 17 })).collect();
-            let mut first_segment = TTFSeg::new((14,2), (20,1));
+            let all_ipps: Vec<PLFSeg> = ttf.seg_iter(WrappingRange::new(17..17)).collect();
+            let mut first_segment = PLFSeg::new((14,2), (20,1));
             first_segment.valid.start = 17;
-            let mut last_segment = TTFSeg::new((14,2), (20,1));
+            let mut last_segment = PLFSeg::new((14,2), (20,1));
             last_segment.valid.end = 17;
-            assert_eq!(all_ipps, vec![first_segment, TTFSeg::new((20,1), (0,2)), TTFSeg::new((0,2), (5,1)), TTFSeg::new((5,1), (14,2)), last_segment]);
+            assert_eq!(all_ipps, vec![first_segment, PLFSeg::new((20,1), (24,2)), PLFSeg::new((0,2), (5,1)), PLFSeg::new((5,1), (14,2)), last_segment]);
         });
     }
 
     #[test]
     fn test_partial_range_seg_iter() {
         run_test_with_periodicity(24, || {
-            let departure_time = vec![0, 5, 14, 20];
-            let travel_time =    vec![2, 1, 2,  1];
+            let departure_time = vec![0, 5, 14, 20, 24];
+            let travel_time =    vec![2, 1, 2,  1,  2];
             let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time);
-            let all_ipps: Vec<TTFSeg> = ttf.seg_iter(WrappingRange::new(Range { start: 10, end: 21 })).collect();
-            let mut first_segment = TTFSeg::new((5,1), (14,2));
+            let all_ipps: Vec<PLFSeg> = ttf.seg_iter(WrappingRange::new(10..21)).collect();
+            let mut first_segment = PLFSeg::new((5,1), (14,2));
             first_segment.valid.start = 10;
-            let mut last_segment = TTFSeg::new((20,1), (0,2));
+            let mut last_segment = PLFSeg::new((20,1), (24,2));
             last_segment.valid.end = 21;
-            assert_eq!(all_ipps, vec![first_segment, TTFSeg::new((14,2), (20,1)), last_segment]);
+            assert_eq!(all_ipps, vec![first_segment, PLFSeg::new((14,2), (20,1)), last_segment]);
         });
     }
 
     #[test]
     fn test_static_weight_seg_iter() {
         run_test_with_periodicity(24, || {
-            let departure_time = vec![0];
-            let travel_time =    vec![2];
+            let departure_time = vec![0, 24];
+            let travel_time =    vec![2, 2];
             let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time);
-            let all_ipps: Vec<TTFSeg> = ttf.seg_iter(WrappingRange::new(Range { start: 0, end: 0 })).collect();
-            assert_eq!(all_ipps, vec![TTFSeg { line: Line { from: Ipp::new(0, 2), to: Ipp::new(1, 2) }, valid: Range { start: 0, end: 24 } }]);
+            let all_ipps: Vec<PLFSeg> = ttf.seg_iter(WrappingRange::new(0..0)).collect();
+            assert_eq!(all_ipps, vec![PLFSeg::new((0, 2), (24, 2))]);
+
+            let all_ipps: Vec<PLFSeg> = ttf.seg_iter(WrappingRange::new(10..10)).collect();
+            let mut seg = PLFSeg::new((0, 2), (24, 2));
+            let mut seg2 = seg.clone();
+            seg.valid.start = 10;
+            seg2.valid.end = 10;
+            assert_eq!(all_ipps, vec![seg, seg2]);
         });
     }
 }

@@ -45,4 +45,11 @@ impl WrappingRange {
     pub fn full_range(&self) -> bool {
         self.range.start == self.range.end
     }
+
+    pub fn monotonize(mut self) -> Range<Timestamp> {
+        if self.start() >= self.end() {
+            self.range.end += period()
+        }
+        self.range
+    }
 }
