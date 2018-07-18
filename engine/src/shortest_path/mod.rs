@@ -2,6 +2,7 @@ use graph::*;
 
 mod timestamped_vector;
 mod stepped_dijkstra;
+mod td_stepped_dijkstra;
 mod stepped_elimination_tree;
 
 use self::stepped_dijkstra::{SteppedDijkstra, QueryProgress, State};
@@ -15,4 +16,11 @@ pub mod query;
 pub struct Query {
     from: NodeId,
     to: NodeId
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct TDQuery {
+    from: NodeId,
+    to: NodeId,
+    departure_time: Weight
 }
