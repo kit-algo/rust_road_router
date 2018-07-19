@@ -40,6 +40,17 @@ impl ShortcutData {
         }
     }
 
+    pub(super) fn non_wrapping_seg_iter<'a>(self, range: Range<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = TTFSeg> + 'a {
+        match self.down_arc.value() {
+            Some(down_shortcut_id) => {
+                ShortcutSourceSegmentIter::Shortcut(Box::new(Linked::new(down_shortcut_id, self.up_arc).non_wrapping_seg_iter(range, shortcut_graph)))
+            },
+            None => {
+                ShortcutSourceSegmentIter::OriginalEdge(shortcut_graph.original_graph().travel_time_function(self.up_arc).non_wrapping_seg_iter(range))
+            },
+        }
+    }
+
     pub(super) fn seg_iter<'a>(self, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = TTFSeg> + 'a {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {

@@ -44,44 +44,73 @@ impl<T> SortedSearchSliceExt for [T] {
     }
 }
 
+#[derive(Debug)]
+pub enum Location {
+    On(usize),
+    Between(usize, usize),
+}
+
 pub trait FullPeriodTimestampSliceExt : SortedSearchSliceExt {
     fn index_ranges<'a, F>(&'a self, range: &WrappingRange, f: F) -> (Range<usize>, Range<usize>)
+        where F: FnMut(&'a Self::Item) -> Timestamp;
+
+    fn index_range<'a, F>(&'a self, range: &Range<Timestamp>, f: F) -> Range<usize>
+        where F: FnMut(&'a Self::Item) -> Timestamp;
+
+    fn locate<'a, F>(&'a self, time: &Timestamp, f: F) -> Location
         where F: FnMut(&'a Self::Item) -> Timestamp;
 }
 
 impl<T> FullPeriodTimestampSliceExt for [T] {
+    #[inline]
+    fn locate<'a, F>(&'a self, time: &Timestamp, f: F) -> Location
+        where F: FnMut(&'a Self::Item) -> Timestamp
+    {
+        if *time == 0 {
+            return Location::On(0);
+        }
+        if *time == period() {
+            return Location::On(self.len() - 1);
+        }
+        match self.sorted_search_by_key(time, f) {
+            Ok(index) => Location::On(index),
+            Err(upper_index) => {
+                debug_assert!(upper_index > 0);
+                debug_assert!(upper_index < self.len());
+                let lower_index = upper_index - 1;
+                Location::Between(lower_index, upper_index)
+            },
+        }
+    }
+
     fn index_ranges<'a, F>(&'a self, range: &WrappingRange, mut f: F) -> (Range<usize>, Range<usize>)
         where F: FnMut(&'a Self::Item) -> Timestamp
     {
         if range.full_range() {
-            if range.start() == 0 {
-                ((0..self.len()), (0..0))
-            } else {
-                debug_assert!(range.start() < period());
-                match self.sorted_search_by_key(&range.start(), f) {
-                    Ok(departure_index) => ((departure_index..self.len()), (0..departure_index+1)),
-                    Err(upper_index) => {
-                        debug_assert!(upper_index > 0);
-                        debug_assert!(upper_index < self.len());
-                        let lower_index = upper_index - 1;
-                        ((lower_index..self.len()), (0..upper_index+1))
-                    },
-                }
+            // I'm pretty sure, we don't need this extra if, so I commented it out
+            // when taking else we will get 0..1 as the second range, which is fine, since we only iterate in windows of 2
+            // Anyway, leaving this here in case my assumptions turn our to be wrong...
+            // if range.start() == 0 {
+            //     ((0..self.len()), (0..0))
+            // } else {
+            debug_assert!(range.start() < period());
+            match self.locate(&range.start(), f) {
+                Location::On(index) => ((index..self.len()), (0..index+1)),
+                Location::Between(lower_index, upper_index) => {
+                    ((lower_index..self.len()), (0..upper_index+1))
+                },
             }
+            // }
         } else {
-            let start_index = match self.sorted_search_by_key(&range.start(), |el| f(el)) {
-                Ok(departure_index) => departure_index,
-                Err(upper_index) => {
-                    debug_assert!(upper_index > 0);
-                    debug_assert!(upper_index < self.len());
-                    upper_index - 1
+            let start_index = match self.locate(&range.start(), |el| f(el)) {
+                Location::On(index) => index,
+                Location::Between(lower_index, _upper_index) => {
+                    lower_index
                 },
             };
-            let end_index = match self.sorted_search_by_key(&range.end(), f) {
-                Ok(departure_index) => departure_index + 1,
-                Err(upper_index) => {
-                    debug_assert!(upper_index > 0);
-                    debug_assert!(upper_index < self.len());
+            let end_index = match self.locate(&range.end(), |el| f(el)) {
+                Location::On(index) => index + 1,
+                Location::Between(_lower_index, upper_index) => {
                     upper_index + 1
                 },
             };
@@ -91,6 +120,29 @@ impl<T> FullPeriodTimestampSliceExt for [T] {
             } else {
                 ((start_index..end_index), (0..0))
             }
+        }
+    }
+
+    fn index_range<'a, F>(&'a self, range: &Range<Timestamp>, mut f: F) -> Range<usize>
+        where F: FnMut(&'a Self::Item) -> Timestamp
+    {
+        if range.start == range.end {
+            (0..0)
+        } else {
+            let start_index = match self.locate(&range.start, |el| f(el)) {
+                Location::On(index) => index,
+                Location::Between(lower_index, _upper_index) => {
+                    lower_index
+                },
+            };
+            let end_index = match self.locate(&range.end, |el| f(el)) {
+                Location::On(index) => index + 1,
+                Location::Between(_lower_index, upper_index) => {
+                    upper_index + 1
+                },
+            };
+
+            (start_index..end_index)
         }
     }
 }

@@ -63,7 +63,14 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
-    // TODO may not need to take a wrapping range since only linked produces wrapping and calls only on shortcuts
+    pub(super) fn non_wrapping_seg_iter(&self, range: Range<Timestamp>) -> impl Iterator<Item = PLFSeg> + 'a {
+        let index_range = self.departure_time.index_range(&range, |&dt| dt);
+
+        self.departure_time[index_range.clone()].windows(2).zip(self.travel_time[index_range].windows(2)).map(move |(dts, tts)| {
+            PLFSeg { line: MonotoneLine(Line { from: Ipp::new(dts[0], tts[0]), to: Ipp::new(dts[1], tts[1]) }), valid: (dts[0]..dts[1]).intersection(&range) }
+        })
+    }
+
     pub(super) fn seg_iter(&self, range: WrappingRange) -> impl Iterator<Item = PLFSeg> + 'a {
         let (first_index_range, second_index_range) = self.departure_time.index_ranges(&range, |&dt| dt);
         let (first_range, mut second_range) = range.monotonize().split(period());

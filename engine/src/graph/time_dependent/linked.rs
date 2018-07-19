@@ -27,6 +27,18 @@ impl Linked {
         (first_min + second_min, first_max + second_max)
     }
 
+    pub(super) fn non_wrapping_seg_iter<'a>(self, range: Range<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = TTFSeg> + 'a {
+        let first_edge = shortcut_graph.get_downward(self.first);
+        let second_edge = shortcut_graph.get_upward(self.second);
+
+        let mut first_iter = first_edge.non_wrapping_seg_iter(range, shortcut_graph).peekable();
+        let start_of_second = first_iter.peek().unwrap().start_of_valid_at_val();
+        let start_of_second = start_of_second % period();
+        let second_iter = second_edge.seg_iter(WrappingRange::new(Range { start: start_of_second, end: start_of_second }), shortcut_graph).peekable();
+
+        SegmentIter { first_iter, second_iter }
+    }
+
     pub(super) fn seg_iter<'a>(self, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = TTFSeg> + 'a {
         let first_edge = shortcut_graph.get_downward(self.first);
         let second_edge = shortcut_graph.get_upward(self.second);
@@ -54,12 +66,12 @@ impl Linked {
     }
 }
 
-struct SegmentIter<ShortcutSegIter: Iterator<Item = TTFSeg>> {
-    first_iter: Peekable<ShortcutSegIter>,
-    second_iter: Peekable<ShortcutSegIter>,
+struct SegmentIter<Shortcut1SegIter: Iterator<Item = TTFSeg>, Shortcut2SegIter: Iterator<Item = TTFSeg>> {
+    first_iter: Peekable<Shortcut1SegIter>,
+    second_iter: Peekable<Shortcut2SegIter>,
 }
 
-impl<'a, ShortcutSegIter: Iterator<Item = TTFSeg>> Iterator for SegmentIter<ShortcutSegIter> {
+impl<'a, Shortcut1SegIter: Iterator<Item = TTFSeg>, Shortcut2SegIter: Iterator<Item = TTFSeg>> Iterator for SegmentIter<Shortcut1SegIter, Shortcut2SegIter> {
     type Item = TTFSeg;
 
     fn next(&mut self) -> Option<Self::Item> {

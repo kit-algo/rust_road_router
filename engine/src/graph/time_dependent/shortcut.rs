@@ -45,10 +45,10 @@ impl Shortcut {
             return
         }
 
-        let range = WrappingRange::new(Range { start: 0, end: 0 });
+        let range = 0..period();
         let mut data = merge(CooccuringSegIter {
-            shortcut_iter: self.seg_iter(range.clone(), shortcut_graph).peekable(),
-            linked_iter: other.seg_iter(range, shortcut_graph).peekable(),
+            shortcut_iter: self.non_wrapping_seg_iter(range.clone(), shortcut_graph).peekable(),
+            linked_iter: other.non_wrapping_seg_iter(range, shortcut_graph).peekable(),
         }).fold(SegmentAggregator {
             shortcut_path_segments: PathSegmentIter::new(self).peekable(),
             merged_path_segments: Vec::new(),
@@ -83,29 +83,49 @@ impl Shortcut {
         }
     }
 
-    // TODO maybe let linking do the splitting and take a regular range
-    pub(super) fn seg_iter<'a, 'b: 'a>(&'b self, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = TTFSeg> + 'a {
+    pub(super) fn non_wrapping_seg_iter<'a, 'b: 'a>(&'b self, range: Range<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = TTFSeg> + 'a {
         match self.data {
             ShortcutPaths::None => SegmentIterIter::None,
             // TODO maybe split range here
-            ShortcutPaths::One(data) => SegmentIterIter::One(std::iter::once(data.seg_iter(range, shortcut_graph))),
+            ShortcutPaths::One(data) => SegmentIterIter::One(std::iter::once(data.non_wrapping_seg_iter(range, shortcut_graph))),
+            ShortcutPaths::Multi(ref data) => {
+                let index_range = data.index_range(&range, |&(dt, _)| dt);
+
+                SegmentIterIter::Multi(data[index_range.clone()].windows(2)
+                    .map(move |paths| {
+                        let (from_at, path) = paths[0];
+                        let (to_at, _) = paths[1];
+                        path.non_wrapping_seg_iter((from_at..to_at).intersection(&range), shortcut_graph)
+                    }))
+            }
+        }.flatten()
+    }
+
+    pub(super) fn seg_iter<'a, 'b: 'a>(&'b self, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = TTFSeg> + 'a {
+        let (first_range, mut second_range) = range.clone().monotonize().split(period());
+        second_range.start -= period();
+        second_range.end -= period();
+
+        match self.data {
+            ShortcutPaths::None => SegmentIterIter::None,
+            // TODO maybe split range here
+            ShortcutPaths::One(data) => SegmentIterIter::One(
+                std::iter::once(data.non_wrapping_seg_iter(first_range, shortcut_graph))
+                    .chain(std::iter::once(data.non_wrapping_seg_iter(second_range, shortcut_graph)))),
             ShortcutPaths::Multi(ref data) => {
                 let (first_index_range, second_index_range) = data.index_ranges(&range, |&(dt, _)| dt);
-                let (first_range, mut second_range) = range.monotonize().split(period());
-                second_range.start -= period();
-                second_range.end -= period();
 
                 let first_iter = data[first_index_range.clone()].windows(2)
                     .map(move |paths| {
                         let (from_at, path) = paths[0];
                         let (to_at, _) = paths[1];
-                        path.seg_iter(WrappingRange::new((from_at..to_at).intersection(&first_range)), shortcut_graph)
+                        path.non_wrapping_seg_iter((from_at..to_at).intersection(&first_range), shortcut_graph)
                     });
                 let second_iter = data[second_index_range.clone()].windows(2)
                     .map(move |paths| {
                         let (from_at, path) = paths[0];
                         let (to_at, _) = paths[1];
-                        path.seg_iter(WrappingRange::new((from_at..to_at).intersection(&second_range)), shortcut_graph)
+                        path.non_wrapping_seg_iter((from_at..to_at).intersection(&second_range), shortcut_graph)
                     });
                 SegmentIterIter::Multi(first_iter.chain(second_iter))
             }
