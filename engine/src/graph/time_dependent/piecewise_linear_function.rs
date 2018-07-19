@@ -1,5 +1,6 @@
 use super::*;
 use math::RangeExtensions;
+use sorted_search_slice_ext::Location;
 
 #[derive(Debug)]
 pub struct PiecewiseLinearFunction<'a> {
@@ -47,18 +48,15 @@ impl<'a> PiecewiseLinearFunction<'a> {
             return unsafe { *self.travel_time.get_unchecked(0) }
         }
 
-        match self.departure_time.sorted_search(&departure) {
-            Ok(departure_index) => unsafe { *self.travel_time.get_unchecked(departure_index) },
-            Err(upper_index) => {
-                debug_assert!(upper_index > 0);
-                debug_assert!(upper_index < self.departure_time.len());
-                let lower_index = upper_index - 1;
+        match self.departure_time.locate(&departure, |&dt| dt) {
+            Location::On(index) => unsafe { *self.travel_time.get_unchecked(index) },
+            Location::Between(lower_index , upper_index) => {
                 let lf = unsafe {
-                    Line::new(
+                    MonotoneLine(Line::new(
                         TTIpp::new(*self.departure_time.get_unchecked(lower_index), *self.travel_time.get_unchecked(lower_index)),
-                        TTIpp::new(*self.departure_time.get_unchecked(upper_index), *self.travel_time.get_unchecked(upper_index)))
+                        TTIpp::new(*self.departure_time.get_unchecked(upper_index), *self.travel_time.get_unchecked(upper_index))))
                 };
-                lf.into_monotone_at_line().interpolate_tt(departure) // TODO optimize
+                lf.into_monotone_at_line().interpolate_tt(departure)
             },
         }
     }

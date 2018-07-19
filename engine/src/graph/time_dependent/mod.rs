@@ -311,6 +311,7 @@ impl MonotoneLine<ATIpp> {
 }
 
 impl MonotoneLine<TTIpp> {
+    // TODO wrong results because rounding up for negative slopes
     #[inline]
     fn interpolate_tt(&self, x: Timestamp) -> Weight {
         debug_assert!(self.0.from.at < self.0.to.at, "self: {:?}", self);
@@ -321,6 +322,11 @@ impl MonotoneLine<TTIpp> {
         debug_assert!(result >= 0);
         debug_assert!(result <= i64::from(INFINITY));
         result as Weight
+    }
+
+    fn into_monotone_at_line(self) -> MonotoneLine<ATIpp> {
+        let MonotoneLine(Line { from, to }) = self;
+        MonotoneLine(Line { from: ATIpp { at: from.at, val: from.at + from.val }, to: ATIpp { at: to.at, val: to.at + to.val } })
     }
 
     fn apply_periodicity(self, period: Timestamp) -> Line<TTIpp> {
