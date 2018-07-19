@@ -46,7 +46,7 @@ impl Shortcut {
         }
 
         let range = WrappingRange::new(Range { start: 0, end: 0 });
-        let data = merge(CooccuringSegIter {
+        let mut data = merge(CooccuringSegIter {
             shortcut_iter: self.seg_iter(range.clone(), shortcut_graph).peekable(),
             linked_iter: other.seg_iter(range, shortcut_graph).peekable(),
         }).fold(SegmentAggregator {
@@ -58,6 +58,8 @@ impl Shortcut {
 
         debug_assert!(!data.merged_path_segments.is_empty());
         if data.merged_path_segments.len() > 1 {
+            let (_, first_path) = data.merged_path_segments.first().unwrap();
+            data.merged_path_segments.push((period(), *first_path));
             self.data = ShortcutPaths::Multi(data.merged_path_segments);
         } else {
             self.data = ShortcutPaths::One(data.merged_path_segments[0].1);
