@@ -65,7 +65,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         let index_range = self.departure_time.index_range(&range, |&dt| dt);
 
         self.departure_time[index_range.clone()].windows(2).zip(self.travel_time[index_range].windows(2)).map(move |(dts, tts)| {
-            PLFSeg { line: MonotoneLine(Line { from: Ipp::new(dts[0], tts[0]), to: Ipp::new(dts[1], tts[1]) }), valid: (dts[0]..dts[1]).intersection(&range) }
+            PLFSeg { line: MonotoneLine(Line { from: TTIpp::new(dts[0], tts[0]), to: TTIpp::new(dts[1], tts[1]) }), valid: (dts[0]..dts[1]).intersection(&range) }
         })
     }
 
@@ -77,11 +77,11 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
         let first_iter = self.departure_time[first_index_range.clone()].windows(2).zip(self.travel_time[first_index_range].windows(2))
             .map(move |(dts, tts)| {
-                PLFSeg { line: MonotoneLine(Line { from: Ipp::new(dts[0], tts[0]), to: Ipp::new(dts[1], tts[1]) }), valid: (dts[0]..dts[1]).intersection(&first_range) }
+                PLFSeg { line: MonotoneLine(Line { from: TTIpp::new(dts[0], tts[0]), to: TTIpp::new(dts[1], tts[1]) }), valid: (dts[0]..dts[1]).intersection(&first_range) }
             });
         let second_iter = self.departure_time[second_index_range.clone()].windows(2).zip(self.travel_time[second_index_range].windows(2))
             .map(move |(dts, tts)| {
-                PLFSeg { line: MonotoneLine(Line { from: Ipp::new(dts[0], tts[0]), to: Ipp::new(dts[1], tts[1]) }), valid: (dts[0]..dts[1]).intersection(&second_range) }
+                PLFSeg { line: MonotoneLine(Line { from: TTIpp::new(dts[0], tts[0]), to: TTIpp::new(dts[1], tts[1]) }), valid: (dts[0]..dts[1]).intersection(&second_range) }
             });
         first_iter.chain(second_iter)
     }

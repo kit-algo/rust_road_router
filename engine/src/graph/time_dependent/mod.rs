@@ -87,8 +87,8 @@ pub struct TTIpp {
 }
 
 impl TTIpp {
-    fn new(at: Timestamp, val: Weight) -> Ipp {
-        Ipp { at, val }
+    fn new(at: Timestamp, val: Weight) -> TTIpp {
+        TTIpp { at, val }
     }
 
     fn as_tuple(self) -> (Timestamp, Weight) {
@@ -115,8 +115,6 @@ impl Sub for TTIpp {
 pub struct Point {
     x: i64, y: i64
 }
-
-type Ipp = TTIpp;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct ATIpp {
@@ -153,17 +151,143 @@ impl<Point> Line<Point> {
     }
 }
 
+
+
+impl Line<TTIpp> {
+    fn into_monotone_tt_line(self) -> MonotoneLine<TTIpp> {
+        let Line { from, mut to } = self;
+        if to.at < from.at {
+            to.at += period();
+        }
+        MonotoneLine(Line { from, to })
+    }
+
+    fn into_monotone_at_line(self) -> MonotoneLine<ATIpp> {
+        let Line { from, mut to } = self;
+        if to.at < from.at {
+            to.at += period();
+        }
+        MonotoneLine(Line { from: ATIpp { at: from.at, val: from.at + from.val }, to: ATIpp { at: to.at, val: to.at + to.val } })
+    }
+
+    #[cfg(test)]
+    fn delta_x(&self) -> Weight {
+        self.to.at - self.from.at
+    }
+
+    #[cfg(test)]
+    fn delta_y(&self) -> Weight {
+        self.to.val - self.from.val
+    }
+}
+
+impl Line<ATIpp> {
+    fn delta_x(&self) -> Weight {
+        self.to.at - self.from.at
+    }
+
+    fn delta_y(&self) -> Weight {
+        self.to.val - self.from.val
+    }
+
+    fn shift(&mut self) {
+        self.from.shift();
+        self.to.shift();
+    }
+}
+
+
+
+#[derive(Debug, Clone, PartialEq)]
+struct MonotoneLine<Point>(Line<Point>);
+
+impl MonotoneLine<TTIpp> {
+    // TODO wrong results because rounding up for negative slopes
+    #[inline]
+    fn interpolate_tt(&self, x: Timestamp) -> Weight {
+        debug_assert!(self.0.from.at < self.0.to.at, "self: {:?}", self);
+        let delta_x = self.0.to.at - self.0.from.at;
+        let delta_y = i64::from(self.0.to.val) - i64::from(self.0.from.val);
+        let relative_x = i64::from(x) - i64::from(self.0.from.at);
+        let result = i64::from(self.0.from.val) + (relative_x * delta_y / i64::from(delta_x)); // TODO div_euc
+        debug_assert!(result >= 0);
+        debug_assert!(result <= i64::from(INFINITY));
+        result as Weight
+    }
+
+    fn into_monotone_at_line(self) -> MonotoneLine<ATIpp> {
+        let MonotoneLine(Line { from, to }) = self;
+        MonotoneLine(Line { from: ATIpp { at: from.at, val: from.at + from.val }, to: ATIpp { at: to.at, val: to.at + to.val } })
+    }
+
+    fn apply_periodicity(self, period: Timestamp) -> Line<TTIpp> {
+        let MonotoneLine(Line { mut from, mut to }) = self;
+        from.at %= period;
+        from.val %= period;
+        to.at %= period;
+        to.val %= period;
+        Line { from, to }
+    }
+
+    #[cfg(test)]
+    fn delta_x(&self) -> Weight {
+        self.0.delta_x()
+    }
+
+    #[cfg(test)]
+    fn delta_y(&self) -> Weight {
+        self.0.delta_y()
+    }
+}
+
+impl MonotoneLine<ATIpp> {
+    #[inline]
+    fn interpolate_tt(&self, x: Timestamp) -> Weight {
+        debug_assert!(x >= self.0.from.at, "self: {:?}, x: {}", self, x);
+        debug_assert!(x <= self.0.to.at, "self: {:?}, x: {}", self, x);
+        debug_assert!(self.0.from.at < self.0.to.at, "self: {:?}", self);
+        debug_assert!(self.0.from.val <= self.0.to.val, "self: {:?}", self);
+        let delta_x = self.0.to.at - self.0.from.at;
+        let delta_y = self.0.to.val - self.0.from.val;
+        let relative_x = x - self.0.from.at;
+        // TODO will round wrong for negative relative_x -> div_euc
+        let result = u64::from(self.0.from.val) + (u64::from(relative_x) * u64::from(delta_y) / u64::from(delta_x));
+        result as Weight - x
+    }
+
+    fn delta_x(&self) -> Weight {
+        self.0.delta_x()
+    }
+
+    fn delta_y(&self) -> Weight {
+        self.0.delta_y()
+    }
+
+    fn into_monotone_tt_line(self) -> MonotoneLine<TTIpp> {
+        let MonotoneLine(Line { from, to }) = self;
+        let from = from.into_ttipp();
+        let to = to.into_ttipp();
+        MonotoneLine(Line { from, to })
+    }
+
+    fn shift(&mut self) {
+        self.0.shift();
+    }
+}
+
+
+
 #[derive(Debug, Clone, PartialEq)]
 struct Segment<LineType> {
     line: LineType,
-    valid: Range<Timestamp>, // TODO Wrapping - NO
+    valid: Range<Timestamp>,
 }
 
-type TTFSeg = Segment<Line<Ipp>>; // TODO always monotone
+type TTFSeg = Segment<Line<TTIpp>>; // TODO always monotone
 
 impl TTFSeg {
     fn new((from_at, from_val): (Timestamp, Weight), (to_at, to_val): (Timestamp, Weight)) -> Self {
-        Segment { line: Line { from: Ipp::new(from_at, from_val), to: Ipp::new(to_at, to_val) }, valid: from_at..to_at }
+        Segment { line: Line { from: TTIpp::new(from_at, from_val), to: TTIpp::new(to_at, to_val) }, valid: from_at..to_at }
     }
 
     #[cfg(test)]
@@ -230,130 +354,13 @@ impl Segment<MonotoneLine<ATIpp>> {
     }
 }
 
-impl Line<TTIpp> {
-    fn into_monotone_tt_line(self) -> MonotoneLine<TTIpp> {
-        let Line { from, mut to } = self;
-        if to.at < from.at {
-            to.at += period();
-        }
-        MonotoneLine(Line { from, to })
-    }
-
-    fn into_monotone_at_line(self) -> MonotoneLine<ATIpp> {
-        let Line { from, mut to } = self;
-        if to.at < from.at {
-            to.at += period();
-        }
-        MonotoneLine(Line { from: ATIpp { at: from.at, val: from.at + from.val }, to: ATIpp { at: to.at, val: to.at + to.val } })
-    }
-
-    #[cfg(test)]
-    fn delta_x(&self) -> Weight {
-        self.to.at - self.from.at
-    }
-
-    #[cfg(test)]
-    fn delta_y(&self) -> Weight {
-        self.to.val - self.from.val
-    }
-}
-
-impl Line<ATIpp> {
-    fn delta_x(&self) -> Weight {
-        self.to.at - self.from.at
-    }
-
-    fn delta_y(&self) -> Weight {
-        self.to.val - self.from.val
-    }
-
-    fn shift(&mut self) {
-        self.from.shift();
-        self.to.shift();
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-struct MonotoneLine<Point>(Line<Point>);
-
-impl MonotoneLine<ATIpp> {
-    #[inline]
-    fn interpolate_tt(&self, x: Timestamp) -> Weight {
-        debug_assert!(x >= self.0.from.at, "self: {:?}, x: {}", self, x);
-        debug_assert!(x <= self.0.to.at, "self: {:?}, x: {}", self, x);
-        debug_assert!(self.0.from.at < self.0.to.at, "self: {:?}", self);
-        debug_assert!(self.0.from.val <= self.0.to.val, "self: {:?}", self);
-        let delta_x = self.0.to.at - self.0.from.at;
-        let delta_y = self.0.to.val - self.0.from.val;
-        let relative_x = x - self.0.from.at;
-        let result = u64::from(self.0.from.val) + (u64::from(relative_x) * u64::from(delta_y) / u64::from(delta_x));
-        result as Weight - x
-    }
-
-    fn delta_x(&self) -> Weight {
-        self.0.delta_x()
-    }
-
-    fn delta_y(&self) -> Weight {
-        self.0.delta_y()
-    }
-
-    fn into_monotone_tt_line(self) -> MonotoneLine<TTIpp> {
-        let MonotoneLine(Line { from, to }) = self;
-        let from = from.into_ttipp();
-        let to = to.into_ttipp();
-        MonotoneLine(Line { from, to })
-    }
-
-    fn shift(&mut self) {
-        self.0.shift();
-    }
-}
-
-impl MonotoneLine<TTIpp> {
-    // TODO wrong results because rounding up for negative slopes
-    #[inline]
-    fn interpolate_tt(&self, x: Timestamp) -> Weight {
-        debug_assert!(self.0.from.at < self.0.to.at, "self: {:?}", self);
-        let delta_x = self.0.to.at - self.0.from.at;
-        let delta_y = i64::from(self.0.to.val) - i64::from(self.0.from.val);
-        let relative_x = i64::from(x) - i64::from(self.0.from.at);
-        let result = i64::from(self.0.from.val) + (relative_x * delta_y / i64::from(delta_x));
-        debug_assert!(result >= 0);
-        debug_assert!(result <= i64::from(INFINITY));
-        result as Weight
-    }
-
-    fn into_monotone_at_line(self) -> MonotoneLine<ATIpp> {
-        let MonotoneLine(Line { from, to }) = self;
-        MonotoneLine(Line { from: ATIpp { at: from.at, val: from.at + from.val }, to: ATIpp { at: to.at, val: to.at + to.val } })
-    }
-
-    fn apply_periodicity(self, period: Timestamp) -> Line<TTIpp> {
-        let MonotoneLine(Line { mut from, mut to }) = self;
-        from.at %= period;
-        from.val %= period;
-        to.at %= period;
-        to.val %= period;
-        Line { from, to }
-    }
-
-    #[cfg(test)]
-    fn delta_x(&self) -> Weight {
-        self.0.delta_x()
-    }
-
-    #[cfg(test)]
-    fn delta_y(&self) -> Weight {
-        self.0.delta_y()
-    }
-}
+type ATFSeg = Segment<MonotoneLine<ATIpp>>;
 
 type PLFSeg = Segment<MonotoneLine<TTIpp>>;
 
 impl PLFSeg {
     fn new((from_at, from_val): (Timestamp, Weight), (to_at, to_val): (Timestamp, Weight)) -> Self {
-        Segment { line: MonotoneLine(Line { from: Ipp::new(from_at, from_val), to: Ipp::new(to_at, to_val) }), valid: from_at..to_at }
+        Segment { line: MonotoneLine(Line { from: TTIpp::new(from_at, from_val), to: TTIpp::new(to_at, to_val) }), valid: from_at..to_at }
     }
 
     fn into_ttfseg(self) -> TTFSeg {

@@ -244,9 +244,9 @@ mod tests {
     fn test_linking_static_segments() {
         run_test_with_periodicity(10, || {
             assert_eq!(link_segments(&TTFSeg::new((0, 2), (5, 2)), &TTFSeg::new((1, 2), (8, 2))),
-                Segment { line: Line { from: Ipp::new(0, 4), to: Ipp::new(1, 4) }, valid: Range { start: 0, end: 5 } });
+                Segment { line: Line { from: TTIpp::new(0, 4), to: TTIpp::new(1, 4) }, valid: Range { start: 0, end: 5 } });
             assert_eq!(link_segments(&TTFSeg::new((1, 2), (6, 2)), &TTFSeg::new((2, 2), (9, 2))),
-                Segment { line: Line { from: Ipp::new(0, 4), to: Ipp::new(1, 4) }, valid: Range { start: 1, end: 6 } });
+                Segment { line: Line { from: TTIpp::new(0, 4), to: TTIpp::new(1, 4) }, valid: Range { start: 1, end: 6 } });
         });
     }
 
@@ -276,8 +276,8 @@ mod tests {
     fn test_linking_different_slopes() {
         run_test_with_periodicity(10, || {
             assert_eq!(
-                link_segments(&Segment { line: Line { from: Ipp::new(0, 2), to: Ipp::new(4, 4) }, valid: Range { start: 1, end: 3 } }, &Segment { line: Line { from: Ipp::new(2, 2), to: Ipp::new(8, 1) }, valid: Range { start: 3, end: 7 } }),
-                Segment { line: Line { from: Ipp::new(0, 4), to: Ipp::new(4, 5) }, valid: Range { start: 1, end: 3 } });
+                link_segments(&Segment { line: Line { from: TTIpp::new(0, 2), to: TTIpp::new(4, 4) }, valid: Range { start: 1, end: 3 } }, &Segment { line: Line { from: TTIpp::new(2, 2), to: TTIpp::new(8, 1) }, valid: Range { start: 3, end: 7 } }),
+                Segment { line: Line { from: TTIpp::new(0, 4), to: TTIpp::new(4, 5) }, valid: Range { start: 1, end: 3 } });
         });
     }
 
