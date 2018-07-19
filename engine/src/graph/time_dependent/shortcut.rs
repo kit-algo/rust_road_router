@@ -87,7 +87,7 @@ impl Shortcut {
         match self.data {
             ShortcutPaths::None => SegmentIterIter::None,
             // TODO maybe split range here
-            ShortcutPaths::One(data) => SegmentIterIter::One(std::iter::once(data.non_wrapping_seg_iter(range, shortcut_graph))),
+            ShortcutPaths::One(data) => SegmentIterIter::One(once(data.non_wrapping_seg_iter(range, shortcut_graph))),
             ShortcutPaths::Multi(ref data) => {
                 let index_range = data.index_range(&range, |&(dt, _)| dt);
 
@@ -110,8 +110,8 @@ impl Shortcut {
             ShortcutPaths::None => SegmentIterIter::None,
             // TODO maybe split range here
             ShortcutPaths::One(data) => SegmentIterIter::One(
-                std::iter::once(data.non_wrapping_seg_iter(first_range, shortcut_graph))
-                    .chain(std::iter::once(data.non_wrapping_seg_iter(second_range, shortcut_graph)))),
+                once(data.non_wrapping_seg_iter(first_range, shortcut_graph))
+                    .chain(once(data.non_wrapping_seg_iter(second_range, shortcut_graph)))),
             ShortcutPaths::Multi(ref data) => {
                 let (first_index_range, second_index_range) = data.index_ranges(&range, |&(dt, _)| dt);
 

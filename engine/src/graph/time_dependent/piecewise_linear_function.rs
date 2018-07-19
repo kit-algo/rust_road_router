@@ -52,7 +52,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
             Location::On(index) => unsafe { *self.travel_time.get_unchecked(index) },
             Location::Between(lower_index , upper_index) => {
                 let lf = unsafe {
-                    MonotoneLine(Line::new(
+                    MonotoneLine::<TTIpp>::new(Line::new(
                         TTIpp::new(*self.departure_time.get_unchecked(lower_index), *self.travel_time.get_unchecked(lower_index)),
                         TTIpp::new(*self.departure_time.get_unchecked(upper_index), *self.travel_time.get_unchecked(upper_index))))
                 };
@@ -65,7 +65,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         let index_range = self.departure_time.index_range(&range, |&dt| dt);
 
         self.departure_time[index_range.clone()].windows(2).zip(self.travel_time[index_range].windows(2)).map(move |(dts, tts)| {
-            PLFSeg { line: MonotoneLine(Line { from: TTIpp::new(dts[0], tts[0]), to: TTIpp::new(dts[1], tts[1]) }), valid: (dts[0]..dts[1]).intersection(&range) }
+            PLFSeg { line: MonotoneLine::<TTIpp>::new(Line { from: TTIpp::new(dts[0], tts[0]), to: TTIpp::new(dts[1], tts[1]) }), valid: (dts[0]..dts[1]).intersection(&range) }
         })
     }
 
@@ -77,11 +77,11 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
         let first_iter = self.departure_time[first_index_range.clone()].windows(2).zip(self.travel_time[first_index_range].windows(2))
             .map(move |(dts, tts)| {
-                PLFSeg { line: MonotoneLine(Line { from: TTIpp::new(dts[0], tts[0]), to: TTIpp::new(dts[1], tts[1]) }), valid: (dts[0]..dts[1]).intersection(&first_range) }
+                PLFSeg { line: MonotoneLine::<TTIpp>::new(Line { from: TTIpp::new(dts[0], tts[0]), to: TTIpp::new(dts[1], tts[1]) }), valid: (dts[0]..dts[1]).intersection(&first_range) }
             });
         let second_iter = self.departure_time[second_index_range.clone()].windows(2).zip(self.travel_time[second_index_range].windows(2))
             .map(move |(dts, tts)| {
-                PLFSeg { line: MonotoneLine(Line { from: TTIpp::new(dts[0], tts[0]), to: TTIpp::new(dts[1], tts[1]) }), valid: (dts[0]..dts[1]).intersection(&second_range) }
+                PLFSeg { line: MonotoneLine::<TTIpp>::new(Line { from: TTIpp::new(dts[0], tts[0]), to: TTIpp::new(dts[1], tts[1]) }), valid: (dts[0]..dts[1]).intersection(&second_range) }
             });
         first_iter.chain(second_iter)
     }
@@ -155,7 +155,7 @@ mod tests {
             let travel_time =    vec![2, 1, 2,  1,  2];
             let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time);
             let all_segments: Vec<PLFSeg> = ttf.seg_iter(WrappingRange::new(0..0)).collect();
-            assert_eq!(all_segments, vec![PLFSeg::new((0,2), (5,1)), PLFSeg::new((5,1), (14,2)), PLFSeg::new((14,2), (20,1)), PLFSeg::new((20,1), (24,2))]);
+            assert_eq!(all_segments, vec![PLFSeg::from_point_tuples((0,2), (5,1)), PLFSeg::from_point_tuples((5,1), (14,2)), PLFSeg::from_point_tuples((14,2), (20,1)), PLFSeg::from_point_tuples((20,1), (24,2))]);
         });
     }
 
@@ -166,11 +166,11 @@ mod tests {
             let travel_time =    vec![2, 1, 2,  1,  2];
             let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time);
             let all_ipps: Vec<PLFSeg> = ttf.seg_iter(WrappingRange::new(17..17)).collect();
-            let mut first_segment = PLFSeg::new((14,2), (20,1));
+            let mut first_segment = PLFSeg::from_point_tuples((14,2), (20,1));
             first_segment.valid.start = 17;
-            let mut last_segment = PLFSeg::new((14,2), (20,1));
+            let mut last_segment = PLFSeg::from_point_tuples((14,2), (20,1));
             last_segment.valid.end = 17;
-            assert_eq!(all_ipps, vec![first_segment, PLFSeg::new((20,1), (24,2)), PLFSeg::new((0,2), (5,1)), PLFSeg::new((5,1), (14,2)), last_segment]);
+            assert_eq!(all_ipps, vec![first_segment, PLFSeg::from_point_tuples((20,1), (24,2)), PLFSeg::from_point_tuples((0,2), (5,1)), PLFSeg::from_point_tuples((5,1), (14,2)), last_segment]);
         });
     }
 
@@ -181,11 +181,11 @@ mod tests {
             let travel_time =    vec![2, 1, 2,  1,  2];
             let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time);
             let all_ipps: Vec<PLFSeg> = ttf.seg_iter(WrappingRange::new(10..21)).collect();
-            let mut first_segment = PLFSeg::new((5,1), (14,2));
+            let mut first_segment = PLFSeg::from_point_tuples((5,1), (14,2));
             first_segment.valid.start = 10;
-            let mut last_segment = PLFSeg::new((20,1), (24,2));
+            let mut last_segment = PLFSeg::from_point_tuples((20,1), (24,2));
             last_segment.valid.end = 21;
-            assert_eq!(all_ipps, vec![first_segment, PLFSeg::new((14,2), (20,1)), last_segment]);
+            assert_eq!(all_ipps, vec![first_segment, PLFSeg::from_point_tuples((14,2), (20,1)), last_segment]);
         });
     }
 
@@ -196,10 +196,10 @@ mod tests {
             let travel_time =    vec![2, 2];
             let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time);
             let all_ipps: Vec<PLFSeg> = ttf.seg_iter(WrappingRange::new(0..0)).collect();
-            assert_eq!(all_ipps, vec![PLFSeg::new((0, 2), (24, 2))]);
+            assert_eq!(all_ipps, vec![PLFSeg::from_point_tuples((0, 2), (24, 2))]);
 
             let all_ipps: Vec<PLFSeg> = ttf.seg_iter(WrappingRange::new(10..10)).collect();
-            let mut seg = PLFSeg::new((0, 2), (24, 2));
+            let mut seg = PLFSeg::from_point_tuples((0, 2), (24, 2));
             let mut seg2 = seg.clone();
             seg.valid.start = 10;
             seg2.valid.end = 10;

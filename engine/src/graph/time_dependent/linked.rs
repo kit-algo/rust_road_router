@@ -181,13 +181,10 @@ fn link_segments(first_segment: &TTFSeg, second_segment: &TTFSeg) -> TTFSeg {
     }
     debug_assert!(!first_value_range.is_intersection_empty(&second_segment.valid));
 
-    let line = link_monotone(&first_segment.line, &second_segment.line, if needs_shifting { first_segment.line.0.from.at } else { 0 });
+    let line = link_monotone(&first_segment.line, &second_segment.line, if needs_shifting { first_segment.line.line().from.at } else { 0 });
 
     // println!("before periodicity {:?}", line);
-    Segment {
-        line: line.into_monotone_tt_line().apply_periodicity(period()),
-        valid: Range { start: start_of_range, end: end_of_range }
-    }
+    TTFSeg::new(line.into_monotone_tt_line().apply_periodicity(period()), start_of_range..end_of_range)
 }
 
 use ::math::*;
@@ -201,10 +198,10 @@ fn link_monotone(first_line: &MonotoneLine<ATIpp>, second_line: &MonotoneLine<AT
 
     // println!("{}y/{}x", linked_delta_y, linked_delta_x);
 
-    let rest_first_term = i64::from(first_line.0.from.at) * linked_delta_y;
-    let rest_second_term = i64::from(second_line.0.from.at) * i64::from(second_line.delta_y()) * i64::from(first_line.delta_x());
-    let rest_third_term = i64::from(first_line.0.from.val) * i64::from(second_line.delta_y()) * i64::from(first_line.delta_x());
-    let rest_fourth_term = i64::from(second_line.0.from.val) * linked_delta_x;
+    let rest_first_term = i64::from(first_line.line().from.at) * linked_delta_y;
+    let rest_second_term = i64::from(second_line.line().from.at) * i64::from(second_line.delta_y()) * i64::from(first_line.delta_x());
+    let rest_third_term = i64::from(first_line.line().from.val) * i64::from(second_line.delta_y()) * i64::from(first_line.delta_x());
+    let rest_fourth_term = i64::from(second_line.line().from.val) * linked_delta_x;
     let rest = rest_first_term + rest_second_term - rest_third_term - rest_fourth_term;
     // println!("rest: {}", rest);
     let result = solve_linear_congruence(linked_delta_y as i64, rest, linked_delta_x as i64).expect("🤯 math is broken");
@@ -233,7 +230,7 @@ fn link_monotone(first_line: &MonotoneLine<ATIpp>, second_line: &MonotoneLine<AT
     debug_assert!(second_val >= second_at);
     debug_assert!(second_val >= first_val);
 
-    MonotoneLine(Line::new(ATIpp::new(first_at as Timestamp, first_val as Timestamp), ATIpp::new(second_at as Timestamp, second_val as Timestamp)))
+    MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(first_at as Timestamp, first_val as Timestamp), ATIpp::new(second_at as Timestamp, second_val as Timestamp)))
 }
 
 #[cfg(test)]
@@ -243,9 +240,9 @@ mod tests {
     #[test]
     fn test_linking_static_segments() {
         run_test_with_periodicity(10, || {
-            assert_eq!(link_segments(&TTFSeg::new((0, 2), (5, 2)), &TTFSeg::new((1, 2), (8, 2))),
+            assert_eq!(link_segments(&TTFSeg::from_point_tuples((0, 2), (5, 2)), &TTFSeg::from_point_tuples((1, 2), (8, 2))),
                 Segment { line: Line { from: TTIpp::new(0, 4), to: TTIpp::new(1, 4) }, valid: Range { start: 0, end: 5 } });
-            assert_eq!(link_segments(&TTFSeg::new((1, 2), (6, 2)), &TTFSeg::new((2, 2), (9, 2))),
+            assert_eq!(link_segments(&TTFSeg::from_point_tuples((1, 2), (6, 2)), &TTFSeg::from_point_tuples((2, 2), (9, 2))),
                 Segment { line: Line { from: TTIpp::new(0, 4), to: TTIpp::new(1, 4) }, valid: Range { start: 1, end: 6 } });
         });
     }
@@ -253,8 +250,8 @@ mod tests {
     #[test]
     fn test_linking_one_static_one_var_segments() {
         run_test_with_periodicity(10, || {
-            assert_eq!(link_segments(&TTFSeg::new((0, 2), (5, 2)), &TTFSeg::new((2, 2), (7, 3))), TTFSeg::new((0, 4), (5, 5)));
-            assert_eq!(link_segments(&TTFSeg::new((0, 2), (5, 3)), &TTFSeg::new((2, 2), (8, 2))), TTFSeg::new((0, 4), (5, 5)));
+            assert_eq!(link_segments(&TTFSeg::from_point_tuples((0, 2), (5, 2)), &TTFSeg::from_point_tuples((2, 2), (7, 3))), TTFSeg::from_point_tuples((0, 4), (5, 5)));
+            assert_eq!(link_segments(&TTFSeg::from_point_tuples((0, 2), (5, 3)), &TTFSeg::from_point_tuples((2, 2), (8, 2))), TTFSeg::from_point_tuples((0, 4), (5, 5)));
         });
     }
 
@@ -262,11 +259,11 @@ mod tests {
     fn test_linking_non_fitting_length_segments() {
         run_test_with_periodicity(10, || {
             for s in 0..10 {
-                let linked = link_segments(&TTFSeg::new((s, 2), ((s + 5) % 10 , 2)), &TTFSeg::new(((s + 2) % 10, 2), ((s + 6) % 10, 3)));
-                let expect = TTFSeg::new((s, 4), ((s + 4) % 10, 5));
+                let linked = link_segments(&TTFSeg::from_point_tuples((s, 2), ((s + 5) % 10 , 2)), &TTFSeg::from_point_tuples(((s + 2) % 10, 2), ((s + 6) % 10, 3)));
+                let expect = TTFSeg::from_point_tuples((s, 4), ((s + 4) % 10, 5));
                 assert!(linked.is_equivalent_to(&expect), "Got: {:?}\nExpected: {:?}", linked, expect);
-                let linked = link_segments(&TTFSeg::new((s, 2), ((s + 4) % 10 , 2)), &TTFSeg::new(((s + 3) % 10, 2), ((s + 5) % 10, 3)));
-                let expect = TTFSeg::new(((s + 1) % 10, 4), ((s + 3) % 10, 5));
+                let linked = link_segments(&TTFSeg::from_point_tuples((s, 2), ((s + 4) % 10 , 2)), &TTFSeg::from_point_tuples(((s + 3) % 10, 2), ((s + 5) % 10, 3)));
+                let expect = TTFSeg::from_point_tuples(((s + 1) % 10, 4), ((s + 3) % 10, 5));
                 assert!(linked.is_equivalent_to(&expect), "Got: {:?}\nExpected: {:?}", linked, expect);
             }
         });

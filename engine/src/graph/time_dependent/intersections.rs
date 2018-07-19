@@ -114,12 +114,12 @@ mod tests {
 
     #[test]
     fn test_intersect() {
-        assert_eq!(intersect_segments(&TTFSeg::new((0,0), (5,0)),   &TTFSeg::new((0,8), (8,8))), None);
-        assert_eq!(intersect_segments(&TTFSeg::new((0,0), (5,0)),   &TTFSeg::new((0,8), (8,7))), None);
-        assert_eq!(intersect_segments(&TTFSeg::new((0,0), (2,2)),   &TTFSeg::new((0,2), (2,0))), Some(1));
-        assert_eq!(intersect_segments(&TTFSeg::new((0,0), (3,2)),   &TTFSeg::new((0,2), (3,0))), Some(2));
-        assert_eq!(intersect_segments(&TTFSeg::new((0,2), (3,0)),   &TTFSeg::new((0,0), (3,2))), Some(2));
-        assert_eq!(intersect_segments(&TTFSeg::new((7, 8), (9, 6)), &TTFSeg::new((6, 2), (16, 12))), None);
-        assert_eq!(intersect_segments(&TTFSeg::new((9,6), (10,10)), &TTFSeg::new((6,2), (16,12))), None);
+        assert_eq!(intersect_segments(&TTFSeg::from_point_tuples((0,0), (5,0)),   &TTFSeg::from_point_tuples((0,8), (8,8))), None);
+        assert_eq!(intersect_segments(&TTFSeg::from_point_tuples((0,0), (5,0)),   &TTFSeg::from_point_tuples((0,8), (8,7))), None);
+        assert_eq!(intersect_segments(&TTFSeg::from_point_tuples((0,0), (2,2)),   &TTFSeg::from_point_tuples((0,2), (2,0))), Some(1));
+        assert_eq!(intersect_segments(&TTFSeg::from_point_tuples((0,0), (3,2)),   &TTFSeg::from_point_tuples((0,2), (3,0))), Some(2));
+        assert_eq!(intersect_segments(&TTFSeg::from_point_tuples((0,2), (3,0)),   &TTFSeg::from_point_tuples((0,0), (3,2))), Some(2));
+        assert_eq!(intersect_segments(&TTFSeg::from_point_tuples((7, 8), (9, 6)), &TTFSeg::from_point_tuples((6, 2), (16, 12))), None);
+        assert_eq!(intersect_segments(&TTFSeg::from_point_tuples((9,6), (10,10)), &TTFSeg::from_point_tuples((6,2), (16,12))), None);
     }
 }
