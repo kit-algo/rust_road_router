@@ -63,8 +63,9 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
+    // TODO may not need to take a wrapping range since only linked produces wrapping and calls only on shortcuts
     pub(super) fn seg_iter(&self, range: WrappingRange) -> impl Iterator<Item = PLFSeg> + 'a {
-        let (first_index_range, second_index_range) = to_index_ranges(self.departure_time, &range);
+        let (first_index_range, second_index_range) = self.departure_time.index_ranges(&range, |&dt| dt);
         let (first_range, mut second_range) = range.monotonize().split(period());
         second_range.start -= period();
         second_range.end -= period();
@@ -91,48 +92,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
             s = s + &format!("{:?}", data);
         }
         s
-    }
-}
-
-fn to_index_ranges<'a>(departure_time: &'a [Timestamp], range: &WrappingRange) -> (Range<usize>, Range<usize>) {
-    if range.full_range() {
-        if range.start() == 0 {
-            ((0..departure_time.len()), (0..0))
-        } else {
-            debug_assert!(range.start() < period());
-            match departure_time.sorted_search(&range.start()) {
-                Ok(departure_index) => ((departure_index..departure_time.len()), (0..departure_index+1)),
-                Err(upper_index) => {
-                    debug_assert!(upper_index > 0);
-                    debug_assert!(upper_index < departure_time.len());
-                    let lower_index = upper_index - 1;
-                    ((lower_index..departure_time.len()), (0..upper_index+1))
-                },
-            }
-        }
-    } else {
-        let start_index = match departure_time.sorted_search(&range.start()) {
-            Ok(departure_index) => departure_index,
-            Err(upper_index) => {
-                debug_assert!(upper_index > 0);
-                debug_assert!(upper_index < departure_time.len());
-                upper_index - 1
-            },
-        };
-        let end_index = match departure_time.sorted_search(&range.end()) {
-            Ok(departure_index) => departure_index + 1,
-            Err(upper_index) => {
-                debug_assert!(upper_index > 0);
-                debug_assert!(upper_index < departure_time.len());
-                upper_index + 1
-            },
-        };
-
-        if range.end() < range.start() {
-            ((start_index..departure_time.len()), (0..end_index))
-        } else {
-            ((start_index..end_index), (0..0))
-        }
     }
 }
 

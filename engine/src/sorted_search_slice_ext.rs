@@ -1,4 +1,7 @@
+use std::ops::Range;
 use std::cmp::Ordering;
+use graph::time_dependent::*;
+use graph::time_dependent::period;
 
 pub trait SortedSearchSliceExt {
     type Item;
@@ -38,6 +41,57 @@ impl<T> SortedSearchSliceExt for [T] {
         //     }
         //     Err(self.len())
         // }
+    }
+}
+
+pub trait FullPeriodTimestampSliceExt : SortedSearchSliceExt {
+    fn index_ranges<'a, F>(&'a self, range: &WrappingRange, f: F) -> (Range<usize>, Range<usize>)
+        where F: FnMut(&'a Self::Item) -> Timestamp;
+}
+
+impl<T> FullPeriodTimestampSliceExt for [T] {
+    fn index_ranges<'a, F>(&'a self, range: &WrappingRange, mut f: F) -> (Range<usize>, Range<usize>)
+        where F: FnMut(&'a Self::Item) -> Timestamp
+    {
+        if range.full_range() {
+            if range.start() == 0 {
+                ((0..self.len()), (0..0))
+            } else {
+                debug_assert!(range.start() < period());
+                match self.sorted_search_by_key(&range.start(), f) {
+                    Ok(departure_index) => ((departure_index..self.len()), (0..departure_index+1)),
+                    Err(upper_index) => {
+                        debug_assert!(upper_index > 0);
+                        debug_assert!(upper_index < self.len());
+                        let lower_index = upper_index - 1;
+                        ((lower_index..self.len()), (0..upper_index+1))
+                    },
+                }
+            }
+        } else {
+            let start_index = match self.sorted_search_by_key(&range.start(), |el| f(el)) {
+                Ok(departure_index) => departure_index,
+                Err(upper_index) => {
+                    debug_assert!(upper_index > 0);
+                    debug_assert!(upper_index < self.len());
+                    upper_index - 1
+                },
+            };
+            let end_index = match self.sorted_search_by_key(&range.end(), f) {
+                Ok(departure_index) => departure_index + 1,
+                Err(upper_index) => {
+                    debug_assert!(upper_index > 0);
+                    debug_assert!(upper_index < self.len());
+                    upper_index + 1
+                },
+            };
+
+            if range.end() < range.start() {
+                ((start_index..self.len()), (0..end_index))
+            } else {
+                ((start_index..end_index), (0..0))
+            }
+        }
     }
 }
 

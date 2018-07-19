@@ -43,7 +43,7 @@ impl ShortcutData {
     pub(super) fn seg_iter<'a>(self, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> ShortcutSourceSegmentIter<'a, impl Iterator<Item = PLFSeg> + 'a> {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
-                ShortcutSourceSegmentIter::Shortcut(Linked::new(down_shortcut_id, self.up_arc).seg_iter(range, shortcut_graph))
+                ShortcutSourceSegmentIter::Shortcut(Box::new(Linked::new(down_shortcut_id, self.up_arc).seg_iter(range, shortcut_graph)))
             },
             None => {
                 ShortcutSourceSegmentIter::OriginalEdge(shortcut_graph.original_graph().travel_time_function(self.up_arc).seg_iter(range))
@@ -75,7 +75,7 @@ impl ShortcutData {
 }
 
 pub(super) enum ShortcutSourceSegmentIter<'a, PLFIter: Iterator<Item = PLFSeg>> {
-    Shortcut(linked::SegmentIter<'a>), // TODO move Box here?
+    Shortcut(Box<dyn Iterator<Item = TTFSeg> + 'a>),
     OriginalEdge(PLFIter),
 }
 
