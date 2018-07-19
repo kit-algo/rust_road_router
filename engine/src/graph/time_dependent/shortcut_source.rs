@@ -40,7 +40,7 @@ impl ShortcutData {
         }
     }
 
-    pub(super) fn seg_iter<'a>(self, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> ShortcutSourceSegmentIter<'a, impl Iterator<Item = PLFSeg> + 'a> {
+    pub(super) fn seg_iter<'a>(self, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = TTFSeg> + 'a {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
                 ShortcutSourceSegmentIter::Shortcut(Box::new(Linked::new(down_shortcut_id, self.up_arc).seg_iter(range, shortcut_graph)))

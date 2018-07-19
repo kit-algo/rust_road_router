@@ -54,7 +54,7 @@ impl Linked {
     }
 }
 
-pub(super) struct SegmentIter<ShortcutSegIter: Iterator<Item = TTFSeg>> {
+struct SegmentIter<ShortcutSegIter: Iterator<Item = TTFSeg>> {
     first_iter: Peekable<ShortcutSegIter>,
     second_iter: Peekable<ShortcutSegIter>,
 }
