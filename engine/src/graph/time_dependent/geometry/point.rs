@@ -48,6 +48,10 @@ impl ATIpp {
         TTIpp { at, val: val - at }
     }
 
+    pub fn as_tuple(self) -> (Timestamp, Timestamp) {
+        (self.at, self.val)
+    }
+
     pub fn shift(&mut self) {
         self.at += period();
         self.val += period();

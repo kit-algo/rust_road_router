@@ -45,33 +45,16 @@ impl TTFSeg {
         Segment { line, valid }
     }
 
-    pub fn eval(&self, x: Timestamp) -> Weight {
-        debug_assert!(self.valid.contains(&x));
-        // TODO optimize
-        self.line.clone().into_monotone_tt_line().interpolate_tt(x)
-    }
 
-    pub fn start_of_valid_at_val(&self) -> Timestamp {
-        (self.line.clone().into_monotone_tt_line().interpolate_tt(self.valid.start) + self.valid.start) % period()
-    }
-
-    pub fn end_of_valid_at_val(&self) -> Timestamp {
-        let x = if self.valid.end <= self.valid.start { self.valid.end + period() } else { self.valid.end };
-        (self.line.clone().into_monotone_tt_line().interpolate_tt(x) + x) % period()
-    }
-
-    pub fn combine(&mut self, other: &TTFSeg) -> bool {
-        if self.line == other.line && self.valid.end == other.valid.start {
-            self.valid.end = other.valid.end;
-            return true
-        }
-        false
-    }
 }
 
-type ATFSeg = Segment<MonotoneLine<ATIpp>>;
+pub type MATSeg = Segment<MonotoneLine<ATIpp>>;
 
-impl ATFSeg {
+impl MATSeg {
+    pub fn from_point_tuples((from_at, from_val): (Timestamp, Weight), (to_at, to_val): (Timestamp, Weight)) -> Self {
+        MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(from_at, from_val), ATIpp::new(to_at, to_val))), from_at..to_at)
+    }
+
     pub fn valid_value_range(&self) -> Range<Timestamp> {
         Range {
             start: self.line.interpolate_tt(self.valid.start) + self.valid.start,
@@ -84,6 +67,31 @@ impl ATFSeg {
         self.valid.end += period();
         self.line.shift();
     }
+
+    pub fn start_of_valid_at_val(&self) -> Timestamp {
+        (self.line.interpolate_tt(self.valid.start) + self.valid.start) % period()
+    }
+
+    pub fn end_of_valid_at_val(&self) -> Timestamp {
+        (self.line.interpolate_tt(self.valid.end) + self.valid.end) % period()
+    }
+
+    pub fn eval(&self, x: Timestamp) -> Weight {
+        debug_assert!(self.valid.contains(&x));
+        self.line.interpolate_tt(x)
+    }
+
+    pub fn combine(&mut self, other: &MATSeg) -> bool {
+        if self.line == other.line && self.valid.end == other.valid.start {
+            self.valid.end = other.valid.end;
+            return true
+        }
+        false
+    }
+
+    pub fn line(&self) -> &Line<ATIpp> {
+        self.line.line()
+    }
 }
 
 pub type PLFSeg = Segment<MonotoneLine<TTIpp>>;
@@ -93,7 +101,7 @@ impl PLFSeg {
         Segment { line: MonotoneLine::<TTIpp>::new(Line { from: TTIpp::new(from_at, from_val), to: TTIpp::new(to_at, to_val) }), valid: from_at..to_at }
     }
 
-    pub fn into_ttfseg(self) -> TTFSeg {
-        TTFSeg { line: self.line.into_line(), valid: self.valid }
+    pub fn into_atfseg(self) -> MATSeg {
+        MATSeg::new(self.line.into_monotone_at_line(), self.valid)
     }
 }

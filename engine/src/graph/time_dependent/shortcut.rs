@@ -52,7 +52,7 @@ impl Shortcut {
         }).fold(SegmentAggregator {
             shortcut_path_segments: PathSegmentIter::new(self).peekable(),
             merged_path_segments: Vec::new(),
-            merged_ttf_segments: Vec::new(),
+            merged_atf_segments: Vec::new(),
             linked_shortcut_data: other.as_shortcut_data(),
         }, |mut acc, better_segment| { acc.integrate_segment(better_segment); acc });
 
@@ -83,7 +83,7 @@ impl Shortcut {
         }
     }
 
-    pub(super) fn non_wrapping_seg_iter<'a, 'b: 'a>(&'b self, range: Range<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = TTFSeg> + 'a {
+    pub(super) fn non_wrapping_seg_iter<'a, 'b: 'a>(&'b self, range: Range<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = MATSeg> + 'a {
         match self.data {
             ShortcutPaths::None => SegmentIterIter::None,
             // TODO maybe split range here
@@ -101,7 +101,7 @@ impl Shortcut {
         }.flatten()
     }
 
-    pub(super) fn seg_iter<'a, 'b: 'a>(&'b self, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = TTFSeg> + 'a {
+    pub(super) fn seg_iter<'a, 'b: 'a>(&'b self, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = MATSeg> + 'a {
         let (first_range, mut second_range) = range.clone().monotonize().split(period());
         second_range.start -= period();
         second_range.end -= period();
@@ -204,13 +204,13 @@ impl Shortcut {
 struct SegmentAggregator<'a> {
     shortcut_path_segments: Peekable<PathSegmentIter<'a>>,
     merged_path_segments: Vec<(Timestamp, ShortcutData)>,
-    merged_ttf_segments: Vec<TTFSeg>,
+    merged_atf_segments: Vec<MATSeg>,
     linked_shortcut_data: ShortcutData
 }
 
 impl<'a> SegmentAggregator<'a> {
     fn integrate_segment(&mut self, segment: BetterSegment) {
-        match self.merged_ttf_segments.last_mut() {
+        match self.merged_atf_segments.last_mut() {
             Some(prev_segment) => {
                 match segment {
                     BetterSegment::Shortcut(segment) => {
@@ -238,7 +238,7 @@ impl<'a> SegmentAggregator<'a> {
                         }
 
                         if !prev_segment.combine(&segment) {
-                            self.merged_ttf_segments.push(segment);
+                            self.merged_atf_segments.push(segment);
                         }
                     },
                     BetterSegment::Linked(segment) => {
@@ -246,13 +246,13 @@ impl<'a> SegmentAggregator<'a> {
                             self.merged_path_segments.push((segment.valid.start, self.linked_shortcut_data));
                         }
                         if !prev_segment.combine(&segment) {
-                            self.merged_ttf_segments.push(segment);
+                            self.merged_atf_segments.push(segment);
                         }
                     },
                     BetterSegment::Equal(shortcut_seg, linked_seg) => {
                         if self.merged_path_segments.last().unwrap().1 == self.linked_shortcut_data {
                             if !prev_segment.combine(&linked_seg) {
-                                self.merged_ttf_segments.push(linked_seg);
+                                self.merged_atf_segments.push(linked_seg);
                             }
                         } else {
                             if self.merged_path_segments.last().unwrap().1 == self.linked_shortcut_data {
@@ -279,7 +279,7 @@ impl<'a> SegmentAggregator<'a> {
                             }
 
                             if !prev_segment.combine(&shortcut_seg) {
-                                self.merged_ttf_segments.push(shortcut_seg);
+                                self.merged_atf_segments.push(shortcut_seg);
                             }
                         }
                     },
@@ -288,15 +288,15 @@ impl<'a> SegmentAggregator<'a> {
             None => {
                 match segment {
                     BetterSegment::Shortcut(segment) => {
-                        self.merged_ttf_segments.push(segment);
+                        self.merged_atf_segments.push(segment);
                         self.merged_path_segments.push(self.shortcut_path_segments.next().map(|(at, data)| (at, *data)).unwrap());
                     },
                     BetterSegment::Linked(segment) => {
-                        self.merged_ttf_segments.push(segment);
+                        self.merged_atf_segments.push(segment);
                         self.merged_path_segments.push((0, self.linked_shortcut_data));
                     },
                     BetterSegment::Equal(shortcut_seg, _linked_seg) => {
-                        self.merged_ttf_segments.push(shortcut_seg);
+                        self.merged_atf_segments.push(shortcut_seg);
                         self.merged_path_segments.push(self.shortcut_path_segments.next().map(|(at, data)| (at, *data)).unwrap());
                     },
                 }
@@ -334,13 +334,13 @@ impl<'a> Iterator for PathSegmentIter<'a> {
     }
 }
 
-struct CooccuringSegIter<SegmentIter: Iterator<Item = TTFSeg>, LinkedSegIter: Iterator<Item = TTFSeg>> {
+struct CooccuringSegIter<SegmentIter: Iterator<Item = MATSeg>, LinkedSegIter: Iterator<Item = MATSeg>> {
     shortcut_iter: Peekable<SegmentIter>,
     linked_iter: Peekable<LinkedSegIter>
 }
 
-impl<'a, SegmentIter: Iterator<Item = TTFSeg>, LinkedSegIter: Iterator<Item = TTFSeg>> Iterator for CooccuringSegIter<SegmentIter, LinkedSegIter> {
-    type Item = (TTFSeg, TTFSeg);
+impl<'a, SegmentIter: Iterator<Item = MATSeg>, LinkedSegIter: Iterator<Item = MATSeg>> Iterator for CooccuringSegIter<SegmentIter, LinkedSegIter> {
+    type Item = (MATSeg, MATSeg);
 
     fn next(&mut self) -> Option<Self::Item> {
         match (self.shortcut_iter.peek().cloned(), self.linked_iter.peek().cloned()) {
@@ -362,14 +362,14 @@ impl<'a, SegmentIter: Iterator<Item = TTFSeg>, LinkedSegIter: Iterator<Item = TT
 }
 
 #[derive(Debug)]
-enum SegmentIterIter<InnerIter: Iterator<Item = TTFSeg>, OneSegIter: Iterator<Item = InnerIter>, MultiSegIter: Iterator<Item = InnerIter>> {
+enum SegmentIterIter<InnerIter: Iterator<Item = MATSeg>, OneSegIter: Iterator<Item = InnerIter>, MultiSegIter: Iterator<Item = InnerIter>> {
     None,
     One(OneSegIter),
     Multi(MultiSegIter)
 }
 
 impl<'a, InnerIter, OneSegIter, MultiSegIter> Iterator for SegmentIterIter<InnerIter, OneSegIter, MultiSegIter> where
-    InnerIter: Iterator<Item = TTFSeg>,
+    InnerIter: Iterator<Item = MATSeg>,
     OneSegIter: Iterator<Item = InnerIter>,
     MultiSegIter: Iterator<Item = InnerIter>,
 {

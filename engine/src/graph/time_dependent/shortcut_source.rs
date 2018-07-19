@@ -40,7 +40,7 @@ impl ShortcutData {
         }
     }
 
-    pub(super) fn non_wrapping_seg_iter<'a>(self, range: Range<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = TTFSeg> + 'a {
+    pub(super) fn non_wrapping_seg_iter<'a>(self, range: Range<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = MATSeg> + 'a {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
                 ShortcutSourceSegmentIter::Shortcut(Box::new(Linked::new(down_shortcut_id, self.up_arc).non_wrapping_seg_iter(range, shortcut_graph)))
@@ -51,7 +51,7 @@ impl ShortcutData {
         }
     }
 
-    pub(super) fn seg_iter<'a>(self, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = TTFSeg> + 'a {
+    pub(super) fn seg_iter<'a>(self, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = MATSeg> + 'a {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
                 ShortcutSourceSegmentIter::Shortcut(Box::new(Linked::new(down_shortcut_id, self.up_arc).seg_iter(range, shortcut_graph)))
@@ -86,18 +86,18 @@ impl ShortcutData {
 }
 
 pub(super) enum ShortcutSourceSegmentIter<'a, PLFIter: Iterator<Item = PLFSeg>> {
-    Shortcut(Box<dyn Iterator<Item = TTFSeg> + 'a>),
+    Shortcut(Box<dyn Iterator<Item = MATSeg> + 'a>),
     OriginalEdge(PLFIter),
 }
 
 impl<'a, PLFIter: Iterator<Item = PLFSeg>> Iterator for ShortcutSourceSegmentIter<'a, PLFIter> {
-    type Item = TTFSeg;
+    type Item = MATSeg;
 
     fn next(&mut self) -> Option<Self::Item> {
         // println!("shortcut src next");
         match *self {
             ShortcutSourceSegmentIter::Shortcut(ref mut iter) => iter.next(),
-            ShortcutSourceSegmentIter::OriginalEdge(ref mut iter) => iter.next().map(|seg| seg.into_ttfseg()),
+            ShortcutSourceSegmentIter::OriginalEdge(ref mut iter) => iter.next().map(|seg| seg.into_atfseg()),
         }
     }
 }

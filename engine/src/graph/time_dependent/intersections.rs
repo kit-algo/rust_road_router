@@ -1,15 +1,14 @@
 use super::*;
 
-// TODO must be monotone
-fn intersect_segments(first_segment: &TTFSeg, second_segment: &TTFSeg) -> Option<Timestamp> {
-    let x1 = i128::from(first_segment.line.from.at);
-    let x2 = i128::from(first_segment.line.to.at);
-    let x3 = i128::from(second_segment.line.from.at);
-    let x4 = i128::from(second_segment.line.to.at);
-    let y1 = i128::from(first_segment.line.from.val);
-    let y2 = i128::from(first_segment.line.to.val);
-    let y3 = i128::from(second_segment.line.from.val);
-    let y4 = i128::from(second_segment.line.to.val);
+fn intersect_segments(first_segment: &MATSeg, second_segment: &MATSeg) -> Option<Timestamp> {
+    let x1 = i128::from(first_segment.line().from.at);
+    let x2 = i128::from(first_segment.line().to.at);
+    let x3 = i128::from(second_segment.line().from.at);
+    let x4 = i128::from(second_segment.line().to.at);
+    let y1 = i128::from(first_segment.line().from.val);
+    let y2 = i128::from(first_segment.line().to.val);
+    let y3 = i128::from(second_segment.line().from.val);
+    let y4 = i128::from(second_segment.line().to.val);
 
     let numerator = (x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4);
     let denominator = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
@@ -58,14 +57,14 @@ impl<T, X: Iterator<Item = T>, Y: Iterator<Item = T>> Iterator for TwoTypeIter<T
 
 #[derive(Debug)]
 pub(super) enum BetterSegment {
-    Shortcut(TTFSeg),
-    Linked(TTFSeg),
-    Equal(TTFSeg, TTFSeg)
+    Shortcut(MATSeg),
+    Linked(MATSeg),
+    Equal(MATSeg, MATSeg)
 }
 
 use math::RangeExtensions;
 
-pub(super) fn merge(iter: impl Iterator<Item = (TTFSeg, TTFSeg)>) -> impl Iterator<Item = BetterSegment> {
+pub(super) fn merge(iter: impl Iterator<Item = (MATSeg, MATSeg)>) -> impl Iterator<Item = BetterSegment> {
     use std::iter::once;
     use std::cmp::Ordering;
 
@@ -114,12 +113,12 @@ mod tests {
 
     #[test]
     fn test_intersect() {
-        assert_eq!(intersect_segments(&TTFSeg::from_point_tuples((0,0), (5,0)),   &TTFSeg::from_point_tuples((0,8), (8,8))), None);
-        assert_eq!(intersect_segments(&TTFSeg::from_point_tuples((0,0), (5,0)),   &TTFSeg::from_point_tuples((0,8), (8,7))), None);
-        assert_eq!(intersect_segments(&TTFSeg::from_point_tuples((0,0), (2,2)),   &TTFSeg::from_point_tuples((0,2), (2,0))), Some(1));
-        assert_eq!(intersect_segments(&TTFSeg::from_point_tuples((0,0), (3,2)),   &TTFSeg::from_point_tuples((0,2), (3,0))), Some(2));
-        assert_eq!(intersect_segments(&TTFSeg::from_point_tuples((0,2), (3,0)),   &TTFSeg::from_point_tuples((0,0), (3,2))), Some(2));
-        assert_eq!(intersect_segments(&TTFSeg::from_point_tuples((7, 8), (9, 6)), &TTFSeg::from_point_tuples((6, 2), (16, 12))), None);
-        assert_eq!(intersect_segments(&TTFSeg::from_point_tuples((9,6), (10,10)), &TTFSeg::from_point_tuples((6,2), (16,12))), None);
+        assert_eq!(intersect_segments(&MATSeg::from_point_tuples((0,0), (5,5)),     &MATSeg::from_point_tuples((0,8), (8,16))), None);
+        assert_eq!(intersect_segments(&MATSeg::from_point_tuples((0,0), (5,5)),     &MATSeg::from_point_tuples((0,8), (8,15))), None);
+        assert_eq!(intersect_segments(&MATSeg::from_point_tuples((0,0), (2,4)),     &MATSeg::from_point_tuples((0,2), (2,2))), Some(1));
+        assert_eq!(intersect_segments(&MATSeg::from_point_tuples((0,0), (3,5)),     &MATSeg::from_point_tuples((0,2), (3,3))), Some(2));
+        assert_eq!(intersect_segments(&MATSeg::from_point_tuples((0,2), (3,3)),     &MATSeg::from_point_tuples((0,0), (3,5))), Some(2));
+        assert_eq!(intersect_segments(&MATSeg::from_point_tuples((7,7+8), (9,9+6)), &MATSeg::from_point_tuples((6,8), (16,16+12))), None);
+        assert_eq!(intersect_segments(&MATSeg::from_point_tuples((9,9+6), (10,20)), &MATSeg::from_point_tuples((6,8), (16,16+12))), None);
     }
 }

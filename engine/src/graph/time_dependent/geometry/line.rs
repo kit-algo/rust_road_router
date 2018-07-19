@@ -91,7 +91,7 @@ impl MonotoneLine<TTIpp> {
 
     pub fn into_monotone_at_line(self) -> MonotoneLine<ATIpp> {
         let MonotoneLine(Line { from, to, .. }) = self;
-        MonotoneLine::<ATIpp>::new(Line::new(ATIpp { at: from.at, val: from.at + from.val }, ATIpp { at: to.at, val: to.at + to.val }))
+        MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(from.at, from.at + from.val), ATIpp::new(to.at, to.at + to.val)))
     }
 
     // TODO WTF?
@@ -131,7 +131,7 @@ impl MonotoneLine<ATIpp> {
         let delta_x = self.0.to.at - self.0.from.at;
         let delta_y = self.0.to.val - self.0.from.val;
         let relative_x = x - self.0.from.at;
-        // TODO will round wrong for negative relative_x -> div_euc
+        // TODO will round wrong for negative relative_x -> div_euc but expensive...
         let result = u64::from(self.0.from.val) + (u64::from(relative_x) * u64::from(delta_y) / u64::from(delta_x));
         result as Weight - x
     }
