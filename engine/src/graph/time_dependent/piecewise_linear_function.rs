@@ -56,6 +56,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                         TTIpp::new(*self.departure_time.get_unchecked(lower_index), *self.travel_time.get_unchecked(lower_index)),
                         TTIpp::new(*self.departure_time.get_unchecked(upper_index), *self.travel_time.get_unchecked(upper_index))))
                 };
+                // TODO optimize - no div_euc necessary
                 lf.into_monotone_at_line().interpolate_tt(departure)
             },
         }

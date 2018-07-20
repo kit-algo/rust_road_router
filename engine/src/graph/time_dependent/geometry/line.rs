@@ -124,17 +124,24 @@ impl MonotoneLine<ATIpp> {
 
     #[inline]
     pub fn interpolate_tt(&self, x: Timestamp) -> Weight {
-        debug_assert!(x >= self.0.from.at, "self: {:?}, x: {}", self, x);
-        debug_assert!(x <= self.0.to.at, "self: {:?}, x: {}", self, x);
-        debug_assert!(self.0.from.at < self.0.to.at, "self: {:?}", self);
-        debug_assert!(self.0.from.val <= self.0.to.val, "self: {:?}", self);
-        let delta_x = self.0.to.at - self.0.from.at;
-        let delta_y = self.0.to.val - self.0.from.val;
-        let relative_x = x - self.0.from.at;
-        // TODO will round wrong for negative relative_x -> div_euc but expensive...
-        let result = u64::from(self.0.from.val) + (u64::from(relative_x) * u64::from(delta_y) / u64::from(delta_x));
-        debug_assert!(result <= u64::from(INFINITY));
-        result as Weight - x
+        self.interpolate_at(x) - x
+    }
+
+    // no modulo period here!
+    #[inline]
+    pub fn interpolate_at(&self, x: Timestamp) -> Weight {
+        let line = &self.0;
+        debug_assert!(line.from.at < line.to.at, "self: {:?}", self);
+        debug_assert!(line.from.val <= line.to.val, "self: {:?}", self);
+        let delta_x = line.to.at - line.from.at;
+        let delta_y = line.to.val - line.from.val;
+        let relative_x = i64::from(x) - i64::from(line.from.at);
+        // TODO div_euc is expensive
+        // maybe shift left ipp below x?
+        let result = i64::from(line.from.val) + (relative_x * i64::from(delta_y)).div_euc(i64::from(delta_x));
+        debug_assert!(result >= 0);
+        debug_assert!(result < i64::from(INFINITY));
+        result as Weight
     }
 
     pub fn delta_x(&self) -> Weight {
@@ -180,7 +187,7 @@ impl MonotoneLine<ATIpp> {
         let result = i64::from(line.from.at) + delta_x_to_target;
 
         debug_assert!(result >= 0);
-        debug_assert!(result <= i64::from(INFINITY));
+        debug_assert!(result < i64::from(INFINITY));
 
         Some(result as Timestamp)
     }
@@ -216,5 +223,15 @@ mod tests {
         assert_eq!(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(2, 4), ATIpp::new(3, 6))).invert(3), Some(2));
         assert_eq!(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(2, 4), ATIpp::new(3, 6))).invert(2), Some(1));
         assert_eq!(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(2, 4), ATIpp::new(3, 6))).invert(1), Some(1));
+    }
+
+    #[test]
+    fn test_interpolation() {
+        assert_eq!(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 1), ATIpp::new(1, 1))).interpolate_at(2), 1);
+        assert_eq!(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(2, 4), ATIpp::new(4, 9))).interpolate_at(2), 4);
+        assert_eq!(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(2, 4), ATIpp::new(4, 9))).interpolate_at(4), 9);
+        assert_eq!(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(2, 4), ATIpp::new(4, 9))).interpolate_at(1), 1);
+        assert_eq!(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(2, 4), ATIpp::new(4, 9))).interpolate_at(3), 6);
+        assert_eq!(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(2, 4), ATIpp::new(4, 9))).interpolate_at(5), 11);
     }
 }

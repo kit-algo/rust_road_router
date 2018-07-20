@@ -56,10 +56,7 @@ impl MATSeg {
     }
 
     pub fn valid_value_range(&self) -> Range<Timestamp> {
-        Range {
-            start: self.line.interpolate_tt(self.valid.start) + self.valid.start,
-            end: self.line.interpolate_tt(self.valid.end) + self.valid.end
-        }
+        self.line.interpolate_at(self.valid.start)..self.line.interpolate_at(self.valid.end)
     }
 
     pub fn shift(&mut self) {
@@ -69,11 +66,11 @@ impl MATSeg {
     }
 
     pub fn start_of_valid_at_val(&self) -> Timestamp {
-        (self.line.interpolate_tt(self.valid.start) + self.valid.start) % period()
+        self.line.interpolate_at(self.valid.start) % period()
     }
 
     pub fn end_of_valid_at_val(&self) -> Timestamp {
-        (self.line.interpolate_tt(self.valid.end) + self.valid.end) % period()
+        self.line.interpolate_at(self.valid.end) % period()
     }
 
     pub fn eval(&self, x: Timestamp) -> Weight {
