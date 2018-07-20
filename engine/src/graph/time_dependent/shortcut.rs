@@ -47,23 +47,21 @@ impl Shortcut {
         }
 
         let range = 0..period();
-        let mut data = merge(CooccuringSegIter {
-            shortcut_iter: self.non_wrapping_seg_iter(range.clone(), shortcut_graph).peekable(),
-            linked_iter: other.non_wrapping_seg_iter(range, shortcut_graph).peekable(),
-        }).fold(SegmentAggregator {
-            shortcut_path_segments: PathSegmentIter::new(self).peekable(),
-            merged_path_segments: Vec::new(),
-            merged_atf_segments: Vec::new(),
-            linked_shortcut_data: other.as_shortcut_data(),
-        }, |mut acc, better_segment| { acc.integrate_segment(better_segment); acc });
+        let data = merge(
+            self.non_wrapping_seg_iter(range.clone(), shortcut_graph),
+            other.non_wrapping_seg_iter(range, shortcut_graph)
+        ).fold(SegmentAggregator::new(
+            other.as_shortcut_data(), PathSegmentIter::new(self)),
+            |mut acc, better_segment| { acc.integrate_segment(better_segment); acc });
 
-        debug_assert!(!data.merged_path_segments.is_empty());
-        if data.merged_path_segments.len() > 1 {
-            let (_, first_path) = data.merged_path_segments.first().unwrap();
-            data.merged_path_segments.push((period(), *first_path));
-            self.data = ShortcutPaths::Multi(data.merged_path_segments);
+        let mut merged_path_segments = data.into_merged_path_segments();
+        debug_assert!(!merged_path_segments.is_empty());
+        if merged_path_segments.len() > 1 {
+            let (_, first_path) = merged_path_segments.first().unwrap();
+            merged_path_segments.push((period(), *first_path));
+            self.data = ShortcutPaths::Multi(merged_path_segments);
         } else {
-            self.data = ShortcutPaths::One(data.merged_path_segments[0].1);
+            self.data = ShortcutPaths::One(merged_path_segments[0].1);
         }
     }
 
@@ -188,7 +186,7 @@ impl Shortcut {
 }
 
 #[derive(Debug)]
-pub(super) enum PathSegmentIter<'a> {
+enum PathSegmentIter<'a> {
     None,
     One(Once<&'a ShortcutData>),
     Multi(SliceIter<'a, (Timestamp, ShortcutData)>)

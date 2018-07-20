@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use super::*;
 use math::RangeExtensions;
 
@@ -25,10 +27,9 @@ pub(super) enum BetterSegment {
     Equal(MATSeg, MATSeg)
 }
 
-pub(super) fn merge(iter: impl Iterator<Item = (MATSeg, MATSeg)>) -> impl Iterator<Item = BetterSegment> {
-    use std::cmp::Ordering;
-
-    iter.flat_map(|(mut shortcut_seg, mut linked_seg)| {
+pub(super) fn merge(shortcut_iter: impl Iterator<Item = MATSeg>, linked_iter: impl Iterator<Item = MATSeg>) -> impl Iterator<Item = BetterSegment> {
+    let combined_iter = CooccuringSegIter { shortcut_iter: shortcut_iter.peekable(), linked_iter: linked_iter.peekable() };
+    combined_iter.flat_map(|(mut shortcut_seg, mut linked_seg)| {
         let common_valid = shortcut_seg.valid.intersection(&linked_seg.valid);
         shortcut_seg.valid = common_valid.clone();
         linked_seg.valid = common_valid;
@@ -69,14 +70,23 @@ pub(super) fn merge(iter: impl Iterator<Item = (MATSeg, MATSeg)>) -> impl Iterat
 
 
 #[derive(Debug)]
-pub(super) struct SegmentAggregator<'a> {
-    pub shortcut_path_segments: Peekable<PathSegmentIter<'a>>,
-    pub merged_path_segments: Vec<(Timestamp, ShortcutData)>,
-    pub merged_atf_segments: Vec<MATSeg>,
-    pub linked_shortcut_data: ShortcutData
+pub(super) struct SegmentAggregator<'a, PathSegmentIter: Iterator<Item = (Timestamp, &'a ShortcutData)>> {
+    shortcut_path_segments: Peekable<PathSegmentIter>,
+    merged_path_segments: Vec<(Timestamp, ShortcutData)>,
+    merged_atf_segments: Vec<MATSeg>,
+    linked_shortcut_data: ShortcutData
 }
 
-impl<'a> SegmentAggregator<'a> {
+impl<'a, PathSegmentIter: Iterator<Item = (Timestamp, &'a ShortcutData)>> SegmentAggregator<'a, PathSegmentIter> {
+    pub fn new(linked_shortcut_data: ShortcutData, shortcut_path_segments: PathSegmentIter) -> Self {
+        SegmentAggregator {
+            shortcut_path_segments: shortcut_path_segments.peekable(),
+            merged_path_segments: Vec::new(),
+            merged_atf_segments: Vec::new(),
+            linked_shortcut_data,
+        }
+    }
+
     pub fn integrate_segment(&mut self, segment: BetterSegment) {
         match self.merged_atf_segments.last_mut() {
             Some(prev_segment) => {
@@ -171,11 +181,15 @@ impl<'a> SegmentAggregator<'a> {
             },
         }
     }
+
+    pub fn into_merged_path_segments(self) -> Vec<(Timestamp, ShortcutData)> {
+        self.merged_path_segments
+    }
 }
 
-pub(super) struct CooccuringSegIter<SegmentIter: Iterator<Item = MATSeg>, LinkedSegIter: Iterator<Item = MATSeg>> {
-    pub shortcut_iter: Peekable<SegmentIter>,
-    pub linked_iter: Peekable<LinkedSegIter>
+struct CooccuringSegIter<SegmentIter: Iterator<Item = MATSeg>, LinkedSegIter: Iterator<Item = MATSeg>> {
+    shortcut_iter: Peekable<SegmentIter>,
+    linked_iter: Peekable<LinkedSegIter>
 }
 
 impl<'a, SegmentIter: Iterator<Item = MATSeg>, LinkedSegIter: Iterator<Item = MATSeg>> Iterator for CooccuringSegIter<SegmentIter, LinkedSegIter> {
