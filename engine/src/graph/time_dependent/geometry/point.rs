@@ -17,19 +17,6 @@ impl TTIpp {
     }
 }
 
-impl Sub for TTIpp {
-    type Output = Point;
-
-    fn sub(self, other: Self) -> Self::Output {
-        Point { x: i64::from(self.at) - i64::from(other.at), y: i64::from(self.val) - i64::from(other.val) }
-    }
-}
-
-#[derive(Debug)]
-pub struct Point {
-    pub x: i64, pub y: i64
-}
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ATIpp {
     pub at: Timestamp,
@@ -55,5 +42,18 @@ impl ATIpp {
     pub fn shift(&mut self) {
         self.at += period();
         self.val += period();
+    }
+}
+
+#[derive(Debug)]
+pub struct Point {
+    pub x: i64, pub y: i64
+}
+
+impl Sub for ATIpp {
+    type Output = Point;
+
+    fn sub(self, other: Self) -> Self::Output {
+        Point { x: i64::from(self.at) - i64::from(other.at), y: i64::from(self.val) - i64::from(other.val) }
     }
 }

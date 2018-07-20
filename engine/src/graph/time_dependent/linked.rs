@@ -1,4 +1,5 @@
 use super::*;
+use ::math::*;
 use std::iter::Peekable;
 
 #[derive(Debug, Clone, Copy)]
@@ -136,41 +137,26 @@ fn link_segments(first_segment: &MATSeg, second_segment: &MATSeg) -> MATSeg {
     MATSeg::new(line, start_of_range..end_of_range)
 }
 
-use ::math::*;
 
 fn link_monotone(first_line: &MonotoneLine<ATIpp>, second_line: &MonotoneLine<ATIpp>, _min_x: Timestamp) -> MonotoneLine<ATIpp> {
-    // println!("f {:?}", first_line);
-    // println!("g {:?}", second_line);
-    // calc linked steigung
     let linked_delta_x = i64::from(first_line.delta_x()) * i64::from(second_line.delta_x());
     let linked_delta_y = i64::from(first_line.delta_y()) * i64::from(second_line.delta_y());
-
-    // println!("{}y/{}x", linked_delta_y, linked_delta_x);
 
     let rest_first_term = i64::from(first_line.line().from.at) * linked_delta_y;
     let rest_second_term = i64::from(second_line.line().from.at) * i64::from(second_line.delta_y()) * i64::from(first_line.delta_x());
     let rest_third_term = i64::from(first_line.line().from.val) * i64::from(second_line.delta_y()) * i64::from(first_line.delta_x());
     let rest_fourth_term = i64::from(second_line.line().from.val) * linked_delta_x;
     let rest = rest_first_term + rest_second_term - rest_third_term - rest_fourth_term;
-    // println!("rest: {}", rest);
     let result = solve_linear_congruence(linked_delta_y as i64, rest, linked_delta_x as i64).expect("🤯 math is broken");
-
-    // println!("{:?}", result);
 
     let min_x = (rest + linked_delta_y - 1) / linked_delta_y;
     let first_at = max(result.solution, result.solution + (min_x - result.solution + result.modulus as i64 - 1) / result.modulus as i64 * result.modulus as i64);
 
-    // println!("{:?}", min_x);
-    // println!("{:?}", first_at);
-
     let first_val = (linked_delta_y * first_at - rest) / linked_delta_x;
-    // println!("{:?}", first_val);
     debug_assert_eq!((linked_delta_y * first_at - rest) % linked_delta_x, 0);
     let second_at = first_at + result.modulus as i64;
     let second_val = (linked_delta_y * second_at - rest) / linked_delta_x;
     debug_assert_eq!((linked_delta_y * second_at - rest) % linked_delta_x, 0);
-
-    // println!("{:?}", Line::new(ATIpp::new(first_at as Timestamp, first_val as Timestamp), ATIpp::new(second_at as Timestamp, second_val as Timestamp)));
 
     debug_assert!(first_at >= 0);
     debug_assert!(first_val >= first_at);
@@ -200,36 +186,44 @@ mod tests {
         });
     }
 
-    // #[test]
-    // fn test_linking_one_static_one_var_segments() {
-    //     run_test_with_periodicity(10, || {
-    //         assert_eq!(link_segments(&TTFSeg::from_point_tuples((0, 2), (5, 2)), &TTFSeg::from_point_tuples((2, 2), (7, 3))), TTFSeg::from_point_tuples((0, 4), (5, 5)));
-    //         assert_eq!(link_segments(&TTFSeg::from_point_tuples((0, 2), (5, 3)), &TTFSeg::from_point_tuples((2, 2), (8, 2))), TTFSeg::from_point_tuples((0, 4), (5, 5)));
-    //     });
-    // }
+    #[test]
+    fn test_linking_one_static_one_var_segments() {
+        run_test_with_periodicity(10, || {
+            assert_eq!(link_segments(&MATSeg::from_point_tuples((0, 2), (5, 7)), &MATSeg::from_point_tuples((2, 4), (7, 10))),
+                MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 4), ATIpp::new(5, 10))), 0..5));
+            assert_eq!(link_segments(&MATSeg::from_point_tuples((0, 2), (5, 8)), &MATSeg::from_point_tuples((2, 4), (8, 10))),
+                MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 4), ATIpp::new(5, 10))), 0..5));
+        });
+    }
 
-    // #[test]
-    // fn test_linking_non_fitting_length_segments() {
-    //     run_test_with_periodicity(10, || {
-    //         for s in 0..10 {
-    //             let linked = link_segments(&TTFSeg::from_point_tuples((s, 2), ((s + 5) % 10 , 2)), &TTFSeg::from_point_tuples(((s + 2) % 10, 2), ((s + 6) % 10, 3)));
-    //             let expect = TTFSeg::from_point_tuples((s, 4), ((s + 4) % 10, 5));
-    //             assert!(linked.is_equivalent_to(&expect), "Got: {:?}\nExpected: {:?}", linked, expect);
-    //             let linked = link_segments(&TTFSeg::from_point_tuples((s, 2), ((s + 4) % 10 , 2)), &TTFSeg::from_point_tuples(((s + 3) % 10, 2), ((s + 5) % 10, 3)));
-    //             let expect = TTFSeg::from_point_tuples(((s + 1) % 10, 4), ((s + 3) % 10, 5));
-    //             assert!(linked.is_equivalent_to(&expect), "Got: {:?}\nExpected: {:?}", linked, expect);
-    //         }
-    //     });
-    // }
+    #[test]
+    fn test_linking_non_fitting_length_segments() {
+        run_test_with_periodicity(10, || {
+            for s in 0..10 {
+                let linked = link_segments(
+                    &MATSeg::from_point_tuples((s, s+2), (s+5, s+5+2)),
+                    &MATSeg::from_point_tuples((s+2, s+2+2), (s+6, s+6+3)));
+                let expect = MATSeg::from_point_tuples((s, s+4), (s+4, s+4+5));
+                assert!(linked.is_equivalent_to(&expect), "Not equivalent!\nGot:      {:?}\nExpected: {:?}", linked, expect);
 
-    // #[test]
-    // fn test_linking_different_slopes() {
-    //     run_test_with_periodicity(10, || {
-    //         assert_eq!(
-    //             link_segments(&Segment { line: Line { from: TTIpp::new(0, 2), to: TTIpp::new(4, 4) }, valid: Range { start: 1, end: 3 } }, &Segment { line: Line { from: TTIpp::new(2, 2), to: TTIpp::new(8, 1) }, valid: Range { start: 3, end: 7 } }),
-    //             Segment { line: Line { from: TTIpp::new(0, 4), to: TTIpp::new(4, 5) }, valid: Range { start: 1, end: 3 } });
-    //     });
-    // }
+                let linked = link_segments(
+                    &MATSeg::from_point_tuples((s, s+2), (s+4, s+4+2)),
+                    &MATSeg::from_point_tuples((s+3, s+3+2), (s+5, s+5+3)));
+                let expect = MATSeg::from_point_tuples((s+1, s+1+4), (s+3, s+3+5));
+                assert!(linked.is_equivalent_to(&expect), "Not equivalent!\nGot:      {:?}\nExpected: {:?}", linked, expect);
+            }
+        });
+    }
+
+    #[test]
+    fn test_linking_different_slopes() {
+        run_test_with_periodicity(10, || {
+            assert_eq!(link_segments(
+                    &MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 2), ATIpp::new(4, 8))), 1..3),
+                    &MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(2, 4), ATIpp::new(8, 9))), 3..7)),
+                MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 4), ATIpp::new(4, 9))), 1..3));
+        });
+    }
 
     #[test]
     fn test_bounds() {

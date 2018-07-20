@@ -20,22 +20,6 @@ impl TTFSeg {
         TTFSeg::new(Line { from: TTIpp::new(from_at, from_val), to: TTIpp::new(to_at, to_val) }, from_at..to_at)
     }
 
-    #[cfg(test)]
-    pub fn is_equivalent_to(&self, other: &Self) -> bool {
-        if self == other { return true }
-        if self.valid != other.valid { return false }
-        let self_line = self.line.clone().into_monotone_tt_line();
-        let other_line = other.line.clone().into_monotone_tt_line();
-        if self_line.delta_x() * other_line.delta_y() != self_line.delta_y() * other_line.delta_x()  { return false }
-        let delta = if self.line.from != other.line.from {
-            self.line.from - other.line.from
-        } else {
-            self.line.to - other.line.to
-        };
-        if delta.x * i64::from(self_line.delta_y()) != delta.y * i64::from(self_line.delta_x()) { return false }
-        true
-    }
-
     pub fn into_monotone_at_segment(self) -> Segment<MonotoneLine<ATIpp>> {
         let Segment { line, mut valid } = self;
         let line = line.into_monotone_at_line();
@@ -88,6 +72,19 @@ impl MATSeg {
 
     pub fn line(&self) -> &Line<ATIpp> {
         self.line.line()
+    }
+
+    #[cfg(test)]
+    pub fn is_equivalent_to(&self, other: &Self) -> bool {
+        if self == other { return true }
+        if self.valid != other.valid { return false }
+        if self.line.delta_x() * other.line.delta_y() != self.line.delta_y() * other.line.delta_x() { return false }
+        let delta = if self.line().from == other.line().from {
+            self.line().to - other.line().to
+        } else {
+            self.line().from - other.line().from
+        };
+        return delta.x * i64::from(self.line.delta_y()) == delta.y * i64::from(self.line.delta_x())
     }
 }
 
