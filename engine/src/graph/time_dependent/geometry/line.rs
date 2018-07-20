@@ -12,34 +12,6 @@ impl<Point> Line<Point> {
     }
 }
 
-impl Line<TTIpp> {
-    pub fn into_monotone_tt_line(self) -> MonotoneLine<TTIpp> {
-        let Line { from, mut to, .. } = self;
-        if to.at < from.at {
-            to.at += period();
-        }
-        MonotoneLine(Line::new(from, to))
-    }
-
-    pub fn into_monotone_at_line(self) -> MonotoneLine<ATIpp> {
-        let Line { from, mut to, .. } = self;
-        if to.at < from.at {
-            to.at += period();
-        }
-        MonotoneLine(Line::new(ATIpp::new(from.at, from.at + from.val), ATIpp::new(to.at, to.at + to.val)))
-    }
-
-    #[cfg(test)]
-    fn delta_x(&self) -> Weight {
-        self.to.at - self.from.at
-    }
-
-    #[cfg(test)]
-    fn delta_y(&self) -> Weight {
-        self.to.val - self.from.val
-    }
-}
-
 impl Line<ATIpp> {
     fn delta_x(&self) -> Weight {
         self.to.at - self.from.at
@@ -61,10 +33,6 @@ impl Line<ATIpp> {
 pub struct MonotoneLine<Point>(Line<Point>);
 
 impl<Point> MonotoneLine<Point> {
-    pub fn into_line(self) -> Line<Point> {
-        self.0
-    }
-
     pub fn line(&self) -> &Line<Point> {
         &self.0
     }
@@ -92,26 +60,6 @@ impl MonotoneLine<TTIpp> {
     pub fn into_monotone_at_line(self) -> MonotoneLine<ATIpp> {
         let MonotoneLine(Line { from, to, .. }) = self;
         MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(from.at, from.at + from.val), ATIpp::new(to.at, to.at + to.val)))
-    }
-
-    // TODO WTF?
-    pub fn apply_periodicity(self, period: Timestamp) -> Line<TTIpp> {
-        let MonotoneLine(Line { mut from, mut to }) = self;
-        from.at %= period;
-        from.val %= period;
-        to.at %= period;
-        to.val %= period;
-        Line { from, to }
-    }
-
-    #[cfg(test)]
-    pub fn delta_x(&self) -> Weight {
-        self.0.delta_x()
-    }
-
-    #[cfg(test)]
-    pub fn delta_y(&self) -> Weight {
-        self.0.delta_y()
     }
 }
 
@@ -152,13 +100,6 @@ impl MonotoneLine<ATIpp> {
         self.0.delta_y()
     }
 
-    pub fn into_monotone_tt_line(self) -> MonotoneLine<TTIpp> {
-        let MonotoneLine(Line { from, to }) = self;
-        let from = from.into_ttipp();
-        let to = to.into_ttipp();
-        MonotoneLine(Line { from, to })
-    }
-
     pub fn shift(&mut self) {
         self.0.shift();
     }
@@ -196,20 +137,7 @@ impl MonotoneLine<ATIpp> {
 
 #[cfg(test)]
 mod tests {
-    use graph::time_dependent::run_test_with_periodicity;
     use super::*;
-
-    #[test]
-    fn test_tt_line_to_monotone_at_line() {
-        run_test_with_periodicity(10, || {
-            assert_eq!(Line { from: TTIpp::new(2, 2), to: TTIpp::new(4, 5) }.into_monotone_at_line(),
-                MonotoneLine(Line { from: ATIpp::new(2, 4), to: ATIpp::new(4, 9) }));
-            assert_eq!(Line { from: TTIpp::new(4, 5), to: TTIpp::new(2, 2) }.into_monotone_at_line(),
-                MonotoneLine(Line { from: ATIpp::new(4, 9), to: ATIpp::new(12, 14) }));
-            assert_eq!(Line { from: TTIpp::new(8, 3), to: TTIpp::new(2, 2) }.into_monotone_at_line(),
-                MonotoneLine(Line { from: ATIpp::new(8, 11), to: ATIpp::new(12, 14) }));
-        });
-    }
 
     #[test]
     fn test_inversion() {

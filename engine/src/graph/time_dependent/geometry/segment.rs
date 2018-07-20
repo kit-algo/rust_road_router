@@ -13,28 +13,10 @@ impl<LineType> Segment<LineType> {
     }
 }
 
-pub type TTFSeg = Segment<Line<TTIpp>>; // TODO always monotone
-
-impl TTFSeg {
-    pub fn from_point_tuples((from_at, from_val): (Timestamp, Weight), (to_at, to_val): (Timestamp, Weight)) -> Self {
-        TTFSeg::new(Line { from: TTIpp::new(from_at, from_val), to: TTIpp::new(to_at, to_val) }, from_at..to_at)
-    }
-
-    pub fn into_monotone_at_segment(self) -> Segment<MonotoneLine<ATIpp>> {
-        let Segment { line, mut valid } = self;
-        let line = line.into_monotone_at_line();
-        if valid.end < valid.start { // TODO <= ?
-            valid.end += period();
-        }
-        Segment { line, valid }
-    }
-
-
-}
-
 pub type MATSeg = Segment<MonotoneLine<ATIpp>>;
 
 impl MATSeg {
+    #[cfg(test)]
     pub fn from_point_tuples((from_at, from_val): (Timestamp, Weight), (to_at, to_val): (Timestamp, Weight)) -> Self {
         MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(from_at, from_val), ATIpp::new(to_at, to_val))), from_at..to_at)
     }
@@ -91,6 +73,7 @@ impl MATSeg {
 pub type PLFSeg = Segment<MonotoneLine<TTIpp>>;
 
 impl PLFSeg {
+    #[cfg(test)]
     pub fn from_point_tuples((from_at, from_val): (Timestamp, Weight), (to_at, to_val): (Timestamp, Weight)) -> Self {
         Segment { line: MonotoneLine::<TTIpp>::new(Line { from: TTIpp::new(from_at, from_val), to: TTIpp::new(to_at, to_val) }), valid: from_at..to_at }
     }

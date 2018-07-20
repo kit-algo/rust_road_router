@@ -11,10 +11,6 @@ impl TTIpp {
     pub fn new(at: Timestamp, val: Weight) -> TTIpp {
         TTIpp { at, val }
     }
-
-    pub fn as_tuple(self) -> (Timestamp, Weight) {
-        (self.at, self.val)
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -27,16 +23,6 @@ impl ATIpp {
     pub fn new(at: Timestamp, val: Weight) -> ATIpp {
         debug_assert!(val >= at);
         ATIpp { at, val }
-    }
-
-    pub fn into_ttipp(self) -> TTIpp {
-        let ATIpp { at, val } = self;
-        debug_assert!(at <= val);
-        TTIpp { at, val: val - at }
-    }
-
-    pub fn as_tuple(self) -> (Timestamp, Timestamp) {
-        (self.at, self.val)
     }
 
     pub fn shift(&mut self) {

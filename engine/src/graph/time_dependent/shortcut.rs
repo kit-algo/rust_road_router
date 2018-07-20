@@ -389,7 +389,6 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore]
     fn test_merging() {
         // run_test_with_periodicity(8, || {
         //     let graph = TDGraph::new(
