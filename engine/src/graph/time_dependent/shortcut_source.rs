@@ -51,17 +51,6 @@ impl ShortcutData {
         }
     }
 
-    pub(super) fn seg_iter<'a>(self, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = MATSeg> + 'a {
-        match self.down_arc.value() {
-            Some(down_shortcut_id) => {
-                ShortcutSourceSegmentIter::Shortcut(Box::new(Linked::new(down_shortcut_id, self.up_arc).seg_iter(range, shortcut_graph)))
-            },
-            None => {
-                ShortcutSourceSegmentIter::OriginalEdge(shortcut_graph.original_graph().travel_time_function(self.up_arc).seg_iter(range))
-            },
-        }
-    }
-
     pub fn bounds(self, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {

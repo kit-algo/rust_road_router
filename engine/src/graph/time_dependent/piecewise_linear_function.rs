@@ -70,23 +70,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
         })
     }
 
-    pub(super) fn seg_iter(&self, range: WrappingRange) -> impl Iterator<Item = PLFSeg> + 'a {
-        let (first_index_range, second_index_range) = self.departure_time.index_ranges(&range, |&dt| dt);
-        let (first_range, mut second_range) = range.monotonize().split(period());
-        second_range.start -= period();
-        second_range.end -= period();
-
-        let first_iter = self.departure_time[first_index_range.clone()].windows(2).zip(self.travel_time[first_index_range].windows(2))
-            .map(move |(dts, tts)| {
-                PLFSeg { line: MonotoneLine::<TTIpp>::new(Line { from: TTIpp::new(dts[0], tts[0]), to: TTIpp::new(dts[1], tts[1]) }), valid: (dts[0]..dts[1]).intersection(&first_range) }
-            });
-        let second_iter = self.departure_time[second_index_range.clone()].windows(2).zip(self.travel_time[second_index_range].windows(2))
-            .map(move |(dts, tts)| {
-                PLFSeg { line: MonotoneLine::<TTIpp>::new(Line { from: TTIpp::new(dts[0], tts[0]), to: TTIpp::new(dts[1], tts[1]) }), valid: (dts[0]..dts[1]).intersection(&second_range) }
-            });
-        first_iter.chain(second_iter)
-    }
-
     pub fn debug_to_s(&self, indent: usize) -> String {
         let mut s = String::from("PLF: ");
         for data in self.departure_time.iter().zip(self.travel_time.iter()) {
@@ -155,23 +138,8 @@ mod tests {
             let departure_time = vec![0, 5, 14, 20, 24];
             let travel_time =    vec![2, 1, 2,  1,  2];
             let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time);
-            let all_segments: Vec<PLFSeg> = ttf.seg_iter(WrappingRange::new(0..0)).collect();
+            let all_segments: Vec<PLFSeg> = ttf.non_wrapping_seg_iter(0..24).collect();
             assert_eq!(all_segments, vec![PLFSeg::from_point_tuples((0,2), (5,1)), PLFSeg::from_point_tuples((5,1), (14,2)), PLFSeg::from_point_tuples((14,2), (20,1)), PLFSeg::from_point_tuples((20,1), (24,2))]);
-        });
-    }
-
-    #[test]
-    fn test_wrapping_range_seg_iter() {
-        run_test_with_periodicity(24, || {
-            let departure_time = vec![0, 5, 14, 20, 24];
-            let travel_time =    vec![2, 1, 2,  1,  2];
-            let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time);
-            let all_ipps: Vec<PLFSeg> = ttf.seg_iter(WrappingRange::new(17..17)).collect();
-            let mut first_segment = PLFSeg::from_point_tuples((14,2), (20,1));
-            first_segment.valid.start = 17;
-            let mut last_segment = PLFSeg::from_point_tuples((14,2), (20,1));
-            last_segment.valid.end = 17;
-            assert_eq!(all_ipps, vec![first_segment, PLFSeg::from_point_tuples((20,1), (24,2)), PLFSeg::from_point_tuples((0,2), (5,1)), PLFSeg::from_point_tuples((5,1), (14,2)), last_segment]);
         });
     }
 
@@ -181,7 +149,7 @@ mod tests {
             let departure_time = vec![0, 5, 14, 20, 24];
             let travel_time =    vec![2, 1, 2,  1,  2];
             let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time);
-            let all_ipps: Vec<PLFSeg> = ttf.seg_iter(WrappingRange::new(10..21)).collect();
+            let all_ipps: Vec<PLFSeg> = ttf.non_wrapping_seg_iter(10..21).collect();
             let mut first_segment = PLFSeg::from_point_tuples((5,1), (14,2));
             first_segment.valid.start = 10;
             let mut last_segment = PLFSeg::from_point_tuples((20,1), (24,2));
@@ -196,15 +164,18 @@ mod tests {
             let departure_time = vec![0, 24];
             let travel_time =    vec![2, 2];
             let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time);
-            let all_ipps: Vec<PLFSeg> = ttf.seg_iter(WrappingRange::new(0..0)).collect();
+            let all_ipps: Vec<PLFSeg> = ttf.non_wrapping_seg_iter(0..24).collect();
             assert_eq!(all_ipps, vec![PLFSeg::from_point_tuples((0, 2), (24, 2))]);
 
-            let all_ipps: Vec<PLFSeg> = ttf.seg_iter(WrappingRange::new(10..10)).collect();
+            let all_ipps: Vec<PLFSeg> = ttf.non_wrapping_seg_iter(10..24).collect();
             let mut seg = PLFSeg::from_point_tuples((0, 2), (24, 2));
-            let mut seg2 = seg.clone();
             seg.valid.start = 10;
-            seg2.valid.end = 10;
-            assert_eq!(all_ipps, vec![seg, seg2]);
+            assert_eq!(all_ipps, vec![seg]);
+
+            let all_ipps: Vec<PLFSeg> = ttf.non_wrapping_seg_iter(0..10).collect();
+            let mut seg = PLFSeg::from_point_tuples((0, 2), (24, 2));
+            seg.valid.end = 10;
+            assert_eq!(all_ipps, vec![seg]);
         });
     }
 }

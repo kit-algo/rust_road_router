@@ -40,17 +40,6 @@ impl Linked {
         SegmentIter { first_iter, second_iter }
     }
 
-    pub(super) fn seg_iter<'a>(self, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = MATSeg> + 'a {
-        let first_edge = shortcut_graph.get_downward(self.first);
-        let second_edge = shortcut_graph.get_upward(self.second);
-
-        let mut first_iter = first_edge.seg_iter(range, shortcut_graph).peekable();
-        let start_of_second = first_iter.peek().unwrap().start_of_valid_at_val(); // already wrapped
-        let second_iter = second_edge.seg_iter(WrappingRange::new(Range { start: start_of_second, end: start_of_second }), shortcut_graph).peekable();
-
-        SegmentIter { first_iter, second_iter }
-    }
-
     pub fn as_shortcut_data(self) -> ShortcutData {
         ShortcutData::new(ShortcutSource::Shortcut(self.first, self.second))
     }

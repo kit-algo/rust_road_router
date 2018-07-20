@@ -148,16 +148,16 @@ impl Shortcut {
             .fold((INFINITY, 0), |(acc_min, acc_max), (seg_min, seg_max)| (min(acc_min, seg_min), max(acc_max, seg_max)))
     }
 
-    pub fn num_segments(&self) -> usize {
+    pub fn num_path_segments(&self) -> usize {
         match self.data {
             ShortcutPaths::None => 0,
             ShortcutPaths::One(_) => 1,
-            ShortcutPaths::Multi(ref data) => data.len()
+            ShortcutPaths::Multi(ref data) => data.len() - 1
         }
     }
 
     pub fn is_valid_path(&self) -> bool {
-        self.num_segments() > 0
+        self.num_path_segments() > 0
     }
 
     pub fn cache_ipps(&mut self, _shortcut_graph: &ShortcutGraph) {
@@ -170,20 +170,6 @@ impl Shortcut {
 
     pub fn clear_cache(&mut self) {
         self.cache = None
-    }
-
-    fn segment_range(&self, segment: usize) -> Range<Timestamp> {
-        match self.data {
-            ShortcutPaths::None => panic!("there are no segment ranges on an empty shortcut"),
-            ShortcutPaths::One(_) => {
-                debug_assert_eq!(segment, 0);
-                Range { start: 0, end: 0 }
-            },
-            ShortcutPaths::Multi(ref data) => {
-                let next_index = (segment + 1) % data.len();
-                Range { start: data[segment].0, end: data[next_index].0 }
-            }
-        }
     }
 
     pub fn debug_to_s<'a>(&self, shortcut_graph: &'a ShortcutGraph, indent: usize) -> String {
