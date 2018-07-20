@@ -101,48 +101,10 @@ impl<'a, Shortcut1SegIter: Iterator<Item = MATSeg>, Shortcut2SegIter: Iterator<I
     }
 }
 
-fn invert(first_ipp: (Timestamp, Timestamp), second_ipp: (Timestamp, Timestamp), target_time: Timestamp) -> Option<Timestamp> {
-    if first_ipp.1 == second_ipp.1 {
-        return Some((target_time + period() - first_ipp.1) % period())
-    }
-    let first_ipp = (first_ipp.0, first_ipp.0 + first_ipp.1);
-    let second_ipp = if second_ipp.0 < first_ipp.0 {
-        (second_ipp.0 + period(), second_ipp.0 + period() + second_ipp.1)
-    } else {
-        (second_ipp.0, second_ipp.0 + second_ipp.1)
-    };
-    let target_time = if target_time < first_ipp.1 { target_time + period() } else { target_time };
-    if target_time < first_ipp.1 {
-        println!("{:?} {:?} {}", first_ipp, second_ipp, target_time);
-        return None
-    }
-
-    let delta_x = second_ipp.0 - first_ipp.0;
-    let delta_x = u64::from(delta_x);
-    let delta_y = second_ipp.1 - first_ipp.1;
-    let delta_y = u64::from(delta_y);
-
-    if delta_y == 0 {
-        if first_ipp.1 == target_time {
-            return Some(first_ipp.0)
-        } else {
-            return None
-        }
-    }
-
-    let delta_y_to_target = target_time - first_ipp.1;
-    let delta_x_to_target = (delta_y - 1 + u64::from(delta_y_to_target) * delta_x) / delta_y;
-
-    Some((first_ipp.0 + delta_x_to_target as u32) % period())
-}
-
 fn link_segments(first_segment: &MATSeg, second_segment: &MATSeg) -> MATSeg {
     let mut second_segment = second_segment.clone();
-    // TODO only invert if necessary, check with result range of first segment
     // TODO one or both full range
-    // TODO first slope -1 / constant arrival time
-    // TODO fix calculation of valid range (thing of wrapping)
-    let start_of_range = if let Some(start_of_second) = invert(first_segment.line().from.as_tuple(), first_segment.line().to.as_tuple(), second_segment.valid.start) {
+    let start_of_range = if let Some(start_of_second) = first_segment.line.invert(second_segment.valid.start) {
         if WrappingRange::new(first_segment.valid.clone()).contains(start_of_second) {
             start_of_second
         } else {
@@ -154,7 +116,7 @@ fn link_segments(first_segment: &MATSeg, second_segment: &MATSeg) -> MATSeg {
     };
 
 
-    let end_of_range = if let Some(end_of_second) = invert(first_segment.line().from.as_tuple(), first_segment.line().to.as_tuple(), second_segment.valid.end) {
+    let end_of_range = if let Some(end_of_second) = first_segment.line.invert(second_segment.valid.end) {
         if WrappingRange::new(first_segment.valid.clone()).contains(end_of_second) {
             end_of_second
         } else {
@@ -234,15 +196,15 @@ fn link_monotone(first_line: &MonotoneLine<ATIpp>, second_line: &MonotoneLine<AT
 mod tests {
     use super::*;
 
-    // #[test]
-    // fn test_linking_static_segments() {
-    //     run_test_with_periodicity(10, || {
-    //         assert_eq!(link_segments(&TTFSeg::from_point_tuples((0, 2), (5, 2)), &TTFSeg::from_point_tuples((1, 2), (8, 2))),
-    //             Segment { line: Line { from: TTIpp::new(0, 4), to: TTIpp::new(1, 4) }, valid: Range { start: 0, end: 5 } });
-    //         assert_eq!(link_segments(&TTFSeg::from_point_tuples((1, 2), (6, 2)), &TTFSeg::from_point_tuples((2, 2), (9, 2))),
-    //             Segment { line: Line { from: TTIpp::new(0, 4), to: TTIpp::new(1, 4) }, valid: Range { start: 1, end: 6 } });
-    //     });
-    // }
+    #[test]
+    fn test_linking_static_segments() {
+        run_test_with_periodicity(10, || {
+            assert_eq!(link_segments(&MATSeg::from_point_tuples((1, 3), (4, 7)), &MATSeg::from_point_tuples((3, 5), (7, 9))),
+                MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(1, 5), ATIpp::new(4, 9))), 1..4));
+            assert_eq!(link_segments(&MATSeg::from_point_tuples((0, 1), (10, 11)), &MATSeg::from_point_tuples((0, 2), (10, 12))),
+                MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 3), ATIpp::new(10, 13))), 0..10));
+        });
+    }
 
     // #[test]
     // fn test_linking_one_static_one_var_segments() {
@@ -344,18 +306,6 @@ mod tests {
             let linked = Linked::new(1, 0);
 
             assert_eq!(linked.evaluate(1, &shortcut_graph), 4);
-        });
-    }
-
-    #[test]
-    fn test_inversion() {
-        run_test_with_periodicity(10, || {
-            assert_eq!(invert((0,1), (5,2), 1), Some(0));
-            assert_eq!(invert((0,1), (5,2), 3), Some(2));
-            assert_eq!(invert((0,2), (5,1), 2), Some(0));
-            assert_eq!(invert((0,2), (5,1), 3), Some(2));
-            assert_eq!(invert((0,1), (4,1), 3), Some(2));
-            assert_eq!(invert((9,1), (1,3), 2), Some(0));
         });
     }
 }

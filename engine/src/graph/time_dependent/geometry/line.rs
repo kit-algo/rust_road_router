@@ -133,6 +133,7 @@ impl MonotoneLine<ATIpp> {
         let relative_x = x - self.0.from.at;
         // TODO will round wrong for negative relative_x -> div_euc but expensive...
         let result = u64::from(self.0.from.val) + (u64::from(relative_x) * u64::from(delta_y) / u64::from(delta_x));
+        debug_assert!(result <= u64::from(INFINITY));
         result as Weight - x
     }
 
@@ -154,6 +155,35 @@ impl MonotoneLine<ATIpp> {
     pub fn shift(&mut self) {
         self.0.shift();
     }
+
+    // this method is used to map the validity range of the second segment
+    // into the departure time domain of the first segment
+    // it has to always round up:
+    // for start evaluating first at result round down yield a value before the start of valid
+    // for end evaluating first at result round down yield a value before the end and thus still inside the range, rounding up is the first value outside
+    // which is just what we need because the ranges are exclusive at the end
+    pub fn invert(&self, target_time: Timestamp) -> Option<Timestamp> {
+        let line = &self.0;
+        let delta_x = i64::from(self.delta_x());
+        let delta_y = i64::from(self.delta_y());
+
+        if delta_y == 0 {
+            if target_time == line.from.val {
+                return Some(line.from.at) // TODO indicate always!
+            } else {
+                return None
+            }
+        }
+
+        let delta_y_to_target = i64::from(target_time) - i64::from(line.from.val);
+        let delta_x_to_target = (delta_y - 1 + delta_y_to_target * delta_x).div_euc(delta_y); // TODO expansive!!!!
+        let result = i64::from(line.from.at) + delta_x_to_target;
+
+        debug_assert!(result >= 0);
+        debug_assert!(result <= i64::from(INFINITY));
+
+        Some(result as Timestamp)
+    }
 }
 
 
@@ -172,5 +202,19 @@ mod tests {
             assert_eq!(Line { from: TTIpp::new(8, 3), to: TTIpp::new(2, 2) }.into_monotone_at_line(),
                 MonotoneLine(Line { from: ATIpp::new(8, 11), to: ATIpp::new(12, 14) }));
         });
+    }
+
+    #[test]
+    fn test_inversion() {
+        assert_eq!(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 1), ATIpp::new(5, 7))).invert(1), Some(0));
+        assert_eq!(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 1), ATIpp::new(5, 7))).invert(3), Some(2));
+        assert_eq!(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 2), ATIpp::new(5, 6))).invert(2), Some(0));
+        assert_eq!(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 2), ATIpp::new(5, 6))).invert(3), Some(2));
+        assert_eq!(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 1), ATIpp::new(4, 5))).invert(3), Some(2));
+        assert_eq!(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(9, 10), ATIpp::new(11, 14))).invert(12), Some(10));
+        assert_eq!(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(9, 10), ATIpp::new(11, 14))).invert(13), Some(11));
+        assert_eq!(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(2, 4), ATIpp::new(3, 6))).invert(3), Some(2));
+        assert_eq!(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(2, 4), ATIpp::new(3, 6))).invert(2), Some(1));
+        assert_eq!(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(2, 4), ATIpp::new(3, 6))).invert(1), Some(1));
     }
 }
