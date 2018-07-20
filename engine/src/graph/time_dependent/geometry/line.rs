@@ -45,17 +45,17 @@ impl MonotoneLine<TTIpp> {
     }
 
     // TODO wrong results because rounding up for negative slopes
-    #[inline]
-    pub fn interpolate_tt(&self, x: Timestamp) -> Weight {
-        debug_assert!(self.0.from.at < self.0.to.at, "self: {:?}", self);
-        let delta_x = self.0.to.at - self.0.from.at;
-        let delta_y = i64::from(self.0.to.val) - i64::from(self.0.from.val);
-        let relative_x = i64::from(x) - i64::from(self.0.from.at);
-        let result = i64::from(self.0.from.val) + (relative_x * delta_y / i64::from(delta_x)); // TODO div_euc
-        debug_assert!(result >= 0);
-        debug_assert!(result <= i64::from(INFINITY));
-        result as Weight
-    }
+    // #[inline]
+    // pub fn interpolate_tt(&self, x: Timestamp) -> Weight {
+    //     debug_assert!(self.0.from.at < self.0.to.at, "self: {:?}", self);
+    //     let delta_x = self.0.to.at - self.0.from.at;
+    //     let delta_y = i64::from(self.0.to.val) - i64::from(self.0.from.val);
+    //     let relative_x = i64::from(x) - i64::from(self.0.from.at);
+    //     let result = i64::from(self.0.from.val) + (relative_x * delta_y / i64::from(delta_x)); // TODO div_euc
+    //     debug_assert!(result >= 0);
+    //     debug_assert!(result <= i64::from(INFINITY));
+    //     result as Weight
+    // }
 
     pub fn into_monotone_at_line(self) -> MonotoneLine<ATIpp> {
         let MonotoneLine(Line { from, to, .. }) = self;
