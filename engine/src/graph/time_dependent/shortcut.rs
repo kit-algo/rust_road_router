@@ -1,8 +1,9 @@
 use super::*;
 use std::slice::Iter as SliceIter;
-use std::iter::{once, Once};
+use std::iter::Once;
 
 use math::RangeExtensions;
+use ::sorted_search_slice_ext::*;
 
 #[derive(Debug, Clone)]
 pub struct Shortcut {

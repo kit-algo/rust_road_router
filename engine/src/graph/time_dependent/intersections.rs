@@ -65,7 +65,6 @@ pub(super) enum BetterSegment {
 use math::RangeExtensions;
 
 pub(super) fn merge(iter: impl Iterator<Item = (MATSeg, MATSeg)>) -> impl Iterator<Item = BetterSegment> {
-    use std::iter::once;
     use std::cmp::Ordering;
 
     iter.flat_map(|(mut shortcut_seg, mut linked_seg)| {

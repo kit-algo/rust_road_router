@@ -1,6 +1,5 @@
 use super::*;
 use ::math::*;
-use std::iter::Peekable;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Linked {

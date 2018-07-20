@@ -4,9 +4,6 @@ use std::{
     cmp::{min, max}
 };
 
-use ::sorted_search_slice_ext::SortedSearchSliceExt;
-use ::sorted_search_slice_ext::FullPeriodTimestampSliceExt;
-
 mod piecewise_linear_function;
 use self::piecewise_linear_function::*;
 
