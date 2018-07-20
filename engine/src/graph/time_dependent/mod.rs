@@ -25,8 +25,8 @@ pub use self::graph::Graph as TDGraph;
 pub mod shortcut_graph;
 pub use self::shortcut_graph::ShortcutGraph;
 
-mod intersections;
-use self::intersections::*;
+mod merge;
+use self::merge::*;
 
 mod geometry;
 use self::geometry::*;

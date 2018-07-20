@@ -56,6 +56,44 @@ impl MATSeg {
         self.line.line()
     }
 
+    pub fn intersect(&self, other: &MATSeg) -> Option<Timestamp> {
+        let x1 = i128::from(self.line().from.at);
+        let x2 = i128::from(self.line().to.at);
+        let x3 = i128::from(other.line().from.at);
+        let x4 = i128::from(other.line().to.at);
+        let y1 = i128::from(self.line().from.val);
+        let y2 = i128::from(self.line().to.val);
+        let y3 = i128::from(other.line().from.val);
+        let y4 = i128::from(other.line().to.val);
+
+        let numerator = (x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4);
+        let denominator = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+
+        if denominator == 0 {
+            return None;
+        }
+
+        let result = if numerator >= 0 {
+            (numerator + denominator - 1) / denominator
+        } else {
+            (numerator + denominator + 1) / denominator
+        };
+        let unrounded = numerator / denominator;
+
+        if result >= i128::from(INFINITY) {
+            return None
+        }
+
+        let result = result as Timestamp;
+        let unrounded = unrounded as Timestamp;
+
+        if !self.valid.contains(&result) || !other.valid.contains(&result) || unrounded < self.valid.start || unrounded < other.valid.start {
+            return None
+        }
+
+        Some(result as Timestamp)
+    }
+
     #[cfg(test)]
     pub fn is_equivalent_to(&self, other: &Self) -> bool {
         if self == other { return true }
@@ -80,5 +118,21 @@ impl PLFSeg {
 
     pub fn into_atfseg(self) -> MATSeg {
         MATSeg::new(self.line.into_monotone_at_line(), self.valid)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_intersection() {
+        assert_eq!(MATSeg::from_point_tuples((0,0), (5,5))    .intersect(&MATSeg::from_point_tuples((0,8), (8,16))),     None);
+        assert_eq!(MATSeg::from_point_tuples((0,0), (5,5))    .intersect(&MATSeg::from_point_tuples((0,8), (8,15))),     None);
+        assert_eq!(MATSeg::from_point_tuples((0,0), (2,4))    .intersect(&MATSeg::from_point_tuples((0,2), (2,2))),      Some(1));
+        assert_eq!(MATSeg::from_point_tuples((0,0), (3,5))    .intersect(&MATSeg::from_point_tuples((0,2), (3,3))),      Some(2));
+        assert_eq!(MATSeg::from_point_tuples((0,2), (3,3))    .intersect(&MATSeg::from_point_tuples((0,0), (3,5))),      Some(2));
+        assert_eq!(MATSeg::from_point_tuples((7,7+8), (9,9+6)).intersect(&MATSeg::from_point_tuples((6,8), (16,16+12))), None);
+        assert_eq!(MATSeg::from_point_tuples((9,9+6), (10,20)).intersect(&MATSeg::from_point_tuples((6,8), (16,16+12))), None);
     }
 }
