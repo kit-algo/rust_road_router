@@ -44,8 +44,7 @@ impl Linked {
         let second_edge = shortcut_graph.get_upward(self.second);
 
         let mut first_iter = first_edge.seg_iter(range, shortcut_graph).peekable();
-        let start_of_second = first_iter.peek().unwrap().start_of_valid_at_val();
-        let start_of_second = start_of_second % period();
+        let start_of_second = first_iter.peek().unwrap().start_of_valid_at_val(); // already wrapped
         let second_iter = second_edge.seg_iter(WrappingRange::new(Range { start: start_of_second, end: start_of_second }), shortcut_graph).peekable();
 
         SegmentIter { first_iter, second_iter }
@@ -103,9 +102,15 @@ impl<'a, Shortcut1SegIter: Iterator<Item = MATSeg>, Shortcut2SegIter: Iterator<I
 
 fn link_segments(first_segment: &MATSeg, second_segment: &MATSeg) -> MATSeg {
     let mut second_segment = second_segment.clone();
-    // TODO one or both full range
+    let first_value_range = first_segment.valid_value_range();
+    let needs_shifting = first_value_range.is_intersection_empty(&second_segment.valid);
+    if needs_shifting {
+        second_segment.shift();
+    }
+    debug_assert!(!first_value_range.is_intersection_empty(&second_segment.valid));
+
     let start_of_range = if let Some(start_of_second) = first_segment.line.invert(second_segment.valid.start) {
-        if WrappingRange::new(first_segment.valid.clone()).contains(start_of_second) {
+        if first_segment.valid.contains(&start_of_second) {
             start_of_second
         } else {
             first_segment.valid.start
@@ -115,9 +120,8 @@ fn link_segments(first_segment: &MATSeg, second_segment: &MATSeg) -> MATSeg {
         first_segment.valid.start
     };
 
-
     let end_of_range = if let Some(end_of_second) = first_segment.line.invert(second_segment.valid.end) {
-        if WrappingRange::new(first_segment.valid.clone()).contains(end_of_second) {
+        if first_segment.valid.contains(&end_of_second) {
             end_of_second
         } else {
             first_segment.valid.end
@@ -127,28 +131,14 @@ fn link_segments(first_segment: &MATSeg, second_segment: &MATSeg) -> MATSeg {
         first_segment.valid.end
     };
 
-    // println!("{:?}", first_segment);
-    // println!("{:?}", second_segment);
-
-    let first_value_range = first_segment.valid_value_range();
-    // println!("{:?}", first_value_range);
-    let needs_shifting = first_value_range.is_intersection_empty(&second_segment.valid);
-    if needs_shifting {
-        // println!("shifting");
-        second_segment.shift();
-        // println!("{:?}", second_segment);
-    }
-    debug_assert!(!first_value_range.is_intersection_empty(&second_segment.valid));
-
     let line = link_monotone(&first_segment.line, &second_segment.line, if needs_shifting { first_segment.line.line().from.at } else { 0 });
 
-    // println!("before periodicity {:?}", line);
     MATSeg::new(line, start_of_range..end_of_range)
 }
 
 use ::math::*;
 
-fn link_monotone(first_line: &MonotoneLine<ATIpp>, second_line: &MonotoneLine<ATIpp>, min_x: Timestamp) -> MonotoneLine<ATIpp> {
+fn link_monotone(first_line: &MonotoneLine<ATIpp>, second_line: &MonotoneLine<ATIpp>, _min_x: Timestamp) -> MonotoneLine<ATIpp> {
     // println!("f {:?}", first_line);
     // println!("g {:?}", second_line);
     // calc linked steigung
@@ -167,7 +157,7 @@ fn link_monotone(first_line: &MonotoneLine<ATIpp>, second_line: &MonotoneLine<AT
 
     // println!("{:?}", result);
 
-    let min_x = max(i64::from(min_x), (rest + linked_delta_y - 1) / linked_delta_y);
+    let min_x = (rest + linked_delta_y - 1) / linked_delta_y;
     let first_at = max(result.solution, result.solution + (min_x - result.solution + result.modulus as i64 - 1) / result.modulus as i64 * result.modulus as i64);
 
     // println!("{:?}", min_x);
@@ -201,8 +191,12 @@ mod tests {
         run_test_with_periodicity(10, || {
             assert_eq!(link_segments(&MATSeg::from_point_tuples((1, 3), (4, 7)), &MATSeg::from_point_tuples((3, 5), (7, 9))),
                 MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(1, 5), ATIpp::new(4, 9))), 1..4));
-            assert_eq!(link_segments(&MATSeg::from_point_tuples((0, 1), (10, 11)), &MATSeg::from_point_tuples((0, 2), (10, 12))),
-                MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 3), ATIpp::new(10, 13))), 0..10));
+            assert_eq!(link_segments(&MATSeg::from_point_tuples((0, 1), (10, 11)), &MATSeg::from_point_tuples((1, 3), (10, 12))),
+                MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 3), ATIpp::new(1, 4))), 0..9));
+            assert_eq!(link_segments(&MATSeg::from_point_tuples((0, 1), (10, 11)), &MATSeg::from_point_tuples((0, 2), (1, 3))),
+                MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 3), ATIpp::new(1, 4))), 9..10));
+            assert_eq!(link_segments(&MATSeg::from_point_tuples((9, 10), (10, 11)), &MATSeg::from_point_tuples((0, 2), (1, 3))),
+                MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 3), ATIpp::new(1, 4))), 9..10));
         });
     }
 
