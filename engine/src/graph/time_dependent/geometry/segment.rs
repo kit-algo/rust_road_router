@@ -21,8 +21,9 @@ impl MATSeg {
         MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(from_at, from_val), ATIpp::new(to_at, to_val))), from_at..to_at)
     }
 
-    pub fn valid_value_range(&self) -> Range<Timestamp> {
-        self.line.interpolate_at(self.valid.start)..self.line.interpolate_at(self.valid.end)
+    pub fn valid_value_range(&self, staring_at: Timestamp) -> Range<Timestamp> {
+        debug_assert!(self.valid.contains(&staring_at));
+        self.line.interpolate_at(staring_at)..self.line.interpolate_at(self.valid.end)
     }
 
     pub fn shift(&mut self) {
