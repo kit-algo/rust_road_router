@@ -40,7 +40,8 @@ impl MATSeg {
     }
 
     pub fn eval(&self, x: Timestamp) -> Weight {
-        debug_assert!(self.valid.contains(&x));
+        debug_assert!(self.valid.start <= x);
+        debug_assert!(self.valid.end >= x);
         self.line.interpolate_tt(x)
     }
 
