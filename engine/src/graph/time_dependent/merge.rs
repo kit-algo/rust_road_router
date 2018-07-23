@@ -77,7 +77,7 @@ pub(super) struct SegmentAggregator<'a, PathSegmentIter: Iterator<Item = (Timest
     linked_shortcut_data: ShortcutData
 }
 
-impl<'a, PathSegmentIter: Iterator<Item = (Timestamp, &'a ShortcutData)>> SegmentAggregator<'a, PathSegmentIter> {
+impl<'a, PathSegmentIter: std::fmt::Debug + Iterator<Item = (Timestamp, &'a ShortcutData)>> SegmentAggregator<'a, PathSegmentIter> {
     pub fn new(linked_shortcut_data: ShortcutData, shortcut_path_segments: PathSegmentIter) -> Self {
         SegmentAggregator {
             shortcut_path_segments: shortcut_path_segments.peekable(),
@@ -98,9 +98,13 @@ impl<'a, PathSegmentIter: Iterator<Item = (Timestamp, &'a ShortcutData)>> Segmen
                             } else {
                                 None
                             };
-                            while self.shortcut_path_segments.peek().unwrap().0 < segment.valid.start {
-                                prev = Some(*self.shortcut_path_segments.peek().unwrap().1);
-                                self.shortcut_path_segments.next();
+                            while let Some(&(next_path_segment_at, next_path_segment)) = self.shortcut_path_segments.peek() {
+                                if next_path_segment_at < segment.valid.start {
+                                    prev = Some(*next_path_segment);
+                                    self.shortcut_path_segments.next();
+                                } else {
+                                    break;
+                                }
                             }
 
                             self.merged_path_segments.push((segment.valid.start, prev.unwrap()));
@@ -139,9 +143,13 @@ impl<'a, PathSegmentIter: Iterator<Item = (Timestamp, &'a ShortcutData)>> Segmen
                                 } else {
                                     None
                                 };
-                                while self.shortcut_path_segments.peek().unwrap().0 < shortcut_seg.valid.start {
-                                    prev = Some(*self.shortcut_path_segments.peek().unwrap().1);
-                                    self.shortcut_path_segments.next();
+                                while let Some(&(next_path_segment_at, next_path_segment)) = self.shortcut_path_segments.peek() {
+                                    if next_path_segment_at < shortcut_seg.valid.start {
+                                        prev = Some(*next_path_segment);
+                                        self.shortcut_path_segments.next();
+                                    } else {
+                                        break;
+                                    }
                                 }
 
                                 self.merged_path_segments.push((shortcut_seg.valid.start, prev.unwrap()));

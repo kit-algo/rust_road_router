@@ -210,7 +210,6 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore]
     fn test_merging() {
         run_test_with_periodicity(8, || {
             let graph = TDGraph::new(
@@ -229,17 +228,13 @@ mod tests {
 
             let mut shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
 
-            // let all_ipps: Vec<_> = shortcut_graph.get_upward(2).non_wrapping_seg_iter(0..8, &shortcut_graph).collect();
-            // assert_eq!(all_ipps, vec![MATSeg::from_point_tuples((0,4),(2,8)), MATSeg::from_point_tuples((2,8), (6,8)), MATSeg::from_point_tuples((6,8), (8,12))]);
-            // let all_ipps: Vec<_> = Linked::new(1, 0).non_wrapping_seg_iter(0..8, &shortcut_graph).collect();
-            // assert_eq!(all_ipps, vec![MATSeg::from_point_tuples((0,4),(2,4)), MATSeg::from_point_tuples((2,4), (6,12)), MATSeg::from_point_tuples((6,12), (8,12))]);
-
             shortcut_graph.merge_upward(2, Linked::new(1, 0));
 
-        //     assert_eq!(shortcut_graph.get_upward(2).data, ShortcutPaths::Multi(vec![(0, ShortcutData::new(ShortcutSource::Shortcut(1, 0))), (4, ShortcutData::new(ShortcutSource::OriginalEdge(2)))]));
-
-        //     let all_merged_ipps: Vec<_> = shortcut_graph.get_upward(2).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }), &shortcut_graph).map(TTIpp::as_tuple).collect();
-        //     assert_eq!(all_merged_ipps, vec![(0,4), (2,2), (4,4), (6,2)]);
+            assert_eq!(shortcut_graph.get_upward(2).data,
+                ShortcutPaths::Multi(vec![
+                    (0, ShortcutData::new(ShortcutSource::Shortcut(1, 0))),
+                    (4, ShortcutData::new(ShortcutSource::OriginalEdge(2))),
+                    (8, ShortcutData::new(ShortcutSource::Shortcut(1, 0)))]));
         });
     }
 
