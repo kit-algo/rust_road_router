@@ -31,12 +31,13 @@ impl Linked {
         let first_edge = shortcut_graph.get_downward(self.first);
         let second_edge = shortcut_graph.get_upward(self.second);
 
+        let progress = range.start;
         let mut first_iter = first_edge.non_wrapping_seg_iter(range, shortcut_graph).peekable();
         let start_of_second = first_iter.peek().unwrap().start_of_valid_at_val();
         let start_of_second = start_of_second % period();
         let second_iter = second_edge.seg_iter(WrappingRange::new(Range { start: start_of_second, end: start_of_second }), shortcut_graph).peekable();
 
-        SegmentIter { first_iter, second_iter }
+        SegmentIter { first_iter, second_iter, progress }
     }
 
     pub fn as_shortcut_data(self) -> ShortcutData {
@@ -57,6 +58,7 @@ impl Linked {
 struct SegmentIter<Shortcut1SegIter: Iterator<Item = MATSeg>, Shortcut2SegIter: Iterator<Item = MATSeg>> {
     first_iter: Peekable<Shortcut1SegIter>,
     second_iter: Peekable<Shortcut2SegIter>,
+    progress: Timestamp
 }
 
 impl<'a, Shortcut1SegIter: Iterator<Item = MATSeg>, Shortcut2SegIter: Iterator<Item = MATSeg>> Iterator for SegmentIter<Shortcut1SegIter, Shortcut2SegIter> {
@@ -65,24 +67,22 @@ impl<'a, Shortcut1SegIter: Iterator<Item = MATSeg>, Shortcut2SegIter: Iterator<I
     fn next(&mut self) -> Option<Self::Item> {
         let first_iter = &mut self.first_iter;
         let second_iter = &mut self.second_iter;
+        let progress = self.progress;
 
-        let (linked, advance) = first_iter.peek().map(|first_segment| {
+        let linked = first_iter.peek().map(|first_segment| {
             println!("link!\n{:?}\n{:?}", first_segment, second_iter.peek().unwrap());
-            link_segments(first_segment, second_iter.peek().unwrap(), 0)
-        }).map_or((None, None), |(linked, advance)| (Some(linked), Some(advance)));
-
-        if let Some(advance) = advance {
-            match advance {
-                Advance::First => { println!("advance first"); first_iter.next(); },
-                Advance::Second => { println!("advance second"); second_iter.next(); },
-                Advance::Both => {
-                    first_iter.next();
-                    second_iter.next();
-                }
-            }
-        }
+            link_segments(first_segment, second_iter.peek().unwrap(), progress)
+        });
 
         if let Some(linked) = &linked {
+            self.progress = linked.valid.end;
+
+            if linked.valid.end == first_iter.peek().unwrap().valid.end {
+                first_iter.next();
+            } else {
+                second_iter.next();
+            }
+
             if linked.valid.start == linked.valid.end {
                 return self.next()
             }
@@ -92,45 +92,30 @@ impl<'a, Shortcut1SegIter: Iterator<Item = MATSeg>, Shortcut2SegIter: Iterator<I
     }
 }
 
-#[derive(Debug)]
-enum Advance {
-    First,
-    Second,
-    Both
-}
-
-// TODO clean up conditions
-fn link_segments(first_segment: &MATSeg, second_segment: &MATSeg, progress: Timestamp) -> (MATSeg, Advance) {
-    let advance;
+fn link_segments(first_segment: &MATSeg, second_segment: &MATSeg, progress: Timestamp) -> MATSeg {
     let mut second_segment = second_segment.clone();
     let first_value_range = first_segment.valid_value_range(progress); // not necessarily exclusive, non wrapping
 
     if (first_value_range.end > period() || first_value_range.start > period()) && second_segment.valid.end < first_value_range.start {
         second_segment.shift();
     }
-    debug_assert!(!first_value_range.is_intersection_empty(&second_segment.valid) || first_value_range.start == second_segment.valid.end, "{:?} {:?}", first_segment, second_segment);
+    debug_assert!(!first_value_range.is_intersection_empty(&second_segment.valid) ||
+        (first_value_range.start == first_value_range.end && second_segment.valid.contains(&first_value_range.start)) ||
+        first_value_range.start == second_segment.valid.end, "{:?} {:?}", first_segment, second_segment);
 
-    let end_of_range = if let Some(end_of_second) = first_segment.line.invert(second_segment.valid.end) {
+    let end_of_range = if let Some(end_of_second) = first_segment.line.invert(second_segment.valid.end) { // TODO all
         if first_segment.valid.contains(&end_of_second) && first_value_range.end > second_segment.valid.end {
-            advance = Advance::Second;
             end_of_second
         } else {
-            // if first_segment.valid.end == end_of_second {
-            //     advance = Advance::Both;
-            // } else {
-            // }
-            advance = Advance::First;
             first_segment.valid.end
         }
     } else {
-        advance = Advance::First;
-        // debug_assert!(second_segment.valid.contains(&first_value_range.end));
         first_segment.valid.end
     };
 
     let line = link_lines(&first_segment.line, &second_segment.line);
 
-    (MATSeg::new(line, progress..end_of_range), advance)
+    MATSeg::new(line, progress..end_of_range)
 }
 
 
@@ -171,13 +156,13 @@ mod tests {
     #[test]
     fn test_linking_static_segments() {
         run_test_with_periodicity(10, || {
-            assert_eq!(link_segments(&MATSeg::from_point_tuples((1, 3), (4, 7)), &MATSeg::from_point_tuples((3, 5), (7, 9)), 1).0,
+            assert_eq!(link_segments(&MATSeg::from_point_tuples((1, 3), (4, 7)), &MATSeg::from_point_tuples((3, 5), (7, 9)), 1),
                 MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(1, 5), ATIpp::new(4, 9))), 1..4));
-            assert_eq!(link_segments(&MATSeg::from_point_tuples((0, 1), (10, 11)), &MATSeg::from_point_tuples((1, 3), (10, 12)), 0).0,
+            assert_eq!(link_segments(&MATSeg::from_point_tuples((0, 1), (10, 11)), &MATSeg::from_point_tuples((1, 3), (10, 12)), 0),
                 MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 3), ATIpp::new(1, 4))), 0..9));
-            assert_eq!(link_segments(&MATSeg::from_point_tuples((0, 1), (10, 11)), &MATSeg::from_point_tuples((0, 2), (1, 3)), 9).0,
+            assert_eq!(link_segments(&MATSeg::from_point_tuples((0, 1), (10, 11)), &MATSeg::from_point_tuples((0, 2), (1, 3)), 9),
                 MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 3), ATIpp::new(1, 4))), 9..10));
-            assert_eq!(link_segments(&MATSeg::from_point_tuples((9, 10), (10, 11)), &MATSeg::from_point_tuples((0, 2), (1, 3)), 9).0,
+            assert_eq!(link_segments(&MATSeg::from_point_tuples((9, 10), (10, 11)), &MATSeg::from_point_tuples((0, 2), (1, 3)), 9),
                 MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 3), ATIpp::new(1, 4))), 9..10));
         });
     }
@@ -185,9 +170,9 @@ mod tests {
     #[test]
     fn test_linking_one_static_one_var_segments() {
         run_test_with_periodicity(10, || {
-            assert_eq!(link_segments(&MATSeg::from_point_tuples((0, 2), (5, 7)), &MATSeg::from_point_tuples((2, 4), (7, 10)), 0).0,
+            assert_eq!(link_segments(&MATSeg::from_point_tuples((0, 2), (5, 7)), &MATSeg::from_point_tuples((2, 4), (7, 10)), 0),
                 MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 4), ATIpp::new(5, 10))), 0..5));
-            assert_eq!(link_segments(&MATSeg::from_point_tuples((0, 2), (5, 8)), &MATSeg::from_point_tuples((2, 4), (8, 10)), 0).0,
+            assert_eq!(link_segments(&MATSeg::from_point_tuples((0, 2), (5, 8)), &MATSeg::from_point_tuples((2, 4), (8, 10)), 0),
                 MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 4), ATIpp::new(5, 10))), 0..5));
         });
     }
@@ -198,13 +183,13 @@ mod tests {
             for s in 0..10 {
                 let linked = link_segments(
                     &MATSeg::from_point_tuples((s, s+2), (s+5, s+5+2)),
-                    &MATSeg::from_point_tuples((s+2, s+2+2), (s+6, s+6+3)), s).0;
+                    &MATSeg::from_point_tuples((s+2, s+2+2), (s+6, s+6+3)), s);
                 let expect = MATSeg::from_point_tuples((s, s+4), (s+4, s+4+5));
                 assert!(linked.is_equivalent_to(&expect), "Not equivalent!\nGot:      {:?}\nExpected: {:?}", linked, expect);
 
                 let linked = link_segments(
                     &MATSeg::from_point_tuples((s, s+2), (s+4, s+4+2)),
-                    &MATSeg::from_point_tuples((s+3, s+3+2), (s+5, s+5+3)), s+1).0;
+                    &MATSeg::from_point_tuples((s+3, s+3+2), (s+5, s+5+3)), s+1);
                 let expect = MATSeg::from_point_tuples((s+1, s+1+4), (s+3, s+3+5));
                 assert!(linked.is_equivalent_to(&expect), "Not equivalent!\nGot:      {:?}\nExpected: {:?}", linked, expect);
             }
@@ -216,7 +201,7 @@ mod tests {
         run_test_with_periodicity(10, || {
             assert_eq!(link_segments(
                     &MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 2), ATIpp::new(4, 8))), 1..3),
-                    &MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(2, 4), ATIpp::new(8, 9))), 3..7), 1).0,
+                    &MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(2, 4), ATIpp::new(8, 9))), 3..7), 1),
                 MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 4), ATIpp::new(4, 9))), 1..3));
         });
     }
@@ -226,7 +211,7 @@ mod tests {
         run_test_with_periodicity(10, || {
             assert_eq!(link_segments(
                     &MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 2), ATIpp::new(1, 3))), 4..6),
-                    &MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 1), ATIpp::new(1, 2))), 4..6), 4).0,
+                    &MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 1), ATIpp::new(1, 2))), 4..6), 4),
                 MATSeg::new(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(0, 3), ATIpp::new(1, 4))), 4..4));
         });
     }
@@ -304,7 +289,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_segment_iter() {
         run_test_with_periodicity(8, || {
             let graph = TDGraph::new(
