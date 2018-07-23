@@ -85,7 +85,6 @@ impl Shortcut {
     pub(super) fn non_wrapping_seg_iter<'a, 'b: 'a>(&'b self, range: Range<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = MATSeg> + 'a {
         match self.data {
             ShortcutPaths::None => SegmentIterIter::None,
-            // TODO maybe split range here
             ShortcutPaths::One(data) => SegmentIterIter::One(once(data.non_wrapping_seg_iter(range, shortcut_graph))),
             ShortcutPaths::Multi(ref data) => {
                 let index_range = data.index_range(&range, |&(dt, _)| dt);
@@ -96,37 +95,6 @@ impl Shortcut {
                         let (to_at, _) = paths[1];
                         path.non_wrapping_seg_iter((from_at..to_at).intersection(&range), shortcut_graph)
                     }))
-            }
-        }.flatten()
-    }
-
-    pub(super) fn seg_iter<'a, 'b: 'a>(&'b self, range: WrappingRange, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = MATSeg> + 'a {
-        let (first_range, mut second_range) = range.clone().monotonize().split(period());
-        second_range.start -= period();
-        second_range.end -= period();
-
-        match self.data {
-            ShortcutPaths::None => SegmentIterIter::None,
-            // TODO maybe split range here
-            ShortcutPaths::One(data) => SegmentIterIter::One(
-                once(data.non_wrapping_seg_iter(first_range, shortcut_graph))
-                    .chain(once(data.non_wrapping_seg_iter(second_range, shortcut_graph)))),
-            ShortcutPaths::Multi(ref data) => {
-                let (first_index_range, second_index_range) = data.index_ranges(&range, |&(dt, _)| dt);
-
-                let first_iter = data[first_index_range.clone()].windows(2)
-                    .map(move |paths| {
-                        let (from_at, path) = paths[0];
-                        let (to_at, _) = paths[1];
-                        path.non_wrapping_seg_iter((from_at..to_at).intersection(&first_range), shortcut_graph)
-                    });
-                let second_iter = data[second_index_range.clone()].windows(2)
-                    .map(move |paths| {
-                        let (from_at, path) = paths[0];
-                        let (to_at, _) = paths[1];
-                        path.non_wrapping_seg_iter((from_at..to_at).intersection(&second_range), shortcut_graph)
-                    });
-                SegmentIterIter::Multi(first_iter.chain(second_iter))
             }
         }.flatten()
     }
@@ -242,36 +210,37 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore]
     fn test_merging() {
-        // run_test_with_periodicity(8, || {
-        //     let graph = TDGraph::new(
-        //         vec![0, 1,    3, 3],
-        //         vec![2, 0, 2],
-        //         vec![0,  1,     3,     5],
-        //         vec![0,  2, 6,  2, 6],
-        //         vec![1,  1, 5,  6, 2],
-        //     );
+        run_test_with_periodicity(8, || {
+            let graph = TDGraph::new(
+                vec![0, 1,    3, 3],
+                vec![2, 0, 2],
+                vec![0,   2,       6,      10],
+                vec![0,8, 0,2,6,8, 0,2,6,8],
+                vec![1,1, 3,1,5,3, 4,6,2,4],
+            );
 
-        //     let cch_first_out = vec![0, 1, 3, 3];
-        //     let cch_head =      vec![2, 0, 2];
+            let cch_first_out = vec![0, 1, 3, 3];
+            let cch_head =      vec![2, 0, 2];
 
-        //     let outgoing = vec![Shortcut::new(Some(0)), Shortcut::new(None), Shortcut::new(Some(2))];
-        //     let incoming = vec![Shortcut::new(None), Shortcut::new(Some(1)), Shortcut::new(None)];
+            let outgoing = vec![Shortcut::new(Some(0)), Shortcut::new(None), Shortcut::new(Some(2))];
+            let incoming = vec![Shortcut::new(None), Shortcut::new(Some(1)), Shortcut::new(None)];
 
-        //     let mut shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
+            let mut shortcut_graph = ShortcutGraph::new(&graph, &cch_first_out, &cch_head, outgoing, incoming);
 
-        //     let all_ipps: Vec<_> = shortcut_graph.get_upward(2).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }), &shortcut_graph).map(TTIpp::as_tuple).collect();
-        //     assert_eq!(all_ipps, vec![(2,6), (6,2)]);
-        //     let all_ipps: Vec<_> = Linked::new(1, 0).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }), &shortcut_graph).map(TTIpp::as_tuple).collect();
-        //     assert_eq!(all_ipps, vec![(2,2), (6,6)]);
+            // let all_ipps: Vec<_> = shortcut_graph.get_upward(2).non_wrapping_seg_iter(0..8, &shortcut_graph).collect();
+            // assert_eq!(all_ipps, vec![MATSeg::from_point_tuples((0,4),(2,8)), MATSeg::from_point_tuples((2,8), (6,8)), MATSeg::from_point_tuples((6,8), (8,12))]);
+            // let all_ipps: Vec<_> = Linked::new(1, 0).non_wrapping_seg_iter(0..8, &shortcut_graph).collect();
+            // assert_eq!(all_ipps, vec![MATSeg::from_point_tuples((0,4),(2,4)), MATSeg::from_point_tuples((2,4), (6,12)), MATSeg::from_point_tuples((6,12), (8,12))]);
 
-        //     shortcut_graph.merge_upward(2, Linked::new(1, 0));
+            shortcut_graph.merge_upward(2, Linked::new(1, 0));
 
         //     assert_eq!(shortcut_graph.get_upward(2).data, ShortcutPaths::Multi(vec![(0, ShortcutData::new(ShortcutSource::Shortcut(1, 0))), (4, ShortcutData::new(ShortcutSource::OriginalEdge(2)))]));
 
         //     let all_merged_ipps: Vec<_> = shortcut_graph.get_upward(2).ipp_iter(WrappingRange::new(Range { start: 0, end: 0 }), &shortcut_graph).map(TTIpp::as_tuple).collect();
         //     assert_eq!(all_merged_ipps, vec![(0,4), (2,2), (4,4), (6,2)]);
-        // });
+        });
     }
 
     #[test]

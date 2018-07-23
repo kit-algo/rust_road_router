@@ -36,10 +36,6 @@ impl MATSeg {
         self.line.interpolate_at(self.valid.start) % period()
     }
 
-    pub fn end_of_valid_at_val(&self) -> Timestamp {
-        self.line.interpolate_at(self.valid.end) % period()
-    }
-
     pub fn eval(&self, x: Timestamp) -> Weight {
         debug_assert!(self.valid.start <= x);
         debug_assert!(self.valid.end >= x);
