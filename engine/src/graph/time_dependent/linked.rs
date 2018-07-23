@@ -127,40 +127,52 @@ fn link_segments(first_segment: &MATSeg, second_segment: &MATSeg, progress: Time
         first_segment.valid.end
     };
 
-    let line = link_lines(&first_segment.line, &second_segment.line);
+    let line = link_lines(&first_segment.line, &second_segment.line).unwrap_or_else(|| {
+        let first_val = second_segment.line.interpolate_at(first_segment.line.interpolate_at(progress));
+        let second_val = second_segment.line.interpolate_at(first_segment.line.interpolate_at(end_of_range));
+        MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(progress, first_val), ATIpp::new(end_of_range, second_val)))
+    });
 
     Some(MATSeg::new(line, progress..end_of_range))
 }
 
 
-fn link_lines(first_line: &MonotoneLine<ATIpp>, second_line: &MonotoneLine<ATIpp>) -> MonotoneLine<ATIpp> {
-    let linked_delta_x = i64::from(first_line.delta_x()) * i64::from(second_line.delta_x());
-    let linked_delta_y = i64::from(first_line.delta_y()) * i64::from(second_line.delta_y());
+fn link_lines(first_line: &MonotoneLine<ATIpp>, second_line: &MonotoneLine<ATIpp>) -> Option<MonotoneLine<ATIpp>> {
+    let linked_delta_x = i128::from(first_line.delta_x()) * i128::from(second_line.delta_x());
+    let linked_delta_y = i128::from(first_line.delta_y()) * i128::from(second_line.delta_y());
 
-    let rest_first_term = i64::from(first_line.line().from.at) * linked_delta_y;
-    let rest_second_term = i64::from(second_line.line().from.at) * i64::from(second_line.delta_y()) * i64::from(first_line.delta_x());
-    let rest_third_term = i64::from(first_line.line().from.val) * i64::from(second_line.delta_y()) * i64::from(first_line.delta_x());
-    let rest_fourth_term = i64::from(second_line.line().from.val) * linked_delta_x;
+    let rest_first_term = i128::from(first_line.line().from.at) * linked_delta_y;
+    let rest_second_term = i128::from(second_line.line().from.at) * i128::from(second_line.delta_y()) * i128::from(first_line.delta_x());
+    let rest_third_term = i128::from(first_line.line().from.val) * i128::from(second_line.delta_y()) * i128::from(first_line.delta_x());
+    let rest_fourth_term = i128::from(second_line.line().from.val) * linked_delta_x;
     let rest = rest_first_term + rest_second_term - rest_third_term - rest_fourth_term;
-    let result = solve_linear_congruence(linked_delta_y as i64, rest, linked_delta_x as i64).expect("🤯 math is broken");
+    let result = solve_linear_congruence(linked_delta_y, rest, linked_delta_x)?;
 
     let min_x = if linked_delta_y == 0 { 0 } else { (rest + linked_delta_y - 1) / linked_delta_y };
-    let first_at = max(result.solution, result.solution + (min_x - result.solution + result.modulus as i64 - 1) / result.modulus as i64 * result.modulus as i64);
+    let first_at = max(result.solution, result.solution + (min_x - result.solution + i128::from(result.modulus) - 1) / i128::from(result.modulus) * i128::from(result.modulus));
 
     let first_val = (linked_delta_y * first_at - rest) / linked_delta_x;
     debug_assert_eq!((linked_delta_y * first_at - rest) % linked_delta_x, 0);
-    let second_at = first_at + result.modulus as i64;
+    let second_at = first_at + i128::from(result.modulus);
     let second_val = (linked_delta_y * second_at - rest) / linked_delta_x;
     debug_assert_eq!((linked_delta_y * second_at - rest) % linked_delta_x, 0);
 
-    debug_assert!(first_at >= 0);
-    debug_assert!(first_val >= first_at);
-    debug_assert!(second_at > first_at);
-    debug_assert!(first_at + i64::from(period()) > second_at);
-    debug_assert!(second_val >= second_at);
-    debug_assert!(second_val >= first_val);
+    debug_assert!(first_at >= 0, "linked: from at {} val {} to at {} val {}", first_at, first_val, second_at, second_val);
+    // disabled as this may be false outside the valid range
+    // debug_assert!(first_val >= first_at, "linked: from at {} val {} to at {} val {}", first_at, first_val, second_at, second_val);
+    debug_assert!(second_at > first_at, "linked: from at {} val {} to at {} val {}", first_at, first_val, second_at, second_val);
+    // disabled as this may be false outside the valid range
+    // debug_assert!(first_at + i128::from(period()) > second_at, "linked: from at {} val {} to at {} val {}", first_at, first_val, second_at, second_val);
+    if first_at >= i128::from(INFINITY) { return None }
+    if first_val >= i128::from(INFINITY) { return None }
+    if second_at >= i128::from(INFINITY) { return None }
+    if second_val >= i128::from(INFINITY) { return None }
+    debug_assert!(first_at < i128::from(INFINITY), "linked: from at {} val {} to at {} val {}", first_at, first_val, second_at, second_val);
+    debug_assert!(first_val < i128::from(INFINITY), "linked: from at {} val {} to at {} val {}", first_at, first_val, second_at, second_val);
+    debug_assert!(second_at < i128::from(INFINITY), "linked: from at {} val {} to at {} val {}", first_at, first_val, second_at, second_val);
+    debug_assert!(second_val < i128::from(INFINITY), "linked: from at {} val {} to at {} val {}", first_at, first_val, second_at, second_val);
 
-    MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(first_at as Timestamp, first_val as Timestamp), ATIpp::new(second_at as Timestamp, second_val as Timestamp)))
+    Some(MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(first_at as Timestamp, first_val as Timestamp), ATIpp::new(second_at as Timestamp, second_val as Timestamp))))
 }
 
 #[cfg(test)]

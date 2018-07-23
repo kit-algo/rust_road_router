@@ -21,7 +21,7 @@ pub struct ATIpp {
 
 impl ATIpp {
     pub fn new(at: Timestamp, val: Weight) -> ATIpp {
-        debug_assert!(val >= at);
+        // debug_assert!(val >= at);
         ATIpp { at, val }
     }
 

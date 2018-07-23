@@ -13,14 +13,14 @@ pub fn gcd<Num: Unsigned + Copy>(mut a: Num, mut b: Num) -> Num {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LinearCongruenceSolution {
-    pub solution: i64,
+    pub solution: i128,
     pub modulus: u64
 }
 
-pub fn solve_linear_congruence(factor: i64, rest: i64, modulus: i64) -> Option<LinearCongruenceSolution> {
+pub fn solve_linear_congruence(factor: i128, rest: i128, modulus: i128) -> Option<LinearCongruenceSolution> {
     let (gcd, s, _t) = extended_euklid(factor, modulus);
     if rest % gcd != 0 { return None };
-    let mut solution = s * rest / gcd;
+    let mut solution = s.checked_mul(rest / gcd)?;
     let modulus = modulus / gcd;
 
     debug_assert!(modulus > 0);
@@ -30,11 +30,11 @@ pub fn solve_linear_congruence(factor: i64, rest: i64, modulus: i64) -> Option<L
     Some(LinearCongruenceSolution { solution, modulus: modulus as u64 })
 }
 
-fn extended_euklid(a: i64, b: i64) -> (i64, i64, i64) {
-    let mut s: i64 = 0;
-    let mut old_s: i64 = 1;
-    let mut t: i64 = 1;
-    let mut old_t: i64 = 0;
+fn extended_euklid(a: i128, b: i128) -> (i128, i128, i128) {
+    let mut s: i128 = 0;
+    let mut old_s: i128 = 1;
+    let mut t: i128 = 1;
+    let mut old_t: i128 = 0;
     let mut remainder = b;
     let mut old_remainder = a;
     let mut tmp;
