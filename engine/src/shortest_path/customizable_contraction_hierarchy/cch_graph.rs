@@ -233,11 +233,11 @@ impl CCHGraph {
                 }
 
                 for node in self.neighbor_iter(current_node) {
-                    shortcut_graph.clear_downward_edge_cache(node_incoming_edge_ids[node as usize].value().unwrap());
+                    // shortcut_graph.clear_downward_edge_cache(node_incoming_edge_ids[node as usize].value().unwrap());
                     node_incoming_edge_ids[node as usize] = InRangeOption::new(None);
                 }
                 for node in self.neighbor_iter(current_node) {
-                    shortcut_graph.clear_upward_edge_cache(node_outgoing_edge_ids[node as usize].value().unwrap());
+                    // shortcut_graph.clear_upward_edge_cache(node_outgoing_edge_ids[node as usize].value().unwrap());
                     node_outgoing_edge_ids[node as usize] = InRangeOption::new(None);
                 }
             }

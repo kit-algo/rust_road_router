@@ -8,7 +8,7 @@ use ::sorted_search_slice_ext::*;
 #[derive(Debug, Clone)]
 pub struct Shortcut {
     data: ShortcutPaths,
-    cache: Option<Vec<TTIpp>>
+    cache: Option<Vec<MATSeg>>
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -31,20 +31,20 @@ impl Shortcut {
         if !other.is_valid_path(shortcut_graph) {
             return
         }
-        if !self.is_valid_path() {
-            self.data = ShortcutPaths::One(other.as_shortcut_data());
-            return
-        }
+        // if !self.is_valid_path() {
+        //     self.data = ShortcutPaths::One(other.as_shortcut_data());
+        //     return
+        // }
 
         // TODO bounds for range
-        let (current_lower_bound, current_upper_bound) = self.bounds(shortcut_graph);
-        let (other_lower_bound, other_upper_bound) = other.bounds(shortcut_graph);
-        if current_lower_bound >= other_upper_bound {
-            self.data = ShortcutPaths::One(other.as_shortcut_data());
-            return
-        } else if other_lower_bound >= current_upper_bound {
-            return
-        }
+        // let (current_lower_bound, current_upper_bound) = self.bounds(shortcut_graph);
+        // let (other_lower_bound, other_upper_bound) = other.bounds(shortcut_graph);
+        // if current_lower_bound >= other_upper_bound {
+        //     self.data = ShortcutPaths::One(other.as_shortcut_data());
+        //     return
+        // } else if other_lower_bound >= current_upper_bound {
+        //     return
+        // }
 
         let range = 0..period();
         let data = merge(
@@ -54,7 +54,8 @@ impl Shortcut {
             other.as_shortcut_data(), PathSegmentIter::new(self)),
             |mut acc, better_segment| { acc.integrate_segment(better_segment); acc });
 
-        let mut merged_path_segments = data.into_merged_path_segments();
+        let (mut merged_path_segments, cache) = data.decompose();
+        self.cache = Some(cache);
         debug_assert!(!merged_path_segments.is_empty());
         if merged_path_segments.len() > 1 {
             let (_, first_path) = merged_path_segments.first().unwrap();
@@ -83,7 +84,19 @@ impl Shortcut {
     }
 
     pub(super) fn non_wrapping_seg_iter<'a, 'b: 'a>(&'b self, range: Range<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = MATSeg> + 'a {
-        match self.data {
+        if let Some(cache) = &self.cache {
+            println!("cache hit");
+            let range2 = range.clone();
+            return TwoTypeIter::First(cache.iter().filter(move |seg| {
+                !seg.valid.is_intersection_empty(&range)
+            }).map(move |seg| {
+                let mut seg = seg.clone();
+                seg.valid = seg.valid.intersection(&range2);
+                seg
+            }))
+        }
+
+        let iter = match self.data {
             ShortcutPaths::None => SegmentIterIter::None,
             ShortcutPaths::One(data) => SegmentIterIter::One(once(data.non_wrapping_seg_iter(range, shortcut_graph))),
             ShortcutPaths::Multi(ref data) => {
@@ -96,7 +109,8 @@ impl Shortcut {
                         path.non_wrapping_seg_iter((from_at..to_at).intersection(&range), shortcut_graph)
                     }))
             }
-        }.flatten()
+        }.flatten();
+        TwoTypeIter::Second(iter)
     }
 
     pub fn bounds(&self, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
@@ -104,11 +118,7 @@ impl Shortcut {
             return (INFINITY, INFINITY);
         }
 
-        if let Some(ref ipps) = self.cache {
-            if !ipps.is_empty() {
-                return ipps.iter().fold((INFINITY, 0), |(acc_min, acc_max), ipp| (min(acc_min, ipp.val), max(acc_max, ipp.val)))
-            }
-        }
+        // TODO use cache
 
         PathSegmentIter::new(self)
             .map(|(_, source)| source.bounds(shortcut_graph))

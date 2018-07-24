@@ -4,7 +4,7 @@ use super::*;
 use math::RangeExtensions;
 
 #[derive(Debug)]
-enum TwoTypeIter<T, X: Iterator<Item = T>, Y: Iterator<Item = T>> {
+pub enum TwoTypeIter<T, X: Iterator<Item = T>, Y: Iterator<Item = T>> {
     First(X),
     Second(Y),
 }
@@ -190,8 +190,8 @@ impl<'a, PathSegmentIter: std::fmt::Debug + Iterator<Item = (Timestamp, &'a Shor
         }
     }
 
-    pub fn into_merged_path_segments(self) -> Vec<(Timestamp, ShortcutData)> {
-        self.merged_path_segments
+    pub fn decompose(self) -> (Vec<(Timestamp, ShortcutData)>, Vec<MATSeg>) {
+        (self.merged_path_segments, self.merged_atf_segments)
     }
 }
 
