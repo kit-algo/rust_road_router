@@ -38,7 +38,9 @@ impl Linked {
         let (first_range, mut second_range) = (start_of_second..(start_of_second+period()+1)).split(period());
         second_range.start -= period();
         second_range.end -= period();
-        let second_iter = second_edge.non_wrapping_seg_iter(first_range, shortcut_graph).chain(second_edge.non_wrapping_seg_iter(second_range, shortcut_graph)).peekable();
+        let second_iter = second_edge.non_wrapping_seg_iter(first_range, shortcut_graph)
+            .lazy_chain(move || second_edge.non_wrapping_seg_iter(second_range, shortcut_graph))
+            .peekable();
 
         SegmentIter { first_iter, second_iter, progress }
     }
@@ -58,10 +60,45 @@ impl Linked {
     }
 }
 
+#[derive(Clone, Debug)]
+#[must_use = "iterator adaptors are lazy and do nothing unless consumed"]
+pub struct LazyChain<I, F> {
+    iter: I,
+    produce_second: Option<F>,
+}
+
+impl<I, F> Iterator for LazyChain<I, F> where
+    I: Iterator,
+    F: FnOnce() -> I
+{
+    type Item = I::Item;
+
+    #[inline]
+    fn next(&mut self) -> Option<I::Item> {
+        match self.iter.next() {
+            elt @ Some(..) => elt,
+            None => {
+                if let Some(f) = self.produce_second.take() {
+                    self.iter = f();
+                }
+                self.iter.next()
+            }
+        }
+    }
+}
+
+trait LazyChainIterExt: Sized {
+    fn lazy_chain<F>(self, f: F) -> LazyChain<Self, F> {
+        LazyChain { iter: self, produce_second: Some(f) }
+    }
+}
+
+impl<T: Iterator> LazyChainIterExt for T {}
+
 struct SegmentIter<Shortcut1SegIter: Iterator<Item = MATSeg>, Shortcut2SegIter: Iterator<Item = MATSeg>> {
     first_iter: Peekable<Shortcut1SegIter>,
     second_iter: Peekable<Shortcut2SegIter>,
-    progress: Timestamp
+    progress: Timestamp,
 }
 
 impl<'a, Shortcut1SegIter: Iterator<Item = MATSeg>, Shortcut2SegIter: Iterator<Item = MATSeg>> Iterator for SegmentIter<Shortcut1SegIter, Shortcut2SegIter> {
@@ -73,7 +110,7 @@ impl<'a, Shortcut1SegIter: Iterator<Item = MATSeg>, Shortcut2SegIter: Iterator<I
         let progress = self.progress;
 
         let linked = first_iter.peek().map(|first_segment| {
-            match link_segments(first_segment, second_iter.peek().unwrap(), progress) {
+            match link_segments(first_segment, second_iter.peek().expect("second already finished"), progress) {
                 Some(linked) => linked,
                 None => {
                     second_iter.next();
