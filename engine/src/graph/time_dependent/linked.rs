@@ -33,7 +33,7 @@ impl Linked {
 
         let progress = range.start;
         let mut first_iter = first_edge.non_wrapping_seg_iter(range, shortcut_graph).peekable();
-        let start_of_second = first_iter.peek().unwrap().start_of_valid_at_val();
+        let start_of_second = first_iter.peek().map(|seg| seg.start_of_valid_at_val()).unwrap_or(0);
 
         let (first_range, mut second_range) = (start_of_second..(start_of_second+period()+1)).split(period());
         second_range.start -= period();
