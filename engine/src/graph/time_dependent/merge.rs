@@ -209,7 +209,7 @@ impl<'a, SegmentIter: Iterator<Item = MATSeg>, LinkedSegIter: Iterator<Item = MA
                 if shortcut_next_seg.valid.end == linked_next_seg.valid.end {
                     self.shortcut_iter.next();
                     self.linked_iter.next();
-                } else if shortcut_next_seg.valid.end <= linked_next_seg.valid.end {
+                } else if shortcut_next_seg.valid.end < linked_next_seg.valid.end {
                     self.shortcut_iter.next();
                 } else {
                     self.linked_iter.next();
@@ -217,7 +217,7 @@ impl<'a, SegmentIter: Iterator<Item = MATSeg>, LinkedSegIter: Iterator<Item = MA
                 Some((shortcut_next_seg, linked_next_seg))
             },
             (None, None) => None,
-            _ => panic!("broken valid ranges in parallel iteration")
+            segments => panic!("broken valid ranges in parallel iteration: {:?}", segments)
         }
     }
 }
