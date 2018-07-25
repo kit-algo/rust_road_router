@@ -31,20 +31,22 @@ impl Shortcut {
         if !other.is_valid_path(shortcut_graph) {
             return
         }
-        // if !self.is_valid_path() {
-        //     self.data = ShortcutPaths::One(other.as_shortcut_data());
-        //     return
-        // }
+        if !self.is_valid_path() {
+            self.data = ShortcutPaths::One(other.as_shortcut_data());
+            self.cache = Some(other.non_wrapping_seg_iter(0..period(), shortcut_graph).collect());
+            return
+        }
 
         // TODO bounds for range
-        // let (current_lower_bound, current_upper_bound) = self.bounds(shortcut_graph);
-        // let (other_lower_bound, other_upper_bound) = other.bounds(shortcut_graph);
-        // if current_lower_bound >= other_upper_bound {
-        //     self.data = ShortcutPaths::One(other.as_shortcut_data());
-        //     return
-        // } else if other_lower_bound >= current_upper_bound {
-        //     return
-        // }
+        let (current_lower_bound, current_upper_bound) = self.bounds(shortcut_graph);
+        let (other_lower_bound, other_upper_bound) = other.bounds(shortcut_graph);
+        if current_lower_bound >= other_upper_bound {
+            self.cache = Some(other.non_wrapping_seg_iter(0..period(), shortcut_graph).collect());
+            self.data = ShortcutPaths::One(other.as_shortcut_data());
+            return
+        } else if other_lower_bound >= current_upper_bound {
+            return
+        }
 
         let range = 0..period();
         let data = merge(
@@ -55,7 +57,6 @@ impl Shortcut {
             |mut acc, better_segment| { acc.integrate_segment(better_segment); acc });
 
         let (mut merged_path_segments, cache) = data.decompose();
-        self.cache = Some(cache);
         debug_assert!(!merged_path_segments.is_empty());
         if merged_path_segments.len() > 1 {
             let (_, first_path) = merged_path_segments.first().unwrap();
@@ -64,6 +65,8 @@ impl Shortcut {
         } else {
             self.data = ShortcutPaths::One(merged_path_segments[0].1);
         }
+        // debug_assert_eq!(cache, self.non_wrapping_seg_iter(0..period(), shortcut_graph).collect::<Vec<_>>());
+        self.cache = Some(cache);
     }
 
     pub fn evaluate(&self, departure: Timestamp, shortcut_graph: &ShortcutGraph) -> Weight {
@@ -85,7 +88,6 @@ impl Shortcut {
 
     pub(super) fn non_wrapping_seg_iter<'a, 'b: 'a>(&'b self, range: Range<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = MATSeg> + 'a {
         if let Some(cache) = &self.cache {
-            println!("cache hit");
             let range2 = range.clone();
             return TwoTypeIter::First(cache.iter().filter(move |seg| {
                 !seg.valid.is_intersection_empty(&range)
@@ -94,6 +96,10 @@ impl Shortcut {
                 seg.valid = seg.valid.intersection(&range2);
                 seg
             }))
+        }
+
+        if self.contains_non_trivial_data() {
+            println!("cache miss!");
         }
 
         let iter = match self.data {
@@ -111,6 +117,24 @@ impl Shortcut {
             }
         }.flatten();
         TwoTypeIter::Second(iter)
+    }
+
+    fn contains_non_trivial_data(&self) -> bool {
+        match self.data {
+            ShortcutPaths::None => false,
+            ShortcutPaths::One(data) => {
+                match data.source() {
+                    ShortcutSource::OriginalEdge(_) => false,
+                    ShortcutSource::Shortcut(_, _) => true,
+                }
+            },
+            ShortcutPaths::Multi(ref data) => {
+                data.len() > 1 || match data[0].1.source() {
+                    ShortcutSource::OriginalEdge(_) => false,
+                    ShortcutSource::Shortcut(_, _) => true,
+                }
+            }
+        }
     }
 
     pub fn bounds(&self, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
