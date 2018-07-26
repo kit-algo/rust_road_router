@@ -56,7 +56,13 @@ impl Linked {
     pub fn debug_to_s(self, shortcut_graph: &ShortcutGraph, indent: usize) -> String {
         let first_edge = shortcut_graph.get_downward(self.first);
         let second_edge = shortcut_graph.get_upward(self.second);
-        format!("Linked:\n{}first: {}\n{}second: {}", String::from(" ").repeat(indent * 2), first_edge.debug_to_s(shortcut_graph, indent + 1), String::from(" ").repeat(indent * 2), second_edge.debug_to_s(shortcut_graph, indent + 1))
+        format!("Linked:\n{}first({}): {}\n{}second({}): {}",
+            String::from(" ").repeat(indent * 2),
+            self.first,
+            first_edge.debug_to_s(shortcut_graph, indent + 1),
+            String::from(" ").repeat(indent * 2),
+            self.second,
+            second_edge.debug_to_s(shortcut_graph, indent + 1))
     }
 }
 

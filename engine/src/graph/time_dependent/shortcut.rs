@@ -88,12 +88,11 @@ impl Shortcut {
 
     pub(super) fn non_wrapping_seg_iter<'a, 'b: 'a>(&'b self, range: Range<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = MATSeg> + 'a {
         if let Some(cache) = &self.cache {
-            let range2 = range.clone();
-            return TwoTypeIter::First(cache.iter().filter(move |seg| {
+            return TwoTypeIter::First(cache.iter().filter({ let range = range.clone(); move |seg| {
                 !seg.valid.is_intersection_empty(&range)
-            }).map(move |seg| {
+            }}).map(move |seg| {
                 let mut seg = seg.clone();
-                seg.valid = seg.valid.intersection(&range2);
+                seg.valid = seg.valid.intersection(&range);
                 seg
             }))
         }
