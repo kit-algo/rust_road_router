@@ -33,7 +33,16 @@ impl Shortcut {
         }
         if !self.is_valid_path() {
             self.data = ShortcutPaths::One(other.as_shortcut_data());
-            self.cache = Some(other.non_wrapping_seg_iter(0..period(), shortcut_graph).collect());
+            self.cache = Some(other.non_wrapping_seg_iter(0..period(), shortcut_graph).fold(Vec::new(), |mut acc, seg| {
+                if let Some(last) = acc.last_mut() {
+                    if !last.combine(&seg) {
+                        acc.push(seg)
+                    }
+                } else {
+                    acc.push(seg)
+                }
+                acc
+            }));
             return
         }
 
