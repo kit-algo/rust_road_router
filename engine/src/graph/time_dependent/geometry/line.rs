@@ -65,7 +65,7 @@ impl MonotoneLine<TTIpp> {
 
 impl MonotoneLine<ATIpp> {
     pub fn new(line: Line<ATIpp>) -> Self {
-        debug_assert!(line.from.at <= line.to.at);
+        debug_assert!(line.from.at < line.to.at);
         debug_assert!(line.from.val <= line.to.val);
         MonotoneLine(line)
     }
