@@ -172,6 +172,7 @@ fn link_segments(first_segment: &MATSeg, second_segment: &MATSeg, progress: Time
 
     let line = link_lines(&first_segment.line, &second_segment.line).unwrap_or_else(|| {
         let first_val = second_segment.line.interpolate_at(first_segment.line.interpolate_at(progress));
+        let end_of_range = if progress == end_of_range { end_of_range + 1 } else { end_of_range };
         let second_val = second_segment.line.interpolate_at(first_segment.line.interpolate_at(end_of_range));
         MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(progress, first_val), ATIpp::new(end_of_range, second_val)))
     });
