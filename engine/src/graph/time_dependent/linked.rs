@@ -152,7 +152,6 @@ fn link_segments(first_segment: &MATSeg, second_segment: &MATSeg, progress: Time
     }
 
     if first_value_range.start > second_segment.valid.end || (first_value_range.start == first_value_range.end && first_value_range.start == second_segment.valid.end) {
-        println!("Skipping second:\n{:?}\n{:?}\n{:?}, {}", first_segment, second_segment, first_value_range, progress);
         return None
     }
 
@@ -172,7 +171,6 @@ fn link_segments(first_segment: &MATSeg, second_segment: &MATSeg, progress: Time
     };
 
     let line = link_lines(&first_segment.line, &second_segment.line).unwrap_or_else(|| {
-        // println!("approximating");
         let first_val = second_segment.line.interpolate_at(first_segment.line.interpolate_at(progress));
         let second_val = second_segment.line.interpolate_at(first_segment.line.interpolate_at(end_of_range));
         MonotoneLine::<ATIpp>::new(Line::new(ATIpp::new(progress, first_val), ATIpp::new(end_of_range, second_val)))
