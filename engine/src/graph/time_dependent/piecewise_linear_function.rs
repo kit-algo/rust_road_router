@@ -44,7 +44,24 @@ impl<'a> PiecewiseLinearFunction<'a> {
         (self.lower_bound(), self.upper_bound())
     }
 
-    pub fn evaluate(&self, departure: Timestamp) -> Weight {
+    pub fn average(&self, range: WrappingRange) -> Weight {
+        let monotone_range = range.monotonize();
+        let total_time = monotone_range.end - monotone_range.start;
+        let (first_range, second_range) = monotone_range.split(period());
+        let mut sum: u64 = 0;
+        for seg in self.non_wrapping_seg_iter(first_range).chain(self.non_wrapping_seg_iter(second_range)) {
+            let delta = seg.valid.end - seg.valid.start;
+            sum += u64::from(seg.line.line().from.val) * u64::from(delta);
+            sum += u64::from(seg.line.line().to.val) * u64::from(delta);
+        }
+        (sum / 2 / u64::from(total_time)) as Weight
+    }
+
+    pub fn eval(&self, departure: Timestamp) -> Weight {
+        self.evaluate(departure % period())
+    }
+
+    pub(super) fn evaluate(&self, departure: Timestamp) -> Weight {
         debug_assert!(departure < period());
         if self.departure_time.len() == 2 {
             return unsafe { *self.travel_time.get_unchecked(0) }
