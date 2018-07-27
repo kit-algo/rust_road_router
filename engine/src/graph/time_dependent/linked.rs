@@ -21,28 +21,17 @@ impl Linked {
     }
 
     pub fn bounds(self, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
-        let (first_min, first_max) = shortcut_graph.get_downward(self.first).bounds(shortcut_graph);
-        let (second_min, second_max) = shortcut_graph.get_upward(self.second).bounds(shortcut_graph);
-        // INFINITY????
+        debug_assert!(self.is_valid_path(shortcut_graph));
+        let (first_min, first_max) = shortcut_graph.get_downward(self.first).bounds();
+        debug_assert!(first_min < INFINITY);
+        debug_assert!(first_max < INFINITY);
+        let (second_min, second_max) = shortcut_graph.get_upward(self.second).bounds();
+        debug_assert!(second_min < INFINITY);
+        debug_assert!(second_max < INFINITY);
+
+        debug_assert!(first_min + second_min < INFINITY);
+        debug_assert!(first_max + second_max < INFINITY);
         (first_min + second_min, first_max + second_max)
-    }
-
-    pub(super) fn non_wrapping_seg_iter<'a>(self, range: Range<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = MATSeg> + 'a {
-        let first_edge = shortcut_graph.get_downward(self.first);
-        let second_edge = shortcut_graph.get_upward(self.second);
-
-        let progress = range.start;
-        let mut first_iter = first_edge.non_wrapping_seg_iter(range, shortcut_graph).peekable();
-        let start_of_second = first_iter.peek().map(|seg| seg.start_of_valid_at_val()).unwrap_or(0);
-
-        let (first_range, mut second_range) = (start_of_second..(start_of_second+period()+1)).split(period());
-        second_range.start -= period();
-        second_range.end -= period();
-        let second_iter = second_edge.non_wrapping_seg_iter(first_range, shortcut_graph)
-            .lazy_chain(move || second_edge.non_wrapping_seg_iter(second_range, shortcut_graph))
-            .peekable();
-
-        SegmentIter { first_iter, second_iter, progress }
     }
 
     pub fn as_shortcut_data(self) -> ShortcutData {
@@ -54,6 +43,7 @@ impl Linked {
     }
 
     pub fn debug_to_s(self, shortcut_graph: &ShortcutGraph, indent: usize) -> String {
+        println!("{:?}", self);
         let first_edge = shortcut_graph.get_downward(self.first);
         let second_edge = shortcut_graph.get_upward(self.second);
         format!("Linked:\n{}first({}): {}\n{}second({}): {}",
@@ -63,6 +53,13 @@ impl Linked {
             String::from(" ").repeat(indent * 2),
             self.second,
             second_edge.debug_to_s(shortcut_graph, indent + 1))
+    }
+
+    pub fn validate_does_not_contain(&self, edge_id: EdgeId, shortcut_graph: &ShortcutGraph) {
+        assert_ne!(edge_id, self.first);
+        assert_ne!(edge_id, self.second);
+        shortcut_graph.get_downward(self.first).validate_does_not_contain(edge_id, shortcut_graph);
+        shortcut_graph.get_downward(self.second).validate_does_not_contain(edge_id, shortcut_graph);
     }
 }
 

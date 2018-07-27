@@ -39,6 +39,8 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     pub fn bounds(&self) -> (Weight, Weight) {
+        debug_assert!(self.lower_bound() < INFINITY);
+        debug_assert!(self.upper_bound() < INFINITY);
         (self.lower_bound(), self.upper_bound())
     }
 

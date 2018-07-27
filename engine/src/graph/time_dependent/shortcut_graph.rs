@@ -33,30 +33,22 @@ impl<'a> ShortcutGraph<'a> {
         &self.outgoing[edge_id as usize]
     }
 
-    pub fn cache_upward_edge_ipps(&mut self, edge_id: EdgeId) {
+    pub fn remove_dominated_upward(&mut self, shortcut_edge_id: EdgeId) {
         let mut shortcut = Shortcut::new(None);
-        swap(&mut self.outgoing[edge_id as usize], &mut shortcut);
-        shortcut.cache_ipps(self);
-        swap(&mut self.outgoing[edge_id as usize], &mut shortcut);
-    }
-
-    pub fn clear_upward_edge_cache(&mut self, edge_id: EdgeId) {
-        self.outgoing[edge_id as usize].clear_cache();
+        swap(&mut self.outgoing[shortcut_edge_id as usize], &mut shortcut);
+        shortcut.remove_dominated(&self);
+        swap(&mut self.outgoing[shortcut_edge_id as usize], &mut shortcut);
     }
 
     pub fn get_downward(&self, edge_id: EdgeId) -> &Shortcut {
         &self.incoming[edge_id as usize]
     }
 
-    pub fn cache_downward_edge_ipps(&mut self, edge_id: EdgeId) {
+    pub fn remove_dominated_downward(&mut self, shortcut_edge_id: EdgeId) {
         let mut shortcut = Shortcut::new(None);
-        swap(&mut self.incoming[edge_id as usize], &mut shortcut);
-        shortcut.cache_ipps(self);
-        swap(&mut self.incoming[edge_id as usize], &mut shortcut);
-    }
-
-    pub fn clear_downward_edge_cache(&mut self, edge_id: EdgeId) {
-        self.incoming[edge_id as usize].clear_cache();
+        swap(&mut self.incoming[shortcut_edge_id as usize], &mut shortcut);
+        shortcut.remove_dominated(&self);
+        swap(&mut self.incoming[shortcut_edge_id as usize], &mut shortcut);
     }
 
     pub fn original_graph(&self) -> &TDGraph {
@@ -67,5 +59,19 @@ impl<'a> ShortcutGraph<'a> {
         let a: usize = self.outgoing.iter().map(|shortcut| shortcut.num_path_segments()).sum();
         let b: usize = self.incoming.iter().map(|shortcut| shortcut.num_path_segments()).sum();
         a + b
+    }
+
+    pub fn print_segment_stats(&self) {
+        let max = self.outgoing.iter()
+            .chain(self.incoming.iter())
+            .map(|shortcut| shortcut.num_path_segments())
+            .max().unwrap();
+        let mut histogramm = vec![0; max + 1];
+
+        for shortcut in self.outgoing.iter().chain(self.incoming.iter()) {
+            histogramm[shortcut.num_path_segments()] += 1;
+        }
+
+        println!("{:?}", histogramm);
     }
 }

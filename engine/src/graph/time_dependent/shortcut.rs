@@ -1,81 +1,70 @@
-use super::*;
-use std::slice::Iter as SliceIter;
 use std::iter::Once;
-
-use math::RangeExtensions;
-use ::sorted_search_slice_ext::*;
+use std::slice::Iter as SliceIter;
+use super::*;
 
 #[derive(Debug, Clone)]
 pub struct Shortcut {
     data: ShortcutPaths,
-    cache: Option<Vec<MATSeg>>
+    lower_bound: Weight,
+    upper_bound: Weight,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 enum ShortcutPaths {
     None,
     One(ShortcutData),
-    Multi(Vec<(Timestamp, ShortcutData)>) // TODO wasting space?
+    Multi(Vec<ShortcutData>)
 }
 
 impl Shortcut {
-    pub fn new(source: Option<EdgeId>) -> Shortcut {
-        let data = match source {
-            Some(edge) => ShortcutPaths::One(ShortcutData::new(ShortcutSource::OriginalEdge(edge))),
-            None => ShortcutPaths::None,
-        };
-        Shortcut { data, cache: None }
+    pub fn new(source: Option<(EdgeId, PiecewiseLinearFunction)>) -> Shortcut {
+        match source {
+            Some((edge, plf)) => {
+                let data = ShortcutPaths::One(ShortcutData::new(ShortcutSource::OriginalEdge(edge)));
+                let (lower_bound, upper_bound) = plf.bounds();
+                Shortcut { data, lower_bound, upper_bound }
+            },
+            None => Shortcut { data: ShortcutPaths::None, lower_bound: INFINITY, upper_bound: INFINITY },
+        }
     }
 
     pub fn merge(&mut self, other: Linked, shortcut_graph: &ShortcutGraph) {
         if !other.is_valid_path(shortcut_graph) {
             return
         }
+        let (other_lower_bound, other_upper_bound) = other.bounds(shortcut_graph);
+
         if !self.is_valid_path() {
             self.data = ShortcutPaths::One(other.as_shortcut_data());
-            self.cache = Some(other.non_wrapping_seg_iter(0..period(), shortcut_graph).fold(Vec::new(), |mut acc, seg| {
-                if let Some(last) = acc.last_mut() {
-                    if !last.combine(&seg) {
-                        acc.push(seg)
-                    }
-                } else {
-                    acc.push(seg)
-                }
-                acc
-            }));
+            self.lower_bound = other_lower_bound;
+            self.upper_bound = other_upper_bound;
             return
         }
 
-        // TODO bounds for range
-        let (current_lower_bound, current_upper_bound) = self.bounds(shortcut_graph);
-        let (other_lower_bound, other_upper_bound) = other.bounds(shortcut_graph);
+        let (current_lower_bound, current_upper_bound) = self.bounds();
         if current_lower_bound >= other_upper_bound {
-            self.cache = Some(other.non_wrapping_seg_iter(0..period(), shortcut_graph).collect());
             self.data = ShortcutPaths::One(other.as_shortcut_data());
+            self.lower_bound = other_lower_bound;
+            self.upper_bound = other_upper_bound;
             return
         } else if other_lower_bound >= current_upper_bound {
             return
         }
 
-        let range = 0..period();
-        let data = merge(
-            self.non_wrapping_seg_iter(range.clone(), shortcut_graph),
-            other.non_wrapping_seg_iter(range, shortcut_graph)
-        ).fold(SegmentAggregator::new(
-            other.as_shortcut_data(), PathSegmentIter::new(self)),
-            |mut acc, better_segment| { acc.integrate_segment(better_segment); acc });
-
-        let (mut merged_path_segments, cache) = data.decompose();
-        debug_assert!(!merged_path_segments.is_empty());
-        if merged_path_segments.len() > 1 {
-            let (_, first_path) = merged_path_segments.first().unwrap();
-            merged_path_segments.push((period(), *first_path));
-            self.data = ShortcutPaths::Multi(merged_path_segments);
-        } else {
-            self.data = ShortcutPaths::One(merged_path_segments[0].1);
+        debug_assert!(current_lower_bound < INFINITY);
+        debug_assert!(current_upper_bound < INFINITY);
+        debug_assert!(other_lower_bound < INFINITY);
+        debug_assert!(other_upper_bound < INFINITY);
+        self.lower_bound = min(current_lower_bound, other_lower_bound);
+        self.upper_bound = min(current_upper_bound, other_upper_bound);
+        match self.data {
+            ShortcutPaths::None => self.data = ShortcutPaths::One(other.as_shortcut_data()),
+            ShortcutPaths::One(data) => self.data = ShortcutPaths::Multi(vec![data, other.as_shortcut_data()]),
+            ShortcutPaths::Multi(ref mut data) => {
+                // TODO maybe clean up
+                data.push(other.as_shortcut_data())
+            }
         }
-        // debug_assert_eq!(cache, self.non_wrapping_seg_iter(0..period(), shortcut_graph).collect::<Vec<_>>());
-        self.cache = Some(cache);
     }
 
     pub fn evaluate(&self, departure: Timestamp, shortcut_graph: &ShortcutGraph) -> Weight {
@@ -84,84 +73,33 @@ impl Shortcut {
             ShortcutPaths::None => INFINITY,
             ShortcutPaths::One(data) => data.evaluate(departure, shortcut_graph),
             ShortcutPaths::Multi(ref data) => {
-                match data.sorted_search_by_key(&departure, |&(time, _)| time) {
-                    Ok(index) => data[index].1.evaluate(departure, shortcut_graph),
-                    Err(index) => {
-                        let index = (index + data.len() - 1) % data.len();
-                        data[index].1.evaluate(departure, shortcut_graph)
-                    },
-                }
+                data.iter().map(|path| path.evaluate(departure, shortcut_graph)).min().unwrap()
             }
         }
     }
 
-    pub(super) fn non_wrapping_seg_iter<'a, 'b: 'a>(&'b self, range: Range<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = MATSeg> + 'a {
-        if let Some(cache) = &self.cache {
-            return TwoTypeIter::First(cache.iter().filter({ let range = range.clone(); move |seg| {
-                !seg.valid.is_intersection_empty(&range)
-            }}).map(move |seg| {
-                let mut seg = seg.clone();
-                seg.valid = seg.valid.intersection(&range);
-                seg
-            }))
-        }
-
-        if self.contains_non_trivial_data() {
-            println!("cache miss!");
-        }
-
-        let iter = match self.data {
-            ShortcutPaths::None => SegmentIterIter::None,
-            ShortcutPaths::One(data) => SegmentIterIter::One(once(data.non_wrapping_seg_iter(range, shortcut_graph))),
-            ShortcutPaths::Multi(ref data) => {
-                let index_range = data.index_range(&range, |&(dt, _)| dt);
-
-                SegmentIterIter::Multi(data[index_range.clone()].windows(2)
-                    .map(move |paths| {
-                        let (from_at, path) = paths[0];
-                        let (to_at, _) = paths[1];
-                        path.non_wrapping_seg_iter((from_at..to_at).intersection(&range), shortcut_graph)
-                    }))
-            }
-        }.flatten();
-        TwoTypeIter::Second(iter)
+    pub fn bounds(&self) -> (Weight, Weight) {
+        debug_assert!(self.lower_bound < INFINITY || !self.is_valid_path());
+        debug_assert!(self.upper_bound < INFINITY || !self.is_valid_path());
+        (self.lower_bound, self.upper_bound)
     }
 
-    fn contains_non_trivial_data(&self) -> bool {
-        match self.data {
-            ShortcutPaths::None => false,
-            ShortcutPaths::One(data) => {
-                match data.source() {
-                    ShortcutSource::OriginalEdge(_) => false,
-                    ShortcutSource::Shortcut(_, _) => true,
-                }
-            },
-            ShortcutPaths::Multi(ref data) => {
-                data.len() > 1 || match data[0].1.source() {
-                    ShortcutSource::OriginalEdge(_) => false,
-                    ShortcutSource::Shortcut(_, _) => true,
-                }
+    pub fn remove_dominated(&mut self, shortcut_graph: &ShortcutGraph) {
+        let upper_bound = self.upper_bound;
+        if let ShortcutPaths::Multi(data) = &mut self.data {
+            data.retain(|path| path.bounds(shortcut_graph).0 < upper_bound);
+            debug_assert!(!data.is_empty());
+            if data.len() == 1 {
+                self.data = ShortcutPaths::One(data[0]);
             }
         }
-    }
-
-    pub fn bounds(&self, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
-        if !self.is_valid_path() {
-            return (INFINITY, INFINITY);
-        }
-
-        // TODO use cache
-
-        PathSegmentIter::new(self)
-            .map(|(_, source)| source.bounds(shortcut_graph))
-            .fold((INFINITY, 0), |(acc_min, acc_max), (seg_min, seg_max)| (min(acc_min, seg_min), max(acc_max, seg_max)))
     }
 
     pub fn num_path_segments(&self) -> usize {
         match self.data {
             ShortcutPaths::None => 0,
             ShortcutPaths::One(_) => 1,
-            ShortcutPaths::Multi(ref data) => data.len() - 1
+            ShortcutPaths::Multi(ref data) => data.len()
         }
     }
 
@@ -169,29 +107,24 @@ impl Shortcut {
         self.num_path_segments() > 0
     }
 
-    pub fn cache_ipps(&mut self, _shortcut_graph: &ShortcutGraph) {
-        // if self.is_valid_path() {
-        //     let range = WrappingRange::new(Range { start: 0, end: 0 });
-        //     let ipps = self.ipp_iter(range, shortcut_graph).collect();
-        //     self.cache = Some(ipps);
-        // }
-    }
-
-    pub fn clear_cache(&mut self) {
-        self.cache = None
-    }
-
     pub fn debug_to_s<'a>(&self, shortcut_graph: &'a ShortcutGraph, indent: usize) -> String {
+        println!("{:?}", self.data);
         let mut s = String::from("Shortcut: ");
-        for (time, source) in PathSegmentIter::new(self) {
+        for source in PathSegmentIter::new(self) {
             s.push('\n');
             for _ in 0..indent {
                 s.push(' ');
                 s.push(' ');
             }
-            s = s + &format!("{}: ", time) + &source.debug_to_s(shortcut_graph, indent + 1);
+            s = s + &source.debug_to_s(shortcut_graph, indent + 1);
         }
         s
+    }
+
+    pub fn validate_does_not_contain(&self, edge_id: EdgeId, shortcut_graph: &ShortcutGraph) {
+        for source in PathSegmentIter::new(self) {
+            source.validate_does_not_contain(edge_id, shortcut_graph);
+        }
     }
 }
 
@@ -199,7 +132,7 @@ impl Shortcut {
 enum PathSegmentIter<'a> {
     None,
     One(Once<&'a ShortcutData>),
-    Multi(SliceIter<'a, (Timestamp, ShortcutData)>)
+    Multi(SliceIter<'a, ShortcutData>)
 }
 
 impl<'a> PathSegmentIter<'a> {
@@ -213,13 +146,13 @@ impl<'a> PathSegmentIter<'a> {
 }
 
 impl<'a> Iterator for PathSegmentIter<'a> {
-    type Item = (Timestamp, &'a ShortcutData);
+    type Item = (&'a ShortcutData);
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             PathSegmentIter::None => None,
-            PathSegmentIter::One(iter) => iter.next().map(|reference| (0, reference)),
-            PathSegmentIter::Multi(iter) => iter.next().map(|&(time, ref source)| (time, source))
+            PathSegmentIter::One(iter) => iter.next(),
+            PathSegmentIter::Multi(iter) => iter.next()
         }
     }
 }

@@ -40,17 +40,6 @@ impl ShortcutData {
         }
     }
 
-    pub(super) fn non_wrapping_seg_iter<'a>(self, range: Range<Timestamp>, shortcut_graph: &'a ShortcutGraph) -> impl Iterator<Item = MATSeg> + 'a {
-        match self.down_arc.value() {
-            Some(down_shortcut_id) => {
-                ShortcutSourceSegmentIter::Shortcut(Box::new(Linked::new(down_shortcut_id, self.up_arc).non_wrapping_seg_iter(range, shortcut_graph)))
-            },
-            None => {
-                ShortcutSourceSegmentIter::OriginalEdge(shortcut_graph.original_graph().travel_time_function(self.up_arc).non_wrapping_seg_iter(range))
-            },
-        }
-    }
-
     pub fn bounds(self, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
@@ -63,6 +52,7 @@ impl ShortcutData {
     }
 
     pub fn debug_to_s(self, shortcut_graph: &ShortcutGraph, indent: usize) -> String {
+        println!("{:?}", self.source());
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
                 Linked::new(down_shortcut_id, self.up_arc).debug_to_s(shortcut_graph, indent)
@@ -70,6 +60,14 @@ impl ShortcutData {
             None => {
                 shortcut_graph.original_graph().travel_time_function(self.up_arc).debug_to_s(indent)
             },
+        }
+    }
+
+    pub fn validate_does_not_contain(&self, edge_id: EdgeId, shortcut_graph: &ShortcutGraph) {
+        if let Some(down_shortcut_id) = self.down_arc.value() {
+            assert_ne!(edge_id, down_shortcut_id);
+            assert_ne!(edge_id, self.up_arc);
+            Linked::new(down_shortcut_id, self.up_arc).validate_does_not_contain(edge_id, shortcut_graph);
         }
     }
 }

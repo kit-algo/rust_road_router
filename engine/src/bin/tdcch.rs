@@ -23,6 +23,8 @@ fn main() {
     let ipp_departure_time = Vec::<Timestamp>::load_from(path.join("ipp_departure_time").to_str().unwrap()).expect("could not read ipp_departure_time");
     let ipp_travel_time = Vec::<Weight>::load_from(path.join("ipp_travel_time").to_str().unwrap()).expect("could not read ipp_travel_time");
 
+    println!("nodes: {}, arcs: {}, ipps: {}", first_out.len() - 1, head.len(), ipp_departure_time.len());
+
     let mut new_ipp_departure_time = Vec::with_capacity(ipp_departure_time.len() + 2 * head.len());
     let mut new_ipp_travel_time = Vec::with_capacity(ipp_departure_time.len() + 2 * head.len());
 
@@ -42,7 +44,7 @@ fn main() {
             added += 1;
         } else if range.end - range.start >= 2 {
             if ipp_travel_time[range.start]!= ipp_travel_time[range.end - 1] {
-                println!("{:?} {:?}", &ipp_departure_time[range.clone()], &ipp_travel_time[range.clone()]);
+                // println!("{:?} {:?}", &ipp_departure_time[range.clone()], &ipp_travel_time[range.clone()]);
             }
             new_ipp_departure_time.push(0);
             new_ipp_travel_time.push(ipp_travel_time[range.start]);
@@ -59,6 +61,7 @@ fn main() {
             added += 1;
         }
     }
+    first_ipp_of_arc[head.len()] += added;
 
     println!("nodes: {}, arcs: {}, ipps: {}", first_out.len() - 1, head.len(), new_ipp_departure_time.len());
 
@@ -66,6 +69,8 @@ fn main() {
     let cch_order = Vec::load_from(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm");
 
     let cch = customizable_contraction_hierarchy::contract(&graph, NodeOrder::from_node_order(cch_order));
+
     let td_cch_graph = cch.customize_td(&graph);
     println!("{:?}", td_cch_graph.total_num_segments());
+    td_cch_graph.print_segment_stats();
 }
