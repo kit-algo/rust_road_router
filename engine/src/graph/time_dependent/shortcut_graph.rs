@@ -1,5 +1,6 @@
 use super::*;
 use std::mem::swap;
+use rank_select_map::BitVec;
 
 #[derive(Debug)]
 pub struct ShortcutGraph<'a> {
@@ -73,5 +74,18 @@ impl<'a> ShortcutGraph<'a> {
         }
 
         println!("{:?}", histogramm);
+
+        let mut original_edges = BitVec::new(self.original_graph.num_arcs());
+        let mut shortcuts = BitVec::new(self.outgoing.len() + self.incoming.len());
+        let m = self.outgoing.len();
+        let max_search_space = self.outgoing[m-1000..].iter().chain(self.incoming[m-1000..].iter())
+            .map(|shortcut| {
+                original_edges.clear();
+                shortcuts.clear();
+                shortcut.unpack(self, &mut shortcuts, &mut original_edges);
+                original_edges.count_ones()
+            }).max().unwrap();
+
+        println!("{:?}", max_search_space);
     }
 }

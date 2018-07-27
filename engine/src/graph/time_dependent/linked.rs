@@ -1,4 +1,5 @@
 use super::*;
+use rank_select_map::BitVec;
 use ::math::*;
 
 #[derive(Debug, Clone, Copy)]
@@ -42,6 +43,17 @@ impl Linked {
         shortcut_graph.get_downward(self.first).is_valid_path() && shortcut_graph.get_upward(self.second).is_valid_path()
     }
 
+    pub fn unpack(self, shortcut_graph: &ShortcutGraph, unpacked_shortcuts: &mut BitVec, original_edges: &mut BitVec) {
+        if !unpacked_shortcuts.get(self.first as usize * 2) {
+            unpacked_shortcuts.set(self.first as usize * 2);
+            shortcut_graph.get_downward(self.first).unpack(shortcut_graph, unpacked_shortcuts, original_edges);
+        }
+        if !unpacked_shortcuts.get(self.second as usize * 2 + 1) {
+            unpacked_shortcuts.set(self.second as usize * 2 + 1);
+            shortcut_graph.get_upward(self.second).unpack(shortcut_graph, unpacked_shortcuts, original_edges);
+        }
+    }
+
     pub fn debug_to_s(self, shortcut_graph: &ShortcutGraph, indent: usize) -> String {
         println!("{:?}", self);
         let first_edge = shortcut_graph.get_downward(self.first);
@@ -55,7 +67,7 @@ impl Linked {
             second_edge.debug_to_s(shortcut_graph, indent + 1))
     }
 
-    pub fn validate_does_not_contain(&self, edge_id: EdgeId, shortcut_graph: &ShortcutGraph) {
+    pub fn validate_does_not_contain(self, edge_id: EdgeId, shortcut_graph: &ShortcutGraph) {
         assert_ne!(edge_id, self.first);
         assert_ne!(edge_id, self.second);
         shortcut_graph.get_downward(self.first).validate_does_not_contain(edge_id, shortcut_graph);

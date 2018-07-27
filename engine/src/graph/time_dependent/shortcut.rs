@@ -1,6 +1,7 @@
 use std::iter::Once;
 use std::slice::Iter as SliceIter;
 use super::*;
+use rank_select_map::BitVec;
 
 #[derive(Debug, Clone)]
 pub struct Shortcut {
@@ -105,6 +106,12 @@ impl Shortcut {
 
     pub fn is_valid_path(&self) -> bool {
         self.num_path_segments() > 0
+    }
+
+    pub fn unpack(&self, shortcut_graph: &ShortcutGraph, unpacked_shortcuts: &mut BitVec, original_edges: &mut BitVec) {
+        for source in PathSegmentIter::new(self) {
+            source.unpack(shortcut_graph, unpacked_shortcuts, original_edges);
+        }
     }
 
     pub fn debug_to_s<'a>(&self, shortcut_graph: &'a ShortcutGraph, indent: usize) -> String {

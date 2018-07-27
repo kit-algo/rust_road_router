@@ -66,6 +66,16 @@ impl BitVec {
     pub fn len(&self) -> usize {
         self.size
     }
+
+    pub fn clear(&mut self) {
+        for val in &mut self.data {
+            *val = 0;
+        }
+    }
+
+    pub fn count_ones(& self) -> usize {
+        self.data.iter().map(|v| v.count_ones() as usize).sum()
+    }
 }
 
 impl DataBytes for BitVec {

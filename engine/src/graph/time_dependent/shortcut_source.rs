@@ -1,4 +1,5 @@
 use super::*;
+use rank_select_map::BitVec;
 use in_range_option::InRangeOption;
 
 #[derive(Debug, Clone, Copy)]
@@ -47,6 +48,17 @@ impl ShortcutData {
             },
             None => {
                 shortcut_graph.original_graph().travel_time_function(self.up_arc).bounds()
+            },
+        }
+    }
+
+    pub fn unpack(self, shortcut_graph: &ShortcutGraph, unpacked_shortcuts: &mut BitVec, original_edges: &mut BitVec) {
+        match self.down_arc.value() {
+            Some(down_shortcut_id) => {
+                Linked::new(down_shortcut_id, self.up_arc).unpack(shortcut_graph, unpacked_shortcuts, original_edges);
+            },
+            None => {
+                original_edges.set(self.up_arc as usize);
             },
         }
     }
