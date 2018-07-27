@@ -274,4 +274,8 @@ impl CCHGraph {
         let range = self.neighbor_edge_indices_usize(node);
         self.head[range].iter().cloned()
     }
+
+    pub fn num_arcs(&self) -> usize {
+        self.head.len()
+    }
 }

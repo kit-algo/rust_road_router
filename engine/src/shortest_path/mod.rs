@@ -4,6 +4,7 @@ mod timestamped_vector;
 mod stepped_dijkstra;
 mod td_stepped_dijkstra;
 mod stepped_elimination_tree;
+mod td_stepped_elimination_tree;
 
 use self::stepped_dijkstra::{SteppedDijkstra, QueryProgress, State};
 

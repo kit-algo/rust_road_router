@@ -88,4 +88,43 @@ impl<'a> ShortcutGraph<'a> {
 
         println!("{:?}", max_search_space);
     }
+
+    pub fn upward_graph<'s>(&'s self) -> SingleDirShortcutGraph<'s> {
+        SingleDirShortcutGraph {
+            first_out: self.first_out,
+            head: self.head,
+            shortcuts: &self.outgoing[..]
+        }
+    }
+
+    pub fn downward_graph<'s>(&'s self) -> SingleDirShortcutGraph<'s> {
+        SingleDirShortcutGraph {
+            first_out: self.first_out,
+            head: self.head,
+            shortcuts: &self.incoming[..]
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct SingleDirShortcutGraph<'a> {
+    first_out: &'a [EdgeId],
+    head: &'a [NodeId],
+    shortcuts: &'a [Shortcut],
+}
+
+impl<'a> SingleDirShortcutGraph<'a> {
+    pub fn num_nodes(&self) -> usize {
+        self.first_out.len() - 1
+    }
+
+    fn neighbor_edge_indices_usize(&self, node: NodeId) -> Range<usize> {
+        (self.first_out[node as usize] as usize)..(self.first_out[(node + 1) as usize] as usize)
+    }
+
+    pub fn neighbor_iter(&self, node: NodeId) -> impl Iterator<Item = ((NodeId, EdgeId), &Shortcut)> {
+        let range = self.neighbor_edge_indices_usize(node);
+        let edge_ids = range.start as EdgeId .. range.end as EdgeId;
+        self.head[range.clone()].iter().cloned().zip(edge_ids).zip(self.shortcuts[range].iter())
+    }
 }

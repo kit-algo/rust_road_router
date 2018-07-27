@@ -3,7 +3,7 @@ use graph::Graph as GraphTrait;
 
 type IPPIndex = u32;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Graph {
     first_out: Vec<EdgeId>,
     head: Vec<NodeId>,
