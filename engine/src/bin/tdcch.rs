@@ -2,6 +2,7 @@ use std::env;
 use std::path::Path;
 
 extern crate bmw_routing_engine;
+extern crate time;
 
 use bmw_routing_engine::*;
 use graph::*;
@@ -9,9 +10,10 @@ use graph::time_dependent::*;
 use shortest_path::customizable_contraction_hierarchy;
 use shortest_path::node_order::NodeOrder;
 use io::Load;
-use bmw_routing_engine::benchmark::report_time;
+use bmw_routing_engine::benchmark::*;
 use shortest_path::query::time_dependent_customizable_contraction_hierarchy::Server;
 use shortest_path::query::td_dijkstra::Server as DijkServer;
+use time::Duration;
 
 fn main() {
     let mut args = env::args();
@@ -86,17 +88,22 @@ fn main() {
     let to = Vec::load_from(path.join("uniform_queries/target_node").to_str().unwrap()).expect("could not read target node");
     let ground_truth = Vec::load_from(path.join("uniform_queries/day/di/optimal_target_time").to_str().unwrap()).expect("could not read travel_time_length");
 
-    for (((from, to), at), ground_truth) in from.into_iter().zip(to.into_iter()).zip(at.into_iter()).zip(ground_truth.into_iter()).take(100) {
+    let num_queries = 100;
+
+    let mut dijkstra_time = Duration::zero();
+    let mut tdcch_time = Duration::zero();
+
+    for (((from, to), at), ground_truth) in from.into_iter().zip(to.into_iter()).zip(at.into_iter()).zip(ground_truth.into_iter()).take(num_queries) {
         let ground_truth = match ground_truth {
             INFINITY => None,
             val => Some(val),
         };
 
-        report_time("TD Dijkstra query", || {
+        dijkstra_time = dijkstra_time + measure(|| {
             assert_eq!(td_dijk_server.distance(from, to, at).map(|dist| dist + at), ground_truth);
-        });
+        }).1;
 
-        report_time("TDCCH query", || {
+        tdcch_time = tdcch_time + measure(|| {
             let dist = server.distance(from, to, at).map(|dist| dist + at);
             if dist == ground_truth {
                 println!("✅ {:?} {:?}", dist, ground_truth);
@@ -104,6 +111,8 @@ fn main() {
                 println!("❌ {:?} {:?}", dist, ground_truth);
             }
             // assert_eq!(server.distance(from, to, at).map(|dist| dist + at), ground_truth);
-        });
+        }).1;
     }
+    println!("Dijkstra {}ms", dijkstra_time.num_milliseconds() / (num_queries as i64));
+    println!("TDCCH {}ms", tdcch_time.num_milliseconds() / (num_queries as i64));
 }
