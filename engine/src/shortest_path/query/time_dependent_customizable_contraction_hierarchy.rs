@@ -23,7 +23,7 @@ pub struct Server<'a> {
 }
 
 impl<'a> Server<'a> {
-    pub fn new<Graph>(cch_graph: &'a CCHGraph, shortcut_graph: &'a ShortcutGraph<'a>) -> Self {
+    pub fn new(cch_graph: &'a CCHGraph, shortcut_graph: &'a ShortcutGraph<'a>) -> Self {
         Self {
             forward: TDSteppedEliminationTree::new(shortcut_graph.upward_graph(), cch_graph.elimination_tree()),
             backward: TDSteppedEliminationTree::new(shortcut_graph.downward_graph(), cch_graph.elimination_tree()),
@@ -38,14 +38,11 @@ impl<'a> Server<'a> {
     }
 
     pub fn distance(&mut self, from: NodeId, to: NodeId, departure_time: Timestamp) -> Option<Weight> {
-        let from = self.cch_graph.node_order().rank(from);
-        let to = self.cch_graph.node_order().rank(to);
-
         // initialize
         self.tentative_distance = (INFINITY, INFINITY);
         self.meeting_nodes.clear();
-        self.forward.initialize_query(from);
-        self.backward.initialize_query(to);
+        self.forward.initialize_query(self.cch_graph.node_order().rank(from));
+        self.backward.initialize_query(self.cch_graph.node_order().rank(to));
 
         // forward up
         while self.forward.next().is_some() {

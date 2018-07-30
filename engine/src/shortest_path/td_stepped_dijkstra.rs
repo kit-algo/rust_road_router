@@ -93,9 +93,7 @@ impl TDSteppedDijkstra {
                     let plf = self.graph.travel_time_function(edge_id);
                     let next = State { distance: distance + plf.eval(distance), node: neighbor };
 
-                    // If so, add it to the frontier and continue
                     if next.distance < self.distances[next.node as usize] {
-                        // Relaxation, we have now found a better way
                         self.distances.set(next.node as usize, next.distance);
                         self.predecessors[next.node as usize] = node;
                         if self.closest_node_priority_queue.contains_index(next.as_index()) {
@@ -116,10 +114,6 @@ impl TDSteppedDijkstra {
 
     pub fn tentative_distance(&self, node: NodeId) -> Weight {
         self.distances[node as usize]
-    }
-
-    pub fn distances_pointer(&self) -> *const TimestampedVector<Weight> {
-        &self.distances
     }
 
     pub fn predecessor(&self, node: NodeId) -> NodeId {
