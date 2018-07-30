@@ -4,8 +4,8 @@ use shortest_path::td_stepped_dijkstra::TDSteppedDijkstra;
 use graph::time_dependent::*;
 use graph::RandomLinkAccessGraph;
 use shortest_path::query::customizable_contraction_hierarchy::Server as CCHServer;
-use rank_select_map::BitVec;
 use super::td_stepped_dijkstra::QueryProgress;
+use self::timestamped_vector::TimestampedVector;
 
 use std::collections::LinkedList;
 use std::ops::Range;
@@ -15,6 +15,7 @@ pub struct Server<'a> {
     dijkstra: TDSteppedDijkstra,
     samples: Vec<CCHServer<'a>>,
     cch_graph: &'a CCHGraph,
+    active_edges: TimestampedVector<bool>
 }
 
 impl<'a> Server<'a> {
@@ -37,14 +38,15 @@ impl<'a> Server<'a> {
         }).collect();
 
         Server {
+            active_edges: TimestampedVector::new(graph.num_arcs(), false),
             dijkstra: TDSteppedDijkstra::new(graph),
             samples,
-            cch_graph: cch
+            cch_graph: cch,
         }
     }
 
     pub fn distance(&mut self, from: NodeId, to: NodeId, departure_time: Timestamp) -> Option<Weight> {
-        let mut active_edges = BitVec::new(self.dijkstra.graph().num_arcs());
+        self.active_edges.reset();
 
         for server in &mut self.samples {
             server.distance(self.cch_graph.node_order().rank(from), self.cch_graph.node_order().rank(to));
@@ -54,14 +56,14 @@ impl<'a> Server<'a> {
             second_node_iter.next();
 
             for (first_node, second_node) in path_iter.zip(second_node_iter) {
-                active_edges.set(self.dijkstra.graph().edge_index(*first_node, *second_node).unwrap() as usize);
+                self.active_edges[self.dijkstra.graph().edge_index(*first_node, *second_node).unwrap() as usize] = true;
             }
         }
 
-        self.dijkstra.initialize_query(TDQuery { from, to, departure_time }, active_edges);
+        self.dijkstra.initialize_query(TDQuery { from, to, departure_time });
 
         loop {
-            match self.dijkstra.next_step() {
+            match self.dijkstra.next_step(|edge_id| self.active_edges[edge_id as usize]) {
                 QueryProgress::Progress(_) => continue,
                 QueryProgress::Done(result) => return result
             }

@@ -2,7 +2,6 @@ use super::*;
 use self::timestamped_vector::TimestampedVector;
 use index_heap::{IndexdMinHeap, Indexing};
 use graph::time_dependent::TDGraph;
-use rank_select_map::BitVec;
 
 #[derive(Debug, Clone)]
 pub enum QueryProgress {
@@ -32,7 +31,6 @@ pub struct TDSteppedDijkstra {
     query: Option<TDQuery>,
     // first option: algorithm finished? second option: final result of algorithm
     result: Option<Option<Weight>>,
-    active_edges: Option<BitVec>
 }
 
 impl TDSteppedDijkstra {
@@ -47,11 +45,10 @@ impl TDSteppedDijkstra {
             closest_node_priority_queue: IndexdMinHeap::new(n),
             query: None,
             result: None,
-            active_edges: None
         }
     }
 
-    pub fn initialize_query(&mut self, query: TDQuery, active_edges: BitVec) {
+    pub fn initialize_query(&mut self, query: TDQuery) {
         let from = query.from;
         // initialize
         self.query = Some(query);
@@ -62,19 +59,18 @@ impl TDSteppedDijkstra {
         // Starte with origin
         self.distances.set(from as usize, query.departure_time);
         self.closest_node_priority_queue.push(State { distance: query.departure_time, node: from });
-        self.active_edges = Some(active_edges)
     }
 
-    pub fn next_step(&mut self) -> QueryProgress {
+    pub fn next_step<F: Fn(EdgeId) -> bool>(&mut self, check_edge: F) -> QueryProgress {
         match self.result {
             Some(result) => QueryProgress::Done(result),
             None => {
-                self.settle_next_node()
+                self.settle_next_node(check_edge)
             }
         }
     }
 
-    fn settle_next_node(&mut self) -> QueryProgress {
+    fn settle_next_node<F: Fn(EdgeId) -> bool>(&mut self, check_edge: F) -> QueryProgress {
         let to = self.query().to;
 
         // Examine the frontier with lower distance nodes first (min-heap)
@@ -89,7 +85,7 @@ impl TDSteppedDijkstra {
             // For each node we can reach, see if we can find a way with
             // a lower distance going through this node
             for (&neighbor, edge_id) in self.graph.neighbor_and_edge_id_iter(node) {
-                if self.active_edges.as_ref().unwrap().get(edge_id as usize) {
+                if check_edge(edge_id) {
                     let plf = self.graph.travel_time_function(edge_id);
                     let next = State { distance: distance + plf.eval(distance), node: neighbor };
 

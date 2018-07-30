@@ -1,7 +1,6 @@
 use super::*;
 use shortest_path::td_stepped_dijkstra::TDSteppedDijkstra;
 use graph::time_dependent::*;
-use rank_select_map::BitVec;
 use super::td_stepped_dijkstra::QueryProgress;
 
 use std::collections::LinkedList;
@@ -19,15 +18,10 @@ impl Server {
     }
 
     pub fn distance(&mut self, from: NodeId, to: NodeId, departure_time: Timestamp) -> Option<Weight> {
-        let mut active_edges = BitVec::new(self.dijkstra.graph().num_arcs());
-        for i in 0..self.dijkstra.graph().num_arcs() {
-            active_edges.set(i);
-        }
-
-        self.dijkstra.initialize_query(TDQuery { from, to, departure_time }, active_edges);
+        self.dijkstra.initialize_query(TDQuery { from, to, departure_time });
 
         loop {
-            match self.dijkstra.next_step() {
+            match self.dijkstra.next_step(|_| true) {
                 QueryProgress::Progress(_) => continue,
                 QueryProgress::Done(result) => return result
             }

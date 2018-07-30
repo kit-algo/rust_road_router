@@ -87,9 +87,9 @@ impl<'a> Server<'a> {
             }
         }
 
-        self.td_dijkstra.initialize_query(TDQuery { from, to, departure_time }, original_edges);
+        self.td_dijkstra.initialize_query(TDQuery { from, to, departure_time });
         loop {
-            match self.td_dijkstra.next_step() {
+            match self.td_dijkstra.next_step(|edge_id| original_edges.get(edge_id as usize)) {
                 OtherQueryProgress::Progress(_) => continue,
                 OtherQueryProgress::Done(result) => return result
             }
