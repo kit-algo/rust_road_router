@@ -13,7 +13,8 @@ use std::ops::Range;
 #[derive(Debug)]
 pub struct Server<'a> {
     dijkstra: TDSteppedDijkstra,
-    samples: Vec<CCHServer<'a>>
+    samples: Vec<CCHServer<'a>>,
+    cch_graph: &'a CCHGraph,
 }
 
 impl<'a> Server<'a> {
@@ -37,7 +38,8 @@ impl<'a> Server<'a> {
 
         Server {
             dijkstra: TDSteppedDijkstra::new(graph),
-            samples
+            samples,
+            cch_graph: cch
         }
     }
 
@@ -45,7 +47,7 @@ impl<'a> Server<'a> {
         let mut active_edges = BitVec::new(self.dijkstra.graph().num_arcs());
 
         for server in &mut self.samples {
-            server.distance(from, to);
+            server.distance(self.cch_graph.node_order().rank(from), self.cch_graph.node_order().rank(to));
             let path = server.path();
             let path_iter = path.iter();
             let mut second_node_iter = path_iter.clone();
