@@ -1,7 +1,7 @@
 use super::*;
 use shortest_path::node_order::NodeOrder;
 use ::in_range_option::InRangeOption;
-use ::benchmark::measure;
+use ::benchmark::report_time;
 
 pub mod cch_graph;
 
@@ -84,7 +84,7 @@ impl<'a, Graph: for<'b> LinkIterGraph<'b>> ContractionGraph<'a, Graph> {
     }
 
     fn contract(mut self) -> ContractedGraph<'a, Graph> {
-        measure("CCH Contraction", || {
+        report_time("CCH Contraction", || {
             let mut num_shortcut_arcs = 0;
             let mut graph = self.partial_graph();
 

@@ -9,7 +9,7 @@ use graph::time_dependent::*;
 use shortest_path::customizable_contraction_hierarchy;
 use shortest_path::node_order::NodeOrder;
 use io::Load;
-use bmw_routing_engine::benchmark::measure;
+use bmw_routing_engine::benchmark::report_time;
 use shortest_path::query::time_dependent_customizable_contraction_hierarchy::Server;
 use shortest_path::query::td_dijkstra::Server as DijkServer;
 
@@ -92,11 +92,11 @@ fn main() {
             val => Some(val),
         };
 
-        measure("TD Dijkstra query", || {
+        report_time("TD Dijkstra query", || {
             assert_eq!(td_dijk_server.distance(from, to, at).map(|dist| dist + at), ground_truth);
         });
 
-        measure("TDCCH query", || {
+        report_time("TDCCH query", || {
             let dist = server.distance(from, to, at).map(|dist| dist + at);
             if dist == ground_truth {
                 println!("✅ {:?} {:?}", dist, ground_truth);

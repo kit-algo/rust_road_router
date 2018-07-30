@@ -1,7 +1,7 @@
 use super::*;
 use shortest_path::node_order::NodeOrder;
 use in_range_option::InRangeOption;
-use benchmark::{measure, Timer};
+use benchmark::{report_time, Timer};
 use self::first_out_graph::degrees_to_first_out;
 use graph::link_id_to_tail_mapper::*;
 use graph::time_dependent::*;
@@ -95,7 +95,7 @@ impl CCHGraph {
         let mut upward_weights = vec![INFINITY; m];
         let mut downward_weights = vec![INFINITY; m];
 
-        measure("CCH apply weights", || {
+        report_time("CCH apply weights", || {
             for node in 0..n {
                 for (edge_id, Link { node: neighbor, weight }) in metric.neighbor_edge_indices(node).zip(metric.neighbor_iter(node)) {
                     let ch_edge_id = self.original_edge_to_ch_edge[edge_id as usize];
@@ -112,7 +112,7 @@ impl CCHGraph {
         let mut upward = FirstOutGraph::new(&self.first_out[..], &self.head[..], upward_weights);
         let mut downward = FirstOutGraph::new(&self.first_out[..], &self.head[..], downward_weights);
 
-        measure("CCH Customization", || {
+        report_time("CCH Customization", || {
             let mut node_outgoing_weights = vec![(INFINITY, InRangeOption::new(None)); n as usize];
             let mut node_incoming_weights = vec![(INFINITY, InRangeOption::new(None)); n as usize];
 
@@ -170,7 +170,7 @@ impl CCHGraph {
         let mut upward_weights = vec![Shortcut::new(None); m];
         let mut downward_weights = vec![Shortcut::new(None); m];
 
-        measure("TD-CCH apply weights", || {
+        report_time("TD-CCH apply weights", || {
             for node in 0..n {
                 for (edge_id, neighbor) in metric.neighbor_edge_indices(node).zip(metric.neighbor_iter(node).map(|link| link.node)) {
                     let ch_edge_id = self.original_edge_to_ch_edge[edge_id as usize];
@@ -186,7 +186,7 @@ impl CCHGraph {
 
         let mut shortcut_graph = ShortcutGraph::new(metric, &self.first_out, &self.head, upward_weights, downward_weights);
 
-        measure("TD-CCH Customization", || {
+        report_time("TD-CCH Customization", || {
             let mut node_outgoing_edge_ids = vec![InRangeOption::new(None); n as usize];
             let mut node_incoming_edge_ids = vec![InRangeOption::new(None); n as usize];
 

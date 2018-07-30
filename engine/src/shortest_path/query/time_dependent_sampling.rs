@@ -63,7 +63,8 @@ impl<'a> Server<'a> {
         self.dijkstra.initialize_query(TDQuery { from, to, departure_time });
 
         loop {
-            match self.dijkstra.next_step(|edge_id| self.active_edges[edge_id as usize]) {
+            let active_edges = &self.active_edges;
+            match self.dijkstra.next_step(|edge_id| active_edges[edge_id as usize]) {
                 QueryProgress::Progress(_) => continue,
                 QueryProgress::Done(result) => return result
             }

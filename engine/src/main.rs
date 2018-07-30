@@ -15,7 +15,7 @@ use shortest_path::query::contraction_hierarchy::Server as CHServer;
 use shortest_path::contraction_hierarchy;
 
 use io::Load;
-use bmw_routing_engine::benchmark::measure;
+use bmw_routing_engine::benchmark::report_time;
 
 fn main() {
     let mut args = env::args();
@@ -56,22 +56,22 @@ fn main() {
             val => Some(val),
         };
 
-        measure("simple dijkstra", || {
+        report_time("simple dijkstra", || {
             assert_eq!(simple_server.distance(from, to), ground_truth);
         });
-        measure("bidir dijkstra", || {
+        report_time("bidir dijkstra", || {
             assert_eq!(bi_dir_server.distance(from, to), ground_truth);
         });
-        measure("async dijkstra", || {
+        report_time("async dijkstra", || {
             assert_eq!(async_server.distance(from, to), ground_truth);
         });
-        measure("async bidir dijkstra", || {
+        report_time("async bidir dijkstra", || {
             assert_eq!(async_bi_dir_server.distance(from, to), ground_truth);
         });
-        measure("CH", || {
+        report_time("CH", || {
             assert_eq!(ch_server.distance(from, to), ground_truth);
         });
-        measure("own CH", || {
+        report_time("own CH", || {
             assert_eq!(ch_server_with_own_ch.distance(inverted_order[from as usize], inverted_order[to as usize]), ground_truth);
         });
     }

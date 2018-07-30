@@ -9,7 +9,7 @@ use shortest_path::customizable_contraction_hierarchy;
 use shortest_path::node_order::NodeOrder;
 use shortest_path::query::customizable_contraction_hierarchy::Server;
 use io::Load;
-use bmw_routing_engine::benchmark::measure;
+use bmw_routing_engine::benchmark::report_time;
 use shortest_path::query::dijkstra::Server as DijkServer;
 
 fn main() {
@@ -41,11 +41,11 @@ fn main() {
             val => Some(val),
         };
 
-        measure("CCH query", || {
+        report_time("CCH query", || {
             assert_eq!(server.distance(from, to), ground_truth);
         });
 
-        measure("Dijkstra query", || {
+        report_time("Dijkstra query", || {
             assert_eq!(simple_server.distance(from, to), ground_truth);
         });
 
