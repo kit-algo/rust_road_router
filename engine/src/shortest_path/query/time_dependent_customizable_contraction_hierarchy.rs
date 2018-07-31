@@ -44,49 +44,56 @@ impl<'a> Server<'a> {
         self.forward.initialize_query(self.cch_graph.node_order().rank(from));
         self.backward.initialize_query(self.cch_graph.node_order().rank(to));
 
+        // TODO get rid of reinit
+        let mut forward_tree_path = Vec::new();
+        let mut backward_tree_path = Vec::new();
+        let mut forward_tree_mask = BitVec::new(self.shortcut_graph.original_graph().num_nodes());
+        let mut backward_tree_mask = BitVec::new(self.shortcut_graph.original_graph().num_nodes());
+
         // forward up
         while let QueryProgress::Progress(node) = self.forward.next_step() {
-            // if self.forward.node_data(node).lower_bound + self.forward.node_data(node).lower_bound < INFINITY {
-                self.tentative_distance.0 = min(self.tentative_distance.0, self.forward.node_data(node).lower_bound + self.backward.node_data(node).lower_bound);
-                self.tentative_distance.1 = min(self.tentative_distance.1, self.forward.node_data(node).upper_bound + self.backward.node_data(node).upper_bound);
-                debug_assert!(self.tentative_distance.0 <= self.tentative_distance.1);
-                self.meeting_nodes.push(node);
-            // }
+            forward_tree_path.push(node);
         }
 
         // backward up
         while let QueryProgress::Progress(node) = self.backward.next_step() {
-            // if self.forward.node_data(node).lower_bound + self.backward.node_data(node).lower_bound < INFINITY {
+            backward_tree_path.push(node);
+            if self.forward.node_data(node).lower_bound + self.backward.node_data(node).lower_bound < self.tentative_distance.1 {
                 self.tentative_distance.0 = min(self.tentative_distance.0, self.forward.node_data(node).lower_bound + self.backward.node_data(node).lower_bound);
                 self.tentative_distance.1 = min(self.tentative_distance.1, self.forward.node_data(node).upper_bound + self.backward.node_data(node).upper_bound);
                 debug_assert!(self.tentative_distance.0 <= self.tentative_distance.1);
+                if let Some(&back) = self.meeting_nodes.last() {
+                    debug_assert!(node > back);
+                }
                 self.meeting_nodes.push(node);
-            // }
+                forward_tree_mask.set(node as usize);
+                backward_tree_mask.set(node as usize);
+            }
         }
 
-        let mut original_edges = BitVec::new(self.m_orig);
-        let mut shortcuts = BitVec::new(2 * self.m_cch);
-        let mut forward_queue: Vec<NodeId> = Vec::new();
-        forward_queue.extend(&self.meeting_nodes);
-        let mut backward_queue: Vec<NodeId> = Vec::new();
-        backward_queue.extend(&self.meeting_nodes);
+        let mut original_edges = BitVec::new(self.m_orig); // TODO get rid of reinit
+        let mut shortcuts = BitVec::new(2 * self.m_cch); // TODO get rid of reinit
 
-        while let Some(node) = forward_queue.pop() {
-            for label in &self.forward.node_data(node).labels {
-                if !shortcuts.get(label.shortcut_id as usize * 2 + 1) {
-                    shortcuts.set(label.shortcut_id as usize * 2 + 1);
-                    self.shortcut_graph.get_upward(label.shortcut_id).unpack(self.shortcut_graph, &mut shortcuts, &mut original_edges);
-                    forward_queue.push(label.parent);
+        while let Some(node) = forward_tree_path.pop() {
+            if forward_tree_mask.get(node as usize) {
+                for label in &self.forward.node_data(node).labels {
+                    if !shortcuts.get(label.shortcut_id as usize * 2 + 1) {
+                        shortcuts.set(label.shortcut_id as usize * 2 + 1);
+                        self.shortcut_graph.get_upward(label.shortcut_id).unpack(self.shortcut_graph, &mut shortcuts, &mut original_edges);
+                    }
+                    forward_tree_mask.set(label.parent as usize);
                 }
             }
         }
 
-        while let Some(node) = backward_queue.pop() {
-            for label in &self.backward.node_data(node).labels {
-                if !shortcuts.get(label.shortcut_id as usize * 2) {
-                    shortcuts.set(label.shortcut_id as usize * 2);
-                    self.shortcut_graph.get_downward(label.shortcut_id).unpack(self.shortcut_graph, &mut shortcuts, &mut original_edges);
-                    backward_queue.push(label.parent);
+        while let Some(node) = backward_tree_path.pop() {
+            if backward_tree_mask.get(node as usize) {
+                for label in &self.backward.node_data(node).labels {
+                    if !shortcuts.get(label.shortcut_id as usize * 2) {
+                        shortcuts.set(label.shortcut_id as usize * 2);
+                        self.shortcut_graph.get_downward(label.shortcut_id).unpack(self.shortcut_graph, &mut shortcuts, &mut original_edges);
+                    }
+                    backward_tree_mask.set(label.parent as usize);
                 }
             }
         }
