@@ -49,7 +49,7 @@ fn main() {
     //         added += 1;
     //     } else if range.end - range.start >= 2 {
     //         if ipp_travel_time[range.start] != ipp_travel_time[range.end - 1] {
-    //             println!("{:?} {:?}", &ipp_departure_time[range.clone()], &ipp_travel_time[range.clone()]);
+    //             // println!("{:?} {:?}", &ipp_departure_time[range.clone()], &ipp_travel_time[range.clone()]);
     //         }
     //         new_ipp_departure_time.push(0);
     //         new_ipp_travel_time.push(ipp_travel_time[range.start]);
@@ -86,29 +86,24 @@ fn main() {
     let from = Vec::load_from(path.join("uniform_queries/source_node").to_str().unwrap()).expect("could not read source node");
     let at = Vec::load_from(path.join("uniform_queries/source_time").to_str().unwrap()).expect("could not read source time");
     let to = Vec::load_from(path.join("uniform_queries/target_node").to_str().unwrap()).expect("could not read target node");
-    let ground_truth = Vec::load_from(path.join("uniform_queries/day/di/optimal_target_time").to_str().unwrap()).expect("could not read travel_time_length");
 
     let num_queries = 100;
 
     let mut dijkstra_time = Duration::zero();
     let mut tdcch_time = Duration::zero();
 
-    for (((from, to), at), ground_truth) in from.into_iter().zip(to.into_iter()).zip(at.into_iter()).zip(ground_truth.into_iter()).take(num_queries) {
-        let ground_truth = match ground_truth {
-            INFINITY => None,
-            val => Some(val),
-        };
-
-        dijkstra_time = dijkstra_time + measure(|| {
-            assert_eq!(td_dijk_server.distance(from, to, at).map(|dist| dist + at), ground_truth);
-        }).1;
+    for ((from, to), at) in from.into_iter().zip(to.into_iter()).zip(at.into_iter()).take(num_queries) {
+        let (ground_truth, time) = measure(|| {
+            td_dijk_server.distance(from, to, at).map(|dist| dist + at)
+        });
+        dijkstra_time =  dijkstra_time + time;
 
         tdcch_time = tdcch_time + measure(|| {
             let dist = server.distance(from, to, at).map(|dist| dist + at);
             if dist == ground_truth {
-                println!("✅ {:?} {:?}", dist, ground_truth);
+                println!("TDCCH ✅ {:?} {:?}", dist, ground_truth);
             } else {
-                println!("❌ {:?} {:?}", dist, ground_truth);
+                println!("TDCCH ❌ {:?} {:?} {}", dist, ground_truth, ground_truth.unwrap() - at);
             }
             // assert_eq!(server.distance(from, to, at).map(|dist| dist + at), ground_truth);
         }).1;
