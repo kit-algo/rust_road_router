@@ -103,7 +103,7 @@ fn main() {
             if dist == ground_truth {
                 println!("TDCCH ✅ {:?} {:?}", dist, ground_truth);
             } else {
-                println!("TDCCH ❌ {:?} {:?} {}", dist, ground_truth, ground_truth.unwrap() - at);
+                println!("TDCCH ❌ {:?} {:?}", dist, ground_truth);
             }
             // assert_eq!(server.distance(from, to, at).map(|dist| dist + at), ground_truth);
         }).1;

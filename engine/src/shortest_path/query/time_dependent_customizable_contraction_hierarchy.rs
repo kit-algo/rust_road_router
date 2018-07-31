@@ -45,19 +45,23 @@ impl<'a> Server<'a> {
         self.backward.initialize_query(self.cch_graph.node_order().rank(to));
 
         // forward up
-        while self.forward.next().is_some() {
-            self.forward.next_step();
+        while let QueryProgress::Progress(node) = self.forward.next_step() {
+            // if self.forward.node_data(node).lower_bound + self.forward.node_data(node).lower_bound < INFINITY {
+                self.tentative_distance.0 = min(self.tentative_distance.0, self.forward.node_data(node).lower_bound + self.backward.node_data(node).lower_bound);
+                self.tentative_distance.1 = min(self.tentative_distance.1, self.forward.node_data(node).upper_bound + self.backward.node_data(node).upper_bound);
+                debug_assert!(self.tentative_distance.0 <= self.tentative_distance.1);
+                self.meeting_nodes.push(node);
+            // }
         }
 
         // backward up
         while let QueryProgress::Progress(node) = self.backward.next_step() {
-            if self.forward.node_data(node).lower_bound + self.backward.node_data(node).lower_bound < self.tentative_distance.0 ||
-                self.forward.node_data(node).upper_bound + self.backward.node_data(node).upper_bound < self.tentative_distance.1
-            {
+            // if self.forward.node_data(node).lower_bound + self.backward.node_data(node).lower_bound < INFINITY {
                 self.tentative_distance.0 = min(self.tentative_distance.0, self.forward.node_data(node).lower_bound + self.backward.node_data(node).lower_bound);
                 self.tentative_distance.1 = min(self.tentative_distance.1, self.forward.node_data(node).upper_bound + self.backward.node_data(node).upper_bound);
+                debug_assert!(self.tentative_distance.0 <= self.tentative_distance.1);
                 self.meeting_nodes.push(node);
-            }
+            // }
         }
 
         let mut original_edges = BitVec::new(self.m_orig);
@@ -69,8 +73,8 @@ impl<'a> Server<'a> {
 
         while let Some(node) = forward_queue.pop() {
             for label in &self.forward.node_data(node).labels {
-                if !shortcuts.get(label.shortcut_id as usize * 2) {
-                    shortcuts.set(label.shortcut_id as usize * 2);
+                if !shortcuts.get(label.shortcut_id as usize * 2 + 1) {
+                    shortcuts.set(label.shortcut_id as usize * 2 + 1);
                     self.shortcut_graph.get_upward(label.shortcut_id).unpack(self.shortcut_graph, &mut shortcuts, &mut original_edges);
                     forward_queue.push(label.parent);
                 }
@@ -79,8 +83,8 @@ impl<'a> Server<'a> {
 
         while let Some(node) = backward_queue.pop() {
             for label in &self.backward.node_data(node).labels {
-                if !shortcuts.get(label.shortcut_id as usize * 2 + 1) {
-                    shortcuts.set(label.shortcut_id as usize * 2 + 1);
+                if !shortcuts.get(label.shortcut_id as usize * 2) {
+                    shortcuts.set(label.shortcut_id as usize * 2);
                     self.shortcut_graph.get_downward(label.shortcut_id).unpack(self.shortcut_graph, &mut shortcuts, &mut original_edges);
                     backward_queue.push(label.parent);
                 }

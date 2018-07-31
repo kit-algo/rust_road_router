@@ -58,11 +58,9 @@ impl<T: Clone> Index<usize> for TimestampedVector<T> {
 
 impl<T: Clone> IndexMut<usize> for TimestampedVector<T> {
     fn index_mut(&mut self, index: usize) -> &mut T {
-        if self.timestamps[index] == self.current {
-            &mut self.data[index]
-        } else {
+        if self.timestamps[index] != self.current {
             self.set(index, self.default.clone());
-            &mut self.data[index]
         }
+        &mut self.data[index]
     }
 }

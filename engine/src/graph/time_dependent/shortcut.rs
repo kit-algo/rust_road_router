@@ -88,7 +88,7 @@ impl Shortcut {
     pub fn remove_dominated(&mut self, shortcut_graph: &ShortcutGraph) {
         let upper_bound = self.upper_bound;
         if let ShortcutPaths::Multi(data) = &mut self.data {
-            data.retain(|path| path.bounds(shortcut_graph).0 < upper_bound);
+            data.retain(|path| path.bounds(shortcut_graph).0 <= upper_bound);
             debug_assert!(!data.is_empty());
             if data.len() == 1 {
                 self.data = ShortcutPaths::One(data[0]);
