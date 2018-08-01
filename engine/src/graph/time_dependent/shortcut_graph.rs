@@ -41,6 +41,13 @@ impl<'a> ShortcutGraph<'a> {
         swap(&mut self.outgoing[shortcut_edge_id as usize], &mut shortcut);
     }
 
+    pub fn remove_dominated_by_upward(&mut self, shortcut_edge_id: EdgeId, bound: Weight) {
+        let mut shortcut = Shortcut::new(None);
+        swap(&mut self.outgoing[shortcut_edge_id as usize], &mut shortcut);
+        shortcut.remove_dominated_by(&self, bound);
+        swap(&mut self.outgoing[shortcut_edge_id as usize], &mut shortcut);
+    }
+
     pub fn get_downward(&self, edge_id: EdgeId) -> &Shortcut {
         &self.incoming[edge_id as usize]
     }
@@ -49,6 +56,13 @@ impl<'a> ShortcutGraph<'a> {
         let mut shortcut = Shortcut::new(None);
         swap(&mut self.incoming[shortcut_edge_id as usize], &mut shortcut);
         shortcut.remove_dominated(&self);
+        swap(&mut self.incoming[shortcut_edge_id as usize], &mut shortcut);
+    }
+
+    pub fn remove_dominated_by_downward(&mut self, shortcut_edge_id: EdgeId, bound: Weight) {
+        let mut shortcut = Shortcut::new(None);
+        swap(&mut self.incoming[shortcut_edge_id as usize], &mut shortcut);
+        shortcut.remove_dominated_by(&self, bound);
         swap(&mut self.incoming[shortcut_edge_id as usize], &mut shortcut);
     }
 

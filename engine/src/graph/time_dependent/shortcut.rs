@@ -86,13 +86,29 @@ impl Shortcut {
     }
 
     pub fn remove_dominated(&mut self, shortcut_graph: &ShortcutGraph) {
-        let upper_bound = self.upper_bound;
-        if let ShortcutPaths::Multi(data) = &mut self.data {
-            data.retain(|path| path.bounds(shortcut_graph).0 <= upper_bound);
-            debug_assert!(!data.is_empty());
-            if data.len() == 1 {
-                self.data = ShortcutPaths::One(data[0]);
+        self.remove_dominated_by(shortcut_graph, self.upper_bound)
+    }
+
+    pub fn remove_dominated_by(&mut self, shortcut_graph: &ShortcutGraph, upper_bound: Weight) {
+        match self.data {
+            ShortcutPaths::One(ref mut data) => {
+                if data.bounds(shortcut_graph).0 > upper_bound {
+                    self.lower_bound = INFINITY;
+                    self.upper_bound = INFINITY;
+                    self.data = ShortcutPaths::None;
+                }
+            },
+            ShortcutPaths::Multi(ref mut data) => {
+                data.retain(|path| path.bounds(shortcut_graph).0 <= upper_bound);
+                if data.len() == 1 {
+                    self.data = ShortcutPaths::One(data[0]);
+                } else if data.is_empty() {
+                    self.upper_bound = INFINITY;
+                    self.lower_bound = INFINITY;
+                    self.data = ShortcutPaths::None;
+                }
             }
+            _ => (),
         }
     }
 

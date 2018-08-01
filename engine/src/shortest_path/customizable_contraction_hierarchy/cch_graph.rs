@@ -187,8 +187,7 @@ impl CCHGraph {
         let mut shortcut_graph = ShortcutGraph::new(metric, &self.first_out, &self.head, upward_weights, downward_weights);
 
         report_time("TD-CCH Customization", || {
-            let mut node_outgoing_edge_ids = vec![InRangeOption::new(None); n as usize];
-            let mut node_incoming_edge_ids = vec![InRangeOption::new(None); n as usize];
+            let mut node_edge_ids = vec![InRangeOption::new(None); n as usize];
 
             let timer = Timer::new();
 
@@ -197,46 +196,59 @@ impl CCHGraph {
                     println!("t: {}s customizing from node {}, degree: {}, current_num_segements: {}", timer.get_passed_ms() / 1000, current_node, self.degree(current_node), shortcut_graph.total_num_segments());
                 }
                 for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
-                    node_incoming_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
-                    // debug_assert_eq!(downward.link(edge_id).node, node);
-                }
-                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
-                    node_outgoing_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
-                    // debug_assert_eq!(upward.link(edge_id).node, node);
+                    node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
                 }
 
-                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) { // downward / incoming
+                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
                     debug_assert_eq!(self.edge_id_to_tail(edge_id), current_node);
-                    let shortcut_edge_ids = self.neighbor_edge_indices(node); // upward / outgoing
-                    for (target, shortcut_edge_id) in self.neighbor_iter(node).zip(shortcut_edge_ids) { // upward / outgoing
+                    let shortcut_edge_ids = self.neighbor_edge_indices(node);
+                    for (target, shortcut_edge_id) in self.neighbor_iter(node).zip(shortcut_edge_ids) {
                         debug_assert_eq!(self.edge_id_to_tail(shortcut_edge_id), node);
-                        if let Some(other_edge_id) = node_outgoing_edge_ids[target as usize].value() {
+                        if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
                             debug_assert!(shortcut_edge_id > edge_id);
                             debug_assert!(shortcut_edge_id > other_edge_id);
                             shortcut_graph.merge_upward(shortcut_edge_id, Linked::new(edge_id, other_edge_id));
-                        }
-                    }
-                }
-                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) { // upward / outgoing
-                    debug_assert_eq!(self.edge_id_to_tail(edge_id), current_node);
-                    let shortcut_edge_ids = self.neighbor_edge_indices(node); // downward / incoming
-                    for (target, shortcut_edge_id) in self.neighbor_iter(node).zip(shortcut_edge_ids) { // downward / incoming
-                        debug_assert_eq!(self.edge_id_to_tail(shortcut_edge_id), node);
-                        if let Some(other_edge_id) = node_incoming_edge_ids[target as usize].value() {
-                            debug_assert!(shortcut_edge_id > edge_id);
-                            debug_assert!(shortcut_edge_id > other_edge_id);
                             shortcut_graph.merge_downward(shortcut_edge_id, Linked::new(other_edge_id, edge_id));
                         }
                     }
                 }
 
                 for node in self.neighbor_iter(current_node) {
-                    shortcut_graph.remove_dominated_downward(node_incoming_edge_ids[node as usize].value().unwrap());
-                    node_incoming_edge_ids[node as usize] = InRangeOption::new(None);
+                    node_edge_ids[node as usize] = InRangeOption::new(None);
                 }
+            }
+
+            for current_node in (0..n).rev() {
+                if current_node % 100_000 == 0 {
+                    println!("t: {}s perfect customizing from node {}, degree: {}, current_num_segements: {}", timer.get_passed_ms() / 1000, current_node, self.degree(current_node), shortcut_graph.total_num_segments());
+                }
+                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
+                    node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
+                }
+
+                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
+                    let shortcut_edge_ids = self.neighbor_edge_indices(node);
+                    for (target, shortcut_edge_id) in self.neighbor_iter(node).zip(shortcut_edge_ids) {
+                        if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
+                            let bound = shortcut_graph.get_upward(edge_id).bounds().1 + shortcut_graph.get_upward(shortcut_edge_id).bounds().1;
+                            shortcut_graph.remove_dominated_by_upward(other_edge_id, bound);
+
+                            let bound = shortcut_graph.get_upward(other_edge_id).bounds().1 + shortcut_graph.get_downward(shortcut_edge_id).bounds().1;
+                            shortcut_graph.remove_dominated_by_upward(edge_id, bound);
+
+                            let bound = shortcut_graph.get_downward(edge_id).bounds().1 + shortcut_graph.get_downward(shortcut_edge_id).bounds().1;
+                            shortcut_graph.remove_dominated_by_downward(other_edge_id, bound);
+
+                            let bound = shortcut_graph.get_downward(other_edge_id).bounds().1 + shortcut_graph.get_upward(shortcut_edge_id).bounds().1;
+                            shortcut_graph.remove_dominated_by_downward(edge_id, bound);
+                        }
+                    }
+                }
+
                 for node in self.neighbor_iter(current_node) {
-                    shortcut_graph.remove_dominated_upward(node_outgoing_edge_ids[node as usize].value().unwrap());
-                    node_outgoing_edge_ids[node as usize] = InRangeOption::new(None);
+                    shortcut_graph.remove_dominated_downward(node_edge_ids[node as usize].value().unwrap());
+                    shortcut_graph.remove_dominated_upward(node_edge_ids[node as usize].value().unwrap());
+                    node_edge_ids[node as usize] = InRangeOption::new(None);
                 }
             }
         });
