@@ -17,7 +17,7 @@ pub struct Server<'a> {
     cch_graph: &'a CCHGraph,
     shortcut_graph: &'a ShortcutGraph<'a>,
     tentative_distance: (Weight, Weight),
-    meeting_nodes: Vec<NodeId>,
+    meeting_nodes: Vec<(NodeId, Weight)>,
     forward_tree_path: Vec<NodeId>,
     backward_tree_path: Vec<NodeId>,
 }
@@ -58,17 +58,21 @@ impl<'a> Server<'a> {
         // backward up
         while let QueryProgress::Progress(node) = self.backward.next_step() {
             self.backward_tree_path.push(node);
-            if self.forward.node_data(node).lower_bound + self.backward.node_data(node).lower_bound < self.tentative_distance.1 {
-                self.tentative_distance.0 = min(self.tentative_distance.0, self.forward.node_data(node).lower_bound + self.backward.node_data(node).lower_bound);
+            let lower_bound = self.forward.node_data(node).lower_bound + self.backward.node_data(node).lower_bound;
+            if lower_bound < self.tentative_distance.1 {
+                self.tentative_distance.0 = min(self.tentative_distance.0, lower_bound);
                 self.tentative_distance.1 = min(self.tentative_distance.1, self.forward.node_data(node).upper_bound + self.backward.node_data(node).upper_bound);
                 debug_assert!(self.tentative_distance.0 <= self.tentative_distance.1);
-                if let Some(&back) = self.meeting_nodes.last() {
-                    debug_assert!(node > back);
-                }
-                self.meeting_nodes.push(node);
-                forward_tree_mask.set(node as usize);
-                backward_tree_mask.set(node as usize);
+                self.meeting_nodes.push((node, lower_bound));
             }
+        }
+
+        let tentative_upper_bound = self.tentative_distance.1;
+        self.meeting_nodes.retain(|&(_, lower_bound)| lower_bound < tentative_upper_bound);
+
+        for &(node, _) in &self.meeting_nodes {
+            forward_tree_mask.set(node as usize);
+            backward_tree_mask.set(node as usize);
         }
 
         let mut original_edges = BitVec::new(self.shortcut_graph.original_graph().num_arcs()); // TODO get rid of reinit
