@@ -18,8 +18,8 @@ pub struct Server<'a> {
     shortcut_graph: &'a ShortcutGraph<'a>,
     tentative_distance: (Weight, Weight),
     meeting_nodes: Vec<NodeId>,
-    m_orig: usize,
-    m_cch: usize
+    forward_tree_path: Vec<NodeId>,
+    backward_tree_path: Vec<NodeId>,
 }
 
 impl<'a> Server<'a> {
@@ -32,8 +32,8 @@ impl<'a> Server<'a> {
             meeting_nodes: Vec::new(),
             tentative_distance: (INFINITY, INFINITY),
             shortcut_graph,
-            m_orig: shortcut_graph.original_graph().num_arcs(),
-            m_cch: cch_graph.num_arcs()
+            forward_tree_path: Vec::new(),
+            backward_tree_path: Vec::new(),
         }
     }
 
@@ -45,19 +45,19 @@ impl<'a> Server<'a> {
         self.backward.initialize_query(self.cch_graph.node_order().rank(to));
 
         // TODO get rid of reinit
-        let mut forward_tree_path = Vec::new();
-        let mut backward_tree_path = Vec::new();
+        self.forward_tree_path.clear();
+        self.backward_tree_path.clear();
         let mut forward_tree_mask = BitVec::new(self.shortcut_graph.original_graph().num_nodes());
         let mut backward_tree_mask = BitVec::new(self.shortcut_graph.original_graph().num_nodes());
 
         // forward up
         while let QueryProgress::Progress(node) = self.forward.next_step() {
-            forward_tree_path.push(node);
+            self.forward_tree_path.push(node);
         }
 
         // backward up
         while let QueryProgress::Progress(node) = self.backward.next_step() {
-            backward_tree_path.push(node);
+            self.backward_tree_path.push(node);
             if self.forward.node_data(node).lower_bound + self.backward.node_data(node).lower_bound < self.tentative_distance.1 {
                 self.tentative_distance.0 = min(self.tentative_distance.0, self.forward.node_data(node).lower_bound + self.backward.node_data(node).lower_bound);
                 self.tentative_distance.1 = min(self.tentative_distance.1, self.forward.node_data(node).upper_bound + self.backward.node_data(node).upper_bound);
@@ -71,10 +71,10 @@ impl<'a> Server<'a> {
             }
         }
 
-        let mut original_edges = BitVec::new(self.m_orig); // TODO get rid of reinit
-        let mut shortcuts = BitVec::new(2 * self.m_cch); // TODO get rid of reinit
+        let mut original_edges = BitVec::new(self.shortcut_graph.original_graph().num_arcs()); // TODO get rid of reinit
+        let mut shortcuts = BitVec::new(2 * self.cch_graph.num_arcs()); // TODO get rid of reinit
 
-        while let Some(node) = forward_tree_path.pop() {
+        while let Some(node) = self.forward_tree_path.pop() {
             if forward_tree_mask.get(node as usize) {
                 for label in &self.forward.node_data(node).labels {
                     if !shortcuts.get(label.shortcut_id as usize * 2 + 1) {
@@ -86,7 +86,7 @@ impl<'a> Server<'a> {
             }
         }
 
-        while let Some(node) = backward_tree_path.pop() {
+        while let Some(node) = self.backward_tree_path.pop() {
             if backward_tree_mask.get(node as usize) {
                 for label in &self.backward.node_data(node).labels {
                     if !shortcuts.get(label.shortcut_id as usize * 2) {
