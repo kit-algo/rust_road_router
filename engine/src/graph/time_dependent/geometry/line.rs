@@ -14,9 +14,9 @@ impl<Point> Line<Point> {
 
 impl Line<TTIpp> {
     pub fn monotonize(self) -> MonotoneLine<TTIpp> {
-        let Line { mut from, to } = self;
+        let Line { from, mut to } = self;
         if from.at > to.at {
-            from.at += period();
+            to.at += period();
         }
         MonotoneLine::<TTIpp>::new(Line { from, to })
     }

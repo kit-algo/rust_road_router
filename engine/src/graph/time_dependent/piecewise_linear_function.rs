@@ -81,6 +81,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                         TTIpp::new(*self.departure_time.get_unchecked(lower_index), *self.travel_time.get_unchecked(lower_index)),
                         TTIpp::new(*self.departure_time.get_unchecked(upper_index), *self.travel_time.get_unchecked(upper_index)))
                 };
+                let departure = if departure < lf.from.at { departure + period() } else { departure };
                 lf.monotonize().into_monotone_at_line().interpolate_tt_in_range(departure)
             },
         }
