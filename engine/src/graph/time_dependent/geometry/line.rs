@@ -12,6 +12,16 @@ impl<Point> Line<Point> {
     }
 }
 
+impl Line<TTIpp> {
+    pub fn monotonize(self) -> MonotoneLine<TTIpp> {
+        let Line { mut from, to } = self;
+        if from.at > to.at {
+            from.at += period();
+        }
+        MonotoneLine::<TTIpp>::new(Line { from, to })
+    }
+}
+
 impl Line<ATIpp> {
     fn delta_x(&self) -> Weight {
         self.to.at - self.from.at

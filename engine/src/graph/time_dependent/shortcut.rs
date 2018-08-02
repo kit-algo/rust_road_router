@@ -62,7 +62,6 @@ impl Shortcut {
             ShortcutPaths::None => self.data = ShortcutPaths::One(other.as_shortcut_data()),
             ShortcutPaths::One(data) => self.data = ShortcutPaths::Multi(vec![data, other.as_shortcut_data()]),
             ShortcutPaths::Multi(ref mut data) => {
-                // TODO maybe clean up
                 data.push(other.as_shortcut_data())
             }
         }
