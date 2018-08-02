@@ -103,7 +103,7 @@ impl<'a> ShortcutGraph<'a> {
         println!("{:?}", max_search_space);
     }
 
-    pub fn upward_graph<'s>(&'s self) -> SingleDirShortcutGraph<'s> {
+    pub fn upward_graph(&self) -> SingleDirShortcutGraph {
         SingleDirShortcutGraph {
             first_out: self.first_out,
             head: self.head,
@@ -111,7 +111,7 @@ impl<'a> ShortcutGraph<'a> {
         }
     }
 
-    pub fn downward_graph<'s>(&'s self) -> SingleDirShortcutGraph<'s> {
+    pub fn downward_graph(&self) -> SingleDirShortcutGraph {
         SingleDirShortcutGraph {
             first_out: self.first_out,
             head: self.head,
