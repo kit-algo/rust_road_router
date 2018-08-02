@@ -16,54 +16,26 @@ impl<'a> ShortcutGraph<'a> {
         ShortcutGraph { original_graph, first_out, head, outgoing, incoming }
     }
 
-    pub fn merge_upward(&mut self, shortcut_edge_id: EdgeId, alternative: Linked) {
-        let mut shortcut = Shortcut::new(None);
-        swap(&mut self.outgoing[shortcut_edge_id as usize], &mut shortcut);
-        shortcut.merge(alternative, &self);
-        swap(&mut self.outgoing[shortcut_edge_id as usize], &mut shortcut);
-    }
-
-    pub fn merge_downward(&mut self, shortcut_edge_id: EdgeId, alternative: Linked) {
-        let mut shortcut = Shortcut::new(None);
-        swap(&mut self.incoming[shortcut_edge_id as usize], &mut shortcut);
-        shortcut.merge(alternative, &self);
-        swap(&mut self.incoming[shortcut_edge_id as usize], &mut shortcut);
-    }
-
     pub fn get_upward(&self, edge_id: EdgeId) -> &Shortcut {
         &self.outgoing[edge_id as usize]
-    }
-
-    pub fn remove_dominated_upward(&mut self, shortcut_edge_id: EdgeId) {
-        let mut shortcut = Shortcut::new(None);
-        swap(&mut self.outgoing[shortcut_edge_id as usize], &mut shortcut);
-        shortcut.remove_dominated(&self);
-        swap(&mut self.outgoing[shortcut_edge_id as usize], &mut shortcut);
-    }
-
-    pub fn remove_dominated_by_upward(&mut self, shortcut_edge_id: EdgeId, bound: Weight) {
-        let mut shortcut = Shortcut::new(None);
-        swap(&mut self.outgoing[shortcut_edge_id as usize], &mut shortcut);
-        shortcut.remove_dominated_by(&self, bound);
-        swap(&mut self.outgoing[shortcut_edge_id as usize], &mut shortcut);
     }
 
     pub fn get_downward(&self, edge_id: EdgeId) -> &Shortcut {
         &self.incoming[edge_id as usize]
     }
 
-    pub fn remove_dominated_downward(&mut self, shortcut_edge_id: EdgeId) {
+    pub fn borrow_mut_upward<F: FnOnce(&mut Shortcut, &ShortcutGraph)>(&mut self, edge_id: EdgeId, f: F) {
         let mut shortcut = Shortcut::new(None);
-        swap(&mut self.incoming[shortcut_edge_id as usize], &mut shortcut);
-        shortcut.remove_dominated(&self);
-        swap(&mut self.incoming[shortcut_edge_id as usize], &mut shortcut);
+        swap(&mut self.outgoing[edge_id as usize], &mut shortcut);
+        f(&mut shortcut, &self);
+        swap(&mut self.outgoing[edge_id as usize], &mut shortcut);
     }
 
-    pub fn remove_dominated_by_downward(&mut self, shortcut_edge_id: EdgeId, bound: Weight) {
+    pub fn borrow_mut_downward<F: FnOnce(&mut Shortcut, &ShortcutGraph)>(&mut self, edge_id: EdgeId, f: F) {
         let mut shortcut = Shortcut::new(None);
-        swap(&mut self.incoming[shortcut_edge_id as usize], &mut shortcut);
-        shortcut.remove_dominated_by(&self, bound);
-        swap(&mut self.incoming[shortcut_edge_id as usize], &mut shortcut);
+        swap(&mut self.incoming[edge_id as usize], &mut shortcut);
+        f(&mut shortcut, &self);
+        swap(&mut self.incoming[edge_id as usize], &mut shortcut);
     }
 
     pub fn original_graph(&self) -> &TDGraph {
