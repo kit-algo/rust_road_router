@@ -24,11 +24,6 @@ impl ATIpp {
         // debug_assert!(val >= at);
         ATIpp { at, val }
     }
-
-    pub fn shift(&mut self) {
-        self.at += period();
-        self.val += period();
-    }
 }
 
 #[derive(Debug)]

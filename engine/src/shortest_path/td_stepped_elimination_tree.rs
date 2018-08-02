@@ -96,15 +96,7 @@ impl<'a, 'b> TDSteppedEliminationTree<'a, 'b> {
         }
     }
 
-    pub fn next(&self) -> Option<NodeId> {
-        self.next
-    }
-
     pub fn node_data(&self, node: NodeId) -> &NodeData {
         &self.distances[node as usize]
-    }
-
-    pub fn origin(&self) -> NodeId {
-        self.origin.unwrap()
     }
 }

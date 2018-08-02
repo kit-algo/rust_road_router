@@ -75,28 +75,11 @@ impl ShortcutData {
         }
     }
 
-    pub fn validate_does_not_contain(&self, edge_id: EdgeId, shortcut_graph: &ShortcutGraph) {
+    pub fn validate_does_not_contain(self, edge_id: EdgeId, shortcut_graph: &ShortcutGraph) {
         if let Some(down_shortcut_id) = self.down_arc.value() {
             assert_ne!(edge_id, down_shortcut_id);
             assert_ne!(edge_id, self.up_arc);
             Linked::new(down_shortcut_id, self.up_arc).validate_does_not_contain(edge_id, shortcut_graph);
-        }
-    }
-}
-
-pub(super) enum ShortcutSourceSegmentIter<'a, PLFIter: Iterator<Item = PLFSeg>> {
-    Shortcut(Box<dyn Iterator<Item = MATSeg> + 'a>),
-    OriginalEdge(PLFIter),
-}
-
-impl<'a, PLFIter: Iterator<Item = PLFSeg>> Iterator for ShortcutSourceSegmentIter<'a, PLFIter> {
-    type Item = MATSeg;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        // println!("shortcut src next");
-        match *self {
-            ShortcutSourceSegmentIter::Shortcut(ref mut iter) => iter.next(),
-            ShortcutSourceSegmentIter::OriginalEdge(ref mut iter) => iter.next().map(|seg| seg.into_atfseg()),
         }
     }
 }

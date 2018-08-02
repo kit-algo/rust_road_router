@@ -1,7 +1,7 @@
 use super::*;
 use std::{
-    iter::{Peekable, once},
-    cmp::{min, max}
+    iter::once,
+    cmp::min
 };
 
 mod piecewise_linear_function;
@@ -25,9 +25,6 @@ pub use self::graph::Graph as TDGraph;
 pub mod shortcut_graph;
 pub use self::shortcut_graph::ShortcutGraph;
 pub use self::shortcut_graph::SingleDirShortcutGraph;
-
-mod merge;
-use self::merge::*;
 
 mod geometry;
 use self::geometry::*;

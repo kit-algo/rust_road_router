@@ -24,7 +24,7 @@ fn main() {
 
     let first_out = Vec::load_from(path.join("first_out").to_str().unwrap()).expect("could not read first_out");
     let head = Vec::load_from(path.join("head").to_str().unwrap()).expect("could not read head");
-    let mut first_ipp_of_arc = Vec::load_from(path.join("first_ipp_of_arc").to_str().unwrap()).expect("could not read first_ipp_of_arc");
+    let first_ipp_of_arc = Vec::load_from(path.join("first_ipp_of_arc").to_str().unwrap()).expect("could not read first_ipp_of_arc");
     let ipp_departure_time = Vec::<Timestamp>::load_from(path.join("ipp_departure_time").to_str().unwrap()).expect("could not read ipp_departure_time");
     let ipp_travel_time = Vec::<Weight>::load_from(path.join("ipp_travel_time").to_str().unwrap()).expect("could not read ipp_travel_time");
 
