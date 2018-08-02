@@ -62,32 +62,24 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
     pub(super) fn evaluate(&self, departure: Timestamp) -> Weight {
         debug_assert!(departure < period());
-        // if self.departure_time.len() == 2 {
         if self.departure_time.len() == 1 {
             return unsafe { *self.travel_time.get_unchecked(0) }
         }
 
-        // match self.departure_time.locate(&departure, |&dt| dt) {
-        //     Location::On(index) => unsafe { *self.travel_time.get_unchecked(index) },
-        //     Location::Between(lower_index , upper_index) => {},
-        // }
-        match self.departure_time.sorted_search(&departure) {
-            Ok(departure_index) => unsafe { *self.travel_time.get_unchecked(departure_index) },
-            Err(upper_index) => {
-                let upper_index = upper_index % self.departure_time.len();
-                let lower_index = if upper_index > 0 { upper_index - 1 } else { self.departure_time.len() - 1 };
+        match self.departure_time.locate(&departure, |&dt| dt) {
+            Location::On(index) => unsafe { *self.travel_time.get_unchecked(index) },
+            Location::Between(lower_index , upper_index) => {
                 let lf = unsafe {
-                    Line::new(
+                    MonotoneLine::<TTIpp>::new(Line::new(
                         TTIpp::new(*self.departure_time.get_unchecked(lower_index), *self.travel_time.get_unchecked(lower_index)),
-                        TTIpp::new(*self.departure_time.get_unchecked(upper_index), *self.travel_time.get_unchecked(upper_index)))
+                        TTIpp::new(*self.departure_time.get_unchecked(upper_index), *self.travel_time.get_unchecked(upper_index))))
                 };
-                let departure = if departure < lf.from.at { departure + period() } else { departure };
-                lf.monotonize().into_monotone_at_line().interpolate_tt_in_range(departure)
+                lf.into_monotone_at_line().interpolate_tt_in_range(departure)
             },
         }
     }
 
-    pub(super) fn non_wrapping_seg_iter(&self, range: Range<Timestamp>) -> impl Iterator<Item = PLFSeg> + 'a {
+    fn non_wrapping_seg_iter(&self, range: Range<Timestamp>) -> impl Iterator<Item = PLFSeg> + 'a {
         let index_range = self.departure_time.index_range(&range, |&dt| dt);
 
         self.departure_time[index_range.clone()].windows(2).zip(self.travel_time[index_range].windows(2)).map(move |(dts, tts)| {

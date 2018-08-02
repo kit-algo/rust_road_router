@@ -12,16 +12,6 @@ impl<Point> Line<Point> {
     }
 }
 
-impl Line<TTIpp> {
-    pub fn monotonize(self) -> MonotoneLine<TTIpp> {
-        let Line { from, mut to } = self;
-        if from.at > to.at {
-            to.at += period();
-        }
-        MonotoneLine::<TTIpp>::new(Line { from, to })
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct MonotoneLine<Point>(Line<Point>);
 
