@@ -44,15 +44,10 @@ fn main() {
         if ipp_departure_time[range.start] == 0 {
             new_ipp_departure_time.extend(ipp_departure_time[range.clone()].iter().cloned());
             new_ipp_travel_time.extend(ipp_travel_time[range.clone()].iter().cloned());
-            if range.end - range.start > 1 {
-                new_ipp_departure_time.push(period());
-                new_ipp_travel_time.push(ipp_travel_time[range.start]);
-                added += 1;
-            }
-        } else if range.end - range.start >= 2 {
-            if ipp_travel_time[range.start] != ipp_travel_time[range.end - 1] {
-                // println!("{:?} {:?}", &ipp_departure_time[range.clone()], &ipp_travel_time[range.clone()]);
-            }
+            new_ipp_departure_time.push(period());
+            new_ipp_travel_time.push(ipp_travel_time[range.start]);
+            added += 1;
+        } else if range.end - range.start > 1 {
             new_ipp_departure_time.push(0);
             new_ipp_travel_time.push(ipp_travel_time[range.start]);
             new_ipp_departure_time.extend(ipp_departure_time[range.clone()].iter().cloned());
@@ -63,9 +58,9 @@ fn main() {
         } else {
             new_ipp_departure_time.push(0);
             new_ipp_travel_time.extend(ipp_travel_time[range.clone()].iter().cloned());
-            // new_ipp_departure_time.push(period());
-            // new_ipp_travel_time.push(ipp_travel_time[range.start]);
-            // added += 1;
+            new_ipp_departure_time.push(period());
+            new_ipp_travel_time.push(ipp_travel_time[range.start]);
+            added += 1;
         }
     }
     first_ipp_of_arc[head.len()] += added;

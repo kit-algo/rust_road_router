@@ -12,10 +12,9 @@ impl<'a> PiecewiseLinearFunction<'a> {
     pub fn new(departure_time: &'a [Timestamp], travel_time: &'a [Weight]) -> PiecewiseLinearFunction<'a> {
         debug_assert_eq!(departure_time.len(), travel_time.len());
         debug_assert!(!departure_time.is_empty());
-        // debug_assert_eq!(departure_time[0], 0, "{:?}", departure_time);
-        // debug_assert_eq!(*departure_time.last().unwrap(), period());
-        // debug_assert_eq!(*travel_time.last().unwrap(), travel_time[0]);
-        // for dt in &departure_time[0..departure_time.len()] {
+        debug_assert_eq!(departure_time[0], 0, "{:?}", departure_time);
+        debug_assert_eq!(*departure_time.last().unwrap(), period());
+        debug_assert_eq!(*travel_time.last().unwrap(), travel_time[0]);
         for dt in &departure_time[0..departure_time.len()-1] {
             debug_assert!(*dt < period());
         }
@@ -62,7 +61,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
     pub(super) fn evaluate(&self, departure: Timestamp) -> Weight {
         debug_assert!(departure < period());
-        if self.departure_time.len() == 1 {
+        if self.departure_time.len() == 2 {
             return unsafe { *self.travel_time.get_unchecked(0) }
         }
 
@@ -80,6 +79,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     fn non_wrapping_seg_iter(&self, range: Range<Timestamp>) -> impl Iterator<Item = PLFSeg> + 'a {
+        debug_assert!(self.departure_time.len() > 1);
         let index_range = self.departure_time.index_range(&range, |&dt| dt);
 
         self.departure_time[index_range.clone()].windows(2).zip(self.travel_time[index_range].windows(2)).map(move |(dts, tts)| {
