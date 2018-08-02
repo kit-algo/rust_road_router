@@ -42,7 +42,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         (self.lower_bound(), self.upper_bound())
     }
 
-    pub fn bounds_for(&self, range: Range<Timestamp>) -> (Weight, Weight) {
+    pub fn bounds_for(&self, range: &Range<Timestamp>) -> (Weight, Weight) {
         // TODO make sure, we're only doing two binary searches at max here...
         debug_assert!(range.end > range.start);
         let mut index_range = self.departure_time.index_range(&range, |&dt| dt);
@@ -50,11 +50,10 @@ impl<'a> PiecewiseLinearFunction<'a> {
         if index_range.start < index_range.end {
             index_range.end -= 1;
         }
-        let iter = self.travel_time[index_range].iter().cloned()
+        self.travel_time[index_range].iter().cloned()
             .chain(once(self.evaluate(range.start)))
-            .chain(once(self.evaluate(range.end - 1)));
-
-        (iter.clone().min().unwrap(), iter.max().unwrap())
+            .chain(once(self.evaluate(range.end - 1)))
+            .fold((INFINITY, 0), |(acc_min, acc_max), val| (min(acc_min, val), max(acc_max, val)))
     }
 
     pub fn average(&self, range: WrappingRange) -> Weight {
@@ -137,9 +136,9 @@ mod tests {
             let departure_time = vec![0, 6, 9, 14, 17, 20, 24];
             let travel_time =    vec![2, 1, 3, 2,  4,  1,  2];
             let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time);
-            assert_eq!(ttf.bounds_for(0..24), (1,4));
-            assert_eq!(ttf.bounds_for(0..6), (1,2));
-            assert_eq!(ttf.bounds_for(3..16), (1,3));
+            assert_eq!(ttf.bounds_for(&(0..24)), (1,4));
+            assert_eq!(ttf.bounds_for(&(0..6)), (1,2));
+            assert_eq!(ttf.bounds_for(&(3..16)), (1,3));
         });
     }
 

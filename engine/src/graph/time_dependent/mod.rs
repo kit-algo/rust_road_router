@@ -1,7 +1,7 @@
 use super::*;
 use std::{
     iter::once,
-    cmp::min
+    cmp::{min, max}
 };
 
 mod piecewise_linear_function;

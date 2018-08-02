@@ -84,6 +84,12 @@ impl Shortcut {
         (self.lower_bound, self.upper_bound)
     }
 
+    pub fn bounds_for(&self, range: &Range<Timestamp>, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
+        PathSegmentIter::new(self)
+            .map(|source| source.bounds_for(range, shortcut_graph))
+            .fold((INFINITY, INFINITY), |(acc_min, acc_max), (source_min, source_max)| (min(acc_min, source_min), min(acc_max, source_max)))
+    }
+
     pub fn remove_dominated(&mut self, shortcut_graph: &ShortcutGraph) {
         self.remove_dominated_by(shortcut_graph, self.upper_bound)
     }

@@ -1,5 +1,6 @@
 use super::*;
 use rank_select_map::BitVec;
+use math::RangeExtensions;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Linked {
@@ -32,6 +33,14 @@ impl Linked {
         debug_assert!(first_min + second_min < INFINITY);
         debug_assert!(first_max + second_max < INFINITY);
         (first_min + second_min, first_max + second_max)
+    }
+
+    pub fn bounds_for(self, range: &Range<Timestamp>, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
+        let (in_min, in_max) = shortcut_graph.get_incoming(self.first).bounds_for(range, shortcut_graph);
+        let (first_range, second_range) = (range.start + in_min .. range.end + in_max).split(period());
+        let (out_first_min, out_first_max) = shortcut_graph.get_outgoing(self.second).bounds_for(&first_range, shortcut_graph);
+        let (out_second_min, out_second_max) = shortcut_graph.get_outgoing(self.second).bounds_for(&second_range, shortcut_graph);
+        (in_min + min(out_first_min, out_second_min), in_max + max(out_first_max, out_second_max))
     }
 
     pub fn as_shortcut_data(self) -> ShortcutData {

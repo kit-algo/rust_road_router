@@ -52,6 +52,17 @@ impl ShortcutData {
         }
     }
 
+    pub fn bounds_for(self, range: &Range<Timestamp>, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
+        match self.down_arc.value() {
+            Some(down_shortcut_id) => {
+                Linked::new(down_shortcut_id, self.up_arc).bounds_for(range, shortcut_graph)
+            },
+            None => {
+                shortcut_graph.original_graph().travel_time_function(self.up_arc).bounds_for(range)
+            },
+        }
+    }
+
     pub fn unpack(self, shortcut_graph: &ShortcutGraph, unpacked_shortcuts: &mut BitVec, original_edges: &mut BitVec) {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
