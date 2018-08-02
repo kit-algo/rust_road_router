@@ -207,8 +207,8 @@ impl CCHGraph {
                         if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
                             debug_assert!(shortcut_edge_id > edge_id);
                             debug_assert!(shortcut_edge_id > other_edge_id);
-                            shortcut_graph.borrow_mut_upward(shortcut_edge_id, |shortcut, shortcut_graph| shortcut.merge(Linked::new(edge_id, other_edge_id), shortcut_graph));
-                            shortcut_graph.borrow_mut_downward(shortcut_edge_id, |shortcut, shortcut_graph| shortcut.merge(Linked::new(other_edge_id, edge_id), shortcut_graph));
+                            shortcut_graph.borrow_mut_outgoing(shortcut_edge_id, |shortcut, shortcut_graph| shortcut.merge(Linked::new(edge_id, other_edge_id), shortcut_graph));
+                            shortcut_graph.borrow_mut_incoming(shortcut_edge_id, |shortcut, shortcut_graph| shortcut.merge(Linked::new(other_edge_id, edge_id), shortcut_graph));
                         }
                     }
                 }
@@ -230,24 +230,24 @@ impl CCHGraph {
                     let shortcut_edge_ids = self.neighbor_edge_indices(node);
                     for (target, shortcut_edge_id) in self.neighbor_iter(node).zip(shortcut_edge_ids) {
                         if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
-                            let bound = shortcut_graph.get_upward(edge_id).bounds().1 + shortcut_graph.get_upward(shortcut_edge_id).bounds().1;
-                            shortcut_graph.borrow_mut_upward(other_edge_id, |shortcut, shortcut_graph| shortcut.remove_dominated_by(shortcut_graph, bound));
+                            let bound = shortcut_graph.get_outgoing(edge_id).bounds().1 + shortcut_graph.get_outgoing(shortcut_edge_id).bounds().1;
+                            shortcut_graph.borrow_mut_outgoing(other_edge_id, |shortcut, shortcut_graph| shortcut.remove_dominated_by(shortcut_graph, bound));
 
-                            let bound = shortcut_graph.get_upward(other_edge_id).bounds().1 + shortcut_graph.get_downward(shortcut_edge_id).bounds().1;
-                            shortcut_graph.borrow_mut_upward(edge_id, |shortcut, shortcut_graph| shortcut.remove_dominated_by(shortcut_graph, bound));
+                            let bound = shortcut_graph.get_outgoing(other_edge_id).bounds().1 + shortcut_graph.get_incoming(shortcut_edge_id).bounds().1;
+                            shortcut_graph.borrow_mut_outgoing(edge_id, |shortcut, shortcut_graph| shortcut.remove_dominated_by(shortcut_graph, bound));
 
-                            let bound = shortcut_graph.get_downward(edge_id).bounds().1 + shortcut_graph.get_downward(shortcut_edge_id).bounds().1;
-                            shortcut_graph.borrow_mut_downward(other_edge_id, |shortcut, shortcut_graph| shortcut.remove_dominated_by(shortcut_graph, bound));
+                            let bound = shortcut_graph.get_incoming(edge_id).bounds().1 + shortcut_graph.get_incoming(shortcut_edge_id).bounds().1;
+                            shortcut_graph.borrow_mut_incoming(other_edge_id, |shortcut, shortcut_graph| shortcut.remove_dominated_by(shortcut_graph, bound));
 
-                            let bound = shortcut_graph.get_downward(other_edge_id).bounds().1 + shortcut_graph.get_upward(shortcut_edge_id).bounds().1;
-                            shortcut_graph.borrow_mut_downward(edge_id, |shortcut, shortcut_graph| shortcut.remove_dominated_by(shortcut_graph, bound));
+                            let bound = shortcut_graph.get_incoming(other_edge_id).bounds().1 + shortcut_graph.get_outgoing(shortcut_edge_id).bounds().1;
+                            shortcut_graph.borrow_mut_incoming(edge_id, |shortcut, shortcut_graph| shortcut.remove_dominated_by(shortcut_graph, bound));
                         }
                     }
                 }
 
                 for node in self.neighbor_iter(current_node) {
-                    shortcut_graph.borrow_mut_downward(node_edge_ids[node as usize].value().unwrap(), Shortcut::remove_dominated);
-                    shortcut_graph.borrow_mut_upward(node_edge_ids[node as usize].value().unwrap(), Shortcut::remove_dominated);
+                    shortcut_graph.borrow_mut_incoming(node_edge_ids[node as usize].value().unwrap(), Shortcut::remove_dominated);
+                    shortcut_graph.borrow_mut_outgoing(node_edge_ids[node as usize].value().unwrap(), Shortcut::remove_dominated);
                     node_edge_ids[node as usize] = InRangeOption::new(None);
                 }
             }

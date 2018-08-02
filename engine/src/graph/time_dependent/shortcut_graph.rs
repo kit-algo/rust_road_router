@@ -16,22 +16,27 @@ impl<'a> ShortcutGraph<'a> {
         ShortcutGraph { original_graph, first_out, head, outgoing, incoming }
     }
 
-    pub fn get_upward(&self, edge_id: EdgeId) -> &Shortcut {
+    pub fn get_outgoing(&self, edge_id: EdgeId) -> &Shortcut {
         &self.outgoing[edge_id as usize]
     }
 
-    pub fn get_downward(&self, edge_id: EdgeId) -> &Shortcut {
+    pub fn get_incoming(&self, edge_id: EdgeId) -> &Shortcut {
         &self.incoming[edge_id as usize]
     }
 
-    pub fn borrow_mut_upward<F: FnOnce(&mut Shortcut, &ShortcutGraph)>(&mut self, edge_id: EdgeId, f: F) {
+    // a little crazy construction to make the borrow checker happy
+    // so we take the shortcut we want to mutate temporarily out of the graph
+    // that enables us to pass the reference to the graph as an argument to any calculation the mutation might need
+    // the mutation just needs to guarantee that it will never refetch the edge under mutation.
+    // But this is usually no problem since we know that a shortcut can only consist of paths of edges lower in the graph
+    pub fn borrow_mut_outgoing<F: FnOnce(&mut Shortcut, &ShortcutGraph)>(&mut self, edge_id: EdgeId, f: F) {
         let mut shortcut = Shortcut::new(None);
         swap(&mut self.outgoing[edge_id as usize], &mut shortcut);
         f(&mut shortcut, &self);
         swap(&mut self.outgoing[edge_id as usize], &mut shortcut);
     }
 
-    pub fn borrow_mut_downward<F: FnOnce(&mut Shortcut, &ShortcutGraph)>(&mut self, edge_id: EdgeId, f: F) {
+    pub fn borrow_mut_incoming<F: FnOnce(&mut Shortcut, &ShortcutGraph)>(&mut self, edge_id: EdgeId, f: F) {
         let mut shortcut = Shortcut::new(None);
         swap(&mut self.incoming[edge_id as usize], &mut shortcut);
         f(&mut shortcut, &self);

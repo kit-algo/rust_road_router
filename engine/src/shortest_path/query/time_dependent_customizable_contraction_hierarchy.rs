@@ -8,6 +8,7 @@ use ::shortest_path::customizable_contraction_hierarchy::cch_graph::CCHGraph;
 // use ::in_range_option::InRangeOption;
 use self::td_stepped_elimination_tree::QueryProgress;
 use rank_select_map::BitVec;
+use benchmark::report_time;
 
 #[derive(Debug)]
 pub struct Server<'a> {
@@ -50,64 +51,71 @@ impl<'a> Server<'a> {
         let mut forward_tree_mask = BitVec::new(self.shortcut_graph.original_graph().num_nodes());
         let mut backward_tree_mask = BitVec::new(self.shortcut_graph.original_graph().num_nodes());
 
-        // forward up
-        while let QueryProgress::Progress(node) = self.forward.next_step() {
-            self.forward_tree_path.push(node);
-        }
-
-        // backward up
-        while let QueryProgress::Progress(node) = self.backward.next_step() {
-            self.backward_tree_path.push(node);
-            let lower_bound = self.forward.node_data(node).lower_bound + self.backward.node_data(node).lower_bound;
-            if lower_bound < self.tentative_distance.1 {
-                self.tentative_distance.0 = min(self.tentative_distance.0, lower_bound);
-                self.tentative_distance.1 = min(self.tentative_distance.1, self.forward.node_data(node).upper_bound + self.backward.node_data(node).upper_bound);
-                debug_assert!(self.tentative_distance.0 <= self.tentative_distance.1);
-                self.meeting_nodes.push((node, lower_bound));
+        report_time("cch elimination tree", || {
+            // forward up
+            while let QueryProgress::Progress(node) = self.forward.next_step() {
+                self.forward_tree_path.push(node);
             }
-        }
+
+            // backward up
+            while let QueryProgress::Progress(node) = self.backward.next_step() {
+                self.backward_tree_path.push(node);
+                let lower_bound = self.forward.node_data(node).lower_bound + self.backward.node_data(node).lower_bound;
+                if lower_bound < self.tentative_distance.1 {
+                    self.tentative_distance.0 = min(self.tentative_distance.0, lower_bound);
+                    self.tentative_distance.1 = min(self.tentative_distance.1, self.forward.node_data(node).upper_bound + self.backward.node_data(node).upper_bound);
+                    debug_assert!(self.tentative_distance.0 <= self.tentative_distance.1);
+                    self.meeting_nodes.push((node, lower_bound));
+                }
+            }
+        });
 
         let tentative_upper_bound = self.tentative_distance.1;
-        self.meeting_nodes.retain(|&(_, lower_bound)| lower_bound < tentative_upper_bound);
-
-        for &(node, _) in &self.meeting_nodes {
-            forward_tree_mask.set(node as usize);
-            backward_tree_mask.set(node as usize);
-        }
-
         let mut original_edges = BitVec::new(self.shortcut_graph.original_graph().num_arcs()); // TODO get rid of reinit
         let mut shortcuts = BitVec::new(2 * self.cch_graph.num_arcs()); // TODO get rid of reinit
 
-        while let Some(node) = self.forward_tree_path.pop() {
-            if forward_tree_mask.get(node as usize) {
-                for label in &self.forward.node_data(node).labels {
-                    if !shortcuts.get(label.shortcut_id as usize * 2 + 1) {
-                        shortcuts.set(label.shortcut_id as usize * 2 + 1);
-                        self.shortcut_graph.get_upward(label.shortcut_id).unpack(self.shortcut_graph, &mut shortcuts, &mut original_edges);
+        report_time("unpacking", || {
+            self.meeting_nodes.retain(|&(_, lower_bound)| lower_bound < tentative_upper_bound);
+
+            for &(node, _) in &self.meeting_nodes {
+                forward_tree_mask.set(node as usize);
+                backward_tree_mask.set(node as usize);
+            }
+
+
+            while let Some(node) = self.forward_tree_path.pop() {
+                if forward_tree_mask.get(node as usize) {
+                    for label in &self.forward.node_data(node).labels {
+                        if !shortcuts.get(label.shortcut_id as usize * 2 + 1) {
+                            shortcuts.set(label.shortcut_id as usize * 2 + 1);
+                            self.shortcut_graph.get_outgoing(label.shortcut_id).unpack(self.shortcut_graph, &mut shortcuts, &mut original_edges);
+                        }
+                        forward_tree_mask.set(label.parent as usize);
                     }
-                    forward_tree_mask.set(label.parent as usize);
                 }
             }
-        }
 
-        while let Some(node) = self.backward_tree_path.pop() {
-            if backward_tree_mask.get(node as usize) {
-                for label in &self.backward.node_data(node).labels {
-                    if !shortcuts.get(label.shortcut_id as usize * 2) {
-                        shortcuts.set(label.shortcut_id as usize * 2);
-                        self.shortcut_graph.get_downward(label.shortcut_id).unpack(self.shortcut_graph, &mut shortcuts, &mut original_edges);
+            while let Some(node) = self.backward_tree_path.pop() {
+                if backward_tree_mask.get(node as usize) {
+                    for label in &self.backward.node_data(node).labels {
+                        if !shortcuts.get(label.shortcut_id as usize * 2) {
+                            shortcuts.set(label.shortcut_id as usize * 2);
+                            self.shortcut_graph.get_incoming(label.shortcut_id).unpack(self.shortcut_graph, &mut shortcuts, &mut original_edges);
+                        }
+                        backward_tree_mask.set(label.parent as usize);
                     }
-                    backward_tree_mask.set(label.parent as usize);
                 }
             }
-        }
+        });
 
-        self.td_dijkstra.initialize_query(TDQuery { from, to, departure_time });
-        loop {
-            match self.td_dijkstra.next_step(|edge_id| original_edges.get(edge_id as usize)) {
-                OtherQueryProgress::Progress(_) => continue,
-                OtherQueryProgress::Done(result) => return result
+        report_time("TD Dijkstra", || {
+            self.td_dijkstra.initialize_query(TDQuery { from, to, departure_time });
+            loop {
+                match self.td_dijkstra.next_step(|edge_id| original_edges.get(edge_id as usize)) {
+                    OtherQueryProgress::Progress(_) => continue,
+                    OtherQueryProgress::Done(result) => return result
+                }
             }
-        }
+        })
     }
 }
