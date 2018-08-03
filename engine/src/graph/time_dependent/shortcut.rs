@@ -63,7 +63,7 @@ impl Shortcut {
         for (i, (bounds, paths)) in self.data.iter_mut().enumerate() {
             let range = Shortcut::window_time_range(i);
 
-            if !linked.is_valid_path() {
+            if !linked.is_valid_path_during(&range) {
                 continue;
             }
             let (other_lower_bound, other_upper_bound) = linked.bounds_for(&range);
@@ -166,8 +166,8 @@ impl Shortcut {
         self.data.iter().map(|(_, p)| p).map(ShortcutPaths::num_path_segments).max().unwrap()
     }
 
-    pub fn is_valid_path(&self) -> bool {
-        self.num_path_segments() > 0 // TODO move into paths
+    pub fn is_valid_path_during(&self, range: &Range<Timestamp>) -> bool {
+        self.data[Shortcut::time_range_to_window_range(range)].iter().all(|(_, paths)| paths.is_valid_path())
     }
 
     pub fn unpack(&self, shortcut_graph: &ShortcutGraph, unpacked_shortcuts: &mut BitVec, original_edges: &mut BitVec) {

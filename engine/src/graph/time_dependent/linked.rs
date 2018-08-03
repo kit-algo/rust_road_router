@@ -1,5 +1,4 @@
 use super::*;
-use rank_select_map::BitVec;
 use math::RangeExtensions;
 
 #[derive(Debug, Clone)]
@@ -20,7 +19,7 @@ impl<'a> Linked<'a> {
     }
 
     pub fn bounds(&self) -> (Weight, Weight) {
-        if !self.is_valid_path() { return (INFINITY, INFINITY); }
+        if !self.is_valid_path_during(&(0..period())) { return (INFINITY, INFINITY); }
         let (first_min, first_max) = self.first.bounds();
         debug_assert!(first_min < INFINITY);
         debug_assert!(first_max < INFINITY);
@@ -46,12 +45,15 @@ impl<'a> Linked<'a> {
         (in_min + min(out_first_min, out_second_min), in_max + max(out_first_max, out_second_max))
     }
 
-    // pub fn as_shortcut_data(self) -> ShortcutData {
-    //     ShortcutData::new(ShortcutSource::Shortcut(self.first, self.second))
-    // }
-
-    pub fn is_valid_path(&self) -> bool {
-        self.first.is_valid_path() && self.second.is_valid_path()
+    pub fn is_valid_path_during(&self, range: &Range<Timestamp>) -> bool {
+        if !self.first.is_valid_path_during(range) { return false }
+        let (in_min, in_max) = self.first.bounds_for(range);
+        debug_assert!(in_min < INFINITY);
+        debug_assert!(in_max < INFINITY);
+        let (first_range, mut second_range) = (range.start + in_min .. range.end + in_max).split(period());
+        second_range.start -= period();
+        second_range.end -= period();
+        self.second.is_valid_path_during(&first_range) && self.second.is_valid_path_during(&second_range)
     }
 
     pub fn debug_to_s(&self, shortcut_graph: &ShortcutGraph, indent: usize) -> String {
@@ -62,38 +64,3 @@ impl<'a> Linked<'a> {
             self.second.debug_to_s(shortcut_graph, indent + 1))
     }
 }
-
-#[derive(Clone, Debug)]
-#[must_use = "iterator adaptors are lazy and do nothing unless consumed"]
-pub struct LazyChain<I, F> {
-    iter: I,
-    produce_second: Option<F>,
-}
-
-impl<I, F> Iterator for LazyChain<I, F> where
-    I: Iterator,
-    F: FnOnce() -> I
-{
-    type Item = I::Item;
-
-    #[inline]
-    fn next(&mut self) -> Option<I::Item> {
-        match self.iter.next() {
-            elt @ Some(..) => elt,
-            None => {
-                if let Some(f) = self.produce_second.take() {
-                    self.iter = f();
-                }
-                self.iter.next()
-            }
-        }
-    }
-}
-
-trait LazyChainIterExt: Sized {
-    fn lazy_chain<F>(self, f: F) -> LazyChain<Self, F> {
-        LazyChain { iter: self, produce_second: Some(f) }
-    }
-}
-
-impl<T: Iterator> LazyChainIterExt for T {}

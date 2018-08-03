@@ -1,4 +1,4 @@
-use super::{Timestamp, Weight, INFINITY, period};
+use super::{Timestamp, Weight, INFINITY};
 
 mod point;
 pub use self::point::*;
