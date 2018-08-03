@@ -7,12 +7,18 @@ struct Bounds {
     upper: Weight,
 }
 
+impl Default for Bounds {
+    fn default() -> Self {
+        Bounds { lower: INFINITY, upper: INFINITY }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Shortcut {
     data: ShortcutPaths,
 }
 
-const NUM_WINDOWS: usize = 1;
+const NUM_WINDOWS: usize = 2;
 #[inline]
 pub fn window_size() -> Weight {
     period() / NUM_WINDOWS as u32
@@ -65,11 +71,11 @@ impl Shortcut {
 
         let data = match self.data {
             ShortcutPaths::None => {
-                self.data = ShortcutPaths::Multi([(Bounds { lower: INFINITY, upper: INFINITY }, Vec::new()); NUM_WINDOWS]);
+                self.data = ShortcutPaths::Multi(Default::default());
                 if let ShortcutPaths::Multi(new_data) = &mut self.data { new_data } else { panic!("not happening") }
             },
             ShortcutPaths::One(_, data) => {
-                self.data = ShortcutPaths::Multi([(Bounds { lower: INFINITY, upper: INFINITY }, Vec::new()); NUM_WINDOWS]);
+                self.data = ShortcutPaths::Multi(Default::default());
                 if let ShortcutPaths::Multi(new_data) = &mut self.data {
                     for (i, window) in new_data.iter_mut().enumerate() {
                         let range = Shortcut::window_time_range(i);
