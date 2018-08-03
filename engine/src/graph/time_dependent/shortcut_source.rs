@@ -33,7 +33,7 @@ impl ShortcutData {
         debug_assert!(departure < period());
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
-                Linked::new(down_shortcut_id, self.up_arc).evaluate(departure, shortcut_graph)
+                Linked::new(shortcut_graph.get_incoming(down_shortcut_id), shortcut_graph.get_outgoing(self.up_arc)).evaluate(departure, shortcut_graph)
             },
             None => {
                 shortcut_graph.original_graph().travel_time_function(self.up_arc).evaluate(departure)
@@ -41,21 +41,10 @@ impl ShortcutData {
         }
     }
 
-    pub fn bounds(self, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
-        match self.down_arc.value() {
-            Some(down_shortcut_id) => {
-                Linked::new(down_shortcut_id, self.up_arc).bounds(shortcut_graph)
-            },
-            None => {
-                shortcut_graph.original_graph().travel_time_function(self.up_arc).bounds()
-            },
-        }
-    }
-
     pub fn bounds_for(self, range: &Range<Timestamp>, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
-                Linked::new(down_shortcut_id, self.up_arc).bounds_for(range, shortcut_graph)
+                Linked::new(shortcut_graph.get_incoming(down_shortcut_id), shortcut_graph.get_outgoing(self.up_arc)).bounds_for(range)
             },
             None => {
                 shortcut_graph.original_graph().travel_time_function(self.up_arc).bounds_for(range)
@@ -66,7 +55,14 @@ impl ShortcutData {
     pub fn unpack(self, shortcut_graph: &ShortcutGraph, unpacked_shortcuts: &mut BitVec, original_edges: &mut BitVec) {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
-                Linked::new(down_shortcut_id, self.up_arc).unpack(shortcut_graph, unpacked_shortcuts, original_edges);
+                if !unpacked_shortcuts.get(down_shortcut_id as usize * 2) {
+                    unpacked_shortcuts.set(down_shortcut_id as usize * 2);
+                    shortcut_graph.get_incoming(down_shortcut_id).unpack(shortcut_graph, unpacked_shortcuts, original_edges);
+                }
+                if !unpacked_shortcuts.get(self.up_arc as usize * 2 + 1) {
+                    unpacked_shortcuts.set(self.up_arc as usize * 2 + 1);
+                    shortcut_graph.get_outgoing(self.up_arc).unpack(shortcut_graph, unpacked_shortcuts, original_edges);
+                }
             },
             None => {
                 original_edges.set(self.up_arc as usize);
@@ -78,19 +74,11 @@ impl ShortcutData {
         println!("{:?}", self.source());
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
-                Linked::new(down_shortcut_id, self.up_arc).debug_to_s(shortcut_graph, indent)
+                Linked::new(shortcut_graph.get_incoming(down_shortcut_id), shortcut_graph.get_outgoing(self.up_arc)).debug_to_s(shortcut_graph, indent)
             },
             None => {
                 shortcut_graph.original_graph().travel_time_function(self.up_arc).debug_to_s(indent)
             },
-        }
-    }
-
-    pub fn validate_does_not_contain(self, edge_id: EdgeId, shortcut_graph: &ShortcutGraph) {
-        if let Some(down_shortcut_id) = self.down_arc.value() {
-            assert_ne!(edge_id, down_shortcut_id);
-            assert_ne!(edge_id, self.up_arc);
-            Linked::new(down_shortcut_id, self.up_arc).validate_does_not_contain(edge_id, shortcut_graph);
         }
     }
 }
