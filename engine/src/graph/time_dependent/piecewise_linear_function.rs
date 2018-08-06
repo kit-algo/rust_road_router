@@ -42,18 +42,20 @@ impl<'a> PiecewiseLinearFunction<'a> {
         (self.lower_bound(), self.upper_bound())
     }
 
-    pub fn bounds_for(&self, range: &Range<Timestamp>) -> (Weight, Weight) {
+    pub fn bounds_for(&self, range: &Range<Timestamp>) -> Option<(Weight, Weight)> {
         // TODO make sure, we're only doing two binary searches at max here...
-        debug_assert!(range.end > range.start);
+        if range.start == range.end {
+            return None
+        }
         let mut index_range = self.departure_time.index_range(&range, |&dt| dt);
         index_range.start += 1;
         if index_range.start < index_range.end {
             index_range.end -= 1;
         }
-        self.travel_time[index_range].iter().cloned()
+        Some(self.travel_time[index_range].iter().cloned()
             .chain(once(self.evaluate(range.start)))
             .chain(once(self.evaluate(range.end - 1)))
-            .fold((INFINITY, 0), |(acc_min, acc_max), val| (min(acc_min, val), max(acc_max, val)))
+            .fold((INFINITY, 0), |(acc_min, acc_max), val| (min(acc_min, val), max(acc_max, val))))
     }
 
     pub fn average(&self, range: WrappingRange) -> Weight {

@@ -32,14 +32,24 @@ impl<'a> Linked<'a> {
         (first_min + second_min, first_max + second_max)
     }
 
-    pub fn bounds_for(&self, range: &Range<Timestamp>) -> (Weight, Weight) {
+    pub fn bounds_for(&self, range: &Range<Timestamp>) -> Option<(Weight, Weight)> {
+        if range.start == range.end { return None }
+
         if let Some((first_range, second_range)) = self.ranges_for_second(range) {
-            let (in_min, in_max) = self.first.bounds_for(range);
-            let (out_first_min, out_first_max) = self.second.bounds_for(&first_range);
-            let (out_second_min, out_second_max) = self.second.bounds_for(&second_range);
-            (in_min + min(out_first_min, out_second_min), in_max + max(out_first_max, out_second_max))
+            let (in_min, in_max) = self.first.bounds_for(range).unwrap();
+
+            match (self.second.bounds_for(&first_range), self.second.bounds_for(&second_range)) {
+                (Some((out_first_min, out_first_max)), Some((out_second_min, out_second_max))) =>
+                    Some((in_min + min(out_first_min, out_second_min), in_max + max(out_first_max, out_second_max))),
+                (Some((out_first_min, out_first_max)), None) =>
+                    Some((in_min + out_first_min, in_max + out_first_max)),
+                (None, Some((out_second_min, out_second_max))) =>
+                    Some((in_min + out_second_min, in_max + out_second_max)),
+                (None, None) =>
+                    None
+            }
         } else {
-            return (INFINITY, INFINITY);
+            return Some((INFINITY, INFINITY));
         }
     }
 
@@ -55,7 +65,7 @@ impl<'a> Linked<'a> {
         debug_assert!(range.start <= period());
         debug_assert!(range.end <= period());
         debug_assert!(range.start <= range.end);
-        let (in_min, in_max) = self.first.bounds_for(range);
+        let (in_min, in_max) = self.first.bounds_for(range)?;
         if in_min >= INFINITY || in_max >= INFINITY { return None }
         let (first_range, mut second_range) = (range.start + in_min .. range.end + in_max).split(period());
         second_range.start -= period();

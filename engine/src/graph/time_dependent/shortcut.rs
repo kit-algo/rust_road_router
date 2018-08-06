@@ -47,7 +47,7 @@ impl Shortcut {
             Some((edge, plf)) => {
                 let mut data: [(Bounds, ShortcutPaths); NUM_WINDOWS] = Default::default();
                 for (paths, range) in data.iter_mut().zip((0..NUM_WINDOWS).map(Shortcut::window_time_range)) {
-                    let (lower, upper) = plf.bounds_for(&range);
+                    let (lower, upper) = plf.bounds_for(&range).unwrap();
                     *paths = (Bounds { lower, upper }, ShortcutPaths::One(ShortcutData::new(ShortcutSource::OriginalEdge(edge))));
                 }
                 Shortcut { data }
@@ -67,7 +67,7 @@ impl Shortcut {
             if !linked.is_valid_path_during(&range) {
                 continue;
             }
-            let (other_lower_bound, other_upper_bound) = linked.bounds_for(&range);
+            let (other_lower_bound, other_upper_bound) = linked.bounds_for(&range).unwrap();
 
             if !paths.is_valid_path() {
                 *bounds = Bounds { lower: other_lower_bound, upper: other_upper_bound };
@@ -116,16 +116,21 @@ impl Shortcut {
             .fold((INFINITY, 0), |(acc_min, acc_max), Bounds { lower, upper }| (min(acc_min, *lower), max(acc_max, *upper)))
     }
 
-    pub fn bounds_for(&self, range: &Range<Timestamp>) -> (Weight, Weight) {
+    pub fn bounds_for(&self, range: &Range<Timestamp>) -> Option<(Weight, Weight)> {
         self.data[Shortcut::time_range_to_window_range(range)].iter()
             .map(|(bounds, _)| bounds)
-            .fold((INFINITY, 0), |(acc_min, acc_max), Bounds { lower, upper }| (min(acc_min, *lower), max(acc_max, *upper)))
+            .fold(None, |acc, Bounds { lower, upper }| {
+                match acc {
+                    Some((acc_min, acc_max)) => Some((min(acc_min, *lower), max(acc_max, *upper))),
+                    None => Some((*lower, *upper)),
+                }
+            })
     }
 
     pub fn remove_dominated(&mut self, shortcut_graph: &ShortcutGraph) {
         for (i, (bounds, paths)) in self.data.iter_mut().enumerate() {
             if let ShortcutPaths::Multi(data) = paths {
-                data.retain(|path| path.bounds_for(&Shortcut::window_time_range(i), shortcut_graph).0 <= bounds.upper);
+                data.retain(|path| path.bounds_for(&Shortcut::window_time_range(i), shortcut_graph).unwrap().0 <= bounds.upper);
                 if data.len() == 1 {
                     *paths = ShortcutPaths::One(data[0]);
                 } else if data.is_empty() {
@@ -138,7 +143,7 @@ impl Shortcut {
     pub fn remove_dominated_by(&mut self, shortcut_graph: &ShortcutGraph, other: &Linked) {
         for (i, (bounds, paths)) in self.data.iter_mut().enumerate() {
             let range = Shortcut::window_time_range(i);
-            let upper_bound = other.bounds_for(&range).1;
+            let upper_bound = other.bounds_for(&range).unwrap().1;
             match paths {
                 ShortcutPaths::One(_) => {
                     if bounds.lower > upper_bound {
@@ -147,8 +152,8 @@ impl Shortcut {
                 },
                 ShortcutPaths::Multi(data) => {
                     if bounds.upper > upper_bound {
-                        data.retain(|path| path.bounds_for(&range, shortcut_graph).0 <= upper_bound);
-                        *bounds = data.iter().map(|path| path.bounds_for(&range, shortcut_graph))
+                        data.retain(|path| path.bounds_for(&range, shortcut_graph).unwrap().0 <= upper_bound);
+                        *bounds = data.iter().map(|path| path.bounds_for(&range, shortcut_graph).unwrap())
                             .fold(Bounds { lower: INFINITY, upper: INFINITY }, |acc, bounds|
                                 Bounds { lower: min(acc.lower, bounds.0), upper: min(acc.upper, bounds.1) });
                         if data.len() == 1 {

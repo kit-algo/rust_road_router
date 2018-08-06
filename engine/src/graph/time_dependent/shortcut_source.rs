@@ -41,7 +41,7 @@ impl ShortcutData {
         }
     }
 
-    pub fn bounds_for(self, range: &Range<Timestamp>, shortcut_graph: &ShortcutGraph) -> (Weight, Weight) {
+    pub fn bounds_for(self, range: &Range<Timestamp>, shortcut_graph: &ShortcutGraph) -> Option<(Weight, Weight)> {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
                 Linked::new(shortcut_graph.get_incoming(down_shortcut_id), shortcut_graph.get_outgoing(self.up_arc)).bounds_for(range)
