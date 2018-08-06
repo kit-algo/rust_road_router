@@ -61,8 +61,9 @@ impl ShortcutData {
                 }
                 if !unpacked_shortcuts.get(self.up_arc as usize * 2 + 1) {
                     unpacked_shortcuts.set(self.up_arc as usize * 2 + 1);
-                    // TODO wrong range
-                    shortcut_graph.get_outgoing(self.up_arc).unpack(range, shortcut_graph, unpacked_shortcuts, original_edges);
+                    let (first, second) = Linked::new(shortcut_graph.get_incoming(down_shortcut_id), shortcut_graph.get_outgoing(self.up_arc)).ranges_for_second(range).unwrap();
+                    shortcut_graph.get_outgoing(self.up_arc).unpack(&first, shortcut_graph, unpacked_shortcuts, original_edges);
+                    shortcut_graph.get_outgoing(self.up_arc).unpack(&second, shortcut_graph, unpacked_shortcuts, original_edges);
                 }
             },
             None => {

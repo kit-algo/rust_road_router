@@ -33,27 +33,40 @@ impl<'a> Linked<'a> {
     }
 
     pub fn bounds_for(&self, range: &Range<Timestamp>) -> (Weight, Weight) {
-        let (in_min, in_max) = self.first.bounds_for(range);
-        if in_min >= INFINITY {
+        if let Some((first_range, second_range)) = self.ranges_for_second(range) {
+            let (in_min, in_max) = self.first.bounds_for(range);
+            let (out_first_min, out_first_max) = self.second.bounds_for(&first_range);
+            let (out_second_min, out_second_max) = self.second.bounds_for(&second_range);
+            (in_min + min(out_first_min, out_second_min), in_max + max(out_first_max, out_second_max))
+        } else {
             return (INFINITY, INFINITY);
         }
-        let (first_range, mut second_range) = (range.start + in_min .. range.end + in_max).split(period());
-        second_range.start -= period();
-        second_range.end -= period();
-        let (out_first_min, out_first_max) = self.second.bounds_for(&first_range);
-        let (out_second_min, out_second_max) = self.second.bounds_for(&second_range);
-        (in_min + min(out_first_min, out_second_min), in_max + max(out_first_max, out_second_max))
     }
 
     pub fn is_valid_path_during(&self, range: &Range<Timestamp>) -> bool {
-        if !self.first.is_valid_path_during(range) { return false }
+        if let Some((first_range, second_range)) = self.ranges_for_second(range) {
+            self.second.is_valid_path_during(&first_range) && self.second.is_valid_path_during(&second_range)
+        } else {
+            false
+        }
+    }
+
+    pub fn ranges_for_second(&self, range: &Range<Timestamp>) -> Option<(Range<Timestamp>, Range<Timestamp>)> {
+        debug_assert!(range.start <= period());
+        debug_assert!(range.end <= period());
+        debug_assert!(range.start <= range.end);
         let (in_min, in_max) = self.first.bounds_for(range);
-        debug_assert!(in_min < INFINITY);
-        debug_assert!(in_max < INFINITY);
+        if in_min >= INFINITY || in_max >= INFINITY { return None }
         let (first_range, mut second_range) = (range.start + in_min .. range.end + in_max).split(period());
         second_range.start -= period();
         second_range.end -= period();
-        self.second.is_valid_path_during(&first_range) && self.second.is_valid_path_during(&second_range)
+        debug_assert!(first_range.start <= period());
+        debug_assert!(first_range.end <= period());
+        debug_assert!(first_range.start <= range.end);
+        debug_assert!(second_range.start <= period());
+        debug_assert!(second_range.end <= period());
+        debug_assert!(second_range.start <= range.end);
+        Some((first_range, second_range))
     }
 
     pub fn debug_to_s(&self, shortcut_graph: &ShortcutGraph, indent: usize) -> String {
