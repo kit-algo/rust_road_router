@@ -1,5 +1,4 @@
 use super::*;
-use rank_select_map::BitVec;
 use in_range_option::InRangeOption;
 
 #[derive(Debug, Clone, Copy)]
@@ -52,22 +51,24 @@ impl ShortcutData {
         }
     }
 
-    pub fn unpack(self, range: &Range<Timestamp>, shortcut_graph: &ShortcutGraph, unpacked_shortcuts: &mut BitVec, original_edges: &mut BitVec) {
+    pub fn unpack<F, G>(&self,
+        range: &Range<Timestamp>,
+        shortcut_graph: &ShortcutGraph,
+        needs_unpacking: &mut F,
+        add_original_arc: &mut G)
+    where
+        F: FnMut(ShortcutId, usize) -> bool,
+        G: FnMut(EdgeId)
+    {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
-                if !unpacked_shortcuts.get(down_shortcut_id as usize * 2) {
-                    unpacked_shortcuts.set(down_shortcut_id as usize * 2);
-                    shortcut_graph.get_incoming(down_shortcut_id).unpack(range, shortcut_graph, unpacked_shortcuts, original_edges);
-                }
-                if !unpacked_shortcuts.get(self.up_arc as usize * 2 + 1) {
-                    unpacked_shortcuts.set(self.up_arc as usize * 2 + 1);
-                    let (first, second) = Linked::new(shortcut_graph.get_incoming(down_shortcut_id), shortcut_graph.get_outgoing(self.up_arc)).ranges_for_second(range).unwrap();
-                    shortcut_graph.get_outgoing(self.up_arc).unpack(&first, shortcut_graph, unpacked_shortcuts, original_edges);
-                    shortcut_graph.get_outgoing(self.up_arc).unpack(&second, shortcut_graph, unpacked_shortcuts, original_edges);
-                }
+                Shortcut::unpack(ShortcutId::Incmoing(down_shortcut_id), range, shortcut_graph, needs_unpacking, add_original_arc);
+                let (first, second) = Linked::new(shortcut_graph.get_incoming(down_shortcut_id), shortcut_graph.get_outgoing(self.up_arc)).ranges_for_second(range).unwrap();
+                Shortcut::unpack(ShortcutId::Outgoing(self.up_arc), &first, shortcut_graph, needs_unpacking, add_original_arc);
+                Shortcut::unpack(ShortcutId::Outgoing(self.up_arc), &second, shortcut_graph, needs_unpacking, add_original_arc);
             },
             None => {
-                original_edges.set(self.up_arc as usize);
+                add_original_arc(self.up_arc);
             },
         }
     }

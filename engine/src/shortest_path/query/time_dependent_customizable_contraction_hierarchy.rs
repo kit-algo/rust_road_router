@@ -82,13 +82,22 @@ impl<'a> Server<'a> {
                 backward_tree_mask.set(node as usize);
             }
 
+            let mut needs_unpacking = |shortcut_id, _window| {
+                let index = match shortcut_id {
+                    ShortcutId::Outgoing(id) => 2 * id,
+                    ShortcutId::Incmoing(id) => 2 * id + 1,
+                };
+                let res = shortcuts.get(index as usize);
+                shortcuts.set(index as usize);
+                res
+            };
 
             while let Some(node) = self.forward_tree_path.pop() {
                 if forward_tree_mask.get(node as usize) {
                     for label in &self.forward.node_data(node).labels {
-                        if !shortcuts.get(label.shortcut_id as usize * 2 + 1) {
-                            shortcuts.set(label.shortcut_id as usize * 2 + 1);
-                            self.shortcut_graph.get_outgoing(label.shortcut_id).unpack(&(0..period()), self.shortcut_graph, &mut shortcuts, &mut original_edges);
+                        if needs_unpacking(ShortcutId::Outgoing(label.shortcut_id), 0) {
+                            Shortcut::unpack(ShortcutId::Outgoing(label.shortcut_id), &(0..period()), self.shortcut_graph, &mut needs_unpacking,
+                                &mut |edge_id| original_edges.set(edge_id as usize));
                         }
                         forward_tree_mask.set(label.parent as usize);
                     }
@@ -98,9 +107,9 @@ impl<'a> Server<'a> {
             while let Some(node) = self.backward_tree_path.pop() {
                 if backward_tree_mask.get(node as usize) {
                     for label in &self.backward.node_data(node).labels {
-                        if !shortcuts.get(label.shortcut_id as usize * 2) {
-                            shortcuts.set(label.shortcut_id as usize * 2);
-                            self.shortcut_graph.get_incoming(label.shortcut_id).unpack(&(0..period()), self.shortcut_graph, &mut shortcuts, &mut original_edges);
+                        if needs_unpacking(ShortcutId::Incmoing(label.shortcut_id), 0) {
+                            Shortcut::unpack(ShortcutId::Incmoing(label.shortcut_id), &(0..period()), self.shortcut_graph, &mut needs_unpacking,
+                                &mut |edge_id| original_edges.set(edge_id as usize));
                         }
                         backward_tree_mask.set(label.parent as usize);
                     }

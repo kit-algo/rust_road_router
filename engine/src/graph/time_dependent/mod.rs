@@ -75,3 +75,9 @@ pub fn period() -> Timestamp {
 pub const fn period() -> Timestamp {
     86_400_000
 }
+
+#[derive(Debug, Clone, Copy)]
+pub enum ShortcutId {
+    Outgoing(EdgeId),
+    Incmoing(EdgeId),
+}

@@ -66,15 +66,24 @@ impl<'a> ShortcutGraph<'a> {
 
         println!("{:?}", histogramm);
 
-        let mut original_edges = BitVec::new(self.original_graph.num_arcs());
         let mut shortcuts = BitVec::new(self.outgoing.len() + self.incoming.len());
         let m = self.outgoing.len();
-        let max_search_space = self.outgoing[m-1000..].iter().chain(self.incoming[m-1000..].iter())
-            .map(|shortcut| {
-                original_edges.clear();
+        let max_search_space = ((m-1000)..m)
+            .map(|id| {
                 shortcuts.clear();
-                shortcut.unpack(&(0..period()), self, &mut shortcuts, &mut original_edges);
-                original_edges.count_ones()
+                let mut count = 0;
+                Shortcut::unpack(ShortcutId::Outgoing(id as EdgeId), &(0..period()), self,
+                    &mut |shortcut_id, _window| {
+                        let index = match shortcut_id {
+                            ShortcutId::Outgoing(id) => 2 * id,
+                            ShortcutId::Incmoing(id) => 2 * id + 1,
+                        };
+                        let res = shortcuts.get(index as usize);
+                        shortcuts.set(index as usize);
+                        res
+                    },
+                    &mut |_| { count += 1; });
+                count
             }).max().unwrap();
 
         println!("{:?}", max_search_space);

@@ -1,6 +1,4 @@
 use super::*;
-use rank_select_map::BitVec;
-use math::RangeExtensions;
 
 use std::iter::Once;
 use std::slice::Iter as SliceIter;
@@ -176,9 +174,23 @@ impl Shortcut {
         self.data[Shortcut::time_range_to_window_range(range)].iter().all(|(_, paths)| paths.is_valid_path())
     }
 
-    pub fn unpack(&self, range: &Range<Timestamp>, shortcut_graph: &ShortcutGraph, unpacked_shortcuts: &mut BitVec, original_edges: &mut BitVec) {
-        for (i, (_, paths)) in self.data[Shortcut::time_range_to_window_range(range)].iter().enumerate() {
-            paths.unpack(&Shortcut::window_time_range(i).intersection(range), shortcut_graph, unpacked_shortcuts, original_edges);
+    pub fn unpack<F, G>(id: ShortcutId,
+        range: &Range<Timestamp>,
+        shortcut_graph: &ShortcutGraph,
+        needs_unpacking: &mut F,
+        add_original_arc: &mut G)
+    where
+        F: FnMut(ShortcutId, usize) -> bool,
+        G: FnMut(EdgeId)
+    {
+        let shortcut = match id {
+            ShortcutId::Incmoing(id) => shortcut_graph.get_incoming(id),
+            ShortcutId::Outgoing(id) => shortcut_graph.get_outgoing(id),
+        };
+        for (i, (_, paths)) in shortcut.data[Shortcut::time_range_to_window_range(range)].iter().enumerate() {
+            if needs_unpacking(id, i) {
+                paths.unpack(&Shortcut::window_time_range(i), shortcut_graph, needs_unpacking, add_original_arc);
+            }
         }
     }
 
@@ -208,10 +220,17 @@ impl Shortcut {
 }
 
 impl ShortcutPaths {
-    // TODO for range
-    pub fn unpack(&self, range: &Range<Timestamp>, shortcut_graph: &ShortcutGraph, unpacked_shortcuts: &mut BitVec, original_edges: &mut BitVec) {
+    pub fn unpack<F, G>(&self,
+        range: &Range<Timestamp>,
+        shortcut_graph: &ShortcutGraph,
+        needs_unpacking: &mut F,
+        add_original_arc: &mut G)
+    where
+        F: FnMut(ShortcutId, usize) -> bool,
+        G: FnMut(EdgeId)
+    {
         for source in PathSegmentIter::new(self) {
-            source.unpack(range, shortcut_graph, unpacked_shortcuts, original_edges);
+            source.unpack(range, shortcut_graph, needs_unpacking, add_original_arc);
         }
     }
 
