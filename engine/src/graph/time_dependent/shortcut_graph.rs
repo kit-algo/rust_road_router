@@ -73,7 +73,7 @@ impl<'a> ShortcutGraph<'a> {
             .map(|shortcut| {
                 original_edges.clear();
                 shortcuts.clear();
-                shortcut.unpack(self, &mut shortcuts, &mut original_edges);
+                shortcut.unpack(&(0..period()), self, &mut shortcuts, &mut original_edges);
                 original_edges.count_ones()
             }).max().unwrap();
 

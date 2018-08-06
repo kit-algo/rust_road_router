@@ -88,7 +88,7 @@ impl<'a> Server<'a> {
                     for label in &self.forward.node_data(node).labels {
                         if !shortcuts.get(label.shortcut_id as usize * 2 + 1) {
                             shortcuts.set(label.shortcut_id as usize * 2 + 1);
-                            self.shortcut_graph.get_outgoing(label.shortcut_id).unpack(self.shortcut_graph, &mut shortcuts, &mut original_edges);
+                            self.shortcut_graph.get_outgoing(label.shortcut_id).unpack(&(0..period()), self.shortcut_graph, &mut shortcuts, &mut original_edges);
                         }
                         forward_tree_mask.set(label.parent as usize);
                     }
@@ -100,7 +100,7 @@ impl<'a> Server<'a> {
                     for label in &self.backward.node_data(node).labels {
                         if !shortcuts.get(label.shortcut_id as usize * 2) {
                             shortcuts.set(label.shortcut_id as usize * 2);
-                            self.shortcut_graph.get_incoming(label.shortcut_id).unpack(self.shortcut_graph, &mut shortcuts, &mut original_edges);
+                            self.shortcut_graph.get_incoming(label.shortcut_id).unpack(&(0..period()), self.shortcut_graph, &mut shortcuts, &mut original_edges);
                         }
                         backward_tree_mask.set(label.parent as usize);
                     }

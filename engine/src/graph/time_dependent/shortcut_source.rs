@@ -52,16 +52,17 @@ impl ShortcutData {
         }
     }
 
-    pub fn unpack(self, shortcut_graph: &ShortcutGraph, unpacked_shortcuts: &mut BitVec, original_edges: &mut BitVec) {
+    pub fn unpack(self, range: &Range<Timestamp>, shortcut_graph: &ShortcutGraph, unpacked_shortcuts: &mut BitVec, original_edges: &mut BitVec) {
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
                 if !unpacked_shortcuts.get(down_shortcut_id as usize * 2) {
                     unpacked_shortcuts.set(down_shortcut_id as usize * 2);
-                    shortcut_graph.get_incoming(down_shortcut_id).unpack(shortcut_graph, unpacked_shortcuts, original_edges);
+                    shortcut_graph.get_incoming(down_shortcut_id).unpack(range, shortcut_graph, unpacked_shortcuts, original_edges);
                 }
                 if !unpacked_shortcuts.get(self.up_arc as usize * 2 + 1) {
                     unpacked_shortcuts.set(self.up_arc as usize * 2 + 1);
-                    shortcut_graph.get_outgoing(self.up_arc).unpack(shortcut_graph, unpacked_shortcuts, original_edges);
+                    // TODO wrong range
+                    shortcut_graph.get_outgoing(self.up_arc).unpack(range, shortcut_graph, unpacked_shortcuts, original_edges);
                 }
             },
             None => {

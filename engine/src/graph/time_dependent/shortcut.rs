@@ -1,5 +1,6 @@
 use super::*;
 use rank_select_map::BitVec;
+use math::RangeExtensions;
 
 use std::iter::Once;
 use std::slice::Iter as SliceIter;
@@ -170,9 +171,9 @@ impl Shortcut {
         self.data[Shortcut::time_range_to_window_range(range)].iter().all(|(_, paths)| paths.is_valid_path())
     }
 
-    pub fn unpack(&self, shortcut_graph: &ShortcutGraph, unpacked_shortcuts: &mut BitVec, original_edges: &mut BitVec) {
-        for (_, paths) in &self.data {
-            paths.unpack(shortcut_graph, unpacked_shortcuts, original_edges);
+    pub fn unpack(&self, range: &Range<Timestamp>, shortcut_graph: &ShortcutGraph, unpacked_shortcuts: &mut BitVec, original_edges: &mut BitVec) {
+        for (i, (_, paths)) in self.data[Shortcut::time_range_to_window_range(range)].iter().enumerate() {
+            paths.unpack(&Shortcut::window_time_range(i).intersection(range), shortcut_graph, unpacked_shortcuts, original_edges);
         }
     }
 
@@ -203,9 +204,9 @@ impl Shortcut {
 
 impl ShortcutPaths {
     // TODO for range
-    pub fn unpack(&self, shortcut_graph: &ShortcutGraph, unpacked_shortcuts: &mut BitVec, original_edges: &mut BitVec) {
+    pub fn unpack(&self, range: &Range<Timestamp>, shortcut_graph: &ShortcutGraph, unpacked_shortcuts: &mut BitVec, original_edges: &mut BitVec) {
         for source in PathSegmentIter::new(self) {
-            source.unpack(shortcut_graph, unpacked_shortcuts, original_edges);
+            source.unpack(range, shortcut_graph, unpacked_shortcuts, original_edges);
         }
     }
 
