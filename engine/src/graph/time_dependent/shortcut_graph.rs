@@ -78,7 +78,7 @@ impl<'a> ShortcutGraph<'a> {
                             ShortcutId::Outgoing(id) => 2 * id,
                             ShortcutId::Incmoing(id) => 2 * id + 1,
                         };
-                        let res = shortcuts.get(index as usize);
+                        let res = !shortcuts.get(index as usize);
                         shortcuts.set(index as usize);
                         res
                     },

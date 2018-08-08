@@ -1,3 +1,4 @@
+use std::collections::LinkedList;
 use graph::time_dependent::*;
 use shortest_path::td_stepped_dijkstra::QueryProgress as OtherQueryProgress;
 use std::cmp::min;
@@ -75,7 +76,7 @@ impl<'a> Server<'a> {
         let mut shortcuts = BitVec::new(2 * self.cch_graph.num_arcs()); // TODO get rid of reinit
 
         report_time("unpacking", || {
-            self.meeting_nodes.retain(|&(_, lower_bound)| lower_bound < tentative_upper_bound);
+            self.meeting_nodes.retain(|&(_, lower_bound)| lower_bound <= tentative_upper_bound);
 
             for &(node, _) in &self.meeting_nodes {
                 forward_tree_mask.set(node as usize);
@@ -87,7 +88,7 @@ impl<'a> Server<'a> {
                     ShortcutId::Outgoing(id) => 2 * id,
                     ShortcutId::Incmoing(id) => 2 * id + 1,
                 };
-                let res = shortcuts.get(index as usize);
+                let res = !shortcuts.get(index as usize);
                 shortcuts.set(index as usize);
                 res
             };
@@ -95,10 +96,8 @@ impl<'a> Server<'a> {
             while let Some(node) = self.forward_tree_path.pop() {
                 if forward_tree_mask.get(node as usize) {
                     for label in &self.forward.node_data(node).labels {
-                        if needs_unpacking(ShortcutId::Outgoing(label.shortcut_id), 0) {
-                            Shortcut::unpack(ShortcutId::Outgoing(label.shortcut_id), &(0..period()), self.shortcut_graph, &mut needs_unpacking,
-                                &mut |edge_id| original_edges.set(edge_id as usize));
-                        }
+                        Shortcut::unpack(ShortcutId::Outgoing(label.shortcut_id), &(0..period()), self.shortcut_graph, &mut needs_unpacking,
+                            &mut |edge_id| original_edges.set(edge_id as usize));
                         forward_tree_mask.set(label.parent as usize);
                     }
                 }
@@ -107,10 +106,8 @@ impl<'a> Server<'a> {
             while let Some(node) = self.backward_tree_path.pop() {
                 if backward_tree_mask.get(node as usize) {
                     for label in &self.backward.node_data(node).labels {
-                        if needs_unpacking(ShortcutId::Incmoing(label.shortcut_id), 0) {
-                            Shortcut::unpack(ShortcutId::Incmoing(label.shortcut_id), &(0..period()), self.shortcut_graph, &mut needs_unpacking,
-                                &mut |edge_id| original_edges.set(edge_id as usize));
-                        }
+                        Shortcut::unpack(ShortcutId::Incmoing(label.shortcut_id), &(0..period()), self.shortcut_graph, &mut needs_unpacking,
+                            &mut |edge_id| original_edges.set(edge_id as usize));
                         backward_tree_mask.set(label.parent as usize);
                     }
                 }
@@ -126,5 +123,19 @@ impl<'a> Server<'a> {
                 }
             }
         })
+    }
+
+
+    pub fn path(&self) -> LinkedList<(NodeId, Weight)> {
+        let mut path = LinkedList::new();
+        path.push_front((self.td_dijkstra.query().to, self.td_dijkstra.tentative_distance(self.td_dijkstra.query().to) - self.td_dijkstra.query().departure_time));
+
+        while path.front().unwrap().0 != self.td_dijkstra.query().from {
+            let next = self.td_dijkstra.predecessor(path.front().unwrap().0);
+            let t = self.td_dijkstra.tentative_distance(next) - self.td_dijkstra.query().departure_time;
+            path.push_front((next, t));
+        }
+
+        path
     }
 }

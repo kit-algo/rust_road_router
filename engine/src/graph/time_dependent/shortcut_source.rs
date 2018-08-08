@@ -51,7 +51,7 @@ impl ShortcutData {
         }
     }
 
-    pub fn unpack<F, G>(&self,
+    pub fn unpack<F, G>(self,
         range: &Range<Timestamp>,
         shortcut_graph: &ShortcutGraph,
         needs_unpacking: &mut F,
@@ -60,12 +60,15 @@ impl ShortcutData {
         F: FnMut(ShortcutId, usize) -> bool,
         G: FnMut(EdgeId)
     {
+        if range.start == range.end { return }
+
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
-                Shortcut::unpack(ShortcutId::Incmoing(down_shortcut_id), range, shortcut_graph, needs_unpacking, add_original_arc);
-                let (first, second) = Linked::new(shortcut_graph.get_incoming(down_shortcut_id), shortcut_graph.get_outgoing(self.up_arc)).ranges_for_second(range).unwrap();
-                Shortcut::unpack(ShortcutId::Outgoing(self.up_arc), &first, shortcut_graph, needs_unpacking, add_original_arc);
-                Shortcut::unpack(ShortcutId::Outgoing(self.up_arc), &second, shortcut_graph, needs_unpacking, add_original_arc);
+                if let Some((first, second)) = Linked::new(shortcut_graph.get_incoming(down_shortcut_id), shortcut_graph.get_outgoing(self.up_arc)).ranges_for_second(range) {
+                    Shortcut::unpack(ShortcutId::Incmoing(down_shortcut_id), range, shortcut_graph, needs_unpacking, add_original_arc);
+                    Shortcut::unpack(ShortcutId::Outgoing(self.up_arc), &first, shortcut_graph, needs_unpacking, add_original_arc);
+                    Shortcut::unpack(ShortcutId::Outgoing(self.up_arc), &second, shortcut_graph, needs_unpacking, add_original_arc);
+                }
             },
             None => {
                 add_original_arc(self.up_arc);
@@ -74,7 +77,6 @@ impl ShortcutData {
     }
 
     pub fn debug_to_s(self, shortcut_graph: &ShortcutGraph, indent: usize) -> String {
-        println!("{:?}", self.source());
         match self.down_arc.value() {
             Some(down_shortcut_id) => {
                 Linked::new(shortcut_graph.get_incoming(down_shortcut_id), shortcut_graph.get_outgoing(self.up_arc)).debug_to_s(shortcut_graph, indent)

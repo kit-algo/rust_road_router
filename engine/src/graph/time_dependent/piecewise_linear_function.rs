@@ -76,7 +76,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     pub(super) fn evaluate(&self, departure: Timestamp) -> Weight {
-        debug_assert!(departure < period());
+        debug_assert!(departure <= period());
         if self.departure_time.len() == 2 {
             return unsafe { *self.travel_time.get_unchecked(0) }
         }

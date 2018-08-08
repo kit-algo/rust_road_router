@@ -32,13 +32,14 @@ impl Server {
         self.dijkstra.tentative_distance(node) < INFINITY
     }
 
-    pub fn path(&self) -> LinkedList<NodeId> {
+    pub fn path(&self) -> LinkedList<(NodeId, Weight)> {
         let mut path = LinkedList::new();
-        path.push_front(self.dijkstra.query().to);
+        path.push_front((self.dijkstra.query().to, self.dijkstra.tentative_distance(self.dijkstra.query().to) - self.dijkstra.query().departure_time));
 
-        while *path.front().unwrap() != self.dijkstra.query().from {
-            let next = self.dijkstra.predecessor(*path.front().unwrap());
-            path.push_front(next);
+        while path.front().unwrap().0 != self.dijkstra.query().from {
+            let next = self.dijkstra.predecessor(path.front().unwrap().0);
+            let t = self.dijkstra.tentative_distance(next) - self.dijkstra.query().departure_time;
+            path.push_front((next, t));
         }
 
         path

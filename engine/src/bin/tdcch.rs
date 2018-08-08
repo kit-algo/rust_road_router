@@ -102,7 +102,7 @@ fn main() {
             } else {
                 println!("TDCCH ❌ {:?} {:?}", dist, ground_truth);
             }
-            // assert_eq!(server.distance(from, to, at).map(|dist| dist + at), ground_truth);
+            assert_eq!(dist, ground_truth);
         }).1;
     }
     println!("Dijkstra {}ms", dijkstra_time.num_milliseconds() / (num_queries as i64));
