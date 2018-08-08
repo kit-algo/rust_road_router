@@ -73,7 +73,7 @@ impl<'a> Server<'a> {
 
         let tentative_upper_bound = self.tentative_distance.1;
         let mut original_edges = BitVec::new(self.shortcut_graph.original_graph().num_arcs()); // TODO get rid of reinit
-        let mut shortcuts = BitVec::new(2 * self.cch_graph.num_arcs()); // TODO get rid of reinit
+        let mut shortcuts = BitVec::new(2 * self.cch_graph.num_arcs() * NUM_WINDOWS); // TODO get rid of reinit
 
         report_time("unpacking", || {
             self.meeting_nodes.retain(|&(_, lower_bound)| lower_bound <= tentative_upper_bound);
@@ -83,10 +83,10 @@ impl<'a> Server<'a> {
                 backward_tree_mask.set(node as usize);
             }
 
-            let mut needs_unpacking = |shortcut_id, _window| {
+            let mut needs_unpacking = |shortcut_id, window| {
                 let index = match shortcut_id {
-                    ShortcutId::Outgoing(id) => 2 * id,
-                    ShortcutId::Incmoing(id) => 2 * id + 1,
+                    ShortcutId::Outgoing(id) => (2 * id) * NUM_WINDOWS as u32 + window as u32,
+                    ShortcutId::Incmoing(id) => (2 * id + 1) * NUM_WINDOWS as u32 + window as u32,
                 };
                 let res = !shortcuts.get(index as usize);
                 shortcuts.set(index as usize);

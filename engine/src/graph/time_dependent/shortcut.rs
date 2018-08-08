@@ -20,7 +20,8 @@ pub struct Shortcut {
     data: [(Bounds, ShortcutPaths); NUM_WINDOWS],
 }
 
-const NUM_WINDOWS: usize = 4;
+pub const NUM_WINDOWS: usize = 4;
+
 #[inline]
 pub fn window_size() -> Weight {
     period() / NUM_WINDOWS as u32
@@ -187,8 +188,8 @@ impl Shortcut {
             ShortcutId::Incmoing(id) => shortcut_graph.get_incoming(id),
             ShortcutId::Outgoing(id) => shortcut_graph.get_outgoing(id),
         };
-        if needs_unpacking(id, 0) {
-            for (_i, (_, paths)) in shortcut.data[Shortcut::time_range_to_window_range(range)].iter().enumerate() {
+        for (i, (_, paths)) in shortcut.data[Shortcut::time_range_to_window_range(range)].iter().enumerate() {
+            if needs_unpacking(id, i) {
                 paths.unpack(&(0..period()), shortcut_graph, needs_unpacking, add_original_arc);
             }
         }
