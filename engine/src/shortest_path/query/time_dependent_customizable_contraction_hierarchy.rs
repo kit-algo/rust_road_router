@@ -13,7 +13,7 @@ use math::RangeExtensions;
 
 #[derive(Debug)]
 pub struct Server<'a> {
-    forward: TDSteppedEliminationTree<'a, 'a>,
+    forward: TDSteppedEliminationTreeWithDeparture<'a, 'a>,
     backward: TDSteppedEliminationTree<'a, 'a>,
     td_dijkstra: TDSteppedDijkstra,
     cch_graph: &'a CCHGraph,
@@ -27,7 +27,7 @@ pub struct Server<'a> {
 impl<'a> Server<'a> {
     pub fn new(cch_graph: &'a CCHGraph, shortcut_graph: &'a ShortcutGraph<'a>) -> Self {
         Self {
-            forward: TDSteppedEliminationTree::new(shortcut_graph.upward_graph(), cch_graph.elimination_tree()),
+            forward: TDSteppedEliminationTreeWithDeparture::new(shortcut_graph.upward_graph(), cch_graph.elimination_tree()),
             backward: TDSteppedEliminationTree::new(shortcut_graph.downward_graph(), cch_graph.elimination_tree()),
             td_dijkstra: TDSteppedDijkstra::new(shortcut_graph.original_graph().clone()), // TODO fix clone
             cch_graph,
@@ -43,7 +43,7 @@ impl<'a> Server<'a> {
         // initialize
         self.tentative_distance = (INFINITY, INFINITY);
         self.meeting_nodes.clear();
-        self.forward.initialize_query(self.cch_graph.node_order().rank(from));
+        self.forward.initialize_query(self.cch_graph.node_order().rank(from), departure_time);
         self.backward.initialize_query(self.cch_graph.node_order().rank(to));
 
         // TODO get rid of reinit
