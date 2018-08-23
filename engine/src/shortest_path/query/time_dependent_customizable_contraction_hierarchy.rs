@@ -6,10 +6,10 @@ use shortest_path::td_stepped_dijkstra::TDSteppedDijkstra;
 use super::*;
 use super::td_stepped_elimination_tree::*;
 use ::shortest_path::customizable_contraction_hierarchy::cch_graph::CCHGraph;
-// use ::in_range_option::InRangeOption;
 use self::td_stepped_elimination_tree::QueryProgress;
 use rank_select_map::BitVec;
 use benchmark::report_time;
+use math::RangeExtensions;
 
 #[derive(Debug)]
 pub struct Server<'a> {
@@ -96,8 +96,12 @@ impl<'a> Server<'a> {
             while let Some(node) = self.forward_tree_path.pop() {
                 if forward_tree_mask.get(node as usize) {
                     for label in &self.forward.node_data(node).labels {
-                        Shortcut::unpack(ShortcutId::Outgoing(label.shortcut_id), &(0..period()), self.shortcut_graph, &mut needs_unpacking,
-                            &mut |edge_id| original_edges.set(edge_id as usize));
+                        let parent = &self.forward.node_data(label.parent);
+                        let (first, mut second) = WrappingRange::new((parent.lower_bound + departure_time) % period() .. (parent.upper_bound + departure_time) % period()).monotonize().split(period());
+                        second.start -= period();
+                        second.end -= period();
+                        Shortcut::unpack(ShortcutId::Outgoing(label.shortcut_id), &first, self.shortcut_graph, &mut needs_unpacking, &mut |edge_id| original_edges.set(edge_id as usize));
+                        Shortcut::unpack(ShortcutId::Outgoing(label.shortcut_id), &second, self.shortcut_graph, &mut needs_unpacking, &mut |edge_id| original_edges.set(edge_id as usize));
                         forward_tree_mask.set(label.parent as usize);
                     }
                 }
