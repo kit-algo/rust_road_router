@@ -1,7 +1,7 @@
 use std::collections::LinkedList;
 use graph::time_dependent::*;
 use shortest_path::td_stepped_dijkstra::QueryProgress as OtherQueryProgress;
-use std::cmp::min;
+use std::cmp::*;
 use shortest_path::td_stepped_dijkstra::TDSteppedDijkstra;
 use super::*;
 use super::td_stepped_elimination_tree::*;
@@ -109,10 +109,36 @@ impl<'a> Server<'a> {
 
             while let Some(node) = self.backward_tree_path.pop() {
                 if backward_tree_mask.get(node as usize) {
+                    let forward_node_data = self.forward.node_data_mut();
+                    let current_node_lower = forward_node_data[node as usize].lower_bound;
+                    let current_node_upper = forward_node_data[node as usize].upper_bound;
+                    let (first, mut second) = WrappingRange::new((current_node_lower + departure_time) % period() .. (current_node_upper + departure_time) % period()).monotonize().split(period());
+                    second.start -= period();
+                    second.end -= period();
+
                     for label in &self.backward.node_data(node).labels {
-                        Shortcut::unpack(ShortcutId::Incmoing(label.shortcut_id), &(0..period()), self.shortcut_graph, &mut needs_unpacking,
-                            &mut |edge_id| original_edges.set(edge_id as usize));
-                        backward_tree_mask.set(label.parent as usize);
+                        let shortcut = self.shortcut_graph.get_incoming(label.shortcut_id);
+
+                        let (lower, upper) = match (shortcut.bounds_for(&first), shortcut.bounds_for(&second)) {
+                            (Some((first_min, first_max)), Some((second_min, second_max))) =>
+                                (current_node_lower + min(first_min, second_min), current_node_upper + max(first_max, second_max)),
+                            (Some((first_min, first_max)), None) =>
+                                (current_node_lower + first_min, current_node_upper + first_max),
+                            (None, Some((second_min, second_max))) =>
+                                (current_node_lower + second_min, current_node_upper + second_max),
+                            (None, None) =>
+                                panic!("weird")
+                        };
+
+                        if lower < forward_node_data[label.parent as usize].upper_bound {
+                            forward_node_data[label.parent as usize].lower_bound = min(forward_node_data[label.parent as usize].lower_bound, lower);
+                            forward_node_data[label.parent as usize].upper_bound = min(forward_node_data[label.parent as usize].upper_bound, upper);
+
+                            Shortcut::unpack(ShortcutId::Incmoing(label.shortcut_id), &first, self.shortcut_graph, &mut needs_unpacking, &mut |edge_id| original_edges.set(edge_id as usize));
+                            Shortcut::unpack(ShortcutId::Incmoing(label.shortcut_id), &second, self.shortcut_graph, &mut needs_unpacking, &mut |edge_id| original_edges.set(edge_id as usize));
+
+                            backward_tree_mask.set(label.parent as usize);
+                        }
                     }
                 }
             }

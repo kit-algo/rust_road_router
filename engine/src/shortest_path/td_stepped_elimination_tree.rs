@@ -99,4 +99,8 @@ impl<'a, 'b> TDSteppedEliminationTree<'a, 'b> {
     pub fn node_data(&self, node: NodeId) -> &NodeData {
         &self.distances[node as usize]
     }
+
+    pub fn node_data_mut(&mut self) -> &mut TimestampedVector<NodeData> {
+        &mut self.distances
+    }
 }
