@@ -97,7 +97,7 @@ impl<'a> Server<'a> {
                 if forward_tree_mask.get(node as usize) {
                     for label in &self.forward.node_data(node).labels {
                         let parent = &self.forward.node_data(label.parent);
-                        let (first, mut second) = WrappingRange::new((parent.lower_bound + departure_time) % period() .. (parent.upper_bound + departure_time) % period()).monotonize().split(period());
+                        let (first, mut second) = WrappingRange::new(parent.lower_bound % period() .. parent.upper_bound % period()).monotonize().split(period());
                         second.start -= period();
                         second.end -= period();
                         Shortcut::unpack(ShortcutId::Outgoing(label.shortcut_id), &first, self.shortcut_graph, &mut needs_unpacking, &mut |edge_id| original_edges.set(edge_id as usize));
@@ -112,7 +112,7 @@ impl<'a> Server<'a> {
                     let forward_node_data = self.forward.node_data_mut();
                     let current_node_lower = forward_node_data[node as usize].lower_bound;
                     let current_node_upper = forward_node_data[node as usize].upper_bound;
-                    let (first, mut second) = WrappingRange::new((current_node_lower + departure_time) % period() .. (current_node_upper + departure_time) % period()).monotonize().split(period());
+                    let (first, mut second) = WrappingRange::new(current_node_lower % period() .. current_node_upper % period()).monotonize().split(period());
                     second.start -= period();
                     second.end -= period();
 
