@@ -62,6 +62,36 @@ impl<'a> Linked<'a> {
         }
     }
 
+    pub fn better_bounds_for(&self, range: &Range<Timestamp>, shortcut_graph: &ShortcutGraph) -> Option<(Weight, Weight)> {
+        debug_assert!(range.start <= period());
+        debug_assert!(range.end <= period());
+        debug_assert!(range.start <= range.end);
+        if range.start == range.end { return None }
+
+        if !self.is_valid_path_during(range) {
+            return Some((INFINITY, INFINITY))
+        }
+
+        if let Some((first_range, second_range)) = self.ranges_for_second(range) {
+            let (in_min, in_max) = self.first.better_bounds_for(range, shortcut_graph).unwrap();
+
+            debug_assert!(first_range.start < first_range.end || second_range.start < second_range.end);
+
+            match (self.second.better_bounds_for(&first_range, shortcut_graph), self.second.better_bounds_for(&second_range, shortcut_graph)) {
+                (Some((out_first_min, out_first_max)), Some((out_second_min, out_second_max))) =>
+                    Some((in_min + min(out_first_min, out_second_min), in_max + max(out_first_max, out_second_max))),
+                (Some((out_first_min, out_first_max)), None) =>
+                    Some((in_min + out_first_min, in_max + out_first_max)),
+                (None, Some((out_second_min, out_second_max))) =>
+                    Some((in_min + out_second_min, in_max + out_second_max)),
+                (None, None) =>
+                    panic!("weird")
+            }
+        } else {
+            return Some((INFINITY, INFINITY));
+        }
+    }
+
     pub fn is_valid_path_during(&self, range: &Range<Timestamp>) -> bool {
         if range.start == range.end {
             return true
@@ -85,10 +115,10 @@ impl<'a> Linked<'a> {
         second_range.end -= period();
         debug_assert!(first_range.start <= period());
         debug_assert!(first_range.end <= period());
-        debug_assert!(first_range.start <= range.end);
+        debug_assert!(first_range.start <= first_range.end);
         debug_assert!(second_range.start <= period());
         debug_assert!(second_range.end <= period());
-        debug_assert!(second_range.start <= range.end);
+        debug_assert!(second_range.start <= second_range.end);
         Some((first_range, second_range))
     }
 

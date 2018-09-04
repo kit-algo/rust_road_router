@@ -51,6 +51,17 @@ impl ShortcutData {
         }
     }
 
+    pub fn better_bounds_for(self, range: &Range<Timestamp>, shortcut_graph: &ShortcutGraph) -> Option<(Weight, Weight)> {
+        match self.down_arc.value() {
+            Some(down_shortcut_id) => {
+                Linked::new(shortcut_graph.get_incoming(down_shortcut_id), shortcut_graph.get_outgoing(self.up_arc)).better_bounds_for(range, shortcut_graph)
+            },
+            None => {
+                shortcut_graph.original_graph().travel_time_function(self.up_arc).bounds_for(range)
+            },
+        }
+    }
+
     pub fn unpack<F, G>(self,
         range: &Range<Timestamp>,
         shortcut_graph: &ShortcutGraph,

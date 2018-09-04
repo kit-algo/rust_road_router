@@ -1,5 +1,7 @@
 use super::*;
 
+use math::RangeExtensions;
+
 use std::iter::Once;
 use std::slice::Iter as SliceIter;
 
@@ -20,7 +22,7 @@ pub struct Shortcut {
     data: [(Bounds, ShortcutPaths); NUM_WINDOWS],
 }
 
-pub const NUM_WINDOWS: usize = 4;
+pub const NUM_WINDOWS: usize = 24;
 
 #[inline]
 pub fn window_size() -> Weight {
@@ -82,6 +84,8 @@ impl Shortcut {
                 continue;
             }
 
+            let (other_lower_bound, other_upper_bound) = linked.better_bounds_for(&range, shortcut_graph).unwrap();
+
             debug_assert!(bounds.lower < INFINITY);
             debug_assert!(bounds.upper < INFINITY);
             debug_assert!(other_lower_bound < INFINITY);
@@ -122,6 +126,27 @@ impl Shortcut {
                 match acc {
                     Some((acc_min, acc_max)) => Some((min(acc_min, *lower), max(acc_max, *upper))),
                     None => Some((*lower, *upper)),
+                }
+            })
+    }
+
+    pub fn better_bounds_for(&self, range: &Range<Timestamp>, shortcut_graph: &ShortcutGraph) -> Option<(Weight, Weight)> {
+        self.data[Shortcut::time_range_to_window_range(range)].iter()
+            .zip(Shortcut::time_range_to_window_range(range).map(Shortcut::window_time_range))
+            .map(|((bounds, data), ref window_range)| {
+                let intersection = window_range.intersection(range);
+                if intersection == *window_range {
+                    (bounds.lower, bounds.upper)
+                } else {
+                    PathSegmentIter::new(data)
+                        .map(|path| path.better_bounds_for(&intersection, shortcut_graph).unwrap())
+                        .fold((INFINITY, INFINITY), |acc, bounds|
+                            (min(acc.0, bounds.0), min(acc.1, bounds.1)))
+                }
+            }).fold(None, |acc, (lower, upper)| {
+                match acc {
+                    Some((acc_min, acc_max)) => Some((min(acc_min, lower), max(acc_max, upper))),
+                    None => Some((lower, upper)),
                 }
             })
     }
