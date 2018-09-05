@@ -29,6 +29,12 @@ pub struct Weight(f64);
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Timestamp(f64);
 
+impl Timestamp {
+    const fn zero() -> Self {
+        Timestamp(0.0)
+    }
+}
+
 #[cfg(test)]
 use std::cell::Cell;
 
