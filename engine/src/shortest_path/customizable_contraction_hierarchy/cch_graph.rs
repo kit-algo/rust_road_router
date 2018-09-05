@@ -318,6 +318,8 @@ impl CCHGraph {
                 }
 
                 for node in self.neighbor_iter(current_node) {
+                    shortcut_graph.borrow_mut_outgoing(node_edge_ids[node as usize].value().unwrap(), |shortcut, _| shortcut.clear_ipps());
+                    shortcut_graph.borrow_mut_incoming(node_edge_ids[node as usize].value().unwrap(), |shortcut, _| shortcut.clear_ipps());
                     node_edge_ids[node as usize] = InRangeOption::new(None);
                 }
             }

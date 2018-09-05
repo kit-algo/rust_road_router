@@ -29,4 +29,8 @@ impl Shortcut {
     pub fn merge(&mut self, _linked_ids: (EdgeId, EdgeId), _shortcut_graph: &ShortcutGraph) {
         unimplemented!()
     }
+
+    pub fn clear_ipps(&mut self) {
+        self.ttf = None;
+    }
 }
