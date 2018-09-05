@@ -1,8 +1,14 @@
-use super::*;
+// use super::*;
+
+mod piecewise_linear_function;
+// use self::piecewise_linear_function::*;
+
+mod geometry;
+use self::geometry::*;
 
 // TODO switch to something ULP based?
 // implications for division with EPSILON like divisors?
-const EPSILON: f64 = 0.000_000_1;
+// const EPSILON: f64 = 0.000_000_1;
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Weight(f64);
