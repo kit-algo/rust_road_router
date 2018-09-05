@@ -61,7 +61,10 @@ impl Shortcut {
     }
 
     fn is_valid_path(&self) -> bool {
-        unimplemented!();
+        match self.sources {
+            Sources::None => false,
+            _ => true,
+        }
     }
 
     pub fn clear_plf(&mut self) {
