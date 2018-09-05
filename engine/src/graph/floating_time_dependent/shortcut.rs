@@ -56,8 +56,20 @@ impl Shortcut {
         self.sources = Shortcut::combine(sources, intersection_data, other_data);
     }
 
-    fn plf(&self, _shortcut_graph: &ShortcutGraph) -> PiecewiseLinearFunction {
-        unimplemented!();
+    fn plf<'s>(&'s self, shortcut_graph: &'s ShortcutGraph) -> PiecewiseLinearFunction<'s> {
+        if let Some(ipps) = &self.ttf {
+            return PiecewiseLinearFunction::new(ipps)
+        }
+
+        match self.sources {
+            Sources::One(source) => {
+                match source.into() {
+                    ShortcutSource::OriginalEdge(id) => shortcut_graph.original_graph().travel_time_function(id),
+                    _ => panic!("invalid state of shortcut: ipps must be cached when shortcut not trivial"),
+                }
+            },
+            _ => panic!("invalid state of shortcut: ipps must be cached when shortcut not trivial"),
+        }
     }
 
     fn is_valid_path(&self) -> bool {

@@ -21,3 +21,16 @@ impl From<ShortcutSource> for ShortcutSourceData {
         }
     }
 }
+
+impl From<ShortcutSourceData> for ShortcutSource {
+    fn from(data: ShortcutSourceData) -> Self {
+        match data.down_arc.value() {
+            Some(down_shortcut_id) => {
+                ShortcutSource::Shortcut(down_shortcut_id, data.up_arc)
+            },
+            None => {
+                ShortcutSource::OriginalEdge(data.up_arc)
+            },
+        }
+    }
+}
