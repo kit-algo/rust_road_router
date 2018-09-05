@@ -7,6 +7,9 @@ pub struct PiecewiseLinearFunction<'a> {
 
 impl<'a> PiecewiseLinearFunction<'a> {
     pub fn new(ipps: &'a [Point]) -> PiecewiseLinearFunction<'a> {
+        debug_assert!(ipps.first().unwrap().at == Timestamp::zero());
+        debug_assert!(ipps.first().unwrap().val == ipps.last().unwrap().val);
+        debug_assert!(ipps.len() == 1 || ipps.last().unwrap().at == period());
         PiecewiseLinearFunction { ipps }
     }
 
