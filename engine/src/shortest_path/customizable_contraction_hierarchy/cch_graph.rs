@@ -280,9 +280,9 @@ impl CCHGraph {
                     let ch_edge_id = self.original_edge_to_ch_edge[edge_id as usize];
 
                     if self.node_order.rank(node) < self.node_order.rank(neighbor) {
-                        upward_weights[ch_edge_id as usize] = Shortcut::new(Some((edge_id, metric.travel_time_function(edge_id))));
+                        upward_weights[ch_edge_id as usize] = Shortcut::new(Some(edge_id));
                     } else {
-                        downward_weights[ch_edge_id as usize] = Shortcut::new(Some((edge_id, metric.travel_time_function(edge_id))));
+                        downward_weights[ch_edge_id as usize] = Shortcut::new(Some(edge_id));
                     }
                 }
             }

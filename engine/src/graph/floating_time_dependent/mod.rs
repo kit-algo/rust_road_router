@@ -12,6 +12,9 @@ pub use self::graph::Graph as TDGraph;
 mod shortcut;
 pub use self::shortcut::*;
 
+mod shortcut_source;
+use self::shortcut_source::*;
+
 pub mod shortcut_graph;
 pub use self::shortcut_graph::ShortcutGraph;
 pub use self::shortcut_graph::SingleDirShortcutGraph;
