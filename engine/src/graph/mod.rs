@@ -4,6 +4,7 @@ use std::ops::Range;
 pub mod first_out_graph;
 pub mod link_id_to_tail_mapper;
 pub mod time_dependent;
+pub mod floating_time_dependent;
 
 pub use self::first_out_graph::{OwnedGraph, FirstOutGraph};
 

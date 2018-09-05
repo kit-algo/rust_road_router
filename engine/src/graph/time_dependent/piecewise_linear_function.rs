@@ -138,9 +138,9 @@ mod tests {
             let departure_time = vec![0, 6, 9, 14, 17, 20, 24];
             let travel_time =    vec![2, 1, 3, 2,  4,  1,  2];
             let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time);
-            assert_eq!(ttf.bounds_for(&(0..24)), (1,4));
-            assert_eq!(ttf.bounds_for(&(0..6)), (1,2));
-            assert_eq!(ttf.bounds_for(&(3..16)), (1,3));
+            assert_eq!(ttf.bounds_for(&(0..24)), Some((1,4)));
+            assert_eq!(ttf.bounds_for(&(0..6)),  Some((1,2)));
+            assert_eq!(ttf.bounds_for(&(3..16)), Some((1,3)));
         });
     }
 

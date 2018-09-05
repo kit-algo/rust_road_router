@@ -21,13 +21,6 @@ impl ShortcutData {
         }
     }
 
-    pub fn source(self) -> ShortcutSource {
-        match self.down_arc.value() {
-            Some(down_shortcut_id) => ShortcutSource::Shortcut(down_shortcut_id, self.up_arc),
-            None => ShortcutSource::OriginalEdge(self.up_arc),
-        }
-    }
-
     pub fn evaluate(self, departure: Timestamp, shortcut_graph: &ShortcutGraph) -> Weight {
         debug_assert!(departure < period());
         match self.down_arc.value() {
