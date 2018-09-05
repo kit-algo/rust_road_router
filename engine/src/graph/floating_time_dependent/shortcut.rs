@@ -122,7 +122,11 @@ enum Sources {
 
 impl Sources {
     fn iter(&self) -> SourcesIter {
-        unimplemented!();
+        match self {
+            Sources::None => SourcesIter::None,
+            Sources::One(source) => SourcesIter::One(std::iter::once(&source)),
+            Sources::Multi(sources) => SourcesIter::Multi(sources.iter()),
+        }
     }
 }
 
@@ -130,13 +134,17 @@ impl Sources {
 enum SourcesIter<'a> {
     None,
     One(std::iter::Once<&'a ShortcutSourceData>),
-    Multi(std::slice::Iter<'a, ShortcutSourceData>),
+    Multi(std::slice::Iter<'a, (Timestamp, ShortcutSourceData)>),
 }
 
 impl<'a> Iterator for SourcesIter<'a> {
     type Item = (Timestamp, &'a ShortcutSourceData);
 
     fn next(&mut self) -> Option<Self::Item> {
-        unimplemented!();
+        match self {
+            SourcesIter::None => None,
+            SourcesIter::One(iter) => iter.next().map(|source| (Timestamp::zero(), source)),
+            SourcesIter::Multi(iter) => iter.next().map(|(t, source)| (*t, source)),
+        }
     }
 }
