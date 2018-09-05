@@ -4,7 +4,6 @@ use in_range_option::InRangeOption;
 use benchmark::{report_time, Timer};
 use self::first_out_graph::degrees_to_first_out;
 use graph::link_id_to_tail_mapper::*;
-use graph::time_dependent::*;
 
 use std;
 use std::ops::Range;
@@ -163,7 +162,9 @@ impl CCHGraph {
         (upward, downward, upward_shortcut_expansions, downward_shortcut_expansions)
     }
 
-    pub fn customize_td<'a, 'b: 'a>(&'a self, metric: &'b TDGraph) -> ShortcutGraph<'a> {
+    pub fn customize_td<'a, 'b: 'a>(&'a self, metric: &'b time_dependent::TDGraph) -> time_dependent::ShortcutGraph<'a> {
+        use graph::time_dependent::*;
+
         let n = (self.first_out.len() - 1) as NodeId;
         let m = self.head.len();
 
@@ -256,6 +257,67 @@ impl CCHGraph {
                 for node in self.neighbor_iter(current_node) {
                     shortcut_graph.borrow_mut_incoming(node_edge_ids[node as usize].value().unwrap(), Shortcut::remove_dominated);
                     shortcut_graph.borrow_mut_outgoing(node_edge_ids[node as usize].value().unwrap(), Shortcut::remove_dominated);
+                    node_edge_ids[node as usize] = InRangeOption::new(None);
+                }
+            }
+        });
+
+        shortcut_graph
+    }
+
+    pub fn customize_floating_td<'a, 'b: 'a>(&'a self, metric: &'b floating_time_dependent::TDGraph) -> floating_time_dependent::ShortcutGraph<'a> {
+        use graph::floating_time_dependent::*;
+
+        let n = (self.first_out.len() - 1) as NodeId;
+        let m = self.head.len();
+
+        let mut upward_weights = vec![Shortcut::new(None); m];
+        let mut downward_weights = vec![Shortcut::new(None); m];
+
+        report_time("TD-CCH apply weights", || {
+            for node in 0..n {
+                for (edge_id, neighbor) in metric.neighbor_edge_indices(node).zip(metric.neighbor_iter(node).map(|link| link.node)) {
+                    let ch_edge_id = self.original_edge_to_ch_edge[edge_id as usize];
+
+                    if self.node_order.rank(node) < self.node_order.rank(neighbor) {
+                        upward_weights[ch_edge_id as usize] = Shortcut::new(Some((edge_id, metric.travel_time_function(edge_id))));
+                    } else {
+                        downward_weights[ch_edge_id as usize] = Shortcut::new(Some((edge_id, metric.travel_time_function(edge_id))));
+                    }
+                }
+            }
+        });
+
+        let mut shortcut_graph = ShortcutGraph::new(metric, &self.first_out, &self.head, upward_weights, downward_weights);
+
+        report_time("TD-CCH Customization", || {
+            let mut node_edge_ids = vec![InRangeOption::new(None); n as usize];
+
+            let timer = Timer::new();
+
+            for current_node in 0..n {
+                if current_node % 100_000 == 0 {
+                    println!("t: {}s customizing from node {}, degree: {}", timer.get_passed_ms() / 1000, current_node, self.degree(current_node));
+                }
+                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
+                    node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
+                }
+
+                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
+                    debug_assert_eq!(self.edge_id_to_tail(edge_id), current_node);
+                    let shortcut_edge_ids = self.neighbor_edge_indices(node);
+                    for (target, shortcut_edge_id) in self.neighbor_iter(node).zip(shortcut_edge_ids) {
+                        debug_assert_eq!(self.edge_id_to_tail(shortcut_edge_id), node);
+                        if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
+                            debug_assert!(shortcut_edge_id > edge_id);
+                            debug_assert!(shortcut_edge_id > other_edge_id);
+                            shortcut_graph.borrow_mut_outgoing(shortcut_edge_id, |shortcut, shortcut_graph| shortcut.merge((edge_id, other_edge_id), shortcut_graph));
+                            shortcut_graph.borrow_mut_incoming(shortcut_edge_id, |shortcut, shortcut_graph| shortcut.merge((other_edge_id, edge_id), shortcut_graph));
+                        }
+                    }
+                }
+
+                for node in self.neighbor_iter(current_node) {
                     node_edge_ids[node as usize] = InRangeOption::new(None);
                 }
             }

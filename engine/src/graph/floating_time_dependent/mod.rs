@@ -1,10 +1,20 @@
-// use super::*;
+use super::*;
 
 mod piecewise_linear_function;
-// use self::piecewise_linear_function::*;
+use self::piecewise_linear_function::*;
 
 mod geometry;
 use self::geometry::*;
+
+mod graph;
+pub use self::graph::Graph as TDGraph;
+
+mod shortcut;
+pub use self::shortcut::*;
+
+pub mod shortcut_graph;
+pub use self::shortcut_graph::ShortcutGraph;
+pub use self::shortcut_graph::SingleDirShortcutGraph;
 
 // TODO switch to something ULP based?
 // implications for division with EPSILON like divisors?
