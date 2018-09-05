@@ -6,16 +6,16 @@ pub struct PiecewiseLinearFunction<'a> {
 }
 
 impl<'a> PiecewiseLinearFunction<'a> {
-    pub fn new(_ipps: &'a [Point]) -> PiecewiseLinearFunction<'a> {
-        unimplemented!();
+    pub fn new(ipps: &'a [Point]) -> PiecewiseLinearFunction<'a> {
+        PiecewiseLinearFunction { ipps }
     }
 
     pub fn lower_bound(&self) -> Weight {
-        unimplemented!();
+        self.ipps.iter().map(|p| p.val).min().unwrap()
     }
 
     pub fn upper_bound(&self) -> Weight {
-        unimplemented!();
+        self.ipps.iter().map(|p| p.val).max().unwrap()
     }
 
     pub fn link(&self, _other: &Self) -> Vec<Point> {

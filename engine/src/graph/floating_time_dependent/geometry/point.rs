@@ -2,6 +2,6 @@ use super::*;
 
 #[derive(Debug, Clone)]
 pub struct Point {
-    at: Timestamp,
-    val: Weight,
+    pub at: Timestamp,
+    pub val: Weight,
 }
