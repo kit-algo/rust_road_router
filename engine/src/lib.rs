@@ -4,6 +4,7 @@
 #![feature(euclidean_division)]
 #![feature(range_contains)]
 #![feature(nll)]
+#![feature(tool_lints)]
 
 extern crate nav_types;
 extern crate postgres;

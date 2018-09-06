@@ -3,5 +3,5 @@ use super::*;
 #[derive(Debug, Clone)]
 pub struct Point {
     pub at: Timestamp,
-    pub val: Weight,
+    pub val: FlWeight,
 }
