@@ -23,7 +23,7 @@ pub use self::shortcut_graph::SingleDirShortcutGraph;
 mod time {
     use std::{
         f64::NAN,
-        ops::{Add, Sub},
+        ops::{Add, Sub, Mul, Div},
         cmp::Ordering,
         borrow::Borrow,
     };
@@ -31,7 +31,17 @@ mod time {
 
     // TODO switch to something ULP based?
     // implications for division with EPSILON like divisors?
-    // const EPSILON: f64 = 0.000_000_1;
+    const EPSILON: f64 = 0.000_000_1;
+
+    fn fuzzy_eq(x: f64, y: f64) -> bool {
+        (x - y).abs() < EPSILON
+    }
+    fn fuzzy_neq(x: f64, y: f64) -> bool {
+        !fuzzy_eq(x, y)
+    }
+    fn fuzzy_lt(x: f64, y: f64) -> bool {
+        x + EPSILON < y
+    }
 
     #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
     pub struct FlWeight(f64);
@@ -67,6 +77,45 @@ mod time {
         }
     }
 
+    impl Add<Timestamp> for FlWeight {
+        type Output = Timestamp;
+
+        fn add(self, other: Timestamp) -> Self::Output {
+            Timestamp::new(self.0 + other.0)
+        }
+    }
+
+    impl Sub<FlWeight> for FlWeight {
+        type Output = FlWeight;
+
+        fn sub(self, other: FlWeight) -> Self::Output {
+            FlWeight::new(self.0 - other.0)
+        }
+    }
+
+    impl Mul<FlWeight> for FlWeight {
+        type Output = FlWeight;
+
+        fn mul(self, other: FlWeight) -> Self::Output {
+            FlWeight::new(self.0 * other.0)
+        }
+    }
+
+    impl Div<FlWeight> for FlWeight {
+        type Output = FlWeight;
+
+        fn div(self, other: FlWeight) -> Self::Output {
+            debug_assert!(fuzzy_neq(other.0, 0.0));
+            FlWeight::new(self.0 / other.0)
+        }
+    }
+
+    impl<W: Borrow<Timestamp>> From<W> for FlWeight {
+        fn from(w: W) -> Self {
+            FlWeight::new(w.borrow().0)
+        }
+    }
+
     #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
     pub struct Timestamp(f64);
 
@@ -78,6 +127,21 @@ mod time {
 
         pub const fn zero() -> Self {
             Timestamp(0.0)
+        }
+
+        pub fn fuzzy_eq(self, other: Timestamp) -> bool {
+            fuzzy_eq(self.0, other.0)
+        }
+        pub fn fuzzy_lt(self, other: Timestamp) -> bool {
+            fuzzy_lt(self.0, other.0)
+        }
+    }
+
+    impl Eq for Timestamp {} // TODO ensure that the val will never be NAN
+
+    impl Ord for Timestamp {
+        fn cmp(&self, other: &Self) -> Ordering {
+            self.partial_cmp(other).unwrap()
         }
     }
 
@@ -107,6 +171,14 @@ mod time {
             debug_assert!(result >= 0.0);
             debug_assert!(result <= period().0);
             Timestamp::new(result)
+        }
+    }
+
+    impl Sub<Timestamp> for Timestamp {
+        type Output = FlWeight;
+
+        fn sub(self, other: Timestamp) -> Self::Output {
+            FlWeight::new(self.0 - other.0)
         }
     }
 }
@@ -153,6 +225,6 @@ pub fn period() -> Timestamp {
 
 #[cfg(not(test))]
 #[inline]
-pub fn period() -> FlWeight {
-    FlWeight::new(86_400.0)
+pub fn period() -> Timestamp {
+    Timestamp::new(86_400.0)
 }
