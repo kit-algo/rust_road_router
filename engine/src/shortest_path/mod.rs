@@ -1,4 +1,4 @@
-use graph::*;
+use crate::graph::*;
 
 mod timestamped_vector;
 mod stepped_dijkstra;

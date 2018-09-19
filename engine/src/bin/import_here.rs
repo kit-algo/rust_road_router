@@ -2,11 +2,14 @@ use std::env;
 
 extern crate bmw_routing_engine;
 
-use bmw_routing_engine::*;
-use import::here;
-use import::here::csv_source::CSVSource;
+use bmw_routing_engine::{
+    import::here::{
+        read_graph,
+        csv_source::CSVSource,
+    },
+    io::Store,
+};
 use std::path::Path;
-use io::Store;
 
 fn main() {
     let mut args = env::args();
@@ -14,7 +17,7 @@ fn main() {
 
     let in_dir = &args.next().expect("No input directory given");
     let source = CSVSource::new(Path::new(in_dir));
-    let (graph, lat, lng, link_id_mapping, here_rank_to_link_id) = here::read_graph(&source);
+    let (graph, lat, lng, link_id_mapping, here_rank_to_link_id) = read_graph(&source);
     let out_dir = &args.next().expect("No output directory given");
     graph.write_to_dir(out_dir).expect("writing graph failed");
     lat.write_to(Path::new(out_dir).join("latitude").to_str().unwrap()).expect("writing lat failed");

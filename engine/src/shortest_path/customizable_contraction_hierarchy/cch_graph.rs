@@ -1,9 +1,9 @@
 use super::*;
-use shortest_path::node_order::NodeOrder;
-use in_range_option::InRangeOption;
-use benchmark::measure;
+use crate::shortest_path::node_order::NodeOrder;
+use crate::in_range_option::InRangeOption;
+use crate::benchmark::measure;
 use self::first_out_graph::degrees_to_first_out;
-use graph::link_id_to_tail_mapper::*;
+use crate::graph::link_id_to_tail_mapper::*;
 
 #[derive(Debug)]
 #[allow(dead_code)]

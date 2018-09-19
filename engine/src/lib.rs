@@ -1,6 +1,7 @@
 #![feature(const_fn)]
 #![feature(allocator_api)]
 #![feature(mpsc_select)]
+#![feature(uniform_paths)]
 
 extern crate nav_types;
 extern crate postgres;

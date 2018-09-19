@@ -1,21 +1,24 @@
-use std::env;
-use std::path::Path;
-use std::sync::Arc;
+use std::{
+    env,
+    path::Path,
+    sync::Arc,
+};
 
-extern crate bmw_routing_engine;
-
-use bmw_routing_engine::*;
-use graph::*;
-use graph::first_out_graph::OwnedGraph as Graph;
-use shortest_path::query::dijkstra::Server as DijkServer;
-use shortest_path::query::bidirectional_dijkstra::Server as BiDijkServer;
-use shortest_path::query::async::dijkstra::Server as AsyncDijkServer;
-use shortest_path::query::async::bidirectional_dijkstra::Server as AsyncBiDijkServer;
-use shortest_path::query::contraction_hierarchy::Server as CHServer;
-use shortest_path::contraction_hierarchy;
-
-use io::Load;
-use bmw_routing_engine::benchmark::measure;
+use bmw_routing_engine::{
+    graph::{*, first_out_graph::OwnedGraph as Graph},
+    shortest_path::{
+        contraction_hierarchy,
+        query::{
+            dijkstra::Server as DijkServer,
+            bidirectional_dijkstra::Server as BiDijkServer,
+            r#async::dijkstra::Server as AsyncDijkServer,
+            r#async::bidirectional_dijkstra::Server as AsyncBiDijkServer,
+            contraction_hierarchy::Server as CHServer,
+        }
+    },
+    io::Load,
+    benchmark::measure,
+};
 
 fn main() {
     let mut args = env::args();

@@ -1,8 +1,8 @@
 use super::*;
 use super::stepped_elimination_tree::SteppedEliminationTree;
-use ::shortest_path::customizable_contraction_hierarchy::cch_graph::CCHGraph;
+use crate::shortest_path::customizable_contraction_hierarchy::cch_graph::CCHGraph;
 use std::collections::LinkedList;
-use ::in_range_option::InRangeOption;
+use crate::in_range_option::InRangeOption;
 
 #[derive(Debug)]
 pub struct Server<'a> {

@@ -1,12 +1,11 @@
 use std::env;
 
-extern crate bmw_routing_engine;
-
-use bmw_routing_engine::*;
-use export::*;
-use io::Load;
+use bmw_routing_engine::{
+    graph::*,
+    export::*,
+    io::Load,
+};
 use std::path::Path;
-use graph::*;
 
 fn main() {
     let mut args = env::args();

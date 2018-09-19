@@ -1,16 +1,19 @@
 use std::env;
 use std::path::Path;
 
-extern crate bmw_routing_engine;
-
-use bmw_routing_engine::*;
-use graph::*;
-use shortest_path::customizable_contraction_hierarchy;
-use shortest_path::node_order::NodeOrder;
-use shortest_path::query::customizable_contraction_hierarchy::Server;
-use io::Load;
-use bmw_routing_engine::benchmark::measure;
-use shortest_path::query::dijkstra::Server as DijkServer;
+use bmw_routing_engine::{
+    graph::*,
+    shortest_path::{
+        customizable_contraction_hierarchy,
+        node_order::NodeOrder,
+        query::{
+            customizable_contraction_hierarchy::Server,
+            dijkstra::Server as DijkServer,
+        },
+    },
+    io::Load,
+    benchmark::measure,
+};
 
 fn main() {
     let mut args = env::args();

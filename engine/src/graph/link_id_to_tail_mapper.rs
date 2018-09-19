@@ -1,6 +1,6 @@
 use super::*;
-use rank_select_map::*;
-use as_slice::AsSlice;
+use crate::rank_select_map::*;
+use crate::as_slice::AsSlice;
 
 #[derive(Debug)]
 pub struct LinkIdToTailMapper {

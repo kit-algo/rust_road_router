@@ -4,8 +4,8 @@ use bmw_routing_engine::*;
 use graph::*;
 use shortest_path::query::dijkstra::Server as DijkServer;
 use shortest_path::query::bidirectional_dijkstra::Server as BiDijkServer;
-use shortest_path::query::async::dijkstra::Server as AsyncDijkServer;
-use shortest_path::query::async::bidirectional_dijkstra::Server as AsyncBiDijkServer;
+use shortest_path::query::r#async::dijkstra::Server as AsyncDijkServer;
+use shortest_path::query::r#async::bidirectional_dijkstra::Server as AsyncBiDijkServer;
 
 fn graph() -> OwnedGraph {
     // This is the directed graph we're going to use.

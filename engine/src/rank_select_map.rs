@@ -7,7 +7,7 @@ use std::ops::Deref;
 
 use std::alloc::{Global, Alloc, Layout};
 
-use io::*;
+use crate::io::*;
 
 // the number of bytes in one L1 cache line
 // hardcoded for now, no idea, if we can retreave it during compilation

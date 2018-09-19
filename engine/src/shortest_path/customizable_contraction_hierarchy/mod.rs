@@ -1,7 +1,7 @@
 use super::*;
-use shortest_path::node_order::NodeOrder;
-use ::in_range_option::InRangeOption;
-use ::benchmark::measure;
+use crate::shortest_path::node_order::NodeOrder;
+use crate::in_range_option::InRangeOption;
+use crate::benchmark::measure;
 
 pub mod cch_graph;
 
