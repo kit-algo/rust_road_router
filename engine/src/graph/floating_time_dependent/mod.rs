@@ -51,6 +51,13 @@ mod time {
             debug_assert_ne!(t, NAN);
             FlWeight(t)
         }
+
+        pub fn fuzzy_eq(self, other: Self) -> bool {
+            fuzzy_eq(self.0, other.0)
+        }
+        pub fn fuzzy_lt(self, other: Self) -> bool {
+            fuzzy_lt(self.0, other.0)
+        }
     }
 
     impl Eq for FlWeight {} // TODO ensure that the val will never be NAN
@@ -129,10 +136,10 @@ mod time {
             Timestamp(0.0)
         }
 
-        pub fn fuzzy_eq(self, other: Timestamp) -> bool {
+        pub fn fuzzy_eq(self, other: Self) -> bool {
             fuzzy_eq(self.0, other.0)
         }
-        pub fn fuzzy_lt(self, other: Timestamp) -> bool {
+        pub fn fuzzy_lt(self, other: Self) -> bool {
             fuzzy_lt(self.0, other.0)
         }
     }

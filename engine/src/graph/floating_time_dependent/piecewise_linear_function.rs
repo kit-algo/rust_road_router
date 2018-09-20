@@ -92,8 +92,119 @@ impl<'a> PiecewiseLinearFunction<'a> {
         result
     }
 
-    pub fn merge(&self, _other: &Self) -> (Vec<Point>, Vec<(Timestamp, bool)>) {
-        unimplemented!();
+    pub fn merge(&self, other: &Self) -> (Vec<Point>, Vec<(Timestamp, bool)>) {
+        if self.upper_bound() < other.lower_bound() {
+            return (self.ipps.to_vec(), vec![(Timestamp::zero(), true)])
+        } else if other.upper_bound()  < self.lower_bound() {
+            return (self.ipps.to_vec(), vec![(Timestamp::zero(), false)])
+        }
+
+        let mut result = Vec::with_capacity(2 * self.ipps.len() + 2 * other.ipps.len() + 2);
+
+        let f = &self.ipps;
+        let g = &other.ipps;
+
+        let mut i = 0;
+        let mut j = 0;
+
+        while i < f.len() || j < g.len() {
+
+            if intersect(&f[i - 1], &f[i], &g[j - 1], &g[j]) {
+                let intersection = intersection_point(&f[i-1], &f[i], &g[j-1], &g[j]);
+                if intersection.at >= Timestamp::zero() { Self::append_point(&mut result, intersection); }
+                // TODO which is the better one?
+            }
+
+            if f[i].at.fuzzy_eq(g[j].at) {
+                if f[i].val.fuzzy_eq(g[j].val) {
+                    Self::append_point(&mut result, f[i].clone());
+
+                    if counter_clockwise(&g[j - 1], &f[i - 1], &f[i]) || counter_clockwise(&f[i], &f[i + 1], &g[j + 1]) {
+                        unimplemented!(); // f better
+                    }
+
+                    if clockwise(&g[j-1], &f[i-1], &f[i]) || clockwise(&f[i], &f[i+1], &g[j+1]) {
+                        unimplemented!() // g better
+                    }
+
+                } else if f[i].val < g[j].val {
+
+                    Self::append_point(&mut result, f[i].clone());
+
+                    debug_assert!(f[i].val.fuzzy_lt(g[j].val));
+                    unimplemented!(); // f better
+
+                } else {
+
+                    debug_assert!(g[j].val < f[i].val);
+                    Self::append_point(&mut result, g[j].clone());
+                    unimplemented!() // g better
+                }
+
+                i += 1;
+                j += 1;
+
+            } else if f[i].at < g[j].at {
+
+                debug_assert!(f[i].at.fuzzy_lt(g[j].at));
+
+                if counter_clockwise(&g[j - 1], &f[i], &g[j]) {
+                    Self::append_point(&mut result, f[i].clone());
+                    unimplemented!(); // f better
+
+                } else if colinear(&g[j - 1], &f[i], &g[j]) {
+
+                    if counter_clockwise(&g[j - 1], &f[i - 1], &f[i]) || counter_clockwise(&f[i], &f[i + 1], &g[j]) {
+                        Self::append_point(&mut result, f[i].clone());
+                        unimplemented!(); // f better
+                    } else if result.is_empty() {
+                        Self::append_point(&mut result, f[i].clone());
+                    }
+
+                    if clockwise(&g[j - 1], &f[i - 1], &f[i]) || clockwise(&f[i], &f[i + 1], &g[j]) {
+                        unimplemented!() // g better
+                    }
+                }
+
+                i += 1;
+
+            } else {
+
+                debug_assert!(g[j].at < f[i].at);
+
+                if counter_clockwise(&f[i - 1], &g[j], &f[i]) {
+                    Self::append_point(&mut result, g[j].clone());
+                    unimplemented!() // g better
+
+                } else if colinear(&f[i - 1], &g[j], &f[i]) {
+                    if counter_clockwise(&g[j - 1], &g[j], &f[i - 1]) || counter_clockwise(&g[j], &g[j + 1], &f[i]) {
+                        Self::append_point(&mut result, g[j].clone());
+                        unimplemented!() // g better
+                    }
+                    if result.is_empty() {
+                        Self::append_point(&mut result, g[j].clone());
+                    }
+
+                    if clockwise(&g[j - 1], &g[j], &f[i - 1]) || clockwise(&g[j], &g[j + 1], &f[i]) {
+                        unimplemented!(); // f better
+                    }
+                }
+
+                j += 1;
+            }
+        };
+
+        let n = f.len();
+        let m = g.len();
+
+        if intersect(&f[n - 1], &f[n], &g[m - 1], &g[m]) {
+            let intersection = intersection_point(&f[n-1], &f[n], &g[m-1], &g[m]);
+            if intersection.at < period() { Self::append_point(&mut result, intersection); }
+
+            unimplemented!(); // TODO which is better?
+        }
+
+        (result, vec![])
     }
 
     fn first_index_greater_or_equal(&self, _val: FlWeight) -> usize {
@@ -103,4 +214,24 @@ impl<'a> PiecewiseLinearFunction<'a> {
     fn append_point(points: &mut Vec<Point>, point: Point) {
         points.push(point)
     }
+}
+
+fn intersect(f1: &Point, f2: &Point, g1: &Point, g2: &Point) -> bool {
+    unimplemented!();
+}
+
+fn intersection_point(f1: &Point, f2: &Point, g1: &Point, g2: &Point) -> Point {
+    unimplemented!();
+}
+
+fn counter_clockwise(p: &Point, q: &Point, r: &Point) -> bool {
+    unimplemented!();
+}
+
+fn clockwise(p: &Point, q: &Point, r: &Point) -> bool {
+    unimplemented!();
+}
+
+fn colinear(p: &Point, q: &Point, r: &Point) -> bool {
+    unimplemented!();
 }
