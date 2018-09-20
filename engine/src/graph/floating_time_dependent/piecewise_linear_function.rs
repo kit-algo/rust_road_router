@@ -92,6 +92,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         result
     }
 
+    #[allow(clippy::cyclomatic_complexity)]
     pub fn merge(&self, other: &Self) -> (Vec<Point>, Vec<(Timestamp, bool)>) {
         if self.upper_bound() < other.lower_bound() {
             return (self.ipps.to_vec(), vec![(Timestamp::zero(), true)])
@@ -214,24 +215,4 @@ impl<'a> PiecewiseLinearFunction<'a> {
     fn append_point(points: &mut Vec<Point>, point: Point) {
         points.push(point)
     }
-}
-
-fn intersect(f1: &Point, f2: &Point, g1: &Point, g2: &Point) -> bool {
-    unimplemented!();
-}
-
-fn intersection_point(f1: &Point, f2: &Point, g1: &Point, g2: &Point) -> Point {
-    unimplemented!();
-}
-
-fn counter_clockwise(p: &Point, q: &Point, r: &Point) -> bool {
-    unimplemented!();
-}
-
-fn clockwise(p: &Point, q: &Point, r: &Point) -> bool {
-    unimplemented!();
-}
-
-fn colinear(p: &Point, q: &Point, r: &Point) -> bool {
-    unimplemented!();
 }

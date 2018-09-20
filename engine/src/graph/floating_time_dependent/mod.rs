@@ -33,13 +33,13 @@ mod time {
     // implications for division with EPSILON like divisors?
     const EPSILON: f64 = 0.000_000_1;
 
-    fn fuzzy_eq(x: f64, y: f64) -> bool {
+    pub fn fuzzy_eq(x: f64, y: f64) -> bool {
         (x - y).abs() < EPSILON
     }
-    fn fuzzy_neq(x: f64, y: f64) -> bool {
+    pub fn fuzzy_neq(x: f64, y: f64) -> bool {
         !fuzzy_eq(x, y)
     }
-    fn fuzzy_lt(x: f64, y: f64) -> bool {
+    pub fn fuzzy_lt(x: f64, y: f64) -> bool {
         x + EPSILON < y
     }
 
@@ -108,6 +108,14 @@ mod time {
         }
     }
 
+    impl Mul<FlWeight> for f64 {
+        type Output = FlWeight;
+
+        fn mul(self, other: FlWeight) -> Self::Output {
+            FlWeight::new(self * other.0)
+        }
+    }
+
     impl Div<FlWeight> for FlWeight {
         type Output = FlWeight;
 
@@ -120,6 +128,12 @@ mod time {
     impl<W: Borrow<Timestamp>> From<W> for FlWeight {
         fn from(w: W) -> Self {
             FlWeight::new(w.borrow().0)
+        }
+    }
+
+    impl From<FlWeight> for f64 {
+        fn from(w: FlWeight) -> Self {
+            w.0
         }
     }
 
@@ -186,6 +200,12 @@ mod time {
 
         fn sub(self, other: Timestamp) -> Self::Output {
             FlWeight::new(self.0 - other.0)
+        }
+    }
+
+    impl From<Timestamp> for f64 {
+        fn from(t: Timestamp) -> Self {
+            t.0
         }
     }
 }
