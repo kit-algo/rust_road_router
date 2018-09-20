@@ -1,5 +1,5 @@
 use super::*;
-use std::cmp::{min, max};
+use std::cmp::{min, max, Ordering};
 
 #[derive(Debug)]
 pub struct PiecewiseLinearFunction<'a> {
@@ -22,8 +22,33 @@ impl<'a> PiecewiseLinearFunction<'a> {
         self.ipps.iter().map(|p| p.val).max().unwrap()
     }
 
-    pub fn eval(&self, _t: Timestamp) -> FlWeight {
-        unimplemented!();
+    pub fn eval(&self, t: Timestamp) -> FlWeight {
+        debug_assert!(t < period());
+
+        if self.ipps.len() == 1 {
+            return self.ipps.first().unwrap().val
+        }
+
+        let pos = self.ipps.binary_search_by(|p| {
+            if p.at.fuzzy_eq(t) {
+                Ordering::Equal
+            } else if p.at < t {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            }
+        });
+
+        match pos {
+            Ok(i) => unsafe { self.ipps.get_unchecked(i).val },
+            Err(i) => {
+                let prev = unsafe { self.ipps.get_unchecked(i-1) };
+                let next = unsafe { self.ipps.get_unchecked(i) };
+
+                let frac = (t - prev.at) / (next.at - prev.at);
+                prev.val + (next.val - prev.val) * frac
+            },
+        }
     }
 
     pub fn link(&self, other: &Self) -> Vec<Point> {
