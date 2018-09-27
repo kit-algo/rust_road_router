@@ -70,39 +70,35 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
         let mut result = Vec::with_capacity(self.ipps.len() + other.ipps.len() + 1);
 
-        let f = &self.ipps;
-        let g = &other.ipps;
-
-        let mut i = other.first_index_greater_or_equal(self.ipps[0].val);
-        let mut j = 0;
+        let mut f = Cursor::new(&self.ipps);
+        let mut g = Cursor::starting_at(&other.ipps, Timestamp::zero() + self.ipps[0].val);
 
         loop {
             let mut x;
             let y;
 
-            if g[i].at.fuzzy_eq(f[j].at + f[j].val) {
-                x = f[j].at;
-                y = g[i].val + f[j].val;
+            if g.cur().at.fuzzy_eq(f.cur().at + f.cur().val) {
+                x = f.cur().at;
+                y = g.cur().val + f.cur().val;
 
-                i += 1;
-                j += 1;
-            }
-            else if g[i].at < f[j].at + f[j].val {
-                debug_assert!(g[i].at.fuzzy_lt(f[j].at + f[j].val));
+                g.advance();
+                f.advance();
+            } else if g.cur().at < f.cur().at + f.cur().val {
+                debug_assert!(g.cur().at.fuzzy_lt(f.cur().at + f.cur().val));
 
-                let m_arr_f_inverse = (f[j].at - f[j-1].at) / (f[j].at + f[j].val - f[j-1].at - f[j-1].val);
-                x = m_arr_f_inverse * (g[i].at - f[j-1].at - f[j-1].val) + f[j-1].at;
-                y = g[i].at + g[i].val - x;
+                let m_arr_f_inverse = (f.cur().at - f.prev().at) / (f.cur().at + f.cur().val - f.prev().at - f.prev().val);
+                x = m_arr_f_inverse * (g.cur().at - f.prev().at - f.prev().val) + f.prev().at;
+                y = g.cur().at + g.cur().val - x;
 
-                i += 1;
+                g.advance();
             } else {
-                debug_assert!((f[j].at + f[j].val).fuzzy_lt(g[i].at));
+                debug_assert!((f.cur().at + f.cur().val).fuzzy_lt(g.cur().at));
 
-                x = f[j].at;
-                let m_g = (g[i].val - g[i-1].val) / (g[i].at - g[i-1].at);
-                y = g[i-1].val + m_g * (f[j].at + f[j].val - g[i-1].at) + f[j].val;
+                x = f.cur().at;
+                let m_g = (g.cur().val - g.prev().val) / (g.cur().at - g.prev().at);
+                y = g.prev().val + m_g * (f.cur().at + f.cur().val - g.prev().at) + f.cur().val;
 
-                j += 1;
+                f.advance();
             }
 
             if period().fuzzy_lt(x) { break }
@@ -127,117 +123,228 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
         let mut result = Vec::with_capacity(2 * self.ipps.len() + 2 * other.ipps.len() + 2);
 
-        let f = &self.ipps;
-        let g = &other.ipps;
+        let mut f = Cursor::new(&self.ipps);
+        let mut g = Cursor::new(&other.ipps);
 
-        let mut i = 0;
-        let mut j = 0;
+        while f.cur().at < period() || g.cur().at < period() {
 
-        while i < f.len() || j < g.len() {
-
-            if intersect(&f[i - 1], &f[i], &g[j - 1], &g[j]) {
-                let intersection = intersection_point(&f[i-1], &f[i], &g[j-1], &g[j]);
-                if intersection.at >= Timestamp::zero() { Self::append_point(&mut result, intersection); }
+            if intersect(&f.prev(), &f.cur(), &g.prev(), &g.cur()) {
+                let intersection = intersection_point(&f.prev(), &f.cur(), &g.prev(), &g.cur());
+                if intersection.at >= Timestamp::zero() {
+                    Self::append_point(&mut result, intersection);
+                }
                 // TODO which is the better one?
             }
 
-            if f[i].at.fuzzy_eq(g[j].at) {
-                if f[i].val.fuzzy_eq(g[j].val) {
-                    Self::append_point(&mut result, f[i].clone());
+            if f.cur().at.fuzzy_eq(g.cur().at) {
+                if f.cur().val.fuzzy_eq(g.cur().val) {
+                    Self::append_point(&mut result, f.cur().clone());
 
-                    if counter_clockwise(&g[j - 1], &f[i - 1], &f[i]) || counter_clockwise(&f[i], &f[i + 1], &g[j + 1]) {
+                    if counter_clockwise(&g.prev(), &f.prev(), &f.cur()) || counter_clockwise(&f.cur(), &f.next(), &g.next()) {
                         unimplemented!(); // f better
                     }
 
-                    if clockwise(&g[j-1], &f[i-1], &f[i]) || clockwise(&f[i], &f[i+1], &g[j+1]) {
+                    if clockwise(&g.prev(), &f.prev(), &f.cur()) || clockwise(&f.cur(), &f.next(), &g.next()) {
                         unimplemented!() // g better
                     }
 
-                } else if f[i].val < g[j].val {
+                } else if f.cur().val < g.cur().val {
 
-                    Self::append_point(&mut result, f[i].clone());
+                    Self::append_point(&mut result, f.cur().clone());
 
-                    debug_assert!(f[i].val.fuzzy_lt(g[j].val));
+                    debug_assert!(f.cur().val.fuzzy_lt(g.cur().val));
                     unimplemented!(); // f better
 
                 } else {
 
-                    debug_assert!(g[j].val < f[i].val);
-                    Self::append_point(&mut result, g[j].clone());
+                    debug_assert!(g.cur().val < f.cur().val);
+                    Self::append_point(&mut result, g.cur().clone());
                     unimplemented!() // g better
                 }
 
-                i += 1;
-                j += 1;
+                f.advance();
+                g.advance();
 
-            } else if f[i].at < g[j].at {
+            } else if f.cur().at < g.cur().at {
 
-                debug_assert!(f[i].at.fuzzy_lt(g[j].at));
+                debug_assert!(f.cur().at.fuzzy_lt(g.cur().at));
 
-                if counter_clockwise(&g[j - 1], &f[i], &g[j]) {
-                    Self::append_point(&mut result, f[i].clone());
+                if counter_clockwise(&g.prev(), &f.cur(), &g.cur()) {
+                    Self::append_point(&mut result, f.cur().clone());
                     unimplemented!(); // f better
 
-                } else if colinear(&g[j - 1], &f[i], &g[j]) {
+                } else if colinear(&g.prev(), &f.cur(), &g.cur()) {
 
-                    if counter_clockwise(&g[j - 1], &f[i - 1], &f[i]) || counter_clockwise(&f[i], &f[i + 1], &g[j]) {
-                        Self::append_point(&mut result, f[i].clone());
+                    if counter_clockwise(&g.prev(), &f.prev(), &f.cur()) || counter_clockwise(&f.cur(), &f.next(), &g.cur()) {
+                        Self::append_point(&mut result, f.cur().clone());
                         unimplemented!(); // f better
                     } else if result.is_empty() {
-                        Self::append_point(&mut result, f[i].clone());
+                        Self::append_point(&mut result, f.cur().clone());
                     }
 
-                    if clockwise(&g[j - 1], &f[i - 1], &f[i]) || clockwise(&f[i], &f[i + 1], &g[j]) {
+                    if clockwise(&g.prev(), &f.prev(), &f.cur()) || clockwise(&f.cur(), &f.next(), &g.cur()) {
                         unimplemented!() // g better
                     }
                 }
 
-                i += 1;
+                f.advance();
 
             } else {
 
-                debug_assert!(g[j].at < f[i].at);
+                debug_assert!(g.cur().at < f.cur().at);
 
-                if counter_clockwise(&f[i - 1], &g[j], &f[i]) {
-                    Self::append_point(&mut result, g[j].clone());
+                if counter_clockwise(&f.prev(), &g.cur(), &f.cur()) {
+                    Self::append_point(&mut result, g.cur().clone());
                     unimplemented!() // g better
 
-                } else if colinear(&f[i - 1], &g[j], &f[i]) {
-                    if counter_clockwise(&g[j - 1], &g[j], &f[i - 1]) || counter_clockwise(&g[j], &g[j + 1], &f[i]) {
-                        Self::append_point(&mut result, g[j].clone());
+                } else if colinear(&f.prev(), &g.cur(), &f.cur()) {
+                    if counter_clockwise(&g.prev(), &g.cur(), &f.prev()) || counter_clockwise(&g.cur(), &g.next(), &f.cur()) {
+                        Self::append_point(&mut result, g.cur().clone());
                         unimplemented!() // g better
                     }
                     if result.is_empty() {
-                        Self::append_point(&mut result, g[j].clone());
+                        Self::append_point(&mut result, g.cur().clone());
                     }
 
-                    if clockwise(&g[j - 1], &g[j], &f[i - 1]) || clockwise(&g[j], &g[j + 1], &f[i]) {
+                    if clockwise(&g.prev(), &g.cur(), &f.prev()) || clockwise(&g.cur(), &g.next(), &f.cur()) {
                         unimplemented!(); // f better
                     }
                 }
 
-                j += 1;
+                g.advance();
             }
         };
 
-        let n = f.len();
-        let m = g.len();
+        debug_assert_eq!(f.cur().at, period());
+        debug_assert_eq!(g.cur().at, period());
 
-        if intersect(&f[n - 1], &f[n], &g[m - 1], &g[m]) {
-            let intersection = intersection_point(&f[n-1], &f[n], &g[m-1], &g[m]);
+        if intersect(&f.prev(), &f.cur(), &g.prev(), &g.cur()) {
+            let intersection = intersection_point(&f.prev(), &f.cur(), &g.prev(), &g.cur());
             if intersection.at < period() { Self::append_point(&mut result, intersection); }
 
             unimplemented!(); // TODO which is better?
         }
 
-        (result, vec![])
-    }
+        if result.len() > 1 {
+            let p = Point { at: period(), val: result[0].val };
+            Self::append_point(&mut result, p);
+        }
 
-    fn first_index_greater_or_equal(&self, _val: FlWeight) -> usize {
-        unimplemented!();
+        debug_assert!(result.len() <= 2 * self.ipps.len() + 2 * other.ipps.len() + 2);
+
+        (result, vec![])
     }
 
     fn append_point(points: &mut Vec<Point>, point: Point) {
         points.push(point)
+    }
+}
+
+#[derive(Debug)]
+struct Cursor<'a> {
+    ipps: &'a [Point],
+    current_index: usize,
+    offset: FlWeight,
+}
+
+impl<'a> Cursor<'a> {
+    fn new(ipps: &'a [Point]) -> Self {
+        Cursor { ipps, current_index: 0, offset: FlWeight::new(0.0) }
+    }
+
+    fn starting_at(ipps: &'a [Point], t: Timestamp) -> Self {
+        debug_assert!(t < period());
+
+        if ipps.len() == 1 {
+            return Self::new(ipps)
+        }
+
+        let pos = ipps.binary_search_by(|p| {
+            if p.at.fuzzy_eq(t) {
+                Ordering::Equal
+            } else if p.at < t {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            }
+        });
+
+        match pos {
+            Ok(i) => Cursor { ipps, current_index: i, offset: FlWeight::new(0.0) },
+            Err(i) => Cursor { ipps, current_index: i-1, offset: FlWeight::new(0.0) },
+        }
+    }
+
+    fn cur(&self) -> Point {
+        let index = self.current_index % self.ipps.len();
+        self.ipps[index].shifted(self.offset)
+    }
+
+    fn next(&self) -> Point {
+        if self.ipps.len() == 1 {
+            self.ipps.first().unwrap().shifted(self.offset + FlWeight::from(period()))
+        } else {
+            let index = (self.current_index + 1) % self.ipps.len();
+            self.ipps[index].shifted(self.offset)
+        }
+    }
+
+    fn prev(&self) -> Point {
+        if self.ipps.len() == 1 {
+            self.ipps.first().unwrap().shifted(self.offset - FlWeight::from(period()))
+        } else if self.current_index % self.ipps.len() == 0 {
+            let offset = self.offset - FlWeight::from(period());
+            self.ipps[self.ipps.len() - 2].shifted(offset)
+        } else {
+            let index = (self.current_index - 1) % self.ipps.len();
+            self.ipps[index].shifted(self.offset)
+        }
+    }
+
+    fn advance(&mut self) {
+        self.current_index += 1;
+        if self.current_index % self.ipps.len() == self.ipps.len() - 1 {
+            self.offset = self.offset + FlWeight::from(period());
+            self.current_index += 1;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_static_fn_cursor() {
+        run_test_with_periodicity(Timestamp::new(10.0), || {
+            let ipps = [Point { at: Timestamp::zero(), val: FlWeight::new(5.0) }];
+            let mut cursor = Cursor::new(&ipps);
+            assert_eq!(cursor.cur(), Point { at: Timestamp::zero(), val: FlWeight::new(5.0) });
+            assert_eq!(cursor.next(), Point { at: period(), val: FlWeight::new(5.0) });
+            assert_eq!(cursor.prev(), Point { at: Timestamp::zero() - FlWeight::from(period()), val: FlWeight::new(5.0) });
+            cursor.advance();
+            assert_eq!(cursor.cur(), Point { at: period(), val: FlWeight::new(5.0) });
+            assert_eq!(cursor.next(), Point { at: Timestamp::new(20.0), val: FlWeight::new(5.0) });
+            assert_eq!(cursor.prev(), Point { at: Timestamp::zero(), val: FlWeight::new(5.0) });
+        });
+    }
+
+    #[test]
+    fn test_dyn_fn_cursor() {
+        run_test_with_periodicity(Timestamp::new(10.0), || {
+            let ipps = [Point { at: Timestamp::zero(), val: FlWeight::new(5.0) }, Point { at: Timestamp::new(5.0), val: FlWeight::new(7.0) }, Point { at: period(), val: FlWeight::new(5.0) }];
+            let mut cursor = Cursor::new(&ipps);
+            assert_eq!(cursor.cur(), Point { at: Timestamp::zero(), val: FlWeight::new(5.0) });
+            assert_eq!(cursor.next(), Point { at: Timestamp::new(5.0), val: FlWeight::new(7.0) });
+            assert_eq!(cursor.prev(), Point { at: Timestamp::new(-5.0), val: FlWeight::new(7.0) });
+            cursor.advance();
+            assert_eq!(cursor.cur(), Point { at: Timestamp::new(5.0), val: FlWeight::new(7.0) });
+            assert_eq!(cursor.next(), Point { at: period(), val: FlWeight::new(5.0) });
+            assert_eq!(cursor.prev(), Point { at: Timestamp::zero(), val: FlWeight::new(5.0) });
+            cursor.advance();
+            assert_eq!(cursor.cur(), Point { at: period(), val: FlWeight::new(5.0) });
+            assert_eq!(cursor.next(), Point { at: Timestamp::new(15.0), val: FlWeight::new(7.0) });
+            assert_eq!(cursor.prev(), Point { at: Timestamp::new(5.0), val: FlWeight::new(7.0) });
+        });
     }
 }

@@ -178,8 +178,6 @@ mod time {
 
         fn add(self, other: W) -> Self::Output {
             let result = self.0 + other.borrow().0;
-            debug_assert!(result >= 0.0);
-            debug_assert!(result <= period().0);
             Timestamp::new(result)
         }
     }
@@ -189,8 +187,6 @@ mod time {
 
         fn sub(self, other: W) -> Self::Output {
             let result = self.0 - other.borrow().0;
-            debug_assert!(result >= 0.0);
-            debug_assert!(result <= period().0);
             Timestamp::new(result)
         }
     }

@@ -1,10 +1,16 @@
 use std::ops::Sub;
 use super::*;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Point {
     pub at: Timestamp,
     pub val: FlWeight,
+}
+
+impl Point {
+    pub fn shifted(&self, offset: FlWeight) -> Point {
+        Point { at: self.at + offset, val: self.val }
+    }
 }
 
 impl<'a> Sub for &'a Point {
