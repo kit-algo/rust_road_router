@@ -31,7 +31,7 @@ mod time {
 
     // TODO switch to something ULP based?
     // implications for division with EPSILON like divisors?
-    const EPSILON: f64 = 0.000_000_1;
+    pub const EPSILON: f64 = 0.000_000_1;
 
     pub fn fuzzy_eq(x: f64, y: f64) -> bool {
         (x - y).abs() < EPSILON
