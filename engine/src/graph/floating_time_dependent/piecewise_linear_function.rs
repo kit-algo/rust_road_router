@@ -276,36 +276,33 @@ impl<'a> Cursor<'a> {
     }
 
     fn cur(&self) -> Point {
-        let index = self.current_index % self.ipps.len();
-        self.ipps[index].shifted(self.offset)
+        self.ipps[self.current_index].shifted(self.offset)
     }
 
     fn next(&self) -> Point {
         if self.ipps.len() == 1 {
             self.ipps.first().unwrap().shifted(self.offset + FlWeight::from(period()))
         } else {
-            let index = (self.current_index + 1) % self.ipps.len();
-            self.ipps[index].shifted(self.offset)
+            self.ipps[self.current_index + 1].shifted(self.offset)
         }
     }
 
     fn prev(&self) -> Point {
         if self.ipps.len() == 1 {
             self.ipps.first().unwrap().shifted(self.offset - FlWeight::from(period()))
-        } else if self.current_index % self.ipps.len() == 0 {
+        } else if self.current_index == 0 {
             let offset = self.offset - FlWeight::from(period());
             self.ipps[self.ipps.len() - 2].shifted(offset)
         } else {
-            let index = (self.current_index - 1) % self.ipps.len();
-            self.ipps[index].shifted(self.offset)
+            self.ipps[self.current_index - 1].shifted(self.offset)
         }
     }
 
     fn advance(&mut self) {
         self.current_index += 1;
-        if self.current_index % self.ipps.len() == self.ipps.len() - 1 {
+        if self.current_index % self.ipps.len() == self.ipps.len() - 1 || self.ipps.len() == 1 {
             self.offset = self.offset + FlWeight::from(period());
-            self.current_index += 1;
+            self.current_index = 0;
         }
     }
 }
