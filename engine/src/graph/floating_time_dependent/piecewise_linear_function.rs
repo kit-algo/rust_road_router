@@ -122,44 +122,52 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
 
         let mut result = Vec::with_capacity(2 * self.ipps.len() + 2 * other.ipps.len() + 2);
+        let mut better = Vec::new();
 
         let mut f = Cursor::new(&self.ipps);
         let mut g = Cursor::new(&other.ipps);
+
+        if f.cur().val.fuzzy_eq(g.cur().val) {
+            better.push((Timestamp::zero(), counter_clockwise(&f.cur(), &f.next(), &g.next())));
+        } else {
+            better.push((Timestamp::zero(), f.cur().val < g.cur().val));
+        }
 
         while f.cur().at < period() || g.cur().at < period() {
 
             if intersect(&f.prev(), &f.cur(), &g.prev(), &g.cur()) {
                 let intersection = intersection_point(&f.prev(), &f.cur(), &g.prev(), &g.cur());
                 if intersection.at >= Timestamp::zero() {
+                    better.push((intersection.at, counter_clockwise(&intersection, &f.cur(), &g.cur())));
                     Self::append_point(&mut result, intersection);
                 }
-                // TODO which is the better one?
             }
 
             if f.cur().at.fuzzy_eq(g.cur().at) {
                 if f.cur().val.fuzzy_eq(g.cur().val) {
                     Self::append_point(&mut result, f.cur().clone());
 
-                    if counter_clockwise(&g.prev(), &f.prev(), &f.cur()) || counter_clockwise(&f.cur(), &f.next(), &g.next()) {
-                        unimplemented!(); // f better
+                    if clockwise(&g.prev(), &f.prev(), &f.cur()) && counter_clockwise(&f.cur(), &f.next(), &g.next()) {
+                        debug_assert!(!better.last().unwrap().1);
+                        better.push((f.cur().at, true));
                     }
 
-                    if clockwise(&g.prev(), &f.prev(), &f.cur()) || clockwise(&f.cur(), &f.next(), &g.next()) {
-                        unimplemented!() // g better
+                    if counter_clockwise(&g.prev(), &f.prev(), &f.cur()) && clockwise(&f.cur(), &f.next(), &g.next()) {
+                        debug_assert!(better.last().unwrap().1);
+                        better.push((f.cur().at, false));
                     }
 
                 } else if f.cur().val < g.cur().val {
 
                     Self::append_point(&mut result, f.cur().clone());
-
                     debug_assert!(f.cur().val.fuzzy_lt(g.cur().val));
-                    unimplemented!(); // f better
+                    debug_assert!(better.last().unwrap().1);
 
                 } else {
 
-                    debug_assert!(g.cur().val < f.cur().val);
                     Self::append_point(&mut result, g.cur().clone());
-                    unimplemented!() // g better
+                    debug_assert!(g.cur().val < f.cur().val);
+                    debug_assert!(!better.last().unwrap().1);
                 }
 
                 f.advance();
@@ -171,19 +179,20 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
                 if counter_clockwise(&g.prev(), &f.cur(), &g.cur()) {
                     Self::append_point(&mut result, f.cur().clone());
-                    unimplemented!(); // f better
+                    debug_assert!(better.last().unwrap().1);
 
                 } else if colinear(&g.prev(), &f.cur(), &g.cur()) {
 
                     if counter_clockwise(&g.prev(), &f.prev(), &f.cur()) || counter_clockwise(&f.cur(), &f.next(), &g.cur()) {
                         Self::append_point(&mut result, f.cur().clone());
-                        unimplemented!(); // f better
+                        debug_assert!(better.last().unwrap().1);
                     } else if result.is_empty() {
                         Self::append_point(&mut result, f.cur().clone());
+                        panic!("wtf?");
                     }
 
                     if clockwise(&g.prev(), &f.prev(), &f.cur()) || clockwise(&f.cur(), &f.next(), &g.cur()) {
-                        unimplemented!() // g better
+                        debug_assert!(!better.last().unwrap().1);
                     }
                 }
 
@@ -195,19 +204,20 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
                 if counter_clockwise(&f.prev(), &g.cur(), &f.cur()) {
                     Self::append_point(&mut result, g.cur().clone());
-                    unimplemented!() // g better
+                    debug_assert!(!better.last().unwrap().1);
 
                 } else if colinear(&f.prev(), &g.cur(), &f.cur()) {
                     if counter_clockwise(&g.prev(), &g.cur(), &f.prev()) || counter_clockwise(&g.cur(), &g.next(), &f.cur()) {
                         Self::append_point(&mut result, g.cur().clone());
-                        unimplemented!() // g better
+                        debug_assert!(!better.last().unwrap().1);
                     }
                     if result.is_empty() {
                         Self::append_point(&mut result, g.cur().clone());
+                        panic!("wtf?");
                     }
 
                     if clockwise(&g.prev(), &g.cur(), &f.prev()) || clockwise(&g.cur(), &g.next(), &f.cur()) {
-                        unimplemented!(); // f better
+                        debug_assert!(better.last().unwrap().1);
                     }
                 }
 
@@ -220,9 +230,10 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
         if intersect(&f.prev(), &f.cur(), &g.prev(), &g.cur()) {
             let intersection = intersection_point(&f.prev(), &f.cur(), &g.prev(), &g.cur());
-            if intersection.at < period() { Self::append_point(&mut result, intersection); }
-
-            unimplemented!(); // TODO which is better?
+            if intersection.at < period() {
+                better.push((intersection.at, counter_clockwise(&intersection, &f.cur(), &g.cur())));
+                Self::append_point(&mut result, intersection);
+            }
         }
 
         if result.len() > 1 {
@@ -232,10 +243,11 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
         debug_assert!(result.len() <= 2 * self.ipps.len() + 2 * other.ipps.len() + 2);
 
-        (result, vec![])
+        (result, better)
     }
 
     fn append_point(points: &mut Vec<Point>, point: Point) {
+        debug_assert!(points.last().map(|p| p.at.fuzzy_lt(point.at)).unwrap_or(true));
         points.push(point)
     }
 }
