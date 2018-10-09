@@ -446,16 +446,16 @@ def plot_coords(coords, *args, **kwargs):
                 for p in f.ipps {
                     write!(&mut stdin, "({}, {}), ", f64::from(p.at), f64::from(p.val));
                 }
-                writeln!(&mut stdin, "], 'r+-', label='f', linewidth=1, markersize=1)");
+                writeln!(&mut stdin, "], 'r+-', label='f', linewidth=1, markersize=5)");
 
                 write!(&mut stdin, "plot_coords([");
                 for p in g.ipps {
                     write!(&mut stdin, "({}, {}), ", f64::from(p.at), f64::from(p.val));
                 }
-                writeln!(&mut stdin, "], 'gx-', label='g', linewidth=1, markersize=1)");
+                writeln!(&mut stdin, "], 'gx-', label='g', linewidth=1, markersize=5)");
 
-                writeln!(&mut stdin, "plot_coords([({}, {})], 'rs', markersize=5)", f64::from(f.cur().at), f64::from(f.cur().val));
-                writeln!(&mut stdin, "plot_coords([({}, {})], 'gs', markersize=5)", f64::from(g.cur().at), f64::from(g.cur().val));
+                writeln!(&mut stdin, "plot_coords([({}, {})], 'rs', markersize=10)", f64::from(f.cur().at), f64::from(f.cur().val));
+                writeln!(&mut stdin, "plot_coords([({}, {})], 'gs', markersize=10)", f64::from(g.cur().at), f64::from(g.cur().val));
 
                 if !merged.is_empty() {
                     write!(&mut stdin, "plot_coords([");
