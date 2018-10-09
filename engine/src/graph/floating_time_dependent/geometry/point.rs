@@ -66,7 +66,7 @@ fn ccw(a: &Point, b: &Point, c: &Point) -> i32 {
 
     let x = perp_dot_product(&(c - a), &(b - a));
 
-    if fuzzy_eq(x, 0.0) { return 0 }
+    if x.abs() < 0.000_001 { return 0 }
 
     if x > 0.0 {
         1
