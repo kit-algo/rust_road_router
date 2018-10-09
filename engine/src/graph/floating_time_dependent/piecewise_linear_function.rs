@@ -62,11 +62,16 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 return vec![Point { at: Timestamp::zero(), val: val + other }]
             } else {
                 let zero_val = other.eval(val.into());
-                return other.ipps.iter().filter(|p| p.at > val.into()).map(|p| Point { at: p.at - val, val: p.val + val })
-                    .chain(std::iter::once(Point { at: Timestamp::zero(), val: zero_val + val }))
+                return std::iter::once(Point { at: Timestamp::zero(), val: zero_val + val })
                     .chain(
+                        other.ipps.iter().filter(|p| p.at > val.into()).map(|p| Point { at: p.at - val, val: p.val + val })
+                    ).chain(
                         other.ipps.iter().filter(|p| p.at < val.into()).map(|p| Point { at: p.at + FlWeight::from(period()) - val, val: p.val + val })
-                    ).chain(std::iter::once(Point { at: period(), val: zero_val + val })).collect()
+                    ).chain(std::iter::once(Point { at: period(), val: zero_val + val }))
+                    .fold(Vec::with_capacity(other.ipps.len() + 2), |mut acc, p| {
+                        Self::append_point(&mut acc, p);
+                        acc
+                    })
             }
         }
         if let [Point { val, .. }] = &other.ipps {
