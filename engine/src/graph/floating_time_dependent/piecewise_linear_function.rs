@@ -111,13 +111,16 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 f.advance();
             }
 
-            if period().fuzzy_lt(x) { break }
+            if !x.fuzzy_lt(period()) { break }
 
             x = min(x, period());
             x = max(x, Timestamp::zero());
 
             Self::append_point(&mut result, Point { at: x, val: y });
         }
+
+        let zero_val = result[0].val;
+        Self::append_point(&mut result, Point { at: period(), val: zero_val });
 
         debug_assert!(result.len() <= self.ipps.len() + other.ipps.len() + 1);
         Self::new(&result);
