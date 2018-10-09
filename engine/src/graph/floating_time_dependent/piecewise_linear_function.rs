@@ -176,13 +176,13 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
                     Self::append_point(&mut result, f.cur().clone());
                     debug_assert!(f.cur().val.fuzzy_lt(g.cur().val));
-                    debug_assert!(better.last().unwrap().1);
+                    debug_assert!(better.last().unwrap().1, "{:?}", debug::debug_merge(&f, &g, &result, &better));
 
                 } else {
 
                     Self::append_point(&mut result, g.cur().clone());
                     debug_assert!(g.cur().val < f.cur().val);
-                    debug_assert!(!better.last().unwrap().1);
+                    debug_assert!(!better.last().unwrap().1, "{:?}", debug::debug_merge(&f, &g, &result, &better));
                 }
 
                 f.advance();
@@ -190,19 +190,20 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
             } else if f.cur().at < g.cur().at {
 
-                debug_assert!(f.cur().at.fuzzy_lt(g.cur().at));
+                debug_assert!(f.cur().at.fuzzy_lt(g.cur().at), "f {:?} g {:?}", f.cur().at, g.cur().at);
 
                 if counter_clockwise(&g.prev(), &f.cur(), &g.cur()) {
                     Self::append_point(&mut result, f.cur().clone());
-                    debug_assert!(better.last().unwrap().1);
+                    debug_assert!(better.last().unwrap().1, "{:?}", debug::debug_merge(&f, &g, &result, &better));
 
                 } else if colinear(&g.prev(), &f.cur(), &g.cur()) {
 
                     if counter_clockwise(&g.prev(), &f.prev(), &f.cur()) || counter_clockwise(&f.cur(), &f.next(), &g.cur()) {
                         Self::append_point(&mut result, f.cur().clone());
-                        debug_assert!(better.last().unwrap().1);
+                        debug_assert!(better.last().unwrap().1, "{:?}", debug::debug_merge(&f, &g, &result, &better));
                     } else if result.is_empty() {
                         Self::append_point(&mut result, f.cur().clone());
+                        debug_assert!(better.last().unwrap().1, "{:?}", debug::debug_merge(&f, &g, &result, &better));
                         panic!("wtf?");
                     }
 
@@ -284,12 +285,13 @@ impl<'a> PiecewiseLinearFunction<'a> {
             points.pop();
         }
 
+        debug_assert!(points.last().map(|p| p.at.fuzzy_lt(point.at)).unwrap_or(true));
         points.push(point)
     }
 }
 
 #[derive(Debug)]
-struct Cursor<'a> {
+pub struct Cursor<'a> {
     ipps: &'a [Point],
     current_index: usize,
     offset: FlWeight,
@@ -391,5 +393,67 @@ mod tests {
             assert_eq!(cursor.next(), Point { at: Timestamp::new(15.0), val: FlWeight::new(7.0) });
             assert_eq!(cursor.prev(), Point { at: Timestamp::new(5.0), val: FlWeight::new(7.0) });
         });
+    }
+}
+
+mod debug {
+    use super::*;
+
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    pub fn debug_merge(f: &Cursor, g: &Cursor, merged: &[Point], better: &[(Timestamp, bool)]) {
+        if let Ok(mut child) = Command::new("python").stdin(Stdio::piped()).spawn() {
+            if let Some(mut stdin) = child.stdin.as_mut() {
+                stdin.write_all(
+b"
+import numpy as np
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import seaborn
+
+def plot_coords(coords, *args, **kwargs):
+  x, y = zip(*coords)
+  plt.plot(list(x), list(y), *args, **kwargs)
+
+"
+                ).expect("broken pipe, could not write to python");
+                write!(&mut stdin, "plot_coords([");
+                for p in f.ipps {
+                    write!(&mut stdin, "({}, {}), ", f64::from(p.at), f64::from(p.val));
+                }
+                writeln!(&mut stdin, "], 'r+-', label='f', linewidth=1, markersize=1)");
+
+                write!(&mut stdin, "plot_coords([");
+                for p in g.ipps {
+                    write!(&mut stdin, "({}, {}), ", f64::from(p.at), f64::from(p.val));
+                }
+                writeln!(&mut stdin, "], 'gx-', label='g', linewidth=1, markersize=1)");
+
+                writeln!(&mut stdin, "plot_coords([({}, {})], 'rs', markersize=5)", f64::from(f.cur().at), f64::from(f.cur().val));
+                writeln!(&mut stdin, "plot_coords([({}, {})], 'gs', markersize=5)", f64::from(g.cur().at), f64::from(g.cur().val));
+
+                write!(&mut stdin, "plot_coords([");
+                for p in merged {
+                    write!(&mut stdin, "({}, {}), ", f64::from(p.at), f64::from(p.val));
+                }
+                writeln!(&mut stdin, "], 'bo-', label='merged', linewidth=1, markersize=1)");
+
+                let max_val = f.ipps.iter().map(|p| p.val).max().unwrap();
+                let max_val = max(g.ipps.iter().map(|p| p.val).max().unwrap(), max_val);
+                let max_val = max(merged.iter().map(|p| p.val).max().unwrap(), max_val);
+
+                let min_val = f.ipps.iter().map(|p| p.val).max().unwrap();
+                let min_val = min(g.ipps.iter().map(|p| p.val).min().unwrap(), min_val);
+                let min_val = min(merged.iter().map(|p| p.val).min().unwrap(), min_val);
+
+                for &(t, f_better) in better {
+                    writeln!(&mut stdin, "plt.vlines({}, {}, {}, '{}', linewidth=1)", f64::from(t), f64::from(min_val), f64::from(max_val), if f_better { 'r' } else { 'g' });
+                }
+
+                writeln!(&mut stdin, "plt.legend()");
+                writeln!(&mut stdin, "plt.show()");
+            }
+        }
     }
 }
