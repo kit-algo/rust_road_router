@@ -1,3 +1,5 @@
+cargo-features = ["edition"]
+
 [package]
 name = "bmw_routing_engine"
 version = "0.1.0"
