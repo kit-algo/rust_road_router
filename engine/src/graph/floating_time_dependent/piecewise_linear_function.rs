@@ -441,19 +441,19 @@ def plot_coords(coords, *args, **kwargs):
                 writeln!(&mut stdin, "plot_coords([({}, {})], 'rs', markersize=5)", f64::from(f.cur().at), f64::from(f.cur().val));
                 writeln!(&mut stdin, "plot_coords([({}, {})], 'gs', markersize=5)", f64::from(g.cur().at), f64::from(g.cur().val));
 
-                write!(&mut stdin, "plot_coords([");
-                for p in merged {
-                    write!(&mut stdin, "({}, {}), ", f64::from(p.at), f64::from(p.val));
+                if !merged.is_empty() {
+                    write!(&mut stdin, "plot_coords([");
+                    for p in merged {
+                        write!(&mut stdin, "({}, {}), ", f64::from(p.at), f64::from(p.val));
+                    }
+                    writeln!(&mut stdin, "], 'bo-', label='merged', linewidth=1, markersize=1)");
                 }
-                writeln!(&mut stdin, "], 'bo-', label='merged', linewidth=1, markersize=1)");
 
                 let max_val = f.ipps.iter().map(|p| p.val).max().unwrap();
                 let max_val = max(g.ipps.iter().map(|p| p.val).max().unwrap(), max_val);
-                let max_val = max(merged.iter().map(|p| p.val).max().unwrap(), max_val);
 
                 let min_val = f.ipps.iter().map(|p| p.val).max().unwrap();
                 let min_val = min(g.ipps.iter().map(|p| p.val).min().unwrap(), min_val);
-                let min_val = min(merged.iter().map(|p| p.val).min().unwrap(), min_val);
 
                 for &(t, f_better) in better {
                     writeln!(&mut stdin, "plt.vlines({}, {}, {}, '{}', linewidth=1)", f64::from(t), f64::from(min_val), f64::from(max_val), if f_better { 'r' } else { 'g' });
