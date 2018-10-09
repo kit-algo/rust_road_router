@@ -144,8 +144,9 @@ impl<'a> PiecewiseLinearFunction<'a> {
         let mut f = Cursor::new(&self.ipps);
         let mut g = Cursor::new(&other.ipps);
 
-        if f.cur().val.fuzzy_eq(g.cur().val) {
-            better.push((Timestamp::zero(), counter_clockwise(&f.cur(), &f.next(), &g.next())));
+        // non fuzzy cmp on purpose!
+        if f.cur().val == g.cur().val {
+            better.push((Timestamp::zero(), !clockwise(&f.cur(), &f.next(), &g.next())));
         } else {
             better.push((Timestamp::zero(), f.cur().val < g.cur().val));
         }
@@ -163,15 +164,19 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
             if f.cur().at.fuzzy_eq(g.cur().at) {
                 if f.cur().val.fuzzy_eq(g.cur().val) {
-                    Self::append_point(&mut result, f.cur().clone());
+                    if better.last().unwrap().1 {
+                        Self::append_point(&mut result, f.cur().clone());
+                    } else {
+                        Self::append_point(&mut result, g.cur().clone());
+                    }
 
-                    if clockwise(&g.prev(), &f.prev(), &f.cur()) && counter_clockwise(&f.cur(), &f.next(), &g.next()) {
-                        debug_assert!(!better.last().unwrap().1);
+                    if !better.last().unwrap().1 && counter_clockwise(&f.cur(), &f.next(), &g.next()) {
+                        debug_assert!(!counter_clockwise(&g.prev(), &f.prev(), &f.cur()));
                         better.push((f.cur().at, true));
                     }
 
-                    if counter_clockwise(&g.prev(), &f.prev(), &f.cur()) && clockwise(&f.cur(), &f.next(), &g.next()) {
-                        debug_assert!(better.last().unwrap().1);
+                    if better.last().unwrap().1 && clockwise(&f.cur(), &f.next(), &g.next()) {
+                        debug_assert!(!clockwise(&g.prev(), &f.prev(), &f.cur()));
                         better.push((f.cur().at, false));
                     }
 
