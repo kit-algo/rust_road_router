@@ -452,7 +452,7 @@ def plot_coords(coords, *args, **kwargs):
                 let max_val = f.ipps.iter().map(|p| p.val).max().unwrap();
                 let max_val = max(g.ipps.iter().map(|p| p.val).max().unwrap(), max_val);
 
-                let min_val = f.ipps.iter().map(|p| p.val).max().unwrap();
+                let min_val = f.ipps.iter().map(|p| p.val).min().unwrap();
                 let min_val = min(g.ipps.iter().map(|p| p.val).min().unwrap(), min_val);
 
                 for &(t, f_better) in better {
