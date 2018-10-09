@@ -8,9 +8,14 @@ pub struct PiecewiseLinearFunction<'a> {
 
 impl<'a> PiecewiseLinearFunction<'a> {
     pub fn new(ipps: &'a [Point]) -> PiecewiseLinearFunction<'a> {
-        debug_assert!(ipps.first().unwrap().at == Timestamp::zero());
-        debug_assert!(ipps.first().unwrap().val == ipps.last().unwrap().val);
-        debug_assert!(ipps.len() == 1 || ipps.last().unwrap().at == period());
+        debug_assert!(ipps.first().unwrap().at == Timestamp::zero(), "{:?}", ipps);
+        debug_assert!(ipps.first().unwrap().val.fuzzy_eq(ipps.last().unwrap().val), "{:?}", ipps);
+        debug_assert!(ipps.len() == 1 || ipps.last().unwrap().at == period(), "{:?}", ipps);
+
+        for points in ipps.windows(2) {
+            debug_assert!(points[0].at < points[1].at);
+        }
+
         PiecewiseLinearFunction { ipps }
     }
 
@@ -110,6 +115,8 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
 
         debug_assert!(result.len() <= self.ipps.len() + other.ipps.len() + 1);
+        Self::new(&result);
+
         result
     }
 
@@ -242,6 +249,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
 
         debug_assert!(result.len() <= 2 * self.ipps.len() + 2 * other.ipps.len() + 2);
+        Self::new(&result);
 
         (result, better)
     }
