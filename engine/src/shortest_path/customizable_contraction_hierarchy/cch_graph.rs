@@ -296,7 +296,7 @@ impl CCHGraph {
             let timer = Timer::new();
 
             for current_node in 0..n {
-                if current_node % 100_000 == 0 {
+                if current_node % 1000 == 0 {
                     println!("t: {}s customizing from node {}, degree: {}", timer.get_passed_ms() / 1000, current_node, self.degree(current_node));
                 }
                 for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
