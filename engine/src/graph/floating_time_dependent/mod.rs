@@ -5,6 +5,7 @@ use self::piecewise_linear_function::*;
 
 mod geometry;
 use self::geometry::*;
+pub use self::geometry::Point;
 
 mod graph;
 pub use self::graph::Graph as TDGraph;
@@ -27,20 +28,19 @@ mod time {
         cmp::Ordering,
         borrow::Borrow,
     };
-    use super::*;
 
     // TODO switch to something ULP based?
     // implications for division with EPSILON like divisors?
-    pub const EPSILON: f64 = 0.000_000_1;
+    pub const EPSILON: f64 = 0.000_001;
 
     pub fn fuzzy_eq(x: f64, y: f64) -> bool {
-        (x - y).abs() < EPSILON
+        (x - y).abs() <= EPSILON
     }
     pub fn fuzzy_neq(x: f64, y: f64) -> bool {
         !fuzzy_eq(x, y)
     }
     pub fn fuzzy_lt(x: f64, y: f64) -> bool {
-        x + EPSILON < y
+        x < y - EPSILON
     }
 
     #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
