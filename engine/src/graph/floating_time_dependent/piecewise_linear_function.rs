@@ -82,7 +82,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         let mut result = Vec::with_capacity(self.ipps.len() + other.ipps.len() + 1);
 
         let mut f = Cursor::new(&self.ipps);
-        let mut g = Cursor::starting_at(&other.ipps, Timestamp::zero() + self.ipps[0].val);
+        let mut g = Cursor::starting_at_or_after(&other.ipps, Timestamp::zero() + self.ipps[0].val);
 
         loop {
             let mut x;
@@ -314,8 +314,8 @@ impl<'a> Cursor<'a> {
         Cursor { ipps, current_index: 0, offset: FlWeight::new(0.0) }
     }
 
-    fn starting_at(ipps: &'a [Point], t: Timestamp) -> Self {
-        debug_assert!(t < period());
+    fn starting_at_or_after(ipps: &'a [Point], t: Timestamp) -> Self {
+        debug_assert!(t.fuzzy_lt(period()));
 
         if ipps.len() == 1 {
             return Self::new(ipps)
@@ -333,7 +333,13 @@ impl<'a> Cursor<'a> {
 
         match pos {
             Ok(i) => Cursor { ipps, current_index: i, offset: FlWeight::new(0.0) },
-            Err(i) => Cursor { ipps, current_index: i-1, offset: FlWeight::new(0.0) },
+            Err(i) => {
+                if i == ipps.len() - 1 {
+                    Cursor { ipps, current_index: 0, offset: period().into() }
+                } else {
+                    Cursor { ipps, current_index: i, offset: FlWeight::new(0.0) }
+                }
+            }
         }
     }
 
