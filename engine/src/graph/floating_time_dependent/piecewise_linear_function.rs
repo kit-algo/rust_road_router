@@ -197,6 +197,9 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     debug_assert!(better.last().unwrap().1, "{:?}", debug::debug_merge(&f, &g, &result, &better));
 
                 } else if colinear(&g.prev(), &f.cur(), &g.cur()) {
+                    if !better.last().unwrap().1 && counter_clockwise(&f.cur(), &f.next(), &g.cur()) {
+                        better.push((f.cur().at, true))
+                    }
 
                     if counter_clockwise(&g.prev(), &f.prev(), &f.cur()) || counter_clockwise(&f.cur(), &f.next(), &g.cur()) {
                         Self::append_point(&mut result, f.cur().clone());
@@ -207,8 +210,8 @@ impl<'a> PiecewiseLinearFunction<'a> {
                         panic!("wtf?");
                     }
 
-                    if clockwise(&g.prev(), &f.prev(), &f.cur()) || clockwise(&f.cur(), &f.next(), &g.cur()) {
-                        debug_assert!(!better.last().unwrap().1);
+                    if better.last().unwrap().1 && clockwise(&f.cur(), &f.next(), &g.cur()) {
+                        better.push((f.cur().at, false))
                     }
                 }
 
@@ -220,20 +223,25 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
                 if counter_clockwise(&f.prev(), &g.cur(), &f.cur()) {
                     Self::append_point(&mut result, g.cur().clone());
-                    debug_assert!(!better.last().unwrap().1);
+                    debug_assert!(!better.last().unwrap().1, "{:?}\n\n\nf: {:?}\n\n\ng: {:?}\n\n\nmerged {:?}", debug::debug_merge(&f, &g, &result, &better), f.ipps, g.ipps, result);
 
                 } else if colinear(&f.prev(), &g.cur(), &f.cur()) {
+                    if better.last().unwrap().1 && counter_clockwise(&g.cur(), &g.next(), &f.cur()) {
+                        better.push((g.cur().at, false))
+                    }
+
                     if counter_clockwise(&g.prev(), &g.cur(), &f.prev()) || counter_clockwise(&g.cur(), &g.next(), &f.cur()) {
                         Self::append_point(&mut result, g.cur().clone());
-                        debug_assert!(!better.last().unwrap().1);
+                        debug_assert!(!better.last().unwrap().1, "{:?}", debug::debug_merge(&f, &g, &result, &better));
                     }
                     if result.is_empty() {
                         Self::append_point(&mut result, g.cur().clone());
+                        debug_assert!(!better.last().unwrap().1, "{:?}", debug::debug_merge(&f, &g, &result, &better));
                         panic!("wtf?");
                     }
 
-                    if clockwise(&g.prev(), &g.cur(), &f.prev()) || clockwise(&g.cur(), &g.next(), &f.cur()) {
-                        debug_assert!(better.last().unwrap().1);
+                    if !better.last().unwrap().1 && clockwise(&g.cur(), &g.next(), &f.cur()) {
+                        better.push((g.cur().at, true))
                     }
                 }
 
