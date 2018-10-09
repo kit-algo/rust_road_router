@@ -1,5 +1,6 @@
 use super::*;
 use std::cmp::{min, max, Ordering};
+use self::debug::debug_merge;
 
 #[derive(Debug)]
 pub struct PiecewiseLinearFunction<'a> {
@@ -112,6 +113,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
             }
 
             if !x.fuzzy_lt(period()) { break }
+            debug_assert!(!x.fuzzy_lt(Timestamp::zero()), "{:?} {:?} {:?}", x, y, debug_merge(&f, &g, &result, &[]));
 
             x = min(x, period());
             x = max(x, Timestamp::zero());
@@ -176,13 +178,13 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
                     Self::append_point(&mut result, f.cur().clone());
                     debug_assert!(f.cur().val.fuzzy_lt(g.cur().val));
-                    debug_assert!(better.last().unwrap().1, "{:?}", debug::debug_merge(&f, &g, &result, &better));
+                    debug_assert!(better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
 
                 } else {
 
                     Self::append_point(&mut result, g.cur().clone());
                     debug_assert!(g.cur().val < f.cur().val);
-                    debug_assert!(!better.last().unwrap().1, "{:?}", debug::debug_merge(&f, &g, &result, &better));
+                    debug_assert!(!better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
                 }
 
                 f.advance();
@@ -194,7 +196,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
                 if counter_clockwise(&g.prev(), &f.cur(), &g.cur()) {
                     Self::append_point(&mut result, f.cur().clone());
-                    debug_assert!(better.last().unwrap().1, "{:?}", debug::debug_merge(&f, &g, &result, &better));
+                    debug_assert!(better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
 
                 } else if colinear(&g.prev(), &f.cur(), &g.cur()) {
                     if !better.last().unwrap().1 && counter_clockwise(&f.cur(), &f.next(), &g.cur()) {
@@ -203,10 +205,10 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
                     if counter_clockwise(&g.prev(), &f.prev(), &f.cur()) || counter_clockwise(&f.cur(), &f.next(), &g.cur()) {
                         Self::append_point(&mut result, f.cur().clone());
-                        debug_assert!(better.last().unwrap().1, "{:?}", debug::debug_merge(&f, &g, &result, &better));
+                        debug_assert!(better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
                     } else if result.is_empty() {
                         Self::append_point(&mut result, f.cur().clone());
-                        debug_assert!(better.last().unwrap().1, "{:?}", debug::debug_merge(&f, &g, &result, &better));
+                        debug_assert!(better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
                         panic!("wtf?");
                     }
 
@@ -223,7 +225,8 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
                 if counter_clockwise(&f.prev(), &g.cur(), &f.cur()) {
                     Self::append_point(&mut result, g.cur().clone());
-                    debug_assert!(!better.last().unwrap().1, "{:?}\n\n\nf: {:?}\n\n\ng: {:?}\n\n\nmerged {:?}", debug::debug_merge(&f, &g, &result, &better), f.ipps, g.ipps, result);
+                    debug_assert!(!better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
+                    // debug_assert!(!better.last().unwrap().1, "{:?}\n\n\nf: {:?}\n\n\ng: {:?}\n\n\nmerged {:?}", debug_merge(&f, &g, &result, &better), f.ipps, g.ipps, result);
 
                 } else if colinear(&f.prev(), &g.cur(), &f.cur()) {
                     if better.last().unwrap().1 && counter_clockwise(&g.cur(), &g.next(), &f.cur()) {
@@ -232,11 +235,11 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
                     if counter_clockwise(&g.prev(), &g.cur(), &f.prev()) || counter_clockwise(&g.cur(), &g.next(), &f.cur()) {
                         Self::append_point(&mut result, g.cur().clone());
-                        debug_assert!(!better.last().unwrap().1, "{:?}", debug::debug_merge(&f, &g, &result, &better));
+                        debug_assert!(!better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
                     }
                     if result.is_empty() {
                         Self::append_point(&mut result, g.cur().clone());
-                        debug_assert!(!better.last().unwrap().1, "{:?}", debug::debug_merge(&f, &g, &result, &better));
+                        debug_assert!(!better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
                         panic!("wtf?");
                     }
 
@@ -272,7 +275,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     fn append_point(points: &mut Vec<Point>, mut point: Point) {
-        debug_assert!(point.val > FlWeight::new(0.0));
+        debug_assert!(point.val > FlWeight::new(0.0), "{:?}", point);
 
         if let Some(prev) = points.last_mut() {
             if prev.at.fuzzy_eq(point.at) {
@@ -280,6 +283,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 println!("Jumping TTF");
                 let early = min(prev.at, point.at);
                 let late = max(prev.at, point.at) + FlWeight::new(EPSILON);
+                debug_assert!(early.fuzzy_lt(late), "{:?} {:?}", prev, point);
                 prev.at = early;
                 point.at = late;
             }
