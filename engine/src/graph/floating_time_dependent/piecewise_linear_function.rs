@@ -10,7 +10,7 @@ pub struct PiecewiseLinearFunction<'a> {
 impl<'a> PiecewiseLinearFunction<'a> {
     pub fn new(ipps: &'a [Point]) -> PiecewiseLinearFunction<'a> {
         debug_assert!(ipps.first().unwrap().at == Timestamp::zero(), "{:?}", ipps);
-        debug_assert!(ipps.first().unwrap().val.fuzzy_eq(ipps.last().unwrap().val), "{:?}", ipps);
+        debug_assert!(ipps.first().unwrap().val == ipps.last().unwrap().val, "{:?}", ipps); // intentional non fuzzy cmp
         debug_assert!(ipps.len() == 1 || ipps.last().unwrap().at == period(), "{:?}", ipps);
 
         for points in ipps.windows(2) {
@@ -171,12 +171,12 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     }
 
                     if !better.last().unwrap().1 && counter_clockwise(&f.cur(), &f.next(), &g.next()) {
-                        debug_assert!(!counter_clockwise(&g.prev(), &f.prev(), &f.cur()));
+                        debug_assert!(!counter_clockwise(&g.prev(), &f.prev(), &f.cur()), "{:?}", debug_merge(&f, &g, &result, &better));
                         better.push((f.cur().at, true));
                     }
 
                     if better.last().unwrap().1 && clockwise(&f.cur(), &f.next(), &g.next()) {
-                        debug_assert!(!clockwise(&g.prev(), &f.prev(), &f.cur()));
+                        debug_assert!(!clockwise(&g.prev(), &f.prev(), &f.cur()), "{:?}", debug_merge(&f, &g, &result, &better));
                         better.push((f.cur().at, false));
                     }
 
@@ -281,7 +281,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     fn append_point(points: &mut Vec<Point>, mut point: Point) {
-        debug_assert!(point.val > FlWeight::new(0.0), "{:?}", point);
+        debug_assert!(point.val >= FlWeight::new(0.0), "{:?}", point);
 
         if let Some(prev) = points.last_mut() {
             if prev.at.fuzzy_eq(point.at) {
@@ -427,6 +427,9 @@ mod debug {
     use std::process::{Command, Stdio};
 
     pub fn debug_merge(f: &Cursor, g: &Cursor, merged: &[Point], better: &[(Timestamp, bool)]) {
+        println!("f: {:?}\n\ncur: {:?}\n", f.ipps, f.cur());
+        println!("g: {:?}\n\ncur: {:?}\n", g.ipps, g.cur());
+
         if let Ok(mut child) = Command::new("python").stdin(Stdio::piped()).spawn() {
             if let Some(mut stdin) = child.stdin.as_mut() {
                 stdin.write_all(
