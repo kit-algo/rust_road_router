@@ -1,4 +1,4 @@
-use std::ops::Sub;
+use std::ops::{Sub, Mul};
 use super::*;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -11,6 +11,10 @@ impl Point {
     pub fn shifted(&self, offset: FlWeight) -> Point {
         Point { at: self.at + offset, val: self.val }
     }
+
+    fn length(&self) -> f64 {
+        (f64::from(self.at) * f64::from(self.at) + f64::from(self.val) * f64::from(self.val)).sqrt()
+    }
 }
 
 impl<'a> Sub for &'a Point {
@@ -21,6 +25,13 @@ impl<'a> Sub for &'a Point {
     }
 }
 
+impl<'a> Mul<f64> for &'a Point {
+    type Output = Point;
+
+    fn mul(self, scalar: f64) -> Self::Output {
+        Point { at: Timestamp::new(f64::from(self.at) * scalar), val: scalar * self.val }
+    }
+}
 
 pub fn intersect(f1: &Point, f2: &Point, g1: &Point, g2: &Point) -> bool {
     if ccw(f1, f2, g1) == 0               { return false }
@@ -64,14 +75,32 @@ fn ccw(a: &Point, b: &Point, c: &Point) -> i32 {
     if a.at.fuzzy_eq(c.at) && a.val.fuzzy_eq(c.val) { return 0 }
     if b.at.fuzzy_eq(c.at) && b.val.fuzzy_eq(c.val) { return 0 }
 
-    let x = perp_dot_product(&(c - a), &(b - a));
+    let v1 = c - a;
+    let v2 = b - a;
 
-    if x.abs() < 0.000_000_01 { return 0 }
+    let x = perp_dot_product(&v1, &v2);
 
-    if x > 0.0 {
-        1
+    if x.abs() < 0.000_000_01 {
+        0
+    } else if x.abs() > 0.1 {
+        if x > 0.0 {
+            1
+        } else {
+            -1
+        }
     } else {
-        -1
+        let v1 = &v1 * (1.0 / if EPSILON > v1.length() { EPSILON } else { v1.length() });
+        let v2 = &v2 * (1.0 / if EPSILON > v2.length() { EPSILON } else { v2.length() });
+
+        let x = perp_dot_product(&v1, &v2);
+
+        if x.abs() < 0.000_000_000_1 { return 0 }
+
+        if x > 0.0 {
+            1
+        } else {
+            -1
+        }
     }
 }
 
