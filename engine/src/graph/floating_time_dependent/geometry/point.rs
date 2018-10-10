@@ -80,27 +80,16 @@ fn ccw(a: &Point, b: &Point, c: &Point) -> i32 {
 
     let x = perp_dot_product(&v1, &v2);
 
-    if x.abs() < 0.000_000_01 {
-        0
-    } else if x.abs() > 0.1 {
-        if x > 0.0 {
-            1
-        } else {
-            -1
-        }
+    if x.abs() < 0.000_000_01 { return 0 }
+
+    if x.abs() < 0.1 && (v1.val.fuzzy_eq((f64::from(v1.at) / f64::from(v2.at)) * v2.val) || v2.val.fuzzy_eq((f64::from(v2.at) / f64::from(v1.at)) * v1.val)) {
+        return 0
+    }
+
+    if x > 0.0 {
+        1
     } else {
-        let v1 = &v1 * (1.0 / if EPSILON > v1.length() { EPSILON } else { v1.length() });
-        let v2 = &v2 * (1.0 / if EPSILON > v2.length() { EPSILON } else { v2.length() });
-
-        let x = perp_dot_product(&v1, &v2);
-
-        if x.abs() < 0.000_000_000_1 { return 0 }
-
-        if x > 0.0 {
-            1
-        } else {
-            -1
-        }
+        -1
     }
 }
 
