@@ -11,10 +11,6 @@ impl Point {
     pub fn shifted(&self, offset: FlWeight) -> Point {
         Point { at: self.at + offset, val: self.val }
     }
-
-    fn length(&self) -> f64 {
-        (f64::from(self.at) * f64::from(self.at) + f64::from(self.val) * f64::from(self.val)).sqrt()
-    }
 }
 
 impl<'a> Sub for &'a Point {
