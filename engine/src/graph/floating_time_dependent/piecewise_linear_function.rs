@@ -299,7 +299,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 std::mem::swap(&mut point.at, &mut prev.at);
             }
         }
-        if points.len() > 1 && colinear(&points[points.len() - 2], &points[points.len() - 1], &point) {
+        if points.len() > 1 && colinear_ordered(&points[points.len() - 2], &points[points.len() - 1], &point) {
             points.pop();
         }
 

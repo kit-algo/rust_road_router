@@ -66,6 +66,14 @@ pub fn colinear(p: &Point, q: &Point, r: &Point) -> bool {
     ccw(p,q,r) == 0
 }
 
+pub fn colinear_ordered(p: &Point, q: &Point, r: &Point) -> bool {
+    debug_assert!(p.at.fuzzy_lt(q.at));
+    debug_assert!(q.at.fuzzy_lt(r.at));
+
+    let v = r - p;
+    q.val.fuzzy_eq(p.val + (f64::from(q.at - p.at) / f64::from(v.at)) * v.val)
+}
+
 fn ccw(a: &Point, b: &Point, c: &Point) -> i32 {
     if a.at.fuzzy_eq(b.at) && a.val.fuzzy_eq(b.val) { return 0 }
     if a.at.fuzzy_eq(c.at) && a.val.fuzzy_eq(c.val) { return 0 }
