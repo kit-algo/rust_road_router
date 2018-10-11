@@ -414,64 +414,72 @@ mod tests {
 mod debug {
     use super::*;
 
+    use std::fs::File;
     use std::io::Write;
     use std::process::{Command, Stdio};
+    use std::env;
 
     pub fn debug_merge(f: &Cursor, g: &Cursor, merged: &[Point], better: &[(Timestamp, bool)]) {
-        println!("f: {:?}\n\ncur: {:?}\n", f.ipps, f.cur());
-        println!("g: {:?}\n\ncur: {:?}\n", g.ipps, g.cur());
+        if let Ok(mut file) = File::create("debug.py") {
+            write_python(&mut file, f, g, merged, better);
+        }
 
-        if let Ok(mut child) = Command::new("python").stdin(Stdio::piped()).spawn() {
-            if let Some(mut stdin) = child.stdin.as_mut() {
-                stdin.write_all(
-b"
+        if env::var("TDCCH_INTERACTIVE_DEBUG").is_ok() {
+            if let Ok(mut child) = Command::new("python3").stdin(Stdio::piped()).spawn() {
+                if let Some(mut stdin) = child.stdin.as_mut() {
+                    write_python(&mut stdin, f, g, merged, better);
+                }
+            }
+        }
+    }
+
+    fn write_python<O: Write>(output: &mut O, f: &Cursor, g: &Cursor, merged: &[Point], better: &[(Timestamp, bool)]) {
+        writeln!(output, "
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import seaborn
 
 def plot_coords(coords, *args, **kwargs):
-  x, y = zip(*coords)
-  plt.plot(list(x), list(y), *args, **kwargs)
+    x, y = zip(*coords)
+    plt.plot(list(x), list(y), *args, **kwargs)
 
 "
-                ).expect("broken pipe, could not write to python");
-                write!(&mut stdin, "plot_coords([");
-                for p in f.ipps {
-                    write!(&mut stdin, "({}, {}), ", f64::from(p.at), f64::from(p.val));
-                }
-                writeln!(&mut stdin, "], 'r+-', label='f', linewidth=1, markersize=5)");
-
-                write!(&mut stdin, "plot_coords([");
-                for p in g.ipps {
-                    write!(&mut stdin, "({}, {}), ", f64::from(p.at), f64::from(p.val));
-                }
-                writeln!(&mut stdin, "], 'gx-', label='g', linewidth=1, markersize=5)");
-
-                writeln!(&mut stdin, "plot_coords([({}, {})], 'rs', markersize=10)", f64::from(f.cur().at), f64::from(f.cur().val));
-                writeln!(&mut stdin, "plot_coords([({}, {})], 'gs', markersize=10)", f64::from(g.cur().at), f64::from(g.cur().val));
-
-                if !merged.is_empty() {
-                    write!(&mut stdin, "plot_coords([");
-                    for p in merged {
-                        write!(&mut stdin, "({}, {}), ", f64::from(p.at), f64::from(p.val));
-                    }
-                    writeln!(&mut stdin, "], 'bo-', label='merged', linewidth=1, markersize=1)");
-                }
-
-                let max_val = f.ipps.iter().map(|p| p.val).max().unwrap();
-                let max_val = max(g.ipps.iter().map(|p| p.val).max().unwrap(), max_val);
-
-                let min_val = f.ipps.iter().map(|p| p.val).min().unwrap();
-                let min_val = min(g.ipps.iter().map(|p| p.val).min().unwrap(), min_val);
-
-                for &(t, f_better) in better {
-                    writeln!(&mut stdin, "plt.vlines({}, {}, {}, '{}', linewidth=1)", f64::from(t), f64::from(min_val), f64::from(max_val), if f_better { 'r' } else { 'g' });
-                }
-
-                writeln!(&mut stdin, "plt.legend()");
-                writeln!(&mut stdin, "plt.show()");
-            }
+        );
+        write!(output, "plot_coords([");
+        for p in f.ipps {
+            write!(output, "({}, {}), ", f64::from(p.at), f64::from(p.val));
         }
+        writeln!(output, "], 'r+-', label='f', linewidth=1, markersize=5)");
+
+        write!(output, "plot_coords([");
+        for p in g.ipps {
+            write!(output, "({}, {}), ", f64::from(p.at), f64::from(p.val));
+        }
+        writeln!(output, "], 'gx-', label='g', linewidth=1, markersize=5)");
+
+        writeln!(output, "plot_coords([({}, {})], 'rs', markersize=10)", f64::from(f.cur().at), f64::from(f.cur().val));
+        writeln!(output, "plot_coords([({}, {})], 'gs', markersize=10)", f64::from(g.cur().at), f64::from(g.cur().val));
+
+        if !merged.is_empty() {
+            write!(output, "plot_coords([");
+            for p in merged {
+                write!(output, "({}, {}), ", f64::from(p.at), f64::from(p.val));
+            }
+            writeln!(output, "], 'bo-', label='merged', linewidth=1, markersize=1)");
+        }
+
+        let max_val = f.ipps.iter().map(|p| p.val).max().unwrap();
+        let max_val = max(g.ipps.iter().map(|p| p.val).max().unwrap(), max_val);
+
+        let min_val = f.ipps.iter().map(|p| p.val).min().unwrap();
+        let min_val = min(g.ipps.iter().map(|p| p.val).min().unwrap(), min_val);
+
+        for &(t, f_better) in better {
+            writeln!(output, "plt.vlines({}, {}, {}, '{}', linewidth=1)", f64::from(t), f64::from(min_val), f64::from(max_val), if f_better { 'r' } else { 'g' });
+        }
+
+        writeln!(output, "plt.legend()");
+        writeln!(output, "plt.show()");
     }
 }
