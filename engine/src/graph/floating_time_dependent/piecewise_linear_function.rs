@@ -204,7 +204,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     Self::append_point(&mut result, f.cur().clone());
                     debug_assert!(better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
 
-                } else if colinear(&g.prev(), &f.cur(), &g.cur()) {
+                } else if colinear_ordered(&g.prev(), &f.cur(), &g.cur()) {
                     if !better.last().unwrap().1 && counter_clockwise(&f.cur(), &f.next(), &g.cur()) {
                         better.push((f.cur().at, true))
                     }
@@ -234,7 +234,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     debug_assert!(!better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
                     // debug_assert!(!better.last().unwrap().1, "{:?}\n\n\nf: {:?}\n\n\ng: {:?}\n\n\nmerged {:?}", debug_merge(&f, &g, &result, &better), f.ipps, g.ipps, result);
 
-                } else if colinear(&f.prev(), &g.cur(), &f.cur()) {
+                } else if colinear_ordered(&f.prev(), &g.cur(), &f.cur()) {
                     if better.last().unwrap().1 && counter_clockwise(&g.cur(), &g.next(), &f.cur()) {
                         better.push((g.cur().at, false))
                     }

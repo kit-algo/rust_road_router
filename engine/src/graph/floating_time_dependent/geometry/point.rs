@@ -62,10 +62,6 @@ pub fn clockwise(p: &Point, q: &Point, r: &Point) -> bool {
     ccw(p,q,r) == 1
 }
 
-pub fn colinear(p: &Point, q: &Point, r: &Point) -> bool {
-    ccw(p,q,r) == 0
-}
-
 pub fn colinear_ordered(p: &Point, q: &Point, r: &Point) -> bool {
     debug_assert!(p.at.fuzzy_lt(q.at));
     debug_assert!(q.at.fuzzy_lt(r.at));
