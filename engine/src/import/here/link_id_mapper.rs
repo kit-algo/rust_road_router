@@ -1,5 +1,5 @@
 use super::*;
-use rank_select_map::*;
+use crate::rank_select_map::*;
 
 #[derive(Debug, Clone, Copy)]
 pub enum LinkDirection {

@@ -4,7 +4,7 @@ use std::ptr;
 use std::sync::{Arc, Barrier, RwLock};
 use std::ops::Deref;
 
-use shortest_path::timestamped_vector::TimestampedVector;
+use crate::shortest_path::timestamped_vector::TimestampedVector;
 
 #[derive(Debug)]
 struct DistancesPointerWrapper {

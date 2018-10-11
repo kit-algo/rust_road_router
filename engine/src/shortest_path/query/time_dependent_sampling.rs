@@ -1,9 +1,9 @@
 use super::*;
-use shortest_path::customizable_contraction_hierarchy::cch_graph::CCHGraph;
-use shortest_path::td_stepped_dijkstra::TDSteppedDijkstra;
-use graph::time_dependent::*;
-use graph::RandomLinkAccessGraph;
-use shortest_path::query::customizable_contraction_hierarchy::Server as CCHServer;
+use crate::shortest_path::customizable_contraction_hierarchy::cch_graph::CCHGraph;
+use crate::shortest_path::td_stepped_dijkstra::TDSteppedDijkstra;
+use crate::graph::time_dependent::*;
+use crate::graph::RandomLinkAccessGraph;
+use crate::shortest_path::query::customizable_contraction_hierarchy::Server as CCHServer;
 use super::td_stepped_dijkstra::QueryProgress;
 use self::timestamped_vector::TimestampedVector;
 

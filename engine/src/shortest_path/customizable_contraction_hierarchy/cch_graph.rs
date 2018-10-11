@@ -1,9 +1,9 @@
 use super::*;
-use shortest_path::node_order::NodeOrder;
-use in_range_option::InRangeOption;
-use benchmark::{report_time, Timer};
+use crate::shortest_path::node_order::NodeOrder;
+use crate::in_range_option::InRangeOption;
+use crate::benchmark::{report_time, Timer};
 use self::first_out_graph::degrees_to_first_out;
-use graph::link_id_to_tail_mapper::*;
+use crate::graph::link_id_to_tail_mapper::*;
 
 use std;
 use std::ops::Range;
@@ -163,7 +163,7 @@ impl CCHGraph {
     }
 
     pub fn customize_td<'a, 'b: 'a>(&'a self, metric: &'b time_dependent::TDGraph) -> time_dependent::ShortcutGraph<'a> {
-        use graph::time_dependent::*;
+        use crate::graph::time_dependent::*;
 
         let n = (self.first_out.len() - 1) as NodeId;
         let m = self.head.len();
@@ -266,7 +266,7 @@ impl CCHGraph {
     }
 
     pub fn customize_floating_td<'a, 'b: 'a>(&'a self, metric: &'b floating_time_dependent::TDGraph) -> floating_time_dependent::ShortcutGraph<'a> {
-        use graph::floating_time_dependent::*;
+        use crate::graph::floating_time_dependent::*;
 
         let n = (self.first_out.len() - 1) as NodeId;
         let m = self.head.len();
@@ -297,7 +297,7 @@ impl CCHGraph {
 
             for current_node in 0..n {
                 if current_node % 1000 == 0 {
-                    use graph::floating_time_dependent::IPP_COUNT;
+                    use crate::graph::floating_time_dependent::IPP_COUNT;
                     println!("t: {}s customizing from node {}, degree: {}, ipp count: {}", timer.get_passed_ms() / 1000, current_node, self.degree(current_node), IPP_COUNT.with(|count| count.get()));
                 }
                 for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {

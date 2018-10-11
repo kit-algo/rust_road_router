@@ -1,6 +1,6 @@
 use super::*;
-use math::RangeExtensions;
-use ::sorted_search_slice_ext::*;
+use crate::math::RangeExtensions;
+use crate::sorted_search_slice_ext::*;
 
 #[derive(Debug)]
 pub struct PiecewiseLinearFunction<'a> {

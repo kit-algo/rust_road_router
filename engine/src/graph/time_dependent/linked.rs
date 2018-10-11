@@ -1,5 +1,5 @@
 use super::*;
-use math::RangeExtensions;
+use crate::math::RangeExtensions;
 
 #[derive(Debug, Clone)]
 pub struct Linked<'a> {

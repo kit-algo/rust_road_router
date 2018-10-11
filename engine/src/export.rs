@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::{Result, Write};
-use graph::*;
+use crate::graph::*;
 
 pub fn write_graph_to_gr<G: for<'a> LinkIterGraph<'a>>(graph: &G, filename: &str) -> Result<()> {
     let mut file  = File::create(filename)?;

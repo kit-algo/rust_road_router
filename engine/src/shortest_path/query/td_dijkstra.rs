@@ -1,6 +1,6 @@
 use super::*;
-use shortest_path::td_stepped_dijkstra::TDSteppedDijkstra;
-use graph::time_dependent::*;
+use crate::shortest_path::td_stepped_dijkstra::TDSteppedDijkstra;
+use crate::graph::time_dependent::*;
 use super::td_stepped_dijkstra::QueryProgress;
 
 use std::collections::LinkedList;

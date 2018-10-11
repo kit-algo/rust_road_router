@@ -1,6 +1,6 @@
 use super::*;
 
-use math::RangeExtensions;
+use crate::math::RangeExtensions;
 
 use std::iter::Once;
 use std::slice::Iter as SliceIter;

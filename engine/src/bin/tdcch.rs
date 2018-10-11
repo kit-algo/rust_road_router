@@ -1,19 +1,24 @@
 use std::env;
 use std::path::Path;
 
-extern crate bmw_routing_engine;
-extern crate time;
+use bmw_routing_engine::{
+    graph::{
+        *,
+        floating_time_dependent::*,
+        time_dependent::period as int_period,
+    },
+    shortest_path::{
+        customizable_contraction_hierarchy,
+        node_order::NodeOrder,
+        query::{
+            time_dependent_customizable_contraction_hierarchy::Server,
+            td_dijkstra::Server as DijkServer
+        },
+    },
+    io::Load,
+    benchmark::*,
+};
 
-use bmw_routing_engine::*;
-use graph::*;
-use graph::floating_time_dependent::*;
-use graph::time_dependent::period as int_period;
-use shortest_path::customizable_contraction_hierarchy;
-use shortest_path::node_order::NodeOrder;
-use io::Load;
-use bmw_routing_engine::benchmark::*;
-use shortest_path::query::time_dependent_customizable_contraction_hierarchy::Server;
-use shortest_path::query::td_dijkstra::Server as DijkServer;
 use time::Duration;
 
 fn main() {

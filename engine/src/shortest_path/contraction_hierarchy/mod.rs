@@ -162,7 +162,7 @@ impl<'a> PartialContractionGraph<'a> {
     }
 
     fn shortcut_required(&self, from: NodeId, to: NodeId, shortcut_weight: Weight) -> bool {
-        let mut server = ::shortest_path::query::bidirectional_dijkstra::Server {
+        let mut server = crate::shortest_path::query::bidirectional_dijkstra::Server {
             forward_dijkstra: SteppedDijkstra::new(ForwardWrapper { graph: &self }),
             backward_dijkstra: SteppedDijkstra::new(BackwardWrapper { graph: &self }),
             tentative_distance: INFINITY,

@@ -1,7 +1,7 @@
 use super::*;
-use as_slice::AsSlice;
-use as_mut_slice::AsMutSlice;
-use ::io::*;
+use crate::as_slice::AsSlice;
+use crate::as_mut_slice::AsMutSlice;
+use crate::io::*;
 use std::io::Result;
 use std::path::Path;
 use std::mem::swap;

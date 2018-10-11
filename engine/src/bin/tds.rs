@@ -3,12 +3,15 @@ use std::path::Path;
 
 extern crate bmw_routing_engine;
 
-use bmw_routing_engine::*;
-use graph::time_dependent::*;
-use shortest_path::customizable_contraction_hierarchy;
-use shortest_path::node_order::NodeOrder;
-use io::Load;
-use shortest_path::query::time_dependent_sampling::Server;
+use bmw_routing_engine::{
+    graph::time_dependent::*,
+    shortest_path::{
+        customizable_contraction_hierarchy,
+        node_order::NodeOrder,
+        query::time_dependent_sampling::Server,
+    },
+    io::Load,
+};
 
 fn main() {
     let mut args = env::args();

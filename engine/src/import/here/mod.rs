@@ -1,6 +1,6 @@
-use ::graph::*;
-use ::rank_select_map::{RankSelectMap, BitVec};
-use in_range_option::*;
+use crate::graph::*;
+use crate::rank_select_map::{RankSelectMap, BitVec};
+use crate::in_range_option::*;
 use std::iter;
 use std::str::FromStr;
 use std::error::Error;

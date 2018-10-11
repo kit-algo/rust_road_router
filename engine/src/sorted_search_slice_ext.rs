@@ -1,7 +1,7 @@
 use std::ops::Range;
 use std::cmp::Ordering;
-use graph::time_dependent::*;
-use graph::time_dependent::period;
+use crate::graph::time_dependent::*;
+use crate::graph::time_dependent::period;
 
 pub trait SortedSearchSliceExt {
     type Item;

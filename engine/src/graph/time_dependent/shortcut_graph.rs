@@ -1,6 +1,6 @@
 use super::*;
 use std::mem::swap;
-use rank_select_map::BitVec;
+use crate::rank_select_map::BitVec;
 
 #[derive(Debug)]
 pub struct ShortcutGraph<'a> {

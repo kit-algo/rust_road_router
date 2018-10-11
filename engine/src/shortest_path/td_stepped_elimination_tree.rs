@@ -1,12 +1,12 @@
-use graph::time_dependent::period;
-use graph::time_dependent::Timestamp;
-use graph::time_dependent::WrappingRange;
-use math::RangeExtensions;
+use crate::graph::time_dependent::period;
+use crate::graph::time_dependent::Timestamp;
+use crate::graph::time_dependent::WrappingRange;
+use crate::math::RangeExtensions;
 use std::cmp::{min, max};
 use super::*;
 use super::timestamped_vector::TimestampedVector;
-use ::in_range_option::InRangeOption;
-use graph::time_dependent::SingleDirShortcutGraph;
+use crate::in_range_option::InRangeOption;
+use crate::graph::time_dependent::SingleDirShortcutGraph;
 
 #[derive(Debug, Clone)]
 pub enum QueryProgress {

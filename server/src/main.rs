@@ -34,7 +34,7 @@ use shortest_path::customizable_contraction_hierarchy;
 use shortest_path::node_order::NodeOrder;
 use shortest_path::query::customizable_contraction_hierarchy::Server;
 use io::*;
-use bmw_routing_engine::benchmark::measure;
+use bmw_routing_engine::benchmark::report_time;
 use graph::link_id_to_tail_mapper::*;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -99,7 +99,7 @@ fn files(file: PathBuf) -> Option<NamedFile> {
 
 #[get("/query?<query_params>", format = "application/json")]
 fn query(query_params: GeoQuery, state: State<Mutex<Sender<Request>>>) -> Json<Option<GeoResponse>> {
-    let result = measure("Total Query Request Time", || {
+    let result = report_time("Total Query Request Time", || {
         println!("Received Query: {:?}", query_params);
 
         let tx_query = state.lock().unwrap();
@@ -115,7 +115,7 @@ fn query(query_params: GeoQuery, state: State<Mutex<Sender<Request>>>) -> Json<O
 
 #[get("/here_query?<query_params>", format = "application/json")]
 fn here_query(query_params: HereQuery, state: State<Mutex<Sender<Request>>>) -> Json<Option<HereResponse>> {
-    let result = measure("Total Query Request Time", || {
+    let result = report_time("Total Query Request Time", || {
         println!("Received Query: {:?}", query_params);
 
         let tx_query = state.lock().unwrap();
@@ -155,7 +155,7 @@ fn main() {
         let mut coords: Vec<NodeCoord> = lat.iter().zip(lng.iter()).enumerate().map(|(node_id, (&lat, &lng))| {
             NodeCoord { node_id: node_id as NodeId, coords: [lat as f64, lng as f64] }
         }).collect();
-        let tree = measure("build kd tree", || {
+        let tree = report_time("build kd tree", || {
              Kdtree::new(&mut coords)
         });
 
@@ -184,11 +184,11 @@ fn main() {
         for query_params in rx_query {
             match query_params {
                 Request::Geo((GeoQuery { from_lat, from_lng, to_lat, to_lng }, tx_result)) => {
-                    let (from, to) = measure("match nodes", || {
+                    let (from, to) = report_time("match nodes", || {
                         (closest_node((from_lat, from_lng)), closest_node((to_lat, to_lng)))
                     });
 
-                    let result = measure("cch query", || {
+                    let result = report_time("cch query", || {
                         server.distance(from, to).map(|distance| {
                             let path = server.path().iter().map(|&node| coords(node)).collect();
                             GeoResponse { distance, path }
@@ -208,7 +208,7 @@ fn main() {
                     let to_link = graph.link(to_link_local_id);
                     let to = link_id_to_tail_mapper.link_id_to_tail(to_link_local_id);
 
-                    let result = measure("cch query", || {
+                    let result = report_time("cch query", || {
                         server.distance(from, to).map(|distance| {
                             let path = server.path();
                             let path_iter = path.iter();

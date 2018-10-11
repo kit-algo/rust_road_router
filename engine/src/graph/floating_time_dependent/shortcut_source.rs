@@ -1,5 +1,5 @@
 use super::*;
-use in_range_option::InRangeOption;
+use crate::in_range_option::InRangeOption;
 
 #[derive(Debug, Clone, Copy)]
 pub enum ShortcutSource {

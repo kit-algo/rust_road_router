@@ -1,15 +1,15 @@
 use std::collections::LinkedList;
-use graph::time_dependent::*;
-use shortest_path::td_stepped_dijkstra::QueryProgress as OtherQueryProgress;
+use crate::graph::time_dependent::*;
+use crate::shortest_path::td_stepped_dijkstra::QueryProgress as OtherQueryProgress;
 use std::cmp::*;
-use shortest_path::td_stepped_dijkstra::TDSteppedDijkstra;
+use crate::shortest_path::td_stepped_dijkstra::TDSteppedDijkstra;
 use super::*;
 use super::td_stepped_elimination_tree::*;
-use ::shortest_path::customizable_contraction_hierarchy::cch_graph::CCHGraph;
+use crate::shortest_path::customizable_contraction_hierarchy::cch_graph::CCHGraph;
 use self::td_stepped_elimination_tree::QueryProgress;
-use rank_select_map::BitVec;
-use benchmark::report_time;
-use math::RangeExtensions;
+use crate::rank_select_map::BitVec;
+use crate::benchmark::report_time;
+use crate::math::RangeExtensions;
 
 #[derive(Debug)]
 pub struct Server<'a> {
