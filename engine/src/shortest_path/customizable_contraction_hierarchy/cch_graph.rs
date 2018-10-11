@@ -297,7 +297,8 @@ impl CCHGraph {
 
             for current_node in 0..n {
                 if current_node % 1000 == 0 {
-                    println!("t: {}s customizing from node {}, degree: {}", timer.get_passed_ms() / 1000, current_node, self.degree(current_node));
+                    use graph::floating_time_dependent::IPP_COUNT;
+                    println!("t: {}s customizing from node {}, degree: {}, ipp count: {}", timer.get_passed_ms() / 1000, current_node, self.degree(current_node), IPP_COUNT.with(|count| count.get()));
                 }
                 for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
                     node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));

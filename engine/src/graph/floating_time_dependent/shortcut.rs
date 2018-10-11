@@ -18,42 +18,49 @@ impl Shortcut {
     }
 
     pub fn merge(&mut self, linked_ids: (EdgeId, EdgeId), shortcut_graph: &ShortcutGraph) {
-        let other_data = ShortcutSource::Shortcut(linked_ids.0, linked_ids.1).into();
+        IPP_COUNT.with(|count| count.set(count.get() - self.ttf.as_ref().map(|ipps| ipps.len()).unwrap_or(0)));
 
-        if !(shortcut_graph.get_incoming(linked_ids.0).is_valid_path() && shortcut_graph.get_outgoing(linked_ids.1).is_valid_path()) { return; }
+        #[allow(clippy::redundant_closure_call)]
+        (|| {
+            let other_data = ShortcutSource::Shortcut(linked_ids.0, linked_ids.1).into();
 
-        let first_plf = shortcut_graph.get_incoming(linked_ids.0).plf(shortcut_graph);
-        let second_plf = shortcut_graph.get_outgoing(linked_ids.1).plf(shortcut_graph);
+            if !(shortcut_graph.get_incoming(linked_ids.0).is_valid_path() && shortcut_graph.get_outgoing(linked_ids.1).is_valid_path()) { return; }
 
-        let linked_ipps = first_plf.link(&second_plf);
+            let first_plf = shortcut_graph.get_incoming(linked_ids.0).plf(shortcut_graph);
+            let second_plf = shortcut_graph.get_outgoing(linked_ids.1).plf(shortcut_graph);
 
-        if !self.is_valid_path() {
-            self.ttf = Some(linked_ipps);
-            self.sources = Sources::One(other_data);
-            return;
-        }
+            let linked_ipps = first_plf.link(&second_plf);
 
-        let linked = PiecewiseLinearFunction::new(&linked_ipps);
-        let other_lower_bound = linked.lower_bound();
-        let other_upper_bound = linked.upper_bound();
+            if !self.is_valid_path() {
+                self.ttf = Some(linked_ipps);
+                self.sources = Sources::One(other_data);
+                return;
+            }
 
-        let self_plf = self.plf(shortcut_graph);
-        let lower_bound = self_plf.lower_bound();
-        let upper_bound = self_plf.upper_bound();
+            let linked = PiecewiseLinearFunction::new(&linked_ipps);
+            let other_lower_bound = linked.lower_bound();
+            let other_upper_bound = linked.upper_bound();
 
-        if lower_bound >= other_upper_bound {
-            self.ttf = Some(linked_ipps);
-            self.sources = Sources::One(other_data);
-            return;
-        } else if other_lower_bound >= upper_bound {
-            return;
-        }
+            let self_plf = self.plf(shortcut_graph);
+            let lower_bound = self_plf.lower_bound();
+            let upper_bound = self_plf.upper_bound();
 
-        let (merged, intersection_data) = self_plf.merge(&linked);
-        self.ttf = Some(merged);
-        let mut sources = Sources::None;
-        std::mem::swap(&mut sources, &mut self.sources);
-        self.sources = Shortcut::combine(sources, intersection_data, other_data);
+            if lower_bound >= other_upper_bound {
+                self.ttf = Some(linked_ipps);
+                self.sources = Sources::One(other_data);
+                return;
+            } else if other_lower_bound >= upper_bound {
+                return;
+            }
+
+            let (merged, intersection_data) = self_plf.merge(&linked);
+            self.ttf = Some(merged);
+            let mut sources = Sources::None;
+            std::mem::swap(&mut sources, &mut self.sources);
+            self.sources = Shortcut::combine(sources, intersection_data, other_data);
+        }) ();
+
+        IPP_COUNT.with(|count| count.set(count.get() + self.ttf.as_ref().map(|ipps| ipps.len()).unwrap_or(0)));
     }
 
     fn plf<'s>(&'s self, shortcut_graph: &'s ShortcutGraph) -> PiecewiseLinearFunction<'s> {
@@ -80,6 +87,7 @@ impl Shortcut {
     }
 
     pub fn clear_plf(&mut self) {
+        IPP_COUNT.with(|count| count.set(count.get() - self.ttf.as_ref().map(|ipps| ipps.len()).unwrap_or(0)));
         self.ttf = None;
     }
 

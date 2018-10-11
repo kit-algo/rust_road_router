@@ -207,7 +207,6 @@ mod time {
 }
 pub use self::time::*;
 
-#[cfg(test)]
 use std::cell::Cell;
 
 #[cfg(test)]
@@ -251,3 +250,5 @@ pub fn period() -> Timestamp {
 pub fn period() -> Timestamp {
     Timestamp::new(86_400.0)
 }
+
+thread_local! { pub static IPP_COUNT: Cell<usize> = Cell::new(0); }
