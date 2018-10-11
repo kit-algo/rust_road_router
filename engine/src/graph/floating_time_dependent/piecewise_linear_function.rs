@@ -124,7 +124,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         let zero_val = result[0].val;
         Self::append_point(&mut result, Point { at: period(), val: zero_val });
 
-        assert!(result.len() <= self.ipps.len() + other.ipps.len() + 1); // hard assert since if not we wrote over cap
+        debug_assert!(result.len() <= self.ipps.len() + other.ipps.len() + 1);
         Self::new(&result);
 
         result
@@ -204,7 +204,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     Self::append_point(&mut result, f.cur().clone());
                     debug_assert!(better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
 
-                } else if colinear_ordered(&g.prev(), &f.cur(), &g.cur()) {
+                } else if colinear(&g.prev(), &f.cur(), &g.cur()) {
                     if !better.last().unwrap().1 && counter_clockwise(&f.cur(), &f.next(), &g.cur()) {
                         better.push((f.cur().at, true))
                     }
@@ -234,7 +234,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     debug_assert!(!better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
                     // debug_assert!(!better.last().unwrap().1, "{:?}\n\n\nf: {:?}\n\n\ng: {:?}\n\n\nmerged {:?}", debug_merge(&f, &g, &result, &better), f.ipps, g.ipps, result);
 
-                } else if colinear_ordered(&f.prev(), &g.cur(), &f.cur()) {
+                } else if colinear(&f.prev(), &g.cur(), &f.cur()) {
                     if better.last().unwrap().1 && counter_clockwise(&g.cur(), &g.next(), &f.cur()) {
                         better.push((g.cur().at, false))
                     }
@@ -274,28 +274,37 @@ impl<'a> PiecewiseLinearFunction<'a> {
             Self::append_point(&mut result, p);
         }
 
-        assert!(result.len() <= 2 * self.ipps.len() + 2 * other.ipps.len() + 2); // hard assert since if not we wrote over cap
+        debug_assert!(result.len() <= 2 * self.ipps.len() + 2 * other.ipps.len() + 2);
         Self::new(&result);
 
         (result, better)
     }
 
-    #[inline]
-    fn append_point(points: &mut Vec<Point>, point: Point) {
+    fn append_point(points: &mut Vec<Point>, mut point: Point) {
         debug_assert!(point.val >= FlWeight::new(0.0), "{:?}", point);
-        debug_assert!(points.last().map(|p| p.at.fuzzy_lt(point.at)).unwrap_or(true));
 
+        if let Some(prev) = points.last_mut() {
+            if prev.at.fuzzy_eq(point.at) {
+                if prev.val.fuzzy_eq(point.val) { return }
+                println!("Jumping TTF");
+                let early = min(prev.at, point.at);
+                let late = max(prev.at, point.at) + FlWeight::new(EPSILON);
+                debug_assert!(early.fuzzy_lt(late), "{:?} {:?}", prev, point);
+                prev.at = early;
+                point.at = late;
+            }
+
+            if point.at < prev.at {
+                println!("Point insert before prev");
+                std::mem::swap(&mut point.at, &mut prev.at);
+            }
+        }
         if points.len() > 1 && colinear_ordered(&points[points.len() - 2], &points[points.len() - 1], &point) {
             points.pop();
         }
 
-        // points.push(point) would be safe but more expensive...
-        debug_assert!(points.len() < points.capacity());
-        unsafe {
-            let end = points.as_mut_ptr().add(points.len());
-            std::ptr::write(end, point);
-            points.set_len(points.len() + 1);
-        }
+        debug_assert!(points.last().map(|p| p.at.fuzzy_lt(point.at)).unwrap_or(true));
+        points.push(point)
     }
 }
 
