@@ -80,7 +80,7 @@ fn ccw(a: &Point, b: &Point, c: &Point) -> i32 {
 
     let x = perp_dot_product(&v1, &v2);
 
-    if x.abs() < 0.000_000_01 { return 0 }
+    if x.abs() < 0.000_000_000_1 { return 0 }
 
     if x.abs() < 0.1 && (v1.val.fuzzy_eq((f64::from(v1.at) / f64::from(v2.at)) * v2.val) || v2.val.fuzzy_eq((f64::from(v2.at) / f64::from(v1.at)) * v1.val)) {
         return 0
