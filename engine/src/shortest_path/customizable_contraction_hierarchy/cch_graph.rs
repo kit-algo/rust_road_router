@@ -294,11 +294,19 @@ impl CCHGraph {
             let mut node_edge_ids = vec![InRangeOption::new(None); n as usize];
 
             let timer = Timer::new();
+            let mut merge_count = 0;
 
             for current_node in 0..n {
-                if current_node % 1000 == 0 {
-                    use crate::graph::floating_time_dependent::IPP_COUNT;
-                    println!("t: {}s customizing from node {}, degree: {}, ipp count: {}", timer.get_passed_ms() / 1000, current_node, self.degree(current_node), IPP_COUNT.with(|count| count.get()));
+                if current_node > 0 && current_node % 1000 == 0 || self.degree(current_node) > 25 {
+                    use crate::graph::floating_time_dependent::{IPP_COUNT, PATH_SOURCES_COUNT, CLOSE_IPPS_COUNT};
+                    println!("t: {}s customizing from node {}, degree: {}, ipp count: {}, merge break points: {}, close ipps: {:.5}%, total merged fns: {}",
+                        timer.get_passed_ms() / 1000,
+                        current_node,
+                        self.degree(current_node),
+                        IPP_COUNT.with(|count| count.get()),
+                        PATH_SOURCES_COUNT.with(|count| count.get()),
+                        CLOSE_IPPS_COUNT.with(|count| count.get()) as f64 / f64::from(merge_count) / 100.0,
+                        merge_count);
                 }
                 for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
                     node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
@@ -314,6 +322,7 @@ impl CCHGraph {
                             debug_assert!(shortcut_edge_id > other_edge_id);
                             shortcut_graph.borrow_mut_outgoing(shortcut_edge_id, |shortcut, shortcut_graph| shortcut.merge((edge_id, other_edge_id), shortcut_graph));
                             shortcut_graph.borrow_mut_incoming(shortcut_edge_id, |shortcut, shortcut_graph| shortcut.merge((other_edge_id, edge_id), shortcut_graph));
+                            merge_count += 2;
                         }
                     }
                 }

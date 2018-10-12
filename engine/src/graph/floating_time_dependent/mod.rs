@@ -46,6 +46,8 @@ mod time {
     #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
     pub struct FlWeight(f64);
 
+    pub const APPROX: FlWeight = FlWeight(10.0);
+
     impl FlWeight {
         pub fn new(t: f64) -> Self {
             debug_assert_ne!(t, NAN);
@@ -57,6 +59,10 @@ mod time {
         }
         pub fn fuzzy_lt(self, other: Self) -> bool {
             fuzzy_lt(self.0, other.0)
+        }
+
+        pub fn abs(self) -> FlWeight {
+            FlWeight::new(self.0.abs())
         }
     }
 
@@ -252,3 +258,5 @@ pub fn period() -> Timestamp {
 }
 
 thread_local! { pub static IPP_COUNT: Cell<usize> = Cell::new(0); }
+thread_local! { pub static PATH_SOURCES_COUNT: Cell<usize> = Cell::new(0); }
+thread_local! { pub static CLOSE_IPPS_COUNT: Cell<usize> = Cell::new(0); }

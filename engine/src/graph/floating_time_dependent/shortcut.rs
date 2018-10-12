@@ -9,9 +9,12 @@ pub struct Shortcut {
 impl Shortcut {
     pub fn new(source: Option<EdgeId>) -> Self {
         match source {
-            Some(edge_id) => Shortcut {
-                sources: Sources::One(ShortcutSource::OriginalEdge(edge_id).into()),
-                ttf: None
+            Some(edge_id) => {
+                PATH_SOURCES_COUNT.with(|count| count.set(count.get() + 1));
+                Shortcut {
+                    sources: Sources::One(ShortcutSource::OriginalEdge(edge_id).into()),
+                    ttf: None
+                }
             },
             None => Shortcut { sources: Sources::None, ttf: None },
         }
@@ -19,6 +22,7 @@ impl Shortcut {
 
     pub fn merge(&mut self, linked_ids: (EdgeId, EdgeId), shortcut_graph: &ShortcutGraph) {
         IPP_COUNT.with(|count| count.set(count.get() - self.ttf.as_ref().map(|ipps| ipps.len()).unwrap_or(0)));
+        PATH_SOURCES_COUNT.with(|count| count.set(count.get() - self.sources.len()));
 
         #[allow(clippy::redundant_closure_call)]
         (|| {
@@ -61,6 +65,7 @@ impl Shortcut {
         }) ();
 
         IPP_COUNT.with(|count| count.set(count.get() + self.ttf.as_ref().map(|ipps| ipps.len()).unwrap_or(0)));
+        PATH_SOURCES_COUNT.with(|count| count.set(count.get() + self.sources.len()));
     }
 
     fn plf<'s>(&'s self, shortcut_graph: &'s ShortcutGraph) -> PiecewiseLinearFunction<'s> {
@@ -149,6 +154,14 @@ impl Sources {
             Sources::None => SourcesIter::None,
             Sources::One(source) => SourcesIter::One(std::iter::once(&source)),
             Sources::Multi(sources) => SourcesIter::Multi(sources.iter()),
+        }
+    }
+
+    fn len(&self) -> usize {
+        match self {
+            Sources::None => 0,
+            Sources::One(_) => 1,
+            Sources::Multi(sources) => sources.len(),
         }
     }
 }

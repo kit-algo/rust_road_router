@@ -51,8 +51,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 let prev = unsafe { self.ipps.get_unchecked(i-1) };
                 let next = unsafe { self.ipps.get_unchecked(i) };
 
-                let frac = (t - prev.at) / (next.at - prev.at);
-                prev.val + (next.val - prev.val) * frac
+                interpolate_linear(prev, next, t)
             },
         }
     }
@@ -144,6 +143,8 @@ impl<'a> PiecewiseLinearFunction<'a> {
         let mut f = Cursor::new(&self.ipps);
         let mut g = Cursor::new(&other.ipps);
 
+        let mut close_ipps_counter = 0;
+
         // non fuzzy cmp on purpose!
         if f.cur().val == g.cur().val {
             better.push((Timestamp::zero(), !clockwise(&f.cur(), &f.next(), &g.next())));
@@ -159,6 +160,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     debug_assert_ne!(better.last().unwrap().1, counter_clockwise(&g.prev(), &f.cur(), &g.cur()), "{:?}", debug_merge(&f, &g, &result, &better));
                     better.push((intersection.at, counter_clockwise(&g.prev(), &f.cur(), &g.cur())));
                     Self::append_point(&mut result, intersection);
+                    close_ipps_counter += 1;
                 }
             }
 
@@ -206,6 +208,10 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
                 }
 
+                if (f.cur().val - g.cur().val).abs() <= APPROX {
+                    close_ipps_counter += 2;
+                }
+
                 f.advance();
                 g.advance();
 
@@ -237,6 +243,10 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     if better.last().unwrap().1 && clockwise(&f.cur(), &f.next(), &g.cur()) {
                         better.push((f.cur().at, false))
                     }
+                }
+
+                if (f.cur().val - interpolate_linear(&g.prev(), &g.next(), f.cur().at)).abs() <= APPROX {
+                    close_ipps_counter += 1;
                 }
 
                 f.advance();
@@ -271,6 +281,10 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     }
                 }
 
+                if (g.cur().val - interpolate_linear(&f.prev(), &f.next(), g.cur().at)).abs() <= APPROX {
+                    close_ipps_counter += 1;
+                }
+
                 g.advance();
             }
         };
@@ -283,8 +297,11 @@ impl<'a> PiecewiseLinearFunction<'a> {
             if intersection.at < period() {
                 better.push((intersection.at, counter_clockwise(&intersection, &f.cur(), &g.cur())));
                 Self::append_point(&mut result, intersection);
+                close_ipps_counter += 1;
             }
         }
+
+        CLOSE_IPPS_COUNT.with(|count| count.set(count.get() + (close_ipps_counter * 10000) / (f.ipps.len() + g.ipps.len())));
 
         if result.len() > 1 {
             let p = Point { at: period(), val: result[0].val };

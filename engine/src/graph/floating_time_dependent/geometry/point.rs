@@ -29,6 +29,11 @@ impl<'a> Mul<f64> for &'a Point {
     }
 }
 
+pub fn interpolate_linear(prev: &Point, next: &Point, t: Timestamp) -> FlWeight {
+    let frac = (t - prev.at) / (next.at - prev.at);
+    prev.val + (next.val - prev.val) * frac
+}
+
 pub fn intersect(f1: &Point, f2: &Point, g1: &Point, g2: &Point) -> bool {
     if ccw(f1, f2, g1) == 0               { return false }
     if ccw(f1, f2, g2) == 0               { return false }
