@@ -4,7 +4,6 @@
 #![feature(euclidean_division)]
 #![feature(range_contains)]
 #![feature(nll)]
-#![feature(tool_lints)]
 #![feature(uniform_paths)]
 
 extern crate nav_types;
