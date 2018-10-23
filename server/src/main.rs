@@ -46,7 +46,7 @@ struct NodeCoord {
 impl KdtreePointTrait for NodeCoord {
     #[inline] // the inline on this method is important! as without it there is ~25% speed loss on the tree when cross-crate usage.
     fn dims(&self) -> &[f64] {
-        return &self.coords;
+        &self.coords
     }
 }
 
@@ -109,7 +109,7 @@ fn query(query_params: GeoQuery, state: State<Mutex<Sender<Request>>>) -> Json<O
         rx_result.recv().expect("routing engine crashed or hung up")
     });
 
-    println!("");
+    println!();
     Json(result)
 }
 
@@ -153,7 +153,7 @@ fn main() {
         let lng = Vec::load_from(path.join("longitude").to_str().unwrap()).expect("could not read longitude");
 
         let mut coords: Vec<NodeCoord> = lat.iter().zip(lng.iter()).enumerate().map(|(node_id, (&lat, &lng))| {
-            NodeCoord { node_id: node_id as NodeId, coords: [lat as f64, lng as f64] }
+            NodeCoord { node_id: node_id as NodeId, coords: [f64::from(lat), f64::from(lng)] }
         }).collect();
         let tree = measure("build kd tree", || {
              Kdtree::new(&mut coords)
@@ -178,7 +178,7 @@ fn main() {
         };
 
         let closest_node = |(p_lat, p_lng): (f32, f32)| -> NodeId {
-            tree.nearest_search(&NodeCoord { coords: [p_lat as f64, p_lng as f64], node_id: 0 }).node_id
+            tree.nearest_search(&NodeCoord { coords: [f64::from(p_lat), f64::from(p_lng)], node_id: 0 }).node_id
         };
 
         for query_params in rx_query {
