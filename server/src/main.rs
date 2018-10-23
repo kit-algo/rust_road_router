@@ -86,7 +86,7 @@ struct HereResponse {
 enum Request {
     Geo((GeoQuery, Sender<Option<GeoResponse>>)),
     Here((HereQuery, Sender<Option<HereResponse>>)),
-    Customize((Vec<(u64, SerializedWeight)>)),
+    Customize((Vec<(u64, bool, SerializedWeight)>)),
 }
 
 #[get("/")]
@@ -162,7 +162,7 @@ impl<'de> Deserialize<'de> for SerializedWeight {
 }
 
 #[post("/customize", data = "<updates>")]
-fn customize(updates: Json<Vec<(u64, SerializedWeight)>>, state: State<Mutex<Sender<Request>>>) {
+fn customize(updates: Json<Vec<(u64, bool, SerializedWeight)>>, state: State<Mutex<Sender<Request>>>) {
     let tx_query = state.lock().unwrap();
     tx_query.send(Request::Customize(updates.0)).expect("routing engine crashed or hung up");
 }
@@ -261,11 +261,12 @@ fn main() {
                     tx_result.send(result).unwrap();
                 },
                 Request::Customize(updates) => {
-                    for (here_link_id, weight) in updates.into_iter() {
-                        if let Some(link_idx) = id_mapper.here_to_local_link_id(here_link_id, LinkDirection::FromRef) {
-                            travel_time[link_idx as usize] = weight.0
-                        }
-                        if let Some(link_idx) = id_mapper.here_to_local_link_id(here_link_id, LinkDirection::ToRef) {
+                    for (here_link_id, is_from_ref, weight) in updates.into_iter() {
+                        if is_from_ref {
+                            if let Some(link_idx) = id_mapper.here_to_local_link_id(here_link_id, LinkDirection::FromRef) {
+                                travel_time[link_idx as usize] = weight.0
+                            }
+                        } else if let Some(link_idx) = id_mapper.here_to_local_link_id(here_link_id, LinkDirection::ToRef) {
                             travel_time[link_idx as usize] = weight.0
                         }
                     }
