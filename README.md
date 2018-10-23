@@ -60,12 +60,12 @@ For the future this should probably be made more flexible to catch the case wher
 ```json
 {
   "distance": 42,
-  "path": [42, 45, 32]
+  "path": [[42, true], [45, false], [32, true]]
 }
 ```
 
 `"distance"` contains the total travel time in ms.
-`"path"` an array of here link ids.
+`"path"` an array of here link ids and directions.
 If no path exists the response will be empty.
 
 When used while preprocessing (or customization) is still running, this endpoint will block and wait until it can execute the query.

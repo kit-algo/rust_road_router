@@ -1,7 +1,7 @@
 use super::*;
 use crate::rank_select_map::*;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LinkDirection {
     FromRef,
     ToRef,
@@ -35,7 +35,15 @@ impl LinkIdMapper {
         }
     }
 
-    pub fn local_to_here_link_id(&self, link_id: EdgeId) -> u64 {
-        self.link_id_mapping.inverse(self.link_id_to_here_rank[link_id as usize] as usize) as u64
+    pub fn local_to_here_link_id(&self, link_id: EdgeId) -> (u64, LinkDirection) {
+        let rank = self.link_id_to_here_rank[link_id as usize] as usize;
+        let here_link_id = self.link_id_mapping.inverse(rank) as u64;
+        let direction = if self.here_rank_to_link_id[rank].0.value() == Some(link_id) {
+            LinkDirection::FromRef
+        } else {
+            debug_assert_eq!(self.here_rank_to_link_id[rank].0.value(), Some(link_id));
+            LinkDirection::ToRef
+        };
+        (here_link_id, direction)
     }
 }

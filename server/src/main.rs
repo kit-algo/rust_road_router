@@ -79,7 +79,7 @@ struct HereQuery {
 #[derive(Debug, Serialize, Deserialize)]
 struct HereResponse {
     distance: Weight,
-    path: Vec<u64>
+    path: Vec<(u64, bool)>
 }
 
 #[derive(Debug)]
@@ -247,11 +247,12 @@ fn main() {
                             let mut second_node_iter = path_iter.clone();
                             second_node_iter.next();
 
-                            let path = once(from_link_id).chain(path_iter.zip(second_node_iter).map(|(first_node, second_node)| {
+                            let path = once((from_link_id, from_direction)).chain(path_iter.zip(second_node_iter).map(|(first_node, second_node)| {
                                 graph.edge_index(*first_node, *second_node).unwrap()
                             }).map(|link_id| {
-                                id_mapper.local_to_here_link_id(link_id)
-                            })).chain(once(to_link_id)).collect();
+                                let (id, dir) = id_mapper.local_to_here_link_id(link_id);
+                                (id, dir == LinkDirection::FromRef)
+                            })).chain(once((to_link_id, to_direction))).collect();
 
                             let distance = distance + (from_link_fraction * from_link.weight as f32) as u32 + (to_link_fraction * to_link.weight as f32) as u32;
                             HereResponse { distance, path }
