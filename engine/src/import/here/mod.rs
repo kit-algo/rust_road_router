@@ -131,7 +131,21 @@ pub trait RdfDataSource {
     fn link_geometries(&self) -> Vec<RdfLinkGeometry>;
 }
 
-pub fn read_graph(source: &RdfDataSource) -> (OwnedGraph, Vec<f32>, Vec<f32>, RankSelectMap, Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>) {
+pub fn read_graph(source: &RdfDataSource, (min_lat, min_lon): (i64, i64), (max_lat, max_lon): (i64, i64)) -> (OwnedGraph, Vec<f32>, Vec<f32>, RankSelectMap, Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>) {
+
+    let included = |node: &RdfNode| {
+        node.lat >= min_lat && node.lat <= max_lat && node.lon >= min_lon && node.lon <= max_lon
+    };
+
+    println!("read nodes");
+
+    let input_nodes = source.nodes();
+    let max_node_id = input_nodes.iter().filter(|&n| included(n)).map(|node| node.node_id).max().unwrap();
+    let mut filtered_node_ids = BitVec::new(max_node_id as usize + 1);
+    for node in input_nodes.iter().filter(|&n| included(n)) {
+        filtered_node_ids.set(node.node_id as usize);
+    }
+
     println!("read nav links");
     // start with all nav links
     let mut nav_links: Vec<RdfNavLink> = source.nav_links();
@@ -147,7 +161,7 @@ pub fn read_graph(source: &RdfDataSource) -> (OwnedGraph, Vec<f32>, Vec<f32>, Ra
     let link_id_mapping = RankSelectMap::new(link_id_mapping);
 
     println!("read links");
-    let links = source.links();
+    let links: Vec<_> = source.links().into_iter().filter(|link| filtered_node_ids.get(link.ref_node_id as usize) && filtered_node_ids.get(link.nonref_node_id as usize)).collect();
     let maximum_node_id = links.iter().flat_map(|link| iter::once(link.ref_node_id).chain(iter::once(link.nonref_node_id)) ).max().unwrap();
 
     // a data structure to do the global to local node ids mapping
@@ -206,9 +220,9 @@ pub fn read_graph(source: &RdfDataSource) -> (OwnedGraph, Vec<f32>, Vec<f32>, Ra
         geometries.sort_by_key(|geometry| geometry.seq_num);
     }
 
-    println!("read nodes");
+    println!("sort nodes");
     let mut nodes: Vec<RdfNode> = vec![RdfNode { node_id: 0, lat: 0, lon: 0, z_coord: None }; n];
-    for node in source.nodes() {
+    for node in input_nodes {
         if let Some(index) = node_id_mapping.get(node.node_id as usize) {
             nodes[index] = node;
         }
