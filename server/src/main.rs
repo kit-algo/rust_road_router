@@ -2,6 +2,8 @@
 #![feature(custom_derive)]
 #![plugin(rocket_codegen)]
 
+extern crate serde;
+extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
 
@@ -84,7 +86,7 @@ struct HereResponse {
 enum Request {
     Geo((GeoQuery, Sender<Option<GeoResponse>>)),
     Here((HereQuery, Sender<Option<HereResponse>>)),
-    Customize((Vec<(u64, u32)>)),
+    Customize((Vec<(u64, SerializedWeight)>)),
 }
 
 #[get("/")]
@@ -125,12 +127,42 @@ fn here_query(query_params: HereQuery, state: State<Mutex<Sender<Request>>>) -> 
         rx_result.recv().expect("routing engine crashed or hung up")
     });
 
-    println!("");
+    println!();
     Json(result)
 }
 
+#[derive(Debug)]
+struct SerializedWeight(Weight);
+
+use serde::de::{Deserialize, Deserializer, Error};
+use serde_json::Value;
+
+impl<'de> Deserialize<'de> for SerializedWeight {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: Deserializer<'de>
+    {
+        let v = Value::deserialize(deserializer)?;
+        match v {
+            Value::Null => Ok(SerializedWeight(INFINITY)),
+            Value::Number(w) => {
+                match w.as_u64() {
+                    Some(w) => {
+                        if w < INFINITY.into() {
+                            Ok(SerializedWeight(w as Weight))
+                        } else {
+                            Err(<D as Deserializer>::Error::custom(format!("Got {} as weight which is bigger than the max weight {}.", w, INFINITY)))
+                        }
+                    },
+                    None => Err(<D as Deserializer>::Error::custom("Got float or negative number as weight")),
+                }
+            },
+            _ => Err(<D as Deserializer>::Error::custom("Got invalid JSON Value for Weight, expected null or number"))
+        }
+    }
+}
+
 #[post("/customize", data = "<updates>")]
-fn customize(updates: Json<Vec<(u64, Weight)>>, state: State<Mutex<Sender<Request>>>) {
+fn customize(updates: Json<Vec<(u64, SerializedWeight)>>, state: State<Mutex<Sender<Request>>>) {
     let tx_query = state.lock().unwrap();
     tx_query.send(Request::Customize(updates.0)).expect("routing engine crashed or hung up");
 }
@@ -231,10 +263,10 @@ fn main() {
                 Request::Customize(updates) => {
                     for (here_link_id, weight) in updates.into_iter() {
                         if let Some(link_idx) = id_mapper.here_to_local_link_id(here_link_id, LinkDirection::FromRef) {
-                            travel_time[link_idx as usize] = weight
+                            travel_time[link_idx as usize] = weight.0
                         }
                         if let Some(link_idx) = id_mapper.here_to_local_link_id(here_link_id, LinkDirection::ToRef) {
-                            travel_time[link_idx as usize] = weight
+                            travel_time[link_idx as usize] = weight.0
                         }
                     }
                     server = Server::new(&cch, &FirstOutGraph::new(&first_out[..], &head[..], travel_time.clone()));

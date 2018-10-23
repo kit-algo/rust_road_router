@@ -77,6 +77,7 @@ The input has to be an array of pairs.
 Each pair is an array of exactly two values.
 The first one is the here link id.
 The second one is the new travel time in ms.
+The weight has to be an integer smaller than 2^31-1 or `null` (to set the weight to infinity).
 Currently the new value will be applied to the link in both directions.
 If a link id does not exist, the pair will be ignored.
 The new values will be carried over into future customizations.
