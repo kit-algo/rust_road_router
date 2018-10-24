@@ -34,6 +34,12 @@ pub enum RdfLinkDirection {
     Both
 }
 
+impl Default for RdfLinkDirection {
+    fn default() -> Self {
+        RdfLinkDirection::Both
+    }
+}
+
 impl FromStr for RdfLinkDirection {
     type Err = DirectionParseError;
 
@@ -54,7 +60,7 @@ pub struct RdfLink {
     nonref_node_id: i64
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default, Clone)]
 pub struct RdfNavLink {
     link_id: i64,
     travel_direction: RdfLinkDirection,
@@ -148,17 +154,23 @@ pub fn read_graph(source: &RdfDataSource, (min_lat, min_lon): (i64, i64), (max_l
 
     println!("read nav links");
     // start with all nav links
-    let mut nav_links: Vec<RdfNavLink> = source.nav_links();
-    println!("sort nav links");
-    nav_links.sort_by_key(|nav_link| nav_link.link_id);
+    let nav_links: Vec<RdfNavLink> = source.nav_links();
 
     println!("build link id mapping");
     // local ids for links
-    let mut link_id_mapping = BitVec::new(nav_links.last().unwrap().link_id as usize + 1);
+    let mut link_id_mapping = BitVec::new(nav_links.iter().map(|l| l.link_id).max().unwrap() as usize + 1);
     for nav_link in &nav_links {
         link_id_mapping.set(nav_link.link_id as usize);
     }
     let link_id_mapping = RankSelectMap::new(link_id_mapping);
+
+    println!("sort nav links");
+    let mut sorted_nav_links = vec![RdfNavLink::default(); nav_links.len() + 1];
+    for link in nav_links {
+        let rank = link_id_mapping.get(link.link_id as usize).unwrap();
+        sorted_nav_links[rank] = link;
+    }
+    let nav_links = sorted_nav_links;
 
     println!("read links");
     let links: Vec<_> = source.links().into_iter().filter(|link| filtered_node_ids.get(link.ref_node_id as usize) && filtered_node_ids.get(link.nonref_node_id as usize)).collect();
