@@ -124,7 +124,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
         Self::append_point(&mut result, Point { at: period(), val: zero_val });
 
         debug_assert!(result.len() <= self.ipps.len() + other.ipps.len() + 1);
-        Self::new(&result);
 
         result
     }
@@ -309,7 +308,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
 
         debug_assert!(result.len() <= 2 * self.ipps.len() + 2 * other.ipps.len() + 2);
-        Self::new(&result);
         for better_fns in better.windows(2) {
             debug_assert_ne!(better_fns[0].1, better_fns[1].1, "{:?}", debug_merge(&f, &g, &result, &better));
         }
