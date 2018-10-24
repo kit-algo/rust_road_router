@@ -33,21 +33,27 @@ impl Shortcut {
             let first_plf = shortcut_graph.get_incoming(linked_ids.0).plf(shortcut_graph);
             let second_plf = shortcut_graph.get_outgoing(linked_ids.1).plf(shortcut_graph);
 
-            let linked_ipps = first_plf.link(&second_plf);
-
             if !self.is_valid_path() {
-                self.ttf = Some(linked_ipps);
+                self.ttf = Some(first_plf.link(&second_plf));
                 self.sources = Sources::One(other_data);
                 return;
             }
 
-            let linked = PiecewiseLinearFunction::new(&linked_ipps);
-            let other_lower_bound = linked.lower_bound();
-            let other_upper_bound = linked.upper_bound();
+            let other_lower_bound = first_plf.lower_bound() + second_plf.lower_bound();
 
             let self_plf = self.plf(shortcut_graph);
             let lower_bound = self_plf.lower_bound();
             let upper_bound = self_plf.upper_bound();
+
+            if other_lower_bound >= upper_bound {
+                return;
+            }
+
+            let linked_ipps = first_plf.link(&second_plf);
+
+            let linked = PiecewiseLinearFunction::new(&linked_ipps);
+            let other_lower_bound = linked.lower_bound();
+            let other_upper_bound = linked.upper_bound();
 
             if lower_bound >= other_upper_bound {
                 self.ttf = Some(linked_ipps);
