@@ -11,6 +11,7 @@ extern crate rocket;
 extern crate rocket_contrib;
 
 extern crate kdtree;
+extern crate crossbeam_utils;
 extern crate bmw_routing_engine;
 
 use std::path::{Path, PathBuf};
@@ -20,7 +21,7 @@ use std::iter::once;
 use std::thread;
 use std::sync::mpsc;
 use mpsc::Sender;
-use std::sync::Mutex;
+use std::sync::{Mutex, Arc};
 
 use rocket::response::NamedFile;
 use rocket::State;
@@ -179,7 +180,7 @@ fn main() {
 
         let first_out = Vec::load_from(path.join("first_out").to_str().unwrap()).expect("could not read first_out");
         let head = Vec::load_from(path.join("head").to_str().unwrap()).expect("could not read head");
-        let mut travel_time = Vec::load_from(path.join("travel_time").to_str().unwrap()).expect("could not read travel_time");
+        let travel_time = Vec::load_from(path.join("travel_time").to_str().unwrap()).expect("could not read travel_time");
 
         let lat = Vec::load_from(path.join("latitude").to_str().unwrap()).expect("could not read latitude");
         let lng = Vec::load_from(path.join("longitude").to_str().unwrap()).expect("could not read longitude");
@@ -203,7 +204,7 @@ fn main() {
 
         let cch = customizable_contraction_hierarchy::contract(&graph, NodeOrder::from_node_order(cch_order));
 
-        let mut server = Server::new(&cch, &graph);
+        let server = Arc::new(Mutex::new(Server::new(&cch, &graph)));
 
         let coords = |node: NodeId| -> (f32, f32) {
             (lat[node as usize], lng[node as usize])
@@ -213,68 +214,81 @@ fn main() {
             tree.nearest_search(&NodeCoord { coords: [f64::from(p_lat), f64::from(p_lng)], node_id: 0 }).node_id
         };
 
-        for query_params in rx_query {
-            match query_params {
-                Request::Geo((GeoQuery { from_lat, from_lng, to_lat, to_lng }, tx_result)) => {
-                    let (from, to) = measure("match nodes", || {
-                        (closest_node((from_lat, from_lng)), closest_node((to_lat, to_lng)))
-                    });
+        crossbeam_utils::thread::scope(|scope| {
+            for query_params in rx_query {
+                match query_params {
+                    Request::Geo((GeoQuery { from_lat, from_lng, to_lat, to_lng }, tx_result)) => {
+                        let (from, to) = measure("match nodes", || {
+                            (closest_node((from_lat, from_lng)), closest_node((to_lat, to_lng)))
+                        });
 
-                    let result = measure("cch query", || {
-                        server.distance(from, to).map(|distance| {
-                            let path = server.path().iter().map(|&node| coords(node)).collect();
-                            GeoResponse { distance, path }
-                        })
-                    });
+                        let mut server = server.lock().unwrap();
+                        let result = measure("cch query", || {
+                            server.distance(from, to).map(|distance| {
+                                let path = server.path().iter().map(|&node| coords(node)).collect();
+                                GeoResponse { distance, path }
+                            })
+                        });
 
-                    tx_result.send(result).unwrap();
-                },
-                Request::Here((HereQuery { from_link_id, from_direction, from_link_fraction, to_link_id, to_direction, to_link_fraction }, tx_result)) => {
-                    let from_link_direction = if from_direction { LinkDirection::FromRef } else { LinkDirection::ToRef };
-                    let from_link_local_id = id_mapper.here_to_local_link_id(from_link_id, from_link_direction).expect("non existing link");
-                    let from_link = graph.link(from_link_local_id);
-                    let from = from_link.node;
+                        tx_result.send(result).unwrap();
+                    },
+                    Request::Here((HereQuery { from_link_id, from_direction, from_link_fraction, to_link_id, to_direction, to_link_fraction }, tx_result)) => {
+                        let from_link_direction = if from_direction { LinkDirection::FromRef } else { LinkDirection::ToRef };
+                        let from_link_local_id = id_mapper.here_to_local_link_id(from_link_id, from_link_direction).expect("non existing link");
+                        let from_link = graph.link(from_link_local_id);
+                        let from = from_link.node;
 
-                    let to_link_direction = if to_direction { LinkDirection::FromRef } else { LinkDirection::ToRef };
-                    let to_link_local_id = id_mapper.here_to_local_link_id(to_link_id, to_link_direction).expect("non existing link");
-                    let to_link = graph.link(to_link_local_id);
-                    let to = link_id_to_tail_mapper.link_id_to_tail(to_link_local_id);
+                        let to_link_direction = if to_direction { LinkDirection::FromRef } else { LinkDirection::ToRef };
+                        let to_link_local_id = id_mapper.here_to_local_link_id(to_link_id, to_link_direction).expect("non existing link");
+                        let to_link = graph.link(to_link_local_id);
+                        let to = link_id_to_tail_mapper.link_id_to_tail(to_link_local_id);
 
-                    let result = measure("cch query", || {
-                        server.distance(from, to).map(|distance| {
-                            let path = server.path();
-                            let path_iter = path.iter();
-                            let mut second_node_iter = path_iter.clone();
-                            second_node_iter.next();
+                        let mut server = server.lock().unwrap();
+                        let result = measure("cch query", || {
+                            server.distance(from, to).map(|distance| {
+                                let path = server.path();
+                                let path_iter = path.iter();
+                                let mut second_node_iter = path_iter.clone();
+                                second_node_iter.next();
 
-                            let path = once((from_link_id, from_direction)).chain(path_iter.zip(second_node_iter).map(|(first_node, second_node)| {
-                                graph.edge_index(*first_node, *second_node).unwrap()
-                            }).map(|link_id| {
-                                let (id, dir) = id_mapper.local_to_here_link_id(link_id);
-                                (id, dir == LinkDirection::FromRef)
-                            })).chain(once((to_link_id, to_direction))).collect();
+                                let path = once((from_link_id, from_direction)).chain(path_iter.zip(second_node_iter).map(|(first_node, second_node)| {
+                                    graph.edge_index(*first_node, *second_node).unwrap()
+                                }).map(|link_id| {
+                                    let (id, dir) = id_mapper.local_to_here_link_id(link_id);
+                                    (id, dir == LinkDirection::FromRef)
+                                })).chain(once((to_link_id, to_direction))).collect();
 
-                            let distance = distance + (from_link_fraction * from_link.weight as f32) as u32 + (to_link_fraction * to_link.weight as f32) as u32;
-                            HereResponse { distance, path }
-                        })
-                    });
+                                let distance = distance + (from_link_fraction * from_link.weight as f32) as u32 + (to_link_fraction * to_link.weight as f32) as u32;
+                                HereResponse { distance, path }
+                            })
+                        });
 
-                    tx_result.send(result).unwrap();
-                },
-                Request::Customize(updates) => {
-                    for (here_link_id, is_from_ref, weight) in updates.into_iter() {
-                        if is_from_ref {
-                            if let Some(link_idx) = id_mapper.here_to_local_link_id(here_link_id, LinkDirection::FromRef) {
-                                travel_time[link_idx as usize] = weight.0
+                        tx_result.send(result).unwrap();
+                    },
+                    Request::Customize(updates) => {
+                        let server = server.clone();
+                        let mut travel_time = travel_time.clone();
+                        let id_mapper = &id_mapper;
+                        let cch = &cch;
+                        let first_out = &first_out;
+                        let head = &head;
+
+                        scope.spawn(move || {
+                            for (here_link_id, is_from_ref, weight) in updates.into_iter() {
+                                if is_from_ref {
+                                    if let Some(link_idx) = id_mapper.here_to_local_link_id(here_link_id, LinkDirection::FromRef) {
+                                        travel_time[link_idx as usize] = weight.0
+                                    }
+                                } else if let Some(link_idx) = id_mapper.here_to_local_link_id(here_link_id, LinkDirection::ToRef) {
+                                    travel_time[link_idx as usize] = weight.0
+                                }
                             }
-                        } else if let Some(link_idx) = id_mapper.here_to_local_link_id(here_link_id, LinkDirection::ToRef) {
-                            travel_time[link_idx as usize] = weight.0
-                        }
-                    }
-                    server = Server::new(&cch, &FirstOutGraph::new(&first_out[..], &head[..], travel_time.clone()));
-                },
+                            *server.lock().unwrap() = Server::new(&cch, &FirstOutGraph::new(&first_out[..], &head[..], travel_time));
+                        });
+                    },
+                }
             }
-        }
+        });
     });
 
     rocket::ignite()
