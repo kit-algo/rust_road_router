@@ -162,6 +162,10 @@ mod time {
         pub fn fuzzy_lt(self, other: Self) -> bool {
             fuzzy_lt(self.0, other.0)
         }
+
+        pub fn split_of_period(self) -> (FlWeight, Timestamp) {
+            (FlWeight::new(self.0.div_euc(super::period().0)), Timestamp::new(self.0.mod_euc(super::period().0)))
+        }
     }
 
     impl Eq for Timestamp {} // TODO ensure that the val will never be NAN

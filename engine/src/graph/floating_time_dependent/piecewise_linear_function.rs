@@ -357,7 +357,7 @@ impl<'a> Cursor<'a> {
     }
 
     fn starting_at_or_after(ipps: &'a [Point], t: Timestamp) -> Self {
-        debug_assert!(t.fuzzy_lt(period()));
+        let (offset, t) = t.split_of_period();
 
         if ipps.len() == 1 {
             return Self::new(ipps)
@@ -374,12 +374,12 @@ impl<'a> Cursor<'a> {
         });
 
         match pos {
-            Ok(i) => Cursor { ipps, current_index: i, offset: FlWeight::new(0.0) },
+            Ok(i) => Cursor { ipps, current_index: i, offset },
             Err(i) => {
                 if i == ipps.len() - 1 {
-                    Cursor { ipps, current_index: 0, offset: period().into() }
+                    Cursor { ipps, current_index: 0, offset: (period() + offset).into() }
                 } else {
-                    Cursor { ipps, current_index: i, offset: FlWeight::new(0.0) }
+                    Cursor { ipps, current_index: i, offset }
                 }
             }
         }
