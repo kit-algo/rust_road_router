@@ -47,26 +47,20 @@ fn main() {
 
         first_ipp_of_arc[i] += added;
 
-        if ipp_departure_time[range.start] == 0 {
+        if range.end - range.start > 1 {
+            if ipp_departure_time[range.start] != 0 {
+                new_ipp_departure_time.push(0);
+                new_ipp_travel_time.push(ipp_travel_time[range.start]);
+                added += 1;
+            }
             new_ipp_departure_time.extend(ipp_departure_time[range.clone()].iter().cloned());
             new_ipp_travel_time.extend(ipp_travel_time[range.clone()].iter().cloned());
             new_ipp_departure_time.push(int_period());
             new_ipp_travel_time.push(ipp_travel_time[range.start]);
             added += 1;
-        } else if range.end - range.start > 1 {
-            new_ipp_departure_time.push(0);
-            new_ipp_travel_time.push(ipp_travel_time[range.start]);
-            new_ipp_departure_time.extend(ipp_departure_time[range.clone()].iter().cloned());
-            new_ipp_travel_time.extend(ipp_travel_time[range.clone()].iter().cloned());
-            new_ipp_departure_time.push(int_period());
-            new_ipp_travel_time.push(ipp_travel_time[range.start]);
-            added += 2;
         } else {
             new_ipp_departure_time.push(0);
-            new_ipp_travel_time.extend(ipp_travel_time[range.clone()].iter().cloned());
-            new_ipp_departure_time.push(int_period());
             new_ipp_travel_time.push(ipp_travel_time[range.start]);
-            added += 1;
         }
     }
     first_ipp_of_arc[head.len()] += added;
