@@ -342,6 +342,83 @@ impl<'a> PiecewiseLinearFunction<'a> {
         debug_assert!(points.last().map(|p| p.at.fuzzy_lt(point.at)).unwrap_or(true));
         points.push(point)
     }
+
+    fn douglas_peuker(&self, result: &mut Vec<Point>) {
+        if self.ipps.len() <= 2 {
+            result.extend_from_slice(self.ipps);
+            return
+        }
+
+        let first = self.ipps.first().unwrap();
+        let last = self.ipps.last().unwrap();
+
+        let (i, delta) = self.ipps[1..self.ipps.len()-1].iter()
+            .enumerate()
+            .map(|(i, p)| (i+1, (p.val - interpolate_linear(first, last, p.at)).abs()))
+            .max_by_key(|&(_, delta)| delta)
+            .unwrap();
+
+        if delta > APPROX {
+            PiecewiseLinearFunction::new(&self.ipps[0..=i]).douglas_peuker(result);
+            result.pop();
+            PiecewiseLinearFunction::new(&self.ipps[i..self.ipps.len()]).douglas_peuker(result);
+        } else {
+            result.push(first.clone());
+            result.push(last.clone());
+        }
+    }
+
+    pub fn approximate(&self) -> Vec<Point> {
+        let mut result = Vec::new();
+        self.douglas_peuker(&mut result);
+        result
+    }
+
+    // pub fn approximate(&self) -> Vec<Point> {
+    //     let mut result = Vec::new();
+    //     let bounds = [self.ipps.to_vec(), self.ipps.to_vec()];
+    //     let mut ps: [usize; 2] = Default::default();
+    //     let mut ls: [usize; 2] = Default::default();
+    //     let mut rs: [usize; 2] = Default::default();
+    //     let mut succs: [Vec<usize>; 2] = Default::default();
+    //     let mut preds: [Vec<usize>; 2] = Default::default();
+
+    //     let angle_dirs = [1,-1];
+    //     let dirs: [usize; 2] = [0, 1];
+    //     let dir_combos: [[usize; 2]; 2] = [[0, 1], [1, 0]];
+
+    //     for b in 0..=1 {
+    //         ps[b] = 0;
+    //         ls[b] = 0;
+    //         rs[b] = 0;
+    //         succs[b][0] = 1;
+    //         preds[b][1] = 0;
+    //     }
+
+    //     let mut next_window = false;
+
+    //     for i in 2..self.ipps.len()-1 {
+    //         // Updating Convex Hull
+    //         for &b in &dirs {
+    //             let mut p = i - 1;
+    //             while p != ps[b] && ccw(&bounds[b][p], &bounds[b][i], &bounds[b][preds[b][p]]) * angle_dirs[b] > 0 {
+    //                 p = preds[b][p];
+    //             }
+    //             succs[b][p] = i;
+    //             preds[b][i] = p;
+    //         }
+
+    //         for &[star, diamond] in &dir_combos {
+    //             if !next_window && ccw(&bounds[star][ls[star]], &bounds[star][i], &bounds[diamond][rs[diamond]]) * angle_dirs[star] <= 0 {
+    //                 result.push(intersection_point(&bounds[star][ls[star]], &bounds[diamond][rs[diamond]], &bounds[star][ps[star]], &bounds[diamond][ps[diamond]]));
+    //                 ps[diamond] = rs[diamond];
+
+    //             }
+    //         }
+    //     }
+
+    //     result
+    // }
 }
 
 #[derive(Debug)]
