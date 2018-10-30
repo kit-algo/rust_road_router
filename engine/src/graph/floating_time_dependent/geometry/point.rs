@@ -13,6 +13,12 @@ impl Point {
     }
 }
 
+impl Default for Point {
+    fn default() -> Self {
+        Point { at: Timestamp::zero(), val: FlWeight::new(0.0) }
+    }
+}
+
 impl<'a> Sub for &'a Point {
     type Output = Point;
 
