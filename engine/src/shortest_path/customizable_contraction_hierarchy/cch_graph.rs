@@ -297,16 +297,18 @@ impl CCHGraph {
             let mut merge_count = 0;
 
             for current_node in 0..n {
-                if current_node > 0 && current_node % 1000 == 0 || self.degree(current_node) > 25 {
+                if current_node > 0 && current_node % 10000 == 0 || self.degree(current_node) > 50 {
                     use crate::graph::floating_time_dependent::{IPP_COUNT, PATH_SOURCES_COUNT, CLOSE_IPPS_COUNT};
-                    println!("t: {}s customizing from node {}, degree: {}, ipp count: {}, merge break points: {}, close ipps: {:.5}%, total merged fns: {}",
+                    println!("t: {}s customizing from node {}, degree: {}, ipp count: {}, merge break points: {}, close ipps: {:.5}%, total merged fns: {}, actual work merge: {}, actual work link: {}",
                         timer.get_passed_ms() / 1000,
                         current_node,
                         self.degree(current_node),
                         IPP_COUNT.with(|count| count.get()),
                         PATH_SOURCES_COUNT.with(|count| count.get()),
                         CLOSE_IPPS_COUNT.with(|count| count.get()) as f64 / f64::from(merge_count) / 100.0,
-                        merge_count);
+                        merge_count,
+                        ACTUALLY_MERGED.with(|count| count.get()),
+                        ACTUALLY_LINKED.with(|count| count.get()));
                 }
                 for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
                     node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));

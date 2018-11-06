@@ -34,6 +34,7 @@ impl Shortcut {
             let second_plf = shortcut_graph.get_outgoing(linked_ids.1).plf(shortcut_graph);
 
             if !self.is_valid_path() {
+                ACTUALLY_LINKED.with(|count| count.set(count.get() + 1));
                 self.ttf = Some(first_plf.link(&second_plf));
                 self.sources = Sources::One(other_data);
                 return;
@@ -50,6 +51,7 @@ impl Shortcut {
             }
 
             let linked_ipps = first_plf.link(&second_plf);
+            ACTUALLY_LINKED.with(|count| count.set(count.get() + 1));
 
             let linked = PiecewiseLinearFunction::new(&linked_ipps);
             let other_lower_bound = linked.lower_bound();
@@ -63,7 +65,9 @@ impl Shortcut {
                 return;
             }
 
+            ACTUALLY_MERGED.with(|count| count.set(count.get() + 1));
             let (merged, intersection_data) = self_plf.merge(&linked);
+
             self.ttf = Some(merged);
             let mut sources = Sources::None;
             std::mem::swap(&mut sources, &mut self.sources);

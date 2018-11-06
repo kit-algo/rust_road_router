@@ -264,3 +264,5 @@ pub fn period() -> Timestamp {
 thread_local! { pub static IPP_COUNT: Cell<usize> = Cell::new(0); }
 thread_local! { pub static PATH_SOURCES_COUNT: Cell<usize> = Cell::new(0); }
 thread_local! { pub static CLOSE_IPPS_COUNT: Cell<usize> = Cell::new(0); }
+thread_local! { pub static ACTUALLY_MERGED: Cell<usize> = Cell::new(0); }
+thread_local! { pub static ACTUALLY_LINKED: Cell<usize> = Cell::new(0); }
