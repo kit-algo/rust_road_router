@@ -158,15 +158,7 @@ pub struct ContractedGraph<'a, Graph: for<'b> LinkIterGraph<'b> + 'a>(Contractio
 
 impl<'a, Graph: for<'b> LinkIterGraph<'b>> ContractedGraph<'a, Graph> {
     fn elimination_tree(&self) -> Vec<InRangeOption<NodeId>> {
-        let n = self.0.original_graph.num_nodes();
-        let mut elimination_tree = vec![InRangeOption::new(None); n];
-
-        for (rank, node) in self.0.nodes.iter().enumerate() {
-            elimination_tree[rank] = InRangeOption::new(node.edges.iter().cloned().min());
-            debug_assert!(elimination_tree[rank].value().unwrap_or(n as NodeId) as usize > rank);
-        }
-
-        elimination_tree
+        self.0.nodes.iter().map(|node| node.edges.iter().cloned().min()).map(InRangeOption::new).collect()
     }
 }
 

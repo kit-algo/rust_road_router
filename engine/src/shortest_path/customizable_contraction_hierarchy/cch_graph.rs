@@ -9,6 +9,12 @@ use std;
 use std::ops::Range;
 
 #[derive(Debug)]
+pub struct SeparatorTree {
+    pub nodes: Vec<NodeId>,
+    pub children: Vec<Box<SeparatorTree>>,
+}
+
+#[derive(Debug)]
 #[allow(dead_code)]
 pub struct CCHGraph {
     first_out: Vec<EdgeId>,
@@ -56,6 +62,40 @@ impl CCHGraph {
             original_edge_to_ch_edge,
             elimination_tree,
             link_id_to_tail_mapper
+        }
+    }
+
+    pub fn separators(&self) -> SeparatorTree {
+        let mut children = vec![Vec::new(); self.num_nodes()];
+        let mut roots = Vec::new();
+
+        for (node_index, parent) in self.elimination_tree.iter().enumerate() {
+            if let Some(parent) = parent.value() {
+                children[parent as usize].push(node_index as NodeId);
+            } else {
+                roots.push(node_index as NodeId);
+            }
+        }
+
+        SeparatorTree {
+            nodes: Vec::new(),
+            children: roots.into_iter().map(|root| Self::aggregate_chain(root, &children)).map(Box::new).collect()
+        }
+    }
+
+    fn aggregate_chain(root: NodeId, children: &[Vec<NodeId>]) -> SeparatorTree {
+        let mut node = root;
+        let mut nodes = vec![root];
+
+        #[allow(clippy::match_ref_pats)]
+        while let &[only_child] = &children[node as usize][..] {
+            node = only_child;
+            nodes.push(only_child)
+        }
+
+        SeparatorTree {
+            nodes,
+            children: children[node as usize].iter().map(|&child| Self::aggregate_chain(child, children)).map(Box::new).collect()
         }
     }
 
@@ -373,5 +413,9 @@ impl CCHGraph {
 
     pub fn num_arcs(&self) -> usize {
         self.head.len()
+    }
+
+    pub fn num_nodes(&self) -> usize {
+        self.first_out.len() - 1
     }
 }

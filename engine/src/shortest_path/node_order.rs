@@ -4,7 +4,7 @@ pub type Rank = NodeId;
 
 #[derive(Debug)]
 pub struct NodeOrder {
-    // NodeIds ordered by their ranks - that is in ascending importance
+    // NodeIds ordered by their ranks - that is ascending in importance
     node_order: Vec<NodeId>,
     // The rank of each node - 0 is the lowest importance, n-1 the highest
     ranks: Vec<Rank>
@@ -45,5 +45,9 @@ impl NodeOrder {
 
     pub fn node(&self, rank: Rank) -> NodeId {
         self.node_order[rank as usize]
+    }
+
+    pub fn len(&self) -> usize {
+        self.node_order.len()
     }
 }
