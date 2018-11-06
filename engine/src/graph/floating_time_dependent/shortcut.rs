@@ -23,6 +23,7 @@ impl Shortcut {
     pub fn merge(&mut self, linked_ids: (EdgeId, EdgeId), shortcut_graph: &ShortcutGraph) {
         IPP_COUNT.with(|count| count.set(count.get() - self.ttf.as_ref().map(|ipps| ipps.len()).unwrap_or(0)));
         PATH_SOURCES_COUNT.with(|count| count.set(count.get() - self.sources.len()));
+        if self.ttf.is_some() { ACTIVE_SHORTCUTS.with(|count| count.set(count.get() - 1)); }
 
         #[allow(clippy::redundant_closure_call)]
         (|| {
@@ -76,6 +77,7 @@ impl Shortcut {
 
         IPP_COUNT.with(|count| count.set(count.get() + self.ttf.as_ref().map(|ipps| ipps.len()).unwrap_or(0)));
         PATH_SOURCES_COUNT.with(|count| count.set(count.get() + self.sources.len()));
+        if self.ttf.is_some() { ACTIVE_SHORTCUTS.with(|count| count.set(count.get() + 1)); }
     }
 
     fn plf<'s>(&'s self, shortcut_graph: &'s ShortcutGraph) -> PiecewiseLinearFunction<'s> {
@@ -103,6 +105,7 @@ impl Shortcut {
 
     pub fn clear_plf(&mut self) {
         IPP_COUNT.with(|count| count.set(count.get() - self.ttf.as_ref().map(|ipps| ipps.len()).unwrap_or(0)));
+        if self.ttf.is_some() { ACTIVE_SHORTCUTS.with(|count| count.set(count.get() - 1)); }
         self.ttf = None;
     }
 
