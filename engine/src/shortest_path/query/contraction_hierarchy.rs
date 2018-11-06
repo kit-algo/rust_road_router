@@ -33,7 +33,7 @@ impl Server {
         let mut forward_done = false;
         let mut backward_done = false;
 
-        while self.tentative_distance > forward_progress && self.tentative_distance > backward_progress && !(forward_done && backward_done) {
+        while (self.tentative_distance > forward_progress || self.tentative_distance > backward_progress) && !(forward_done && backward_done) {
             if backward_done || (forward_progress <= backward_progress && !forward_done) {
                 match self.forward_dijkstra.next_step() {
                     QueryProgress::Progress(State { distance, node }) => {
