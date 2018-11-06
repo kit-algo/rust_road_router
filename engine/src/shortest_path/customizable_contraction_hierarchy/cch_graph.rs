@@ -337,7 +337,7 @@ impl CCHGraph {
             let mut merge_count = 0;
 
             for current_node in 0..n {
-                if current_node > 0 && current_node % 10000 == 0 || self.degree(current_node) > 50 {
+                if current_node > 0 && current_node % (n / 100) == 0 || self.degree(current_node) > 50 {
                     use crate::graph::floating_time_dependent::{IPP_COUNT, PATH_SOURCES_COUNT, CLOSE_IPPS_COUNT};
                     println!("t: {}s, at node {} (deg {}), {} ipps on {} active shortcuts (avg {} each), {} switch points, close ipps: {:.5}%, merged {} plfs, linked {} plfs, {} triangles",
                         timer.get_passed_ms() / 1000,
