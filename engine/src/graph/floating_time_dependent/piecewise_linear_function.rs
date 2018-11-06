@@ -151,6 +151,58 @@ impl<'a> PiecewiseLinearFunction<'a> {
             better.push((Timestamp::zero(), f.cur().val < g.cur().val));
         }
 
+        let mut needs_merging = false;
+        while f.cur().at < period() || g.cur().at < period() {
+            if f.cur().at.fuzzy_eq(g.cur().at) {
+                if !f.cur().val.fuzzy_eq(g.cur().val) && (f.cur().val < g.cur().val) != better.last().unwrap().1 {
+                    needs_merging = true;
+                }
+
+                if (f.cur().val - g.cur().val).abs() <= APPROX {
+                    close_ipps_counter += 2;
+                }
+
+                f.advance();
+                g.advance();
+
+            } else if f.cur().at < g.cur().at {
+
+                let delta = f.cur().val - interpolate_linear(&g.prev(), &g.next(), f.cur().at);
+
+                if !delta.fuzzy_eq(FlWeight::zero()) && (delta < FlWeight::zero()) != better.last().unwrap().1 {
+                    needs_merging = true;
+                }
+
+                if delta.abs() <= APPROX {
+                    close_ipps_counter += 1;
+                }
+
+                f.advance();
+
+            } else {
+
+                let delta = g.cur().val - interpolate_linear(&f.prev(), &f.next(), g.cur().at);
+
+                if !delta.fuzzy_eq(FlWeight::zero()) && (delta > FlWeight::zero()) != better.last().unwrap().1 {
+                    needs_merging = true;
+                }
+
+                if delta.abs() <= APPROX {
+                    close_ipps_counter += 1;
+                }
+
+                g.advance();
+            }
+        }
+
+        if !needs_merging {
+            CLOSE_IPPS_COUNT.with(|count| count.set(count.get() + (close_ipps_counter * 10000) / (f.ipps.len() + g.ipps.len())));
+            return ((if better.last().unwrap().1 { self.ipps } else { other.ipps }).to_vec(), better)
+        }
+
+        let mut f = Cursor::new(&self.ipps);
+        let mut g = Cursor::new(&other.ipps);
+
         while f.cur().at < period() || g.cur().at < period() {
 
             if intersect(&f.prev(), &f.cur(), &g.prev(), &g.cur()) {
@@ -207,10 +259,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
                 }
 
-                if (f.cur().val - g.cur().val).abs() <= APPROX {
-                    close_ipps_counter += 2;
-                }
-
                 f.advance();
                 g.advance();
 
@@ -244,10 +292,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     }
                 }
 
-                if (f.cur().val - interpolate_linear(&g.prev(), &g.next(), f.cur().at)).abs() <= APPROX {
-                    close_ipps_counter += 1;
-                }
-
                 f.advance();
 
             } else {
@@ -278,10 +322,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     if !better.last().unwrap().1 && clockwise(&g.cur(), &g.next(), &f.cur()) {
                         better.push((g.cur().at, true))
                     }
-                }
-
-                if (g.cur().val - interpolate_linear(&f.prev(), &f.next(), g.cur().at)).abs() <= APPROX {
-                    close_ipps_counter += 1;
                 }
 
                 g.advance();

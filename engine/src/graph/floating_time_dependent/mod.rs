@@ -54,6 +54,10 @@ mod time {
             FlWeight(t)
         }
 
+        pub const fn zero() -> Self {
+            FlWeight(0.0)
+        }
+
         pub fn fuzzy_eq(self, other: Self) -> bool {
             fuzzy_eq(self.0, other.0)
         }
