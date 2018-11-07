@@ -156,8 +156,6 @@ impl CCHReordering {
     }
 
     fn reorder_sep(&self, nodes: &mut [NodeId]) {
-        if nodes.len() < 10 { return }
-
         let furthest = nodes.first().map(|&first| {
             nodes.iter().max_by_key(|&&node| self.distance(first, node)).unwrap()
         });
@@ -167,10 +165,12 @@ impl CCHReordering {
         }
     }
 
-    fn reorder_tree(&self, separators: &mut SeparatorTree) {
+    fn reorder_tree(&self, separators: &mut SeparatorTree, level: usize) {
+        if level > 2 { return }
+
         self.reorder_sep(&mut separators.nodes);
         for child in &mut separators.children {
-            self.reorder_tree(child);
+            self.reorder_tree(child, level + 1);
             // if let Some(&first) = child.nodes.first() {
             //     if let Some(&last) = child.nodes.last() {
             //         if let Some(&node) = separators.nodes.first() {
@@ -190,22 +190,10 @@ impl CCHReordering {
         }
     }
 
-    fn to_ordering_bfs(&self, seperators: SeparatorTree, order: &mut Vec<NodeId>) {
-        let mut queue = std::collections::VecDeque::new();
-        queue.push_back(seperators);
-
-        while let Some(seperator) = queue.pop_front() {
-            order.extend(seperator.nodes);
-            for child in seperator.children {
-                queue.push_back(*child);
-            }
-        }
-    }
-
     pub fn reorder(self, mut separators: SeparatorTree) -> NodeOrder {
-        self.reorder_tree(&mut separators);
+        self.reorder_tree(&mut separators, 0);
         let mut order = Vec::new();
-        self.to_ordering_bfs(separators, &mut order);
+        self.to_ordering(separators, &mut order);
 
         for rank in &mut order {
             *rank = self.node_order.node(*rank);
