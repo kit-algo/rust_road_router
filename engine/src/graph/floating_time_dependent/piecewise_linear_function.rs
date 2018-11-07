@@ -356,30 +356,13 @@ impl<'a> PiecewiseLinearFunction<'a> {
         (result, better)
     }
 
-    fn append_point(points: &mut Vec<Point>, mut point: Point) {
+    fn append_point(points: &mut Vec<Point>, point: Point) {
         debug_assert!(point.val >= FlWeight::new(0.0), "{:?}", point);
-
-        if let Some(prev) = points.last_mut() {
-            if prev.at.fuzzy_eq(point.at) {
-                if prev.val.fuzzy_eq(point.val) { return }
-                println!("Jumping TTF");
-                let early = min(prev.at, point.at);
-                let late = max(prev.at, point.at) + FlWeight::new(EPSILON);
-                debug_assert!(early.fuzzy_lt(late), "{:?} {:?}", prev, point);
-                prev.at = early;
-                point.at = late;
-            }
-
-            if point.at < prev.at {
-                println!("Point insert before prev");
-                std::mem::swap(&mut point.at, &mut prev.at);
-            }
+        if let Some(p) = points.last() {
+            if p.at.fuzzy_eq(point.at) && p.val.fuzzy_eq(point.val) { return }
         }
-        if points.len() > 1 && colinear_ordered(&points[points.len() - 2], &points[points.len() - 1], &point) {
-            points.pop();
-        }
+        debug_assert!(points.last().map(|p| p.at.fuzzy_lt(point.at) || p.val.fuzzy_eq(point.val)).unwrap_or(true));
 
-        debug_assert!(points.last().map(|p| p.at.fuzzy_lt(point.at)).unwrap_or(true));
         points.push(point)
     }
 
