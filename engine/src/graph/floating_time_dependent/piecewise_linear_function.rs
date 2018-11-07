@@ -132,7 +132,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
     pub fn merge(&self, other: &Self) -> (Vec<Point>, Vec<(Timestamp, bool)>) {
         if self.upper_bound() < other.lower_bound() {
             return (self.ipps.to_vec(), vec![(Timestamp::zero(), true)])
-        } else if other.upper_bound()  < self.lower_bound() {
+        } else if other.upper_bound() < self.lower_bound() {
             return (self.ipps.to_vec(), vec![(Timestamp::zero(), false)])
         }
 
@@ -560,25 +560,25 @@ mod debug {
     use super::*;
 
     use std::fs::File;
-    use std::io::Write;
+    use std::io::{Write, Error};
     use std::process::{Command, Stdio};
     use std::env;
 
     pub fn debug_merge(f: &Cursor, g: &Cursor, merged: &[Point], better: &[(Timestamp, bool)]) {
         if let Ok(mut file) = File::create(format!("debug-{}-{}.py", f64::from(f.cur().at), f64::from(g.cur().at))) {
-            write_python(&mut file, f, g, merged, better);
+            write_python(&mut file, f, g, merged, better).unwrap_or_else(|_| println!("failed to write debug script to file"));
         }
 
         if env::var("TDCCH_INTERACTIVE_DEBUG").is_ok() {
             if let Ok(mut child) = Command::new("python3").stdin(Stdio::piped()).spawn() {
                 if let Some(mut stdin) = child.stdin.as_mut() {
-                    write_python(&mut stdin, f, g, merged, better);
+                    write_python(&mut stdin, f, g, merged, better).unwrap_or_else(|_| println!("failed to execute debug script"));
                 }
             }
         }
     }
 
-    fn write_python<O: Write>(output: &mut O, f: &Cursor, g: &Cursor, merged: &[Point], better: &[(Timestamp, bool)]) {
+    fn write_python<O: Write>(output: &mut O, f: &Cursor, g: &Cursor, merged: &[Point], better: &[(Timestamp, bool)]) -> Result<(), Error> {
         writeln!(output, "
 import numpy as np
 import matplotlib as mpl
@@ -590,28 +590,28 @@ def plot_coords(coords, *args, **kwargs):
     plt.plot(list(x), list(y), *args, **kwargs)
 
 "
-        );
-        write!(output, "plot_coords([");
+        )?;
+        write!(output, "plot_coords([")?;
         for p in f.ipps {
-            write!(output, "({}, {}), ", f64::from(p.at), f64::from(p.val));
+            write!(output, "({}, {}), ", f64::from(p.at), f64::from(p.val))?;
         }
-        writeln!(output, "], 'r+-', label='f', linewidth=1, markersize=5)");
+        writeln!(output, "], 'r+-', label='f', linewidth=1, markersize=5)")?;
 
-        write!(output, "plot_coords([");
+        write!(output, "plot_coords([")?;
         for p in g.ipps {
-            write!(output, "({}, {}), ", f64::from(p.at), f64::from(p.val));
+            write!(output, "({}, {}), ", f64::from(p.at), f64::from(p.val))?;
         }
-        writeln!(output, "], 'gx-', label='g', linewidth=1, markersize=5)");
+        writeln!(output, "], 'gx-', label='g', linewidth=1, markersize=5)")?;
 
-        writeln!(output, "plot_coords([({}, {})], 'rs', markersize=10)", f64::from(f.cur().at), f64::from(f.cur().val));
-        writeln!(output, "plot_coords([({}, {})], 'gs', markersize=10)", f64::from(g.cur().at), f64::from(g.cur().val));
+        writeln!(output, "plot_coords([({}, {})], 'rs', markersize=10)", f64::from(f.cur().at), f64::from(f.cur().val))?;
+        writeln!(output, "plot_coords([({}, {})], 'gs', markersize=10)", f64::from(g.cur().at), f64::from(g.cur().val))?;
 
         if !merged.is_empty() {
-            write!(output, "plot_coords([");
+            write!(output, "plot_coords([")?;
             for p in merged {
-                write!(output, "({}, {}), ", f64::from(p.at), f64::from(p.val));
+                write!(output, "({}, {}), ", f64::from(p.at), f64::from(p.val))?;
             }
-            writeln!(output, "], 'bo-', label='merged', linewidth=1, markersize=1)");
+            writeln!(output, "], 'bo-', label='merged', linewidth=1, markersize=1)")?;
         }
 
         let max_val = f.ipps.iter().map(|p| p.val).max().unwrap();
@@ -621,10 +621,11 @@ def plot_coords(coords, *args, **kwargs):
         let min_val = min(g.ipps.iter().map(|p| p.val).min().unwrap(), min_val);
 
         for &(t, f_better) in better {
-            writeln!(output, "plt.vlines({}, {}, {}, '{}', linewidth=1)", f64::from(t), f64::from(min_val), f64::from(max_val), if f_better { 'r' } else { 'g' });
+            writeln!(output, "plt.vlines({}, {}, {}, '{}', linewidth=1)", f64::from(t), f64::from(min_val), f64::from(max_val), if f_better { 'r' } else { 'g' })?;
         }
 
-        writeln!(output, "plt.legend()");
-        writeln!(output, "plt.show()");
+        writeln!(output, "plt.legend()")?;
+        writeln!(output, "plt.show()")?;
+        Ok(())
     }
 }
