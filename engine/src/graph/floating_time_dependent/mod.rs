@@ -271,3 +271,4 @@ thread_local! { pub static CLOSE_IPPS_COUNT: Cell<usize> = Cell::new(0); }
 thread_local! { pub static ACTUALLY_MERGED: Cell<usize> = Cell::new(0); }
 thread_local! { pub static ACTUALLY_LINKED: Cell<usize> = Cell::new(0); }
 thread_local! { pub static ACTIVE_SHORTCUTS: Cell<usize> = Cell::new(0); }
+thread_local! { pub static UNNECESSARY_LINKED: Cell<usize> = Cell::new(0); }

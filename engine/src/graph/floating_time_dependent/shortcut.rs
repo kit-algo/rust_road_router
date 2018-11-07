@@ -61,6 +61,7 @@ impl Shortcut {
             if lower_bound >= other_upper_bound {
                 self.ttf = Some(linked_ipps);
                 self.sources = Sources::One(other_data);
+                UNNECESSARY_LINKED.with(|count| count.set(count.get() + 1));
                 return;
             } else if other_lower_bound >= upper_bound {
                 return;
