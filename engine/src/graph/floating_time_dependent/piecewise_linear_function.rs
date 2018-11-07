@@ -382,9 +382,9 @@ impl<'a> PiecewiseLinearFunction<'a> {
             .unwrap();
 
         if delta > APPROX {
-            PiecewiseLinearFunction::new(&self.ipps[0..=i]).douglas_peuker(result);
+            PiecewiseLinearFunction { ipps: &self.ipps[0..=i] }.douglas_peuker(result);
             result.pop();
-            PiecewiseLinearFunction::new(&self.ipps[i..self.ipps.len()]).douglas_peuker(result);
+            PiecewiseLinearFunction { ipps: &self.ipps[i..self.ipps.len()] }.douglas_peuker(result);
         } else {
             result.push(first.clone());
             result.push(last.clone());
