@@ -307,12 +307,18 @@ impl CCHGraph {
 
     pub fn customize_floating_td<'a, 'b: 'a>(&'a self, metric: &'b floating_time_dependent::TDGraph) -> floating_time_dependent::ShortcutGraph<'a> {
         use crate::graph::floating_time_dependent::*;
+        use std::cmp::min;
 
         let n = (self.first_out.len() - 1) as NodeId;
         let m = self.head.len();
 
         let mut upward_weights = vec![Shortcut::new(None); m];
         let mut downward_weights = vec![Shortcut::new(None); m];
+
+        let mut upward_min = vec![FlWeight::new(f64::from(INFINITY)); m];
+        let mut upward_max = vec![FlWeight::new(f64::from(INFINITY)); m];
+        let mut downward_min = vec![FlWeight::new(f64::from(INFINITY)); m];
+        let mut downward_max = vec![FlWeight::new(f64::from(INFINITY)); m];
 
         report_time("TD-CCH apply weights", || {
             for node in 0..n {
@@ -321,14 +327,48 @@ impl CCHGraph {
 
                     if self.node_order.rank(node) < self.node_order.rank(neighbor) {
                         upward_weights[ch_edge_id as usize] = Shortcut::new(Some(edge_id));
+                        upward_min[ch_edge_id as usize] = metric.travel_time_function(edge_id).lower_bound();
+                        upward_max[ch_edge_id as usize] = metric.travel_time_function(edge_id).upper_bound();
                     } else {
                         downward_weights[ch_edge_id as usize] = Shortcut::new(Some(edge_id));
+                        downward_min[ch_edge_id as usize] = metric.travel_time_function(edge_id).lower_bound();
+                        downward_max[ch_edge_id as usize] = metric.travel_time_function(edge_id).upper_bound();
                     }
                 }
             }
         });
 
         let mut shortcut_graph = ShortcutGraph::new(metric, &self.first_out, &self.head, upward_weights, downward_weights);
+
+        report_time("TD-CCH Pre-Customization", || {
+            let mut node_edge_ids = vec![InRangeOption::new(None); n as usize];
+
+            for current_node in 0..n {
+                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
+                    node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
+                }
+
+                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
+                    debug_assert_eq!(self.edge_id_to_tail(edge_id), current_node);
+                    let shortcut_edge_ids = self.neighbor_edge_indices(node);
+                    for (target, shortcut_edge_id) in self.neighbor_iter(node).zip(shortcut_edge_ids) {
+                        debug_assert_eq!(self.edge_id_to_tail(shortcut_edge_id), node);
+                        if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
+                            debug_assert!(shortcut_edge_id > edge_id);
+                            debug_assert!(shortcut_edge_id > other_edge_id);
+                            upward_max[shortcut_edge_id as usize] = min(upward_max[shortcut_edge_id as usize], downward_max[edge_id as usize] + upward_max[other_edge_id as usize]);
+                            upward_min[shortcut_edge_id as usize] = min(upward_min[shortcut_edge_id as usize], downward_min[edge_id as usize] + upward_min[other_edge_id as usize]);
+                            downward_max[shortcut_edge_id as usize] = min(downward_max[shortcut_edge_id as usize], downward_max[other_edge_id as usize] + upward_max[edge_id as usize]);
+                            downward_min[shortcut_edge_id as usize] = min(downward_min[shortcut_edge_id as usize], downward_min[other_edge_id as usize] + upward_min[edge_id as usize]);
+                        }
+                    }
+                }
+
+                for node in self.neighbor_iter(current_node) {
+                    node_edge_ids[node as usize] = InRangeOption::new(None);
+                }
+            }
+        });
 
         report_time("TD-CCH Customization", || {
             let mut node_edge_ids = vec![InRangeOption::new(None); n as usize];
@@ -365,8 +405,12 @@ impl CCHGraph {
                         if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
                             debug_assert!(shortcut_edge_id > edge_id);
                             debug_assert!(shortcut_edge_id > other_edge_id);
-                            shortcut_graph.borrow_mut_outgoing(shortcut_edge_id, |shortcut, shortcut_graph| shortcut.merge((edge_id, other_edge_id), shortcut_graph));
-                            shortcut_graph.borrow_mut_incoming(shortcut_edge_id, |shortcut, shortcut_graph| shortcut.merge((other_edge_id, edge_id), shortcut_graph));
+                            if downward_min[edge_id as usize] + upward_min[other_edge_id as usize] <= upward_max[shortcut_edge_id as usize] {
+                                shortcut_graph.borrow_mut_outgoing(shortcut_edge_id, |shortcut, shortcut_graph| shortcut.merge((edge_id, other_edge_id), shortcut_graph));
+                            }
+                            if upward_min[edge_id as usize] + downward_min[other_edge_id as usize] <= downward_max[shortcut_edge_id as usize] {
+                                shortcut_graph.borrow_mut_incoming(shortcut_edge_id, |shortcut, shortcut_graph| shortcut.merge((other_edge_id, edge_id), shortcut_graph));
+                            }
                             merge_count += 2;
                         }
                     }
