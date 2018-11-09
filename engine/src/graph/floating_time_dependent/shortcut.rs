@@ -153,6 +153,26 @@ impl Shortcut {
 
         Sources::Multi(new_sources)
     }
+
+    pub(super) fn eval(&self, t: Timestamp, shortcut_graph: &ShortcutGraph) -> FlWeight {
+        debug_assert!(t < period());
+
+        if let Some(ipps) = &self.ttf {
+            return PiecewiseLinearFunction::new(ipps).eval(t)
+        }
+
+        match &self.sources {
+            Sources::None => FlWeight::new(f64::from(INFINITY)),
+            Sources::One(source) => ShortcutSource::from(*source).eval(t, shortcut_graph),
+            Sources::Multi(data) => {
+                let (_, source) = match data.binary_search_by_key(&t, |(t, _)| *t) {
+                    Ok(i) => data[i],
+                    Err(i) => data[i-1]
+                };
+                ShortcutSource::from(source).eval(t, shortcut_graph)
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

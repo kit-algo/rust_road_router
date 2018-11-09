@@ -33,7 +33,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         self.eval(t)
     }
 
-    fn eval(&self, t: Timestamp) -> FlWeight {
+    pub(super) fn eval(&self, t: Timestamp) -> FlWeight {
         debug_assert!(t < period());
 
         if self.ipps.len() == 1 {
