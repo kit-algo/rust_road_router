@@ -416,9 +416,9 @@ impl CCHGraph {
                     }
                 }
 
-                for node in self.neighbor_iter(current_node) {
-                    shortcut_graph.borrow_mut_outgoing(node_edge_ids[node as usize].value().unwrap(), |shortcut, _| shortcut.clear_plf());
-                    shortcut_graph.borrow_mut_incoming(node_edge_ids[node as usize].value().unwrap(), |shortcut, _| shortcut.clear_plf());
+                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
+                    shortcut_graph.borrow_mut_outgoing(edge_id, |shortcut, _| shortcut.clear_plf());
+                    shortcut_graph.borrow_mut_incoming(edge_id, |shortcut, _| shortcut.clear_plf());
                     node_edge_ids[node as usize] = InRangeOption::new(None);
                 }
             }
