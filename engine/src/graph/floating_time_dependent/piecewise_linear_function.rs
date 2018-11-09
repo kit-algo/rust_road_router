@@ -28,7 +28,12 @@ impl<'a> PiecewiseLinearFunction<'a> {
         self.ipps.iter().map(|p| p.val).max().unwrap()
     }
 
-    pub fn eval(&self, t: Timestamp) -> FlWeight {
+    pub fn evaluate(&self, t: Timestamp) -> FlWeight {
+        let (_, t) = t.split_of_period();
+        self.eval(t)
+    }
+
+    fn eval(&self, t: Timestamp) -> FlWeight {
         debug_assert!(t < period());
 
         if self.ipps.len() == 1 {

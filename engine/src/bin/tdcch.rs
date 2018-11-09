@@ -13,7 +13,7 @@ use bmw_routing_engine::{
         node_order::NodeOrder,
         query::{
             time_dependent_customizable_contraction_hierarchy::Server,
-            td_dijkstra::Server as DijkServer
+            floating_td_dijkstra::Server as DijkServer
         },
     },
     io::Load,
@@ -106,26 +106,26 @@ fn main() {
     let cch = customizable_contraction_hierarchy::contract(&graph, cch_order);
 
     let _td_cch_graph = cch.customize_floating_td(&graph);
-    // println!("{:?}", td_cch_graph.total_num_segments());
-    // td_cch_graph.print_segment_stats();
 
-    // let mut td_dijk_server = DijkServer::new(graph.clone());
+    let mut td_dijk_server = DijkServer::new(graph.clone());
     // let mut server = Server::new(&cch, &td_cch_graph);
 
-    // let from = Vec::load_from(path.join("uniform_queries/source_node").to_str().unwrap()).expect("could not read source node");
-    // let at = Vec::load_from(path.join("uniform_queries/source_time").to_str().unwrap()).expect("could not read source time");
-    // let to = Vec::load_from(path.join("uniform_queries/target_node").to_str().unwrap()).expect("could not read target node");
+    let from = Vec::load_from(path.join("uniform_queries/source_node").to_str().unwrap()).expect("could not read source node");
+    let at = Vec::<u32>::load_from(path.join("uniform_queries/source_time").to_str().unwrap()).expect("could not read source time");
+    let to = Vec::load_from(path.join("uniform_queries/target_node").to_str().unwrap()).expect("could not read target node");
 
-    // let num_queries = 100;
+    let num_queries = 100;
 
-    // let mut dijkstra_time = Duration::zero();
+    let mut dijkstra_time = Duration::zero();
     // let mut tdcch_time = Duration::zero();
 
-    // for ((from, to), at) in from.into_iter().zip(to.into_iter()).zip(at.into_iter()).take(num_queries) {
-    //     let (ground_truth, time) = measure(|| {
-    //         td_dijk_server.distance(from, to, at).map(|dist| dist + at)
-    //     });
-    //     dijkstra_time =  dijkstra_time + time;
+    for ((from, to), at) in from.into_iter().zip(to.into_iter()).zip(at.into_iter()).take(num_queries) {
+        let (ground_truth, time) = measure(|| {
+            let at = Timestamp::new(f64::from(at) / 1000.0);
+            td_dijk_server.distance(from, to, at).map(|dist| dist + at)
+        });
+        println!("{:?}", ground_truth);
+        dijkstra_time =  dijkstra_time + time;
 
     //     tdcch_time = tdcch_time + measure(|| {
     //         let dist = server.distance(from, to, at).map(|dist| dist + at);
@@ -136,8 +136,8 @@ fn main() {
     //         }
     //         assert_eq!(dist, ground_truth);
     //     }).1;
-    // }
-    // println!("Dijkstra {}ms", dijkstra_time.num_milliseconds() / (num_queries as i64));
+    }
+    println!("Dijkstra {}ms", dijkstra_time.num_milliseconds() / (num_queries as i64));
     // println!("TDCCH {}ms", tdcch_time.num_milliseconds() / (num_queries as i64));
 }
 
