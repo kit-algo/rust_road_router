@@ -29,14 +29,14 @@ impl<'a> ShortcutGraph<'a> {
     // the mutation just needs to guarantee that it will never refetch the edge under mutation.
     // But this is usually no problem since we know that a shortcut can only consist of paths of edges lower in the graph
     pub fn borrow_mut_outgoing<F: FnOnce(&mut Shortcut, &ShortcutGraph)>(&mut self, edge_id: EdgeId, f: F) {
-        let mut shortcut = Shortcut::new(None);
+        let mut shortcut = Shortcut::new(None, self.original_graph());
         swap(&mut self.outgoing[edge_id as usize], &mut shortcut);
         f(&mut shortcut, &self);
         swap(&mut self.outgoing[edge_id as usize], &mut shortcut);
     }
 
     pub fn borrow_mut_incoming<F: FnOnce(&mut Shortcut, &ShortcutGraph)>(&mut self, edge_id: EdgeId, f: F) {
-        let mut shortcut = Shortcut::new(None);
+        let mut shortcut = Shortcut::new(None, self.original_graph());
         swap(&mut self.incoming[edge_id as usize], &mut shortcut);
         f(&mut shortcut, &self);
         swap(&mut self.incoming[edge_id as usize], &mut shortcut);
