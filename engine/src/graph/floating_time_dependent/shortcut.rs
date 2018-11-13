@@ -51,14 +51,12 @@ impl Shortcut {
             if !self.is_valid_path() {
                 ACTUALLY_LINKED.with(|count| count.set(count.get() + 1));
                 let linked = first_plf.link(&second_plf);
+
                 self.upper_bound = min(self.upper_bound, PiecewiseLinearFunction::new(&linked).upper_bound());
+                debug_assert!(self.upper_bound >= self.lower_bound);
                 self.ttf = Some(linked);
                 self.sources = Sources::One(other_data);
                 return;
-            }
-
-            if other_lower_bound >= self.upper_bound {
-                return
             }
 
             let self_plf = self.plf(shortcut_graph);
@@ -72,11 +70,12 @@ impl Shortcut {
 
             if self_plf.lower_bound() >= other_upper_bound {
                 self.upper_bound = min(self.upper_bound, PiecewiseLinearFunction::new(&linked_ipps).upper_bound());
+                debug_assert!(self.upper_bound >= self.lower_bound);
                 self.ttf = Some(linked_ipps);
                 self.sources = Sources::One(other_data);
                 UNNECESSARY_LINKED.with(|count| count.set(count.get() + 1));
                 return;
-            } else if other_lower_bound >= self.upper_bound {
+            } else if other_lower_bound > self.upper_bound {
                 return;
             }
 
@@ -84,6 +83,7 @@ impl Shortcut {
             let (merged, intersection_data) = self_plf.merge(&linked);
 
             self.upper_bound = min(self.upper_bound, PiecewiseLinearFunction::new(&merged).upper_bound());
+            debug_assert!(self.upper_bound >= self.lower_bound);
             self.ttf = Some(merged);
             let mut sources = Sources::None;
             std::mem::swap(&mut sources, &mut self.sources);
@@ -120,7 +120,10 @@ impl Shortcut {
 
     pub fn finalize_lower_bound(&mut self) {
         if let Some(points) = &self.ttf {
-            self.lower_bound = PiecewiseLinearFunction::new(points).lower_bound();
+            let new_lower_bound = PiecewiseLinearFunction::new(points).lower_bound();
+            debug_assert!(!new_lower_bound.fuzzy_lt(self.lower_bound), "{:?}, {:?}", new_lower_bound, self);
+            debug_assert!(new_lower_bound <= self.upper_bound, "{:?}, {:?}", new_lower_bound, self);
+            self.lower_bound = new_lower_bound;
         }
     }
 
@@ -185,7 +188,17 @@ impl Shortcut {
         Sources::Multi(new_sources)
     }
 
+    pub fn evaluate(&self, t: Timestamp, shortcut_graph: &ShortcutGraph) -> FlWeight {
+        let (_, t) = t.split_of_period();
+        self.eval(t, shortcut_graph)
+    }
+
     pub(super) fn eval(&self, t: Timestamp, shortcut_graph: &ShortcutGraph) -> FlWeight {
+        // TODO benchmark
+        if self.lower_bound == self.upper_bound {
+            return self.lower_bound;
+        }
+
         debug_assert!(t < period());
 
         if let Some(ipps) = &self.ttf {

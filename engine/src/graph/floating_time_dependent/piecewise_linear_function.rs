@@ -138,7 +138,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         if self.upper_bound() < other.lower_bound() {
             return (self.ipps.to_vec(), vec![(Timestamp::zero(), true)])
         } else if other.upper_bound() < self.lower_bound() {
-            return (self.ipps.to_vec(), vec![(Timestamp::zero(), false)])
+            return (other.ipps.to_vec(), vec![(Timestamp::zero(), false)])
         }
 
         let mut result = Vec::with_capacity(2 * self.ipps.len() + 2 * other.ipps.len() + 2);

@@ -12,7 +12,7 @@ use bmw_routing_engine::{
         customizable_contraction_hierarchy::{self, cch_graph::SeparatorTree},
         node_order::NodeOrder,
         query::{
-            time_dependent_customizable_contraction_hierarchy::Server,
+            floating_td_customizable_contraction_hierarchy::Server,
             floating_td_dijkstra::Server as DijkServer
         },
     },
@@ -105,10 +105,10 @@ fn main() {
     let cch_order = CCHReordering { node_order: cch_order, latitude, longitude }.reorder(cch.separators());
     let cch = customizable_contraction_hierarchy::contract(&graph, cch_order);
 
-    let _td_cch_graph = cch.customize_floating_td(&graph);
+    let td_cch_graph = cch.customize_floating_td(&graph);
 
     let mut td_dijk_server = DijkServer::new(graph.clone());
-    // let mut server = Server::new(&cch, &td_cch_graph);
+    let mut server = Server::new(&cch, &td_cch_graph);
 
     let from = Vec::load_from(path.join("uniform_queries/source_node").to_str().unwrap()).expect("could not read source node");
     let at = Vec::<u32>::load_from(path.join("uniform_queries/source_time").to_str().unwrap()).expect("could not read source time");
@@ -117,28 +117,27 @@ fn main() {
     let num_queries = 100;
 
     let mut dijkstra_time = Duration::zero();
-    // let mut tdcch_time = Duration::zero();
+    let mut tdcch_time = Duration::zero();
 
     for ((from, to), at) in from.into_iter().zip(to.into_iter()).zip(at.into_iter()).take(num_queries) {
+        let at = Timestamp::new(f64::from(at) / 1000.0);
         let (ground_truth, time) = measure(|| {
-            let at = Timestamp::new(f64::from(at) / 1000.0);
             td_dijk_server.distance(from, to, at).map(|dist| dist + at)
         });
-        println!("{:?}", ground_truth);
+        println!("from {} to {} at {:?} - EA {:?}", from, to, at, ground_truth);
         dijkstra_time =  dijkstra_time + time;
 
-    //     tdcch_time = tdcch_time + measure(|| {
-    //         let dist = server.distance(from, to, at).map(|dist| dist + at);
-    //         if dist == ground_truth {
-    //             println!("TDCCH ✅ {:?} {:?}", dist, ground_truth);
-    //         } else {
-    //             println!("TDCCH ❌ {:?} {:?}", dist, ground_truth);
-    //         }
-    //         assert_eq!(dist, ground_truth);
-    //     }).1;
+        tdcch_time = tdcch_time + measure(|| {
+            let dist = server.distance(from, to, at).map(|dist| dist + at);
+            if dist.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY))).fuzzy_eq(ground_truth.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY)))) {
+                println!("TDCCH ✅ {:?} {:?}", dist, ground_truth);
+            } else {
+                println!("TDCCH ❌ {:?} {:?}", dist, ground_truth);
+            }
+        }).1;
     }
     println!("Dijkstra {}ms", dijkstra_time.num_milliseconds() / (num_queries as i64));
-    // println!("TDCCH {}ms", tdcch_time.num_milliseconds() / (num_queries as i64));
+    println!("TDCCH {}ms", tdcch_time.num_milliseconds() / (num_queries as i64));
 }
 
 #[derive(Debug)]

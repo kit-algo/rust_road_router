@@ -76,7 +76,7 @@ impl<'a, 'b> FloatingTDSteppedEliminationTree<'a, 'b> {
                     shortcut_id
                 };
 
-                debug_assert!(next.lower_bound <= next.upper_bound);
+                debug_assert!(next.lower_bound <= next.upper_bound, "{:?}, {:?}", next, shortcut);
 
                 if next.upper_bound <= self.distances[target as usize].lower_bound {
                     self.distances[target as usize].lower_bound = next.lower_bound;
@@ -98,5 +98,15 @@ impl<'a, 'b> FloatingTDSteppedEliminationTree<'a, 'b> {
 
     pub fn node_data(&self, node: NodeId) -> &NodeData {
         &self.distances[node as usize]
+    }
+
+    pub fn peek_next(&self) -> Option<NodeId> {
+        self.next
+    }
+
+    pub fn skip_next(&mut self) {
+        if let Some(node) = self.next {
+            self.next = self.elimination_tree[node as usize].value();
+        }
     }
 }

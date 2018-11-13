@@ -441,6 +441,10 @@ impl CCHGraph {
         self.link_id_to_tail_mapper.link_id_to_tail(edge_id)
     }
 
+    pub fn head(&self, edge_id: EdgeId) -> NodeId {
+        self.head[edge_id as usize]
+    }
+
     fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {
         (self.first_out[node as usize] as EdgeId)..(self.first_out[(node + 1) as usize] as EdgeId)
     }
