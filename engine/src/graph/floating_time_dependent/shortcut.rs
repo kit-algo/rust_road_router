@@ -140,9 +140,10 @@ impl Shortcut {
         }
 
         debug_assert!(intersection_data.len() >= 2);
-        let mut intersection_iter = intersection_data.into_iter().peekable();
-        let (zero, mut self_currently_better) = intersection_iter.next().unwrap();
+        let &(zero, mut self_currently_better) = intersection_data.first().unwrap();
         debug_assert!(zero == Timestamp::zero());
+        let debug_intersections = intersection_data.clone();
+        let mut intersection_iter = intersection_data.into_iter().peekable();
 
         let dummy = ShortcutSource::OriginalEdge(std::u32::MAX).into();
         let mut prev_source = &dummy;
@@ -171,6 +172,16 @@ impl Shortcut {
             prev_source = source;
         }
 
+        for (at, is_self_better) in intersection_iter {
+            if is_self_better {
+                new_sources.push((at, *prev_source));
+            } else {
+                new_sources.push((at, other_data));
+            }
+        }
+
+        debug_assert!(new_sources.len() >= 2, "old: {:?}\nintersections: {:?}\nnew: {:?}", sources, debug_intersections, new_sources);
+        debug_assert!(new_sources.first().unwrap().0 == Timestamp::zero());
         Sources::Multi(new_sources)
     }
 
@@ -185,6 +196,7 @@ impl Shortcut {
             Sources::None => FlWeight::new(f64::from(INFINITY)),
             Sources::One(source) => ShortcutSource::from(*source).eval(t, shortcut_graph),
             Sources::Multi(data) => {
+                debug_assert!(data[0].0 == Timestamp::zero(), "{:?}", data);
                 let (_, source) = match data.binary_search_by_key(&t, |(t, _)| *t) {
                     Ok(i) => data[i],
                     Err(i) => data[i-1]
