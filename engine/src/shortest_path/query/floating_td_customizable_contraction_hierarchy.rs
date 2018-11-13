@@ -132,7 +132,7 @@ impl<'a> Server<'a> {
                     let tail = node;
                     let head = label.parent;
                     let t_cur = self.distances[tail as usize];
-                    let t_next = t_cur + self.shortcut_graph.get_outgoing(label.shortcut_id).evaluate(t_cur, self.shortcut_graph);
+                    let t_next = t_cur + self.shortcut_graph.get_incoming(label.shortcut_id).evaluate(t_cur, self.shortcut_graph);
                     if t_next < self.distances[head as usize] {
                         self.distances[head as usize] = t_next;
                     }

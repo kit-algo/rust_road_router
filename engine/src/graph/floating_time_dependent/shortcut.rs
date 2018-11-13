@@ -212,7 +212,13 @@ impl Shortcut {
                 debug_assert!(data[0].0 == Timestamp::zero(), "{:?}", data);
                 let (_, source) = match data.binary_search_by_key(&t, |(t, _)| *t) {
                     Ok(i) => data[i],
-                    Err(i) => data[i-1]
+                    Err(i) => {
+                        debug_assert!(data[i-1].0 < t);
+                        if i < data.len() {
+                            debug_assert!(t < data[i].0);
+                        }
+                        data[i-1]
+                    }
                 };
                 ShortcutSource::from(source).eval(t, shortcut_graph)
             },

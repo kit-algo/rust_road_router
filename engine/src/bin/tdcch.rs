@@ -136,8 +136,8 @@ fn main() {
             }
         }).1;
     }
-    println!("Dijkstra {}ms", dijkstra_time.num_milliseconds() / (num_queries as i64));
-    println!("TDCCH {}ms", tdcch_time.num_milliseconds() / (num_queries as i64));
+    println!("Dijkstra {}", dijkstra_time / (num_queries as i32));
+    println!("TDCCH {}", tdcch_time / (num_queries as i32));
 }
 
 #[derive(Debug)]
