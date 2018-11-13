@@ -188,12 +188,9 @@ impl Shortcut {
         Sources::Multi(new_sources)
     }
 
-    pub fn evaluate(&self, t: Timestamp, shortcut_graph: &ShortcutGraph) -> FlWeight {
-        let (_, t) = t.split_of_period();
-        self.eval(t, shortcut_graph)
-    }
-
-    pub(super) fn eval(&self, t: Timestamp, shortcut_graph: &ShortcutGraph) -> FlWeight {
+    pub fn evaluate<F>(&self, t: Timestamp, shortcut_graph: &ShortcutGraph, f: &mut F) -> FlWeight
+        where F: (FnMut(bool, EdgeId, Timestamp) -> bool)
+    {
         // TODO benchmark
         if self.lower_bound == self.upper_bound {
             return self.lower_bound;
@@ -202,15 +199,16 @@ impl Shortcut {
         debug_assert!(t < period());
 
         if let Some(ipps) = &self.ttf {
-            return PiecewiseLinearFunction::new(ipps).eval(t)
+            return PiecewiseLinearFunction::new(ipps).evaluate(t)
         }
 
         match &self.sources {
             Sources::None => FlWeight::new(f64::from(INFINITY)),
-            Sources::One(source) => ShortcutSource::from(*source).eval(t, shortcut_graph),
+            Sources::One(source) => ShortcutSource::from(*source).evaluate(t, shortcut_graph, f),
             Sources::Multi(data) => {
+                let (_, t_period) = t.split_of_period();
                 debug_assert!(data[0].0 == Timestamp::zero(), "{:?}", data);
-                let (_, source) = match data.binary_search_by_key(&t, |(t, _)| *t) {
+                let (_, source) = match data.binary_search_by_key(&t_period, |(t, _)| *t) {
                     Ok(i) => data[i],
                     Err(i) => {
                         debug_assert!(data[i-1].0 < t);
@@ -220,7 +218,7 @@ impl Shortcut {
                         data[i-1]
                     }
                 };
-                ShortcutSource::from(source).eval(t, shortcut_graph)
+                ShortcutSource::from(source).evaluate(t, shortcut_graph, f)
             },
         }
     }

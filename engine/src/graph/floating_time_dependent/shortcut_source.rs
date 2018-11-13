@@ -8,15 +8,18 @@ pub enum ShortcutSource {
 }
 
 impl ShortcutSource {
-    pub(super) fn eval(&self, t: Timestamp, shortcut_graph: &ShortcutGraph) -> FlWeight {
+    pub(super) fn evaluate<F>(&self, t: Timestamp, shortcut_graph: &ShortcutGraph, f: &mut F) -> FlWeight
+        where F: (FnMut(bool, EdgeId, Timestamp) -> bool)
+    {
         match *self {
             ShortcutSource::Shortcut(down, up) => {
-                let first_val = shortcut_graph.get_incoming(down).eval(t, shortcut_graph);
+                if !f(false, down, t) { return FlWeight::new(f64::from(INFINITY)); }
+                let first_val = shortcut_graph.get_incoming(down).evaluate(t, shortcut_graph, f);
                 let t_mid = t + first_val;
-                let (_, t_sec) = t_mid.split_of_period();
-                first_val + shortcut_graph.get_outgoing(up).eval(t_sec, shortcut_graph)
+                if !f(true, up, t_mid) { return FlWeight::new(f64::from(INFINITY)); }
+                first_val + shortcut_graph.get_outgoing(up).evaluate(t_mid, shortcut_graph, f)
             },
-            ShortcutSource::OriginalEdge(edge) => shortcut_graph.original_graph().travel_time_function(edge).eval(t),
+            ShortcutSource::OriginalEdge(edge) => shortcut_graph.original_graph().travel_time_function(edge).evaluate(t),
         }
     }
 }

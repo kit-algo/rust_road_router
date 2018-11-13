@@ -114,7 +114,7 @@ fn main() {
     let at = Vec::<u32>::load_from(path.join("uniform_queries/source_time").to_str().unwrap()).expect("could not read source time");
     let to = Vec::load_from(path.join("uniform_queries/target_node").to_str().unwrap()).expect("could not read target node");
 
-    let num_queries = 100;
+    let num_queries = 250;
 
     let mut dijkstra_time = Duration::zero();
     let mut tdcch_time = Duration::zero();
