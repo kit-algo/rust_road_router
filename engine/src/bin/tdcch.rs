@@ -1,6 +1,8 @@
-use std::cmp::Ordering;
-use std::env;
-use std::path::Path;
+use std::{
+    cmp::Ordering,
+    path::Path,
+    env,
+};
 
 use bmw_routing_engine::{
     graph::{
@@ -21,6 +23,7 @@ use bmw_routing_engine::{
 };
 
 use time::Duration;
+use rand::prelude::*;
 
 #[derive(PartialEq,PartialOrd)]
 struct NonNan(f32);
@@ -95,7 +98,6 @@ fn main() {
 
     let graph = TDGraph::new(first_out, head, first_ipp_of_arc, points);
 
-    // let graph = TDGraph::new(first_out, head, first_ipp_of_arc, ipp_departure_time, ipp_travel_time);
     let cch_order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm"));
     let cch = customizable_contraction_hierarchy::contract(&graph, cch_order);
 
@@ -110,34 +112,75 @@ fn main() {
     let mut td_dijk_server = DijkServer::new(graph.clone());
     let mut server = Server::new(&cch, &td_cch_graph);
 
-    let from = Vec::load_from(path.join("uniform_queries/source_node").to_str().unwrap()).expect("could not read source node");
-    let at = Vec::<u32>::load_from(path.join("uniform_queries/source_time").to_str().unwrap()).expect("could not read source time");
-    let to = Vec::load_from(path.join("uniform_queries/target_node").to_str().unwrap()).expect("could not read target node");
+    let mut rng = StdRng::from_seed(Default::default());
 
-    let num_queries = 250;
+    let mut rank_times = vec![Vec::new(); 64];
 
-    let mut dijkstra_time = Duration::zero();
-    let mut tdcch_time = Duration::zero();
-
-    for ((from, to), at) in from.into_iter().zip(to.into_iter()).zip(at.into_iter()).take(num_queries) {
-        let at = Timestamp::new(f64::from(at) / 1000.0);
-        let (ground_truth, time) = measure(|| {
-            td_dijk_server.distance(from, to, at).map(|dist| dist + at)
-        });
-        println!("from {} to {} at {:?} - EA {:?}", from, to, at, ground_truth);
-        dijkstra_time =  dijkstra_time + time;
-
-        tdcch_time = tdcch_time + measure(|| {
-            let dist = server.distance(from, to, at).map(|dist| dist + at);
-            if dist.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY))).fuzzy_eq(ground_truth.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY)))) {
-                println!("TDCCH ✅ {:?} {:?}", dist, ground_truth);
+    for _ in 0..50 {
+        let from: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
+        let at = Timestamp::new(rng.gen_range(0.0, f64::from(period())));
+        td_dijk_server.ranks(from, at, |to, ea_ground_truth, rank| {
+            let (ea, duration) = measure(|| server.distance(from, to, at).map(|dist| dist + at));
+            rank_times[rank].push(duration);
+            if ea.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY))).fuzzy_eq(ea_ground_truth) {
+                println!("TDCCH ✅ {:?} {:?}", ea, ea_ground_truth);
             } else {
-                println!("TDCCH ❌ {:?} {:?}", dist, ground_truth);
+                println!("TDCCH ❌ {:?} {:?}", ea, ea_ground_truth);
             }
-        }).1;
+        });
     }
-    println!("Dijkstra {}", dijkstra_time / (num_queries as i32));
-    println!("TDCCH {}", tdcch_time / (num_queries as i32));
+
+    for (rank, rank_times) in rank_times.into_iter().enumerate() {
+        let count = rank_times.len();
+        if count > 0 {
+            let sum = rank_times.into_iter().fold(Duration::zero(), std::ops::Add::add);
+            let avg = sum / count as i32;
+            println!("rank: {} - avg running time: {}", rank, avg);
+        }
+    }
+
+    let mut query_dir = None;
+    let mut base_dir = Some(path);
+
+    while let Some(base) = base_dir {
+        if base.join("uniform_queries").exists() {
+            query_dir = Some(base.join("uniform_queries"));
+            break;
+        } else {
+            base_dir = base.parent();
+        }
+    }
+
+    if let Some(path) = query_dir {
+        let from = Vec::load_from(path.join("source_node").to_str().unwrap()).expect("could not read source node");
+        let at = Vec::<u32>::load_from(path.join("source_time").to_str().unwrap()).expect("could not read source time");
+        let to = Vec::load_from(path.join("target_node").to_str().unwrap()).expect("could not read target node");
+
+        let num_queries = 50;
+
+        let mut dijkstra_time = Duration::zero();
+        let mut tdcch_time = Duration::zero();
+
+        for ((from, to), at) in from.into_iter().zip(to.into_iter()).zip(at.into_iter()).take(num_queries) {
+            let at = Timestamp::new(f64::from(at) / 1000.0);
+            let (ground_truth, time) = measure(|| {
+                td_dijk_server.distance(from, to, at).map(|dist| dist + at)
+            });
+            println!("from {} to {} at {:?} - EA {:?}", from, to, at, ground_truth);
+            dijkstra_time =  dijkstra_time + time;
+
+            tdcch_time = tdcch_time + measure(|| {
+                let dist = server.distance(from, to, at).map(|dist| dist + at);
+                if dist.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY))).fuzzy_eq(ground_truth.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY)))) {
+                    println!("TDCCH ✅ {:?} {:?}", dist, ground_truth);
+                } else {
+                    println!("TDCCH ❌ {:?} {:?}", dist, ground_truth);
+                }
+            }).1;
+        }
+        println!("Dijkstra {}", dijkstra_time / (num_queries as i32));
+        println!("TDCCH {}", tdcch_time / (num_queries as i32));
+    }
 }
 
 #[derive(Debug)]

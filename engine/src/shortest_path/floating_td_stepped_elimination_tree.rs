@@ -1,5 +1,5 @@
 use crate::graph::floating_time_dependent::*;
-use std::cmp::{min, max};
+use std::cmp::min;
 use super::*;
 use super::timestamped_vector::TimestampedVector;
 use crate::in_range_option::InRangeOption;

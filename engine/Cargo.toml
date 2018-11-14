@@ -11,6 +11,7 @@ postgres = "0.15"
 csv = "^1.0.0-beta.4"
 glob = "0.2.11"
 num-traits = "^0.2.5"
+rand = "0.6"
 
 [dev-dependencies]
 criterion = { version = "0.2", features=['real_blackbox'] }
