@@ -1,7 +1,6 @@
 use crate::graph::floating_time_dependent::*;
 use std::cmp::min;
 use super::*;
-use super::timestamped_vector::TimestampedVector;
 use crate::in_range_option::InRangeOption;
 use crate::graph::floating_time_dependent::SingleDirShortcutGraph;
 
@@ -29,7 +28,7 @@ pub struct NodeData {
 #[derive(Debug)]
 pub struct FloatingTDSteppedEliminationTree<'a, 'b> {
     graph: SingleDirShortcutGraph<'a>,
-    distances: TimestampedVector<NodeData>,
+    distances: Vec<NodeData>,
     elimination_tree: &'b [InRangeOption<NodeId>],
     next: Option<NodeId>,
     origin: Option<NodeId>
@@ -41,7 +40,7 @@ impl<'a, 'b> FloatingTDSteppedEliminationTree<'a, 'b> {
 
         FloatingTDSteppedEliminationTree {
             graph,
-            distances: TimestampedVector::new(n, NodeData { labels: Vec::new(), lower_bound: FlWeight::new(f64::from(INFINITY)), upper_bound: FlWeight::new(f64::from(INFINITY)) }),
+            distances: vec![NodeData { labels: Vec::new(), lower_bound: FlWeight::new(f64::from(INFINITY)), upper_bound: FlWeight::new(f64::from(INFINITY)) }; n],
             elimination_tree,
             next: None,
             origin: None
@@ -49,13 +48,23 @@ impl<'a, 'b> FloatingTDSteppedEliminationTree<'a, 'b> {
     }
 
     pub fn initialize_query(&mut self, from: NodeId) {
+        if let Some(from) = self.origin {
+            let mut next = Some(from);
+            while let Some(node) = next {
+                self.distances[node as usize].labels.clear();
+                self.distances[node as usize].upper_bound = FlWeight::new(f64::from(INFINITY));
+                self.distances[node as usize].lower_bound = FlWeight::new(f64::from(INFINITY));
+                next = self.elimination_tree[node as usize].value();
+            }
+        }
+
         // initialize
         self.origin = Some(from);
         self.next = Some(from);
-        self.distances.reset();
 
         // Starte with origin
-        self.distances.set(from as usize, NodeData { labels: Vec::new(), lower_bound: FlWeight::zero(), upper_bound: FlWeight::zero() });
+        self.distances[from as usize].upper_bound = FlWeight::zero();
+        self.distances[from as usize].lower_bound = FlWeight::zero();
     }
 
     pub fn next_step(&mut self) -> QueryProgress {
@@ -81,7 +90,8 @@ impl<'a, 'b> FloatingTDSteppedEliminationTree<'a, 'b> {
                 if next.upper_bound <= self.distances[target as usize].lower_bound {
                     self.distances[target as usize].lower_bound = next.lower_bound;
                     self.distances[target as usize].upper_bound = next.upper_bound;
-                    self.distances[target as usize].labels = vec![next];
+                    self.distances[target as usize].labels.clear();
+                    self.distances[target as usize].labels.push(next);
                 } else if next.lower_bound < self.distances[target as usize].upper_bound {
                     self.distances[target as usize].lower_bound = min(next.lower_bound, self.distances[target as usize].lower_bound);
                     self.distances[target as usize].upper_bound = min(next.upper_bound, self.distances[target as usize].upper_bound);
