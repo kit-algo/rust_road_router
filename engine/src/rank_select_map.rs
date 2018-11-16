@@ -39,6 +39,7 @@ impl BitVec {
             // TODO: freeing will supply a different alignment (the one of u64)
             // appearently this is not a problem, but it could be some day
             // so we probably should also do the dropping ourselves
+            #[allow(clippy::cast_ptr_alignment)] // the pointer is actually strcter aligned (to CACHE_LINE_WIDTH)
             Vec::from_raw_parts(pointer.as_ptr() as *mut u64, num_ints, num_ints)
         };
 
@@ -63,8 +64,17 @@ impl BitVec {
         self.data[index / STORAGE_BITS] &= !(1 << (index % STORAGE_BITS));
     }
 
+    pub fn unset_all_around(&mut self, index: usize) {
+        assert!(index < self.size, "index: {} size: {}", index, self.size);
+        self.data[index / STORAGE_BITS] = 0;
+    }
+
     pub fn len(&self) -> usize {
         self.size
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.size == 0
     }
 
     pub fn clear(&mut self) {

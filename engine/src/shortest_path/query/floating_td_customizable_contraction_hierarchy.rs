@@ -20,10 +20,13 @@ pub struct Server<'a> {
     backward_tree_path: Vec<NodeId>,
     shortcut_queue: Vec<EdgeId>,
     distances: TimestampedVector<Timestamp>,
+    backward_tree_mask: BitVec,
+    forward_tree_mask: BitVec,
 }
 
 impl<'a> Server<'a> {
     pub fn new(cch_graph: &'a CCHGraph, shortcut_graph: &'a ShortcutGraph<'a>) -> Self {
+        let n = shortcut_graph.original_graph().num_nodes();
         Self {
             forward: FloatingTDSteppedEliminationTree::new(shortcut_graph.upward_graph(), cch_graph.elimination_tree()),
             backward: FloatingTDSteppedEliminationTree::new(shortcut_graph.downward_graph(), cch_graph.elimination_tree()),
@@ -34,11 +37,14 @@ impl<'a> Server<'a> {
             forward_tree_path: Vec::new(),
             backward_tree_path: Vec::new(),
             shortcut_queue: Vec::new(),
-            distances: TimestampedVector::new(shortcut_graph.original_graph().num_nodes(), Timestamp::new(f64::from(INFINITY))),
+            distances: TimestampedVector::new(n, Timestamp::new(f64::from(INFINITY))),
+            forward_tree_mask: BitVec::new(n),
+            backward_tree_mask: BitVec::new(n),
         }
     }
 
     #[allow(clippy::collapsible_if)]
+    #[allow(clippy::cyclomatic_complexity)]
     pub fn distance(&mut self, from: NodeId, to: NodeId, departure_time: Timestamp) -> Option<FlWeight> {
         let from = self.cch_graph.node_order().rank(from);
         let to = self.cch_graph.node_order().rank(to);
@@ -57,14 +63,13 @@ impl<'a> Server<'a> {
         self.forward_tree_path.clear();
         self.backward_tree_path.clear();
         self.shortcut_queue.clear();
-        let mut forward_tree_mask = BitVec::new(n);
-        let mut backward_tree_mask = BitVec::new(n);
 
         while self.forward.peek_next().is_some() || self.backward.peek_next().is_some() {
             if self.forward.peek_next().unwrap_or(n as NodeId) <= self.backward.peek_next().unwrap_or(n as NodeId) {
                 if self.forward.node_data(self.forward.peek_next().unwrap()).lower_bound > self.tentative_distance.1 {
                     self.forward.skip_next();
                 } else if let QueryProgress::Progress(node) = self.forward.next_step() {
+                    self.forward_tree_mask.unset_all_around(node as usize);
                     self.forward_tree_path.push(node);
 
                     let lower_bound = self.forward.node_data(node).lower_bound + self.backward.node_data(node).lower_bound;
@@ -81,6 +86,7 @@ impl<'a> Server<'a> {
                 if self.backward.node_data(self.backward.peek_next().unwrap()).lower_bound > self.tentative_distance.1 {
                     self.backward.skip_next();
                 } else if let QueryProgress::Progress(node) = self.backward.next_step() {
+                    self.backward_tree_mask.unset_all_around(node as usize);
                     self.backward_tree_path.push(node);
 
                     let lower_bound = self.forward.node_data(node).lower_bound + self.backward.node_data(node).lower_bound;
@@ -101,14 +107,14 @@ impl<'a> Server<'a> {
         self.meeting_nodes.retain(|&(_, lower_bound)| lower_bound <= tentative_upper_bound);
 
         for &(node, _) in &self.meeting_nodes {
-            forward_tree_mask.set(node as usize);
-            backward_tree_mask.set(node as usize);
+            self.forward_tree_mask.set(node as usize);
+            self.backward_tree_mask.set(node as usize);
         }
 
         while let Some(node) = self.forward_tree_path.pop() {
-            if forward_tree_mask.get(node as usize) {
+            if self.forward_tree_mask.get(node as usize) {
                 for label in &self.forward.node_data(node).labels {
-                    forward_tree_mask.set(label.parent as usize);
+                    self.forward_tree_mask.set(label.parent as usize);
                     self.shortcut_queue.push(label.shortcut_id);
                 }
             }
@@ -149,9 +155,9 @@ impl<'a> Server<'a> {
         }
 
         while let Some(node) = self.backward_tree_path.pop() {
-            if backward_tree_mask.get(node as usize) {
+            if self.backward_tree_mask.get(node as usize) {
                 for label in &self.backward.node_data(node).labels {
-                    backward_tree_mask.set(label.parent as usize);
+                    self.backward_tree_mask.set(label.parent as usize);
                     let tail = node;
                     let head = label.parent;
                     let t_cur = distances[tail as usize];
