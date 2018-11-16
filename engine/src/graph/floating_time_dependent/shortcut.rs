@@ -196,8 +196,6 @@ impl Shortcut {
             return self.lower_bound;
         }
 
-        debug_assert!(t < period());
-
         if let Some(ipps) = &self.ttf {
             return PiecewiseLinearFunction::new(ipps).evaluate(t)
         }
@@ -211,9 +209,9 @@ impl Shortcut {
                 let (_, source) = match data.binary_search_by_key(&t_period, |(t, _)| *t) {
                     Ok(i) => data[i],
                     Err(i) => {
-                        debug_assert!(data[i-1].0 < t);
+                        debug_assert!(data[i-1].0 < t_period);
                         if i < data.len() {
-                            debug_assert!(t < data[i].0);
+                            debug_assert!(t_period < data[i].0);
                         }
                         data[i-1]
                     }
