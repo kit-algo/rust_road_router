@@ -19,10 +19,10 @@ pub struct SeparatorTree {
 pub struct CCHGraph {
     first_out: Vec<EdgeId>,
     head: Vec<NodeId>,
+    tail: Vec<NodeId>,
     node_order: NodeOrder,
     original_edge_to_ch_edge: Vec<EdgeId>,
     elimination_tree: Vec<InRangeOption<NodeId>>,
-    link_id_to_tail_mapper: LinkIdToTailMapper,
 }
 
 impl CCHGraph {
@@ -34,6 +34,9 @@ impl CCHGraph {
 
         let graph = Self::adjancecy_lists_to_first_out_graph(contracted_graph.nodes);
         let n = graph.num_nodes() as NodeId;
+        let m = graph.num_arcs();
+
+        let mut tail = vec![0; m];
 
         let original_edge_to_ch_edge = (0..n).flat_map(|node| {
             {
@@ -52,7 +55,10 @@ impl CCHGraph {
             }
         }).collect();
 
-        let link_id_to_tail_mapper = LinkIdToTailMapper::new(&graph);
+        for node in 0..n {
+            tail[graph.neighbor_edge_indices_usize(node)].iter_mut().for_each(|tail| *tail = node);
+        }
+
         let (first_out, head, _) = graph.decompose();
 
         CCHGraph {
@@ -61,7 +67,7 @@ impl CCHGraph {
             node_order,
             original_edge_to_ch_edge,
             elimination_tree,
-            link_id_to_tail_mapper
+            tail
         }
     }
 
@@ -438,7 +444,7 @@ impl CCHGraph {
     }
 
     pub fn edge_id_to_tail(&self, edge_id: EdgeId) -> NodeId {
-        self.link_id_to_tail_mapper.link_id_to_tail(edge_id)
+        self.tail[edge_id as usize]
     }
 
     pub fn head(&self, edge_id: EdgeId) -> NodeId {
