@@ -5,7 +5,7 @@ use self::piecewise_linear_function::*;
 
 mod geometry;
 use self::geometry::*;
-pub use self::geometry::Point;
+pub use self::geometry::TTFPoint;
 
 mod graph;
 pub use self::graph::Graph as TDGraph;

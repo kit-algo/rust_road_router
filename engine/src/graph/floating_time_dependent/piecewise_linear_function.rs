@@ -4,11 +4,11 @@ use self::debug::debug_merge;
 
 #[derive(Debug)]
 pub struct PiecewiseLinearFunction<'a> {
-    ipps: &'a [Point],
+    ipps: &'a [TTFPoint],
 }
 
 impl<'a> PiecewiseLinearFunction<'a> {
-    pub fn new(ipps: &'a [Point]) -> PiecewiseLinearFunction<'a> {
+    pub fn new(ipps: &'a [TTFPoint]) -> PiecewiseLinearFunction<'a> {
         debug_assert!(ipps.first().unwrap().at == Timestamp::zero(), "{:?}", ipps);
         debug_assert!(ipps.first().unwrap().val == ipps.last().unwrap().val, "{:?}", ipps); // intentional non fuzzy cmp
         debug_assert!(ipps.len() == 1 || ipps.last().unwrap().at == period(), "{:?}", ipps);
@@ -61,26 +61,26 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
-    pub fn link(&self, other: &Self) -> Vec<Point> {
-        if let [Point { val, .. }] = &self.ipps {
-            if let [Point { val: other, .. }] = &other.ipps {
-                return vec![Point { at: Timestamp::zero(), val: val + other }]
+    pub fn link(&self, other: &Self) -> Vec<TTFPoint> {
+        if let [TTFPoint { val, .. }] = &self.ipps {
+            if let [TTFPoint { val: other, .. }] = &other.ipps {
+                return vec![TTFPoint { at: Timestamp::zero(), val: val + other }]
             } else {
                 let zero_val = other.eval(val.into());
-                return std::iter::once(Point { at: Timestamp::zero(), val: zero_val + val })
+                return std::iter::once(TTFPoint { at: Timestamp::zero(), val: zero_val + val })
                     .chain(
-                        other.ipps.iter().filter(|p| p.at > val.into()).map(|p| Point { at: p.at - val, val: p.val + val })
+                        other.ipps.iter().filter(|p| p.at > val.into()).map(|p| TTFPoint { at: p.at - val, val: p.val + val })
                     ).chain(
-                        other.ipps.iter().filter(|p| p.at < val.into()).map(|p| Point { at: p.at + FlWeight::from(period()) - val, val: p.val + val })
-                    ).chain(std::iter::once(Point { at: period(), val: zero_val + val }))
+                        other.ipps.iter().filter(|p| p.at < val.into()).map(|p| TTFPoint { at: p.at + FlWeight::from(period()) - val, val: p.val + val })
+                    ).chain(std::iter::once(TTFPoint { at: period(), val: zero_val + val }))
                     .fold(Vec::with_capacity(other.ipps.len() + 2), |mut acc, p| {
                         Self::append_point(&mut acc, p);
                         acc
                     })
             }
         }
-        if let [Point { val, .. }] = &other.ipps {
-            return self.ipps.iter().map(|p| Point { at: p.at, val: p.val + val }).collect()
+        if let [TTFPoint { val, .. }] = &other.ipps {
+            return self.ipps.iter().map(|p| TTFPoint { at: p.at, val: p.val + val }).collect()
         }
 
         let mut result = Vec::with_capacity(self.ipps.len() + other.ipps.len() + 1);
@@ -122,11 +122,11 @@ impl<'a> PiecewiseLinearFunction<'a> {
             x = min(x, period());
             x = max(x, Timestamp::zero());
 
-            Self::append_point(&mut result, Point { at: x, val: y });
+            Self::append_point(&mut result, TTFPoint { at: x, val: y });
         }
 
         let zero_val = result[0].val;
-        Self::append_point(&mut result, Point { at: period(), val: zero_val });
+        Self::append_point(&mut result, TTFPoint { at: period(), val: zero_val });
 
         debug_assert!(result.len() <= self.ipps.len() + other.ipps.len() + 1);
 
@@ -134,7 +134,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     #[allow(clippy::cyclomatic_complexity)]
-    pub fn merge(&self, other: &Self) -> (Vec<Point>, Vec<(Timestamp, bool)>) {
+    pub fn merge(&self, other: &Self) -> (Vec<TTFPoint>, Vec<(Timestamp, bool)>) {
         if self.upper_bound() < other.lower_bound() {
             return (self.ipps.to_vec(), vec![(Timestamp::zero(), true)])
         } else if other.upper_bound() < self.lower_bound() {
@@ -348,7 +348,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         CLOSE_IPPS_COUNT.with(|count| count.set(count.get() + (close_ipps_counter * 10000) / (f.ipps.len() + g.ipps.len())));
 
         if result.len() > 1 {
-            let p = Point { at: period(), val: result[0].val };
+            let p = TTFPoint { at: period(), val: result[0].val };
             Self::append_point(&mut result, p);
         }
 
@@ -361,7 +361,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         (result, better)
     }
 
-    fn append_point(points: &mut Vec<Point>, point: Point) {
+    fn append_point(points: &mut Vec<TTFPoint>, point: TTFPoint) {
         debug_assert!(point.val >= FlWeight::new(0.0), "{:?}", point);
         if let Some(p) = points.last() {
             if p.at.fuzzy_eq(point.at) && p.val.fuzzy_eq(point.val) { return }
@@ -371,7 +371,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         points.push(point)
     }
 
-    fn douglas_peuker(&self, result: &mut Vec<Point>) {
+    fn douglas_peuker(&self, result: &mut Vec<TTFPoint>) {
         if self.ipps.len() <= 2 {
             result.extend_from_slice(self.ipps);
             return
@@ -396,13 +396,13 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
-    pub fn approximate(&self) -> Vec<Point> {
+    pub fn approximate(&self) -> Vec<TTFPoint> {
         let mut result = Vec::new();
         self.douglas_peuker(&mut result);
         result
     }
 
-    // pub fn approximate(&self) -> Vec<Point> {
+    // pub fn approximate(&self) -> Vec<TTFPoint> {
     //     let mut result = Vec::new();
     //     let bounds = [self.ipps.to_vec(), self.ipps.to_vec()];
     //     let mut ps: [usize; 2] = Default::default();
@@ -451,17 +451,17 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
 #[derive(Debug)]
 pub struct Cursor<'a> {
-    ipps: &'a [Point],
+    ipps: &'a [TTFPoint],
     current_index: usize,
     offset: FlWeight,
 }
 
 impl<'a> Cursor<'a> {
-    fn new(ipps: &'a [Point]) -> Self {
+    fn new(ipps: &'a [TTFPoint]) -> Self {
         Cursor { ipps, current_index: 0, offset: FlWeight::new(0.0) }
     }
 
-    fn starting_at_or_after(ipps: &'a [Point], t: Timestamp) -> Self {
+    fn starting_at_or_after(ipps: &'a [TTFPoint], t: Timestamp) -> Self {
         let (offset, t) = t.split_of_period();
 
         if ipps.len() == 1 {
@@ -490,11 +490,11 @@ impl<'a> Cursor<'a> {
         }
     }
 
-    fn cur(&self) -> Point {
+    fn cur(&self) -> TTFPoint {
         self.ipps[self.current_index].shifted(self.offset)
     }
 
-    fn next(&self) -> Point {
+    fn next(&self) -> TTFPoint {
         if self.ipps.len() == 1 {
             self.ipps.first().unwrap().shifted(self.offset + FlWeight::from(period()))
         } else {
@@ -502,7 +502,7 @@ impl<'a> Cursor<'a> {
         }
     }
 
-    fn prev(&self) -> Point {
+    fn prev(&self) -> TTFPoint {
         if self.ipps.len() == 1 {
             self.ipps.first().unwrap().shifted(self.offset - FlWeight::from(period()))
         } else if self.current_index == 0 {
@@ -529,34 +529,34 @@ mod tests {
     #[test]
     fn test_static_fn_cursor() {
         run_test_with_periodicity(Timestamp::new(10.0), || {
-            let ipps = [Point { at: Timestamp::zero(), val: FlWeight::new(5.0) }];
+            let ipps = [TTFPoint { at: Timestamp::zero(), val: FlWeight::new(5.0) }];
             let mut cursor = Cursor::new(&ipps);
-            assert_eq!(cursor.cur(), Point { at: Timestamp::zero(), val: FlWeight::new(5.0) });
-            assert_eq!(cursor.next(), Point { at: period(), val: FlWeight::new(5.0) });
-            assert_eq!(cursor.prev(), Point { at: Timestamp::zero() - FlWeight::from(period()), val: FlWeight::new(5.0) });
+            assert_eq!(cursor.cur(), TTFPoint { at: Timestamp::zero(), val: FlWeight::new(5.0) });
+            assert_eq!(cursor.next(), TTFPoint { at: period(), val: FlWeight::new(5.0) });
+            assert_eq!(cursor.prev(), TTFPoint { at: Timestamp::zero() - FlWeight::from(period()), val: FlWeight::new(5.0) });
             cursor.advance();
-            assert_eq!(cursor.cur(), Point { at: period(), val: FlWeight::new(5.0) });
-            assert_eq!(cursor.next(), Point { at: Timestamp::new(20.0), val: FlWeight::new(5.0) });
-            assert_eq!(cursor.prev(), Point { at: Timestamp::zero(), val: FlWeight::new(5.0) });
+            assert_eq!(cursor.cur(), TTFPoint { at: period(), val: FlWeight::new(5.0) });
+            assert_eq!(cursor.next(), TTFPoint { at: Timestamp::new(20.0), val: FlWeight::new(5.0) });
+            assert_eq!(cursor.prev(), TTFPoint { at: Timestamp::zero(), val: FlWeight::new(5.0) });
         });
     }
 
     #[test]
     fn test_dyn_fn_cursor() {
         run_test_with_periodicity(Timestamp::new(10.0), || {
-            let ipps = [Point { at: Timestamp::zero(), val: FlWeight::new(5.0) }, Point { at: Timestamp::new(5.0), val: FlWeight::new(7.0) }, Point { at: period(), val: FlWeight::new(5.0) }];
+            let ipps = [TTFPoint { at: Timestamp::zero(), val: FlWeight::new(5.0) }, TTFPoint { at: Timestamp::new(5.0), val: FlWeight::new(7.0) }, TTFPoint { at: period(), val: FlWeight::new(5.0) }];
             let mut cursor = Cursor::new(&ipps);
-            assert_eq!(cursor.cur(), Point { at: Timestamp::zero(), val: FlWeight::new(5.0) });
-            assert_eq!(cursor.next(), Point { at: Timestamp::new(5.0), val: FlWeight::new(7.0) });
-            assert_eq!(cursor.prev(), Point { at: Timestamp::new(-5.0), val: FlWeight::new(7.0) });
+            assert_eq!(cursor.cur(), TTFPoint { at: Timestamp::zero(), val: FlWeight::new(5.0) });
+            assert_eq!(cursor.next(), TTFPoint { at: Timestamp::new(5.0), val: FlWeight::new(7.0) });
+            assert_eq!(cursor.prev(), TTFPoint { at: Timestamp::new(-5.0), val: FlWeight::new(7.0) });
             cursor.advance();
-            assert_eq!(cursor.cur(), Point { at: Timestamp::new(5.0), val: FlWeight::new(7.0) });
-            assert_eq!(cursor.next(), Point { at: period(), val: FlWeight::new(5.0) });
-            assert_eq!(cursor.prev(), Point { at: Timestamp::zero(), val: FlWeight::new(5.0) });
+            assert_eq!(cursor.cur(), TTFPoint { at: Timestamp::new(5.0), val: FlWeight::new(7.0) });
+            assert_eq!(cursor.next(), TTFPoint { at: period(), val: FlWeight::new(5.0) });
+            assert_eq!(cursor.prev(), TTFPoint { at: Timestamp::zero(), val: FlWeight::new(5.0) });
             cursor.advance();
-            assert_eq!(cursor.cur(), Point { at: period(), val: FlWeight::new(5.0) });
-            assert_eq!(cursor.next(), Point { at: Timestamp::new(15.0), val: FlWeight::new(7.0) });
-            assert_eq!(cursor.prev(), Point { at: Timestamp::new(5.0), val: FlWeight::new(7.0) });
+            assert_eq!(cursor.cur(), TTFPoint { at: period(), val: FlWeight::new(5.0) });
+            assert_eq!(cursor.next(), TTFPoint { at: Timestamp::new(15.0), val: FlWeight::new(7.0) });
+            assert_eq!(cursor.prev(), TTFPoint { at: Timestamp::new(5.0), val: FlWeight::new(7.0) });
         });
     }
 }
@@ -569,7 +569,7 @@ mod debug {
     use std::process::{Command, Stdio};
     use std::env;
 
-    pub fn debug_merge(f: &Cursor, g: &Cursor, merged: &[Point], better: &[(Timestamp, bool)]) {
+    pub fn debug_merge(f: &Cursor, g: &Cursor, merged: &[TTFPoint], better: &[(Timestamp, bool)]) {
         if let Ok(mut file) = File::create(format!("debug-{}-{}.py", f64::from(f.cur().at), f64::from(g.cur().at))) {
             write_python(&mut file, f, g, merged, better).unwrap_or_else(|_| println!("failed to write debug script to file"));
         }
@@ -583,7 +583,7 @@ mod debug {
         }
     }
 
-    fn write_python<O: Write>(output: &mut O, f: &Cursor, g: &Cursor, merged: &[Point], better: &[(Timestamp, bool)]) -> Result<(), Error> {
+    fn write_python<O: Write>(output: &mut O, f: &Cursor, g: &Cursor, merged: &[TTFPoint], better: &[(Timestamp, bool)]) -> Result<(), Error> {
         writeln!(output, "
 import numpy as np
 import matplotlib as mpl

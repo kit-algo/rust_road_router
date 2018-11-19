@@ -4,7 +4,7 @@ use std::cmp::min;
 #[derive(Debug, Clone)]
 pub struct Shortcut {
     sources: Sources,
-    ttf: Option<Vec<Point>>,
+    ttf: Option<Vec<TTFPoint>>,
     pub lower_bound: FlWeight,
     pub upper_bound: FlWeight
 }

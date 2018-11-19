@@ -8,14 +8,14 @@ pub struct Graph {
     first_out: Vec<EdgeId>,
     head: Vec<NodeId>,
     first_ipp_of_arc: Vec<IPPIndex>,
-    ipps: Vec<Point>,
+    ipps: Vec<TTFPoint>,
 }
 
 impl Graph {
     pub fn new(first_out: Vec<EdgeId>,
                head: Vec<NodeId>,
                first_ipp_of_arc: Vec<IPPIndex>,
-               ipps: Vec<Point>) -> Graph {
+               ipps: Vec<TTFPoint>) -> Graph {
         Graph { first_out, head, first_ipp_of_arc, ipps }
     }
 
