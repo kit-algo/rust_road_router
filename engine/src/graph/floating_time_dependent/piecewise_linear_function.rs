@@ -356,7 +356,9 @@ impl<'a> PiecewiseLinearFunction<'a> {
         for better_fns in better.windows(2) {
             debug_assert_ne!(better_fns[0].1, better_fns[1].1, "{:?}", debug_merge(&f, &g, &result, &better));
         }
-        debug_assert_eq!(better.first().map(|(_, better_fn)| better_fn), better.last().map(|(_, better_fn)| better_fn), "{:?}", debug_merge(&f, &g, &result, &better));
+        if !f.cur().val.fuzzy_eq(g.cur().val) {
+            debug_assert_eq!(better.first().map(|(_, better_fn)| better_fn), better.last().map(|(_, better_fn)| better_fn), "{:?}", debug_merge(&f, &g, &result, &better));
+        }
 
         (result, better)
     }
