@@ -56,7 +56,7 @@ pub fn intersection_point(f1: &TTFPoint, f2: &TTFPoint, g1: &TTFPoint, g2: &TTFP
     let div = perp_dot_product(&(g1 - g2), &(f2 - f1));
 
     #[allow(clippy::float_cmp)]
-    debug_assert!(div != 0.0);
+    debug_assert!(div != 0.0, "{:?} {:?} {:?} {:?}", f1, f2, g1, g2);
     let frac = nom / div;
 
     TTFPoint {

@@ -375,13 +375,15 @@ impl CCHGraph {
 
             for current_node in 0..n {
                 if current_node > 0 && current_node % (n / 100) == 0 || self.degree(current_node) > 50 {
-                    println!("t: {}s, rank {} (deg {}), {} ipps on {} active shortcuts (avg {} each), {} switch points, close ipps: {:.5}%, merged {} plfs, linked {} plfs ({} unnec.), {} triangles",
+                    println!("t: {}s, rank {} (deg {}), {} ipps on {} active shortcuts (avg {} each, reduced {}/{}), {} switch points, close ipps: {:.5}%, merged {} plfs, linked {} plfs ({} unnec.), {} triangles",
                         timer.get_passed_ms() / 1000,
                         current_node,
                         self.degree(current_node),
                         IPP_COUNT.with(|count| count.get()),
                         ACTIVE_SHORTCUTS.with(|count| count.get()),
                         IPP_COUNT.with(|count| count.get()) / (ACTIVE_SHORTCUTS.with(|count| count.get())+1),
+                        SAVED_BY_APPROX.with(|count| count.get()),
+                        CONSIDERED_FOR_APPROX.with(|count| count.get()),
                         PATH_SOURCES_COUNT.with(|count| count.get()),
                         CLOSE_IPPS_COUNT.with(|count| count.get()) as f64 / f64::from(merge_count) / 100.0,
                         ACTUALLY_MERGED.with(|count| count.get()),
@@ -418,11 +420,13 @@ impl CCHGraph {
                 }
             }
 
-            println!("t: {}s, done, {} ipps on {} active shortcuts (avg {} each), {} switch points, close ipps: {:.5}%, merged {} plfs, linked {} plfs ({} unnec.), {} triangles",
+            println!("t: {}s, done, {} ipps on {} active shortcuts (avg {} each, reduced {}/{}), {} switch points, close ipps: {:.5}%, merged {} plfs, linked {} plfs ({} unnec.), {} triangles",
                 timer.get_passed_ms() / 1000,
                 IPP_COUNT.with(|count| count.get()),
                 ACTIVE_SHORTCUTS.with(|count| count.get()),
                 IPP_COUNT.with(|count| count.get()) / (ACTIVE_SHORTCUTS.with(|count| count.get())+1),
+                SAVED_BY_APPROX.with(|count| count.get()),
+                CONSIDERED_FOR_APPROX.with(|count| count.get()),
                 PATH_SOURCES_COUNT.with(|count| count.get()),
                 CLOSE_IPPS_COUNT.with(|count| count.get()) as f64 / f64::from(merge_count) / 100.0,
                 ACTUALLY_MERGED.with(|count| count.get()),

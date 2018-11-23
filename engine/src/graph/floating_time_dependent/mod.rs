@@ -272,3 +272,5 @@ thread_local! { pub static ACTUALLY_MERGED: Cell<usize> = Cell::new(0); }
 thread_local! { pub static ACTUALLY_LINKED: Cell<usize> = Cell::new(0); }
 thread_local! { pub static ACTIVE_SHORTCUTS: Cell<usize> = Cell::new(0); }
 thread_local! { pub static UNNECESSARY_LINKED: Cell<usize> = Cell::new(0); }
+thread_local! { pub static CONSIDERED_FOR_APPROX: Cell<usize> = Cell::new(0); }
+thread_local! { pub static SAVED_BY_APPROX: Cell<usize> = Cell::new(0); }

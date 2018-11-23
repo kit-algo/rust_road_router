@@ -61,7 +61,7 @@ impl Shortcut {
 
             let self_plf = self.plf(shortcut_graph);
 
-            let linked_ipps = first_plf.link(&second_plf);
+            let mut linked_ipps = first_plf.link(&second_plf);
             ACTUALLY_LINKED.with(|count| count.set(count.get() + 1));
 
             let linked = PiecewiseLinearFunction::new(&linked_ipps);
@@ -71,6 +71,13 @@ impl Shortcut {
             if self_plf.lower_bound() >= other_upper_bound {
                 self.upper_bound = min(self.upper_bound, PiecewiseLinearFunction::new(&linked_ipps).upper_bound());
                 debug_assert!(self.upper_bound >= self.lower_bound);
+                if linked_ipps.len() > 1_000_000 {
+                    let old = linked_ipps.len();
+                    CONSIDERED_FOR_APPROX.with(|count| count.set(count.get() + old));
+                    // linked_ipps = Imai::new(&linked_ipps, APPROX.into(), APPROX.into(), true, true).compute();
+                    linked_ipps = PiecewiseLinearFunction::new(&linked_ipps).approximate();
+                    SAVED_BY_APPROX.with(|count| count.set(count.get() + old - linked_ipps.len()));
+                }
                 self.ttf = Some(linked_ipps);
                 self.sources = Sources::One(other_data);
                 UNNECESSARY_LINKED.with(|count| count.set(count.get() + 1));
@@ -80,7 +87,14 @@ impl Shortcut {
             }
 
             ACTUALLY_MERGED.with(|count| count.set(count.get() + 1));
-            let (merged, intersection_data) = self_plf.merge(&linked);
+            let (mut merged, intersection_data) = self_plf.merge(&linked);
+            if merged.len() > 1_000_000 {
+                let old = merged.len();
+                CONSIDERED_FOR_APPROX.with(|count| count.set(count.get() + old));
+                // merged = Imai::new(&merged, APPROX.into(), APPROX.into(), true, true).compute();
+                merged = PiecewiseLinearFunction::new(&merged).approximate();
+                SAVED_BY_APPROX.with(|count| count.set(count.get() + old - merged.len()));
+            }
 
             self.upper_bound = min(self.upper_bound, PiecewiseLinearFunction::new(&merged).upper_bound());
             debug_assert!(self.upper_bound >= self.lower_bound);
