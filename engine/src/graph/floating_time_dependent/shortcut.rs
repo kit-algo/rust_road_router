@@ -172,18 +172,27 @@ impl Shortcut {
                     new_sources.push((at, *source));
                 }
             } else {
-                self_currently_better = intersection_iter.peek().unwrap().1;
-
-                if self_currently_better {
-                    if at > intersection_iter.peek().unwrap().0 {
-                        new_sources.push((intersection_iter.peek().unwrap().0, *prev_source));
+                while let Some(&(next_change, better)) = intersection_iter.peek() {
+                    if next_change > at {
+                        break;
                     }
-                    new_sources.push((at, *source));
-                } else {
-                    new_sources.push((intersection_iter.peek().unwrap().0, other_data));
+
+                    self_currently_better = better;
+
+                    if self_currently_better {
+                        if next_change < at {
+                            new_sources.push((next_change, *prev_source));
+                        }
+                    } else {
+                        new_sources.push((next_change, other_data));
+                    }
+
+                    intersection_iter.next();
                 }
 
-                intersection_iter.next();
+                if self_currently_better {
+                    new_sources.push((at, *source));
+                }
             }
 
             prev_source = source;
@@ -199,6 +208,9 @@ impl Shortcut {
 
         debug_assert!(new_sources.len() >= 2, "old: {:?}\nintersections: {:?}\nnew: {:?}", sources, debug_intersections, new_sources);
         debug_assert!(new_sources.first().unwrap().0 == Timestamp::zero());
+        for sources in new_sources.windows(2) {
+            debug_assert!(sources[0].0 < sources[1].0);
+        }
         Sources::Multi(new_sources)
     }
 
