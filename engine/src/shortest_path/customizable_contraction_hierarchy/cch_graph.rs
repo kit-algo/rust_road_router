@@ -340,6 +340,8 @@ impl CCHGraph {
 
             for current_node in 0..n {
                 for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
+                    upward[edge_id as usize].update_is_constant();
+                    downward[edge_id as usize].update_is_constant();
                     node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
                 }
 

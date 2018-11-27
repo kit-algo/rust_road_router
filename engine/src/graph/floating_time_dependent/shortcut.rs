@@ -1,12 +1,14 @@
 use super::*;
 use std::cmp::min;
+use std::collections::LinkedList;
 
 #[derive(Debug, Clone)]
 pub struct Shortcut {
     sources: Sources,
     ttf: Option<Vec<TTFPoint>>,
     pub lower_bound: FlWeight,
-    pub upper_bound: FlWeight
+    pub upper_bound: FlWeight,
+    constant: bool,
 }
 
 impl Shortcut {
@@ -19,9 +21,10 @@ impl Shortcut {
                     ttf: None,
                     lower_bound: original_graph.travel_time_function(edge_id).lower_bound(),
                     upper_bound: original_graph.travel_time_function(edge_id).upper_bound(),
+                    constant: false,
                 }
             },
-            None => Shortcut { sources: Sources::None, ttf: None, lower_bound: FlWeight::new(f64::from(INFINITY)), upper_bound: FlWeight::new(f64::from(INFINITY)) },
+            None => Shortcut { sources: Sources::None, ttf: None, lower_bound: FlWeight::new(f64::from(INFINITY)), upper_bound: FlWeight::new(f64::from(INFINITY)), constant: false },
         }
     }
 
@@ -139,6 +142,10 @@ impl Shortcut {
         }
     }
 
+    pub fn update_is_constant(&mut self) {
+        self.constant = self.upper_bound == self.lower_bound;
+    }
+
     pub fn clear_plf(&mut self) {
         IPP_COUNT.with(|count| count.set(count.get() - self.ttf.as_ref().map(|ipps| ipps.len()).unwrap_or(0)));
         if self.ttf.is_some() { ACTIVE_SHORTCUTS.with(|count| count.set(count.get() - 1)); }
@@ -215,7 +222,7 @@ impl Shortcut {
     pub fn evaluate<F>(&self, t: Timestamp, shortcut_graph: &ShortcutGraph, f: &mut F) -> FlWeight
         where F: (FnMut(bool, EdgeId, Timestamp) -> bool)
     {
-        if cfg!(not(feature = "tdcch-approx")) && self.lower_bound == self.upper_bound {
+        if self.constant {
             return self.lower_bound;
         }
 
