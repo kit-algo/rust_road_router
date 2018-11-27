@@ -15,10 +15,3 @@ nav-types = "^0.3.0"
 csv = "^1.0.2"
 glob = "^0.2.11"
 rand = "^0.6.1"
-
-[dev-dependencies]
-criterion = { version = "0.2", features=['real_blackbox'] }
-
-[[bench]]
-name = "mod_benchmark"
-harness = false
