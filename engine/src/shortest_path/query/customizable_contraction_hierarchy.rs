@@ -61,7 +61,7 @@ impl<'a> Server<'a> {
         }
     }
 
-    pub fn path(&self) -> LinkedList<NodeId> {
+    pub fn path(&self) -> Vec<NodeId> {
         let mut forwad_path = LinkedList::new();
         forwad_path.push_front(self.meeting_node);
 
@@ -102,7 +102,7 @@ impl<'a> Server<'a> {
         for node in &mut forwad_path {
             *node = self.cch_graph.node_order().node(*node);
         }
-        forwad_path
+        forwad_path.into_iter().collect()
     }
 
     fn expand_shortcut(&self, edge_id: EdgeId, direction: Direction) -> LinkedList<NodeId> {

@@ -11,8 +11,6 @@ use bmw_routing_engine::{
         query::{
             dijkstra::Server as DijkServer,
             bidirectional_dijkstra::Server as BiDijkServer,
-            r#async::dijkstra::Server as AsyncDijkServer,
-            r#async::bidirectional_dijkstra::Server as AsyncBiDijkServer,
             contraction_hierarchy::Server as CHServer,
         }
     },
@@ -36,11 +34,8 @@ fn main() {
     let ground_truth = Vec::load_from(path.join("test/travel_time_length").to_str().unwrap()).expect("could not read travel_time_length");
 
     let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
-    let arcd_graph = FirstOutGraph::new(first_out.clone(), head.clone(), travel_time.clone());
     let mut simple_server = DijkServer::new(graph.clone());
     let mut bi_dir_server = BiDijkServer::new(graph.clone());
-    let async_server = AsyncDijkServer::new(arcd_graph.clone());
-    let mut async_bi_dir_server = AsyncBiDijkServer::new(arcd_graph);
 
     let ch_first_out = Vec::load_from(path.join("travel_time_ch/first_out").to_str().unwrap()).expect("could not read travel_time_ch/first_out");
     let ch_head = Vec::load_from(path.join("travel_time_ch/head").to_str().unwrap()).expect("could not read travel_time_ch/head");
@@ -64,12 +59,6 @@ fn main() {
         });
         report_time("bidir dijkstra", || {
             assert_eq!(bi_dir_server.distance(from, to), ground_truth);
-        });
-        report_time("async dijkstra", || {
-            assert_eq!(async_server.distance(from, to), ground_truth);
-        });
-        report_time("async bidir dijkstra", || {
-            assert_eq!(async_bi_dir_server.distance(from, to), ground_truth);
         });
         report_time("CH", || {
             assert_eq!(ch_server.distance(from, to), ground_truth);

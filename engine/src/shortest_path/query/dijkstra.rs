@@ -1,7 +1,5 @@
 use super::*;
 
-use std::collections::LinkedList;
-
 #[derive(Debug)]
 pub struct Server<Graph: for<'a> LinkIterGraph<'a>> {
     dijkstra: SteppedDijkstra<Graph>,
@@ -29,14 +27,16 @@ impl<Graph: for<'a> LinkIterGraph<'a>> Server<Graph> {
         self.dijkstra.tentative_distance(node) < INFINITY
     }
 
-    pub fn path(&self) -> LinkedList<NodeId> {
-        let mut path = LinkedList::new();
-        path.push_front(self.dijkstra.query().to);
+    pub fn path(&self) -> Vec<NodeId> {
+        let mut path = Vec::new();
+        path.push(self.dijkstra.query().to);
 
-        while *path.front().unwrap() != self.dijkstra.query().from {
-            let next = self.dijkstra.predecessor(*path.front().unwrap());
-            path.push_front(next);
+        while *path.last().unwrap() != self.dijkstra.query().from {
+            let next = self.dijkstra.predecessor(*path.last().unwrap());
+            path.push(next);
         }
+
+        path.reverse();
 
         path
     }

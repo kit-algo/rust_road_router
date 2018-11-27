@@ -1,5 +1,5 @@
 [workspace]
-members = ["engine", "server", "search_space_visualization"]
+members = ["engine", "server"]
 
 [profile.dev]
 opt-level = 3
@@ -7,4 +7,3 @@ opt-level = 3
 debug = true
 incremental = false
 codegen-units = 1
-# debug-assertions = true

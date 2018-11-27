@@ -8,7 +8,6 @@ use std::fmt;
 
 use nav_types::WGS84;
 
-pub mod postgres_source;
 pub mod csv_source;
 pub mod link_id_mapper;
 
@@ -34,6 +33,12 @@ pub enum RdfLinkDirection {
     Both
 }
 
+impl Default for RdfLinkDirection {
+    fn default() -> Self {
+        RdfLinkDirection::Both
+    }
+}
+
 impl FromStr for RdfLinkDirection {
     type Err = DirectionParseError;
 
@@ -54,7 +59,7 @@ pub struct RdfLink {
     nonref_node_id: i64
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default, Clone)]
 pub struct RdfNavLink {
     link_id: i64,
     travel_direction: RdfLinkDirection,
@@ -131,23 +136,43 @@ pub trait RdfDataSource {
     fn link_geometries(&self) -> Vec<RdfLinkGeometry>;
 }
 
-pub fn read_graph(source: &RdfDataSource) -> (OwnedGraph, Vec<f32>, Vec<f32>, RankSelectMap, Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>) {
+pub fn read_graph(source: &RdfDataSource, (min_lat, min_lon): (i64, i64), (max_lat, max_lon): (i64, i64)) -> (OwnedGraph, Vec<f32>, Vec<f32>, RankSelectMap, Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>) {
+
+    let included = |node: &RdfNode| {
+        node.lat >= min_lat && node.lat <= max_lat && node.lon >= min_lon && node.lon <= max_lon
+    };
+
+    println!("read nodes");
+
+    let input_nodes = source.nodes();
+    let max_node_id = input_nodes.iter().filter(|&n| included(n)).map(|node| node.node_id).max().unwrap();
+    let mut filtered_node_ids = BitVec::new(max_node_id as usize + 1);
+    for node in input_nodes.iter().filter(|&n| included(n)) {
+        filtered_node_ids.set(node.node_id as usize);
+    }
+
     println!("read nav links");
     // start with all nav links
-    let mut nav_links: Vec<RdfNavLink> = source.nav_links();
-    println!("sort nav links");
-    nav_links.sort_by_key(|nav_link| nav_link.link_id);
+    let nav_links: Vec<RdfNavLink> = source.nav_links();
 
     println!("build link id mapping");
     // local ids for links
-    let mut link_id_mapping = BitVec::new(nav_links.last().unwrap().link_id as usize + 1);
+    let mut link_id_mapping = BitVec::new(nav_links.iter().map(|l| l.link_id).max().unwrap() as usize + 1);
     for nav_link in &nav_links {
         link_id_mapping.set(nav_link.link_id as usize);
     }
     let link_id_mapping = RankSelectMap::new(link_id_mapping);
 
+    println!("sort nav links");
+    let mut sorted_nav_links = vec![RdfNavLink::default(); nav_links.len() + 1];
+    for link in nav_links {
+        let rank = link_id_mapping.get(link.link_id as usize).unwrap();
+        sorted_nav_links[rank] = link;
+    }
+    let nav_links = sorted_nav_links;
+
     println!("read links");
-    let links = source.links();
+    let links: Vec<_> = source.links().into_iter().filter(|link| filtered_node_ids.get(link.ref_node_id as usize) && filtered_node_ids.get(link.nonref_node_id as usize)).collect();
     let maximum_node_id = links.iter().flat_map(|link| iter::once(link.ref_node_id).chain(iter::once(link.nonref_node_id)) ).max().unwrap();
 
     // a data structure to do the global to local node ids mapping
@@ -206,9 +231,9 @@ pub fn read_graph(source: &RdfDataSource) -> (OwnedGraph, Vec<f32>, Vec<f32>, Ra
         geometries.sort_by_key(|geometry| geometry.seq_num);
     }
 
-    println!("read nodes");
+    println!("sort nodes");
     let mut nodes: Vec<RdfNode> = vec![RdfNode { node_id: 0, lat: 0, lon: 0, z_coord: None }; n];
-    for node in source.nodes() {
+    for node in input_nodes {
         if let Some(index) = node_id_mapping.get(node.node_id as usize) {
             nodes[index] = node;
         }

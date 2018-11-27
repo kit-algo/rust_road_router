@@ -53,19 +53,19 @@ Might lead to browser timeouts.
 The link ids have to exist within the given here map.
 If not the query will return a HTTP 500.
 Again probably not the best API design in the moment.
-The direction parameter indicates if the link is to be taken in `from_ref` direction (`true`) or `to_ref` (`false`).
+The direction parameter indicates if the link is to be taken in `FromRef` direction (`true`) or `FromRef` (`false`).
 Finally the fraction indicates where on the link the query should start.
 For the future this should probably be made more flexible to catch the case where both directions are fine.
 
 ```json
 {
   "distance": 42,
-  "path": [42, 45, 32]
+  "path": [[42, true], [45, false], [32, true]]
 }
 ```
 
 `"distance"` contains the total travel time in ms.
-`"path"` an array of here link ids.
+`"path"` an array of here link ids and directions.
 If no path exists the response will be empty.
 
 When used while preprocessing (or customization) is still running, this endpoint will block and wait until it can execute the query.
@@ -74,9 +74,11 @@ Might lead to browser timeouts.
 `POST /customize` takes its parameters as json.
 
 The input has to be an array of pairs.
-Each pair is an array of exactly two values.
+Each pair is an array of exactly three values.
 The first one is the here link id.
-The second one is the new travel time in ms.
+The second one is a boolean indicating if the weight is to be applied in `FromRef` direction (`true`) or `ToRef` (`false`).
+The third one is the new travel time in ms.
+The weight has to be an integer smaller than 2^31-1 or `null` (to set the weight to infinity).
 Currently the new value will be applied to the link in both directions.
 If a link id does not exist, the pair will be ignored.
 The new values will be carried over into future customizations.

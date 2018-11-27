@@ -1,4 +1,3 @@
-use std::collections::LinkedList;
 use super::*;
 
 #[derive(Debug)]
@@ -79,25 +78,22 @@ impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>> Server<G, H> {
             || self.backward_dijkstra.tentative_distance(node) < INFINITY
     }
 
-    pub fn path(&self) -> LinkedList<NodeId> {
-        let mut forwad_path = LinkedList::new();
-        forwad_path.push_front(self.meeting_node);
+    pub fn path(&self) -> Vec<NodeId> {
+        let mut path = Vec::new();
+        path.push(self.meeting_node);
 
-        while *forwad_path.front().unwrap() != self.forward_dijkstra.query().from {
-            let next = self.forward_dijkstra.predecessor(*forwad_path.front().unwrap());
-            forwad_path.push_front(next);
+        while *path.last().unwrap() != self.forward_dijkstra.query().from {
+            let next = self.forward_dijkstra.predecessor(*path.last().unwrap());
+            path.push(next);
         }
 
-        let mut backward_path = LinkedList::new();
-        backward_path.push_back(self.meeting_node);
+        path.reverse();
 
-        while *backward_path.back().unwrap() != self.backward_dijkstra.query().from {
-            let next = self.backward_dijkstra.predecessor(*backward_path.back().unwrap());
-            backward_path.push_back(next);
+        while *path.last().unwrap() != self.backward_dijkstra.query().from {
+            let next = self.backward_dijkstra.predecessor(*path.last().unwrap());
+            path.push(next);
         }
 
-        forwad_path.pop_back();
-        forwad_path.append(&mut backward_path);
-        forwad_path
+        path
     }
 }

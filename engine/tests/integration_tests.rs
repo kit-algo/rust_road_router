@@ -5,8 +5,6 @@ use bmw_routing_engine::{
     shortest_path::query::{
         dijkstra::Server as DijkServer,
         bidirectional_dijkstra::Server as BiDijkServer,
-        r#async::dijkstra::Server as AsyncDijkServer,
-        r#async::bidirectional_dijkstra::Server as AsyncBiDijkServer,
     },
 };
 
@@ -49,28 +47,6 @@ fn simple_dijkstra_correct_distances() {
 #[test]
 fn bidir_dijkstra_correct_distances() {
     let mut server = BiDijkServer::new(graph());
-
-    assert_eq!(server.distance(0, 1), Some(1));
-    assert_eq!(server.distance(0, 3), Some(3));
-    assert_eq!(server.distance(3, 0), Some(7));
-    assert_eq!(server.distance(0, 4), Some(5));
-    assert_eq!(server.distance(4, 0), None);
-}
-
-#[test]
-fn async_dijkstra_correct_distances() {
-    let server = AsyncDijkServer::new(graph());
-
-    assert_eq!(server.distance(0, 1), Some(1));
-    assert_eq!(server.distance(0, 3), Some(3));
-    assert_eq!(server.distance(3, 0), Some(7));
-    assert_eq!(server.distance(0, 4), Some(5));
-    assert_eq!(server.distance(4, 0), None);
-}
-
-#[test]
-fn async_bidijkstra_correct_distances() {
-    let mut server = AsyncBiDijkServer::new(graph());
 
     assert_eq!(server.distance(0, 1), Some(1));
     assert_eq!(server.distance(0, 3), Some(3));
