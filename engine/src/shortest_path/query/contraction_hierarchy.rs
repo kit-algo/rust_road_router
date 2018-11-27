@@ -1,4 +1,3 @@
-use std::collections::LinkedList;
 use super::*;
 
 #[derive(Debug)]
@@ -86,7 +85,9 @@ impl Server {
             || self.backward_dijkstra.tentative_distance(node) < INFINITY
     }
 
-    pub fn path(&self) -> LinkedList<NodeId> {
+    pub fn path(&self) -> Vec<NodeId> {
+        use std::collections::LinkedList;
+
         let &(ref forward_middle_nodes, ref backward_middle_nodes) = self.shortcut_middle_nodes.as_ref().unwrap();
         let mut forwad_path = LinkedList::new();
         forwad_path.push_front(self.meeting_node);
@@ -128,6 +129,6 @@ impl Server {
 
         forwad_path.pop_back();
         forwad_path.append(&mut backward_path);
-        forwad_path
+        forwad_path.into_iter().collect()
     }
 }
