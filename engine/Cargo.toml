@@ -4,6 +4,11 @@ version = "0.1.0"
 authors = ["Tim \"S.D.Eagle\" Zeitz <dev.tim.zeitz@gmail.com>"]
 edition = "2018"
 
+[features]
+default = []
+tdcch-approx = []
+tdcch-approx-imai-iri = ["tdcch-approx"]
+
 [dependencies]
 time = "0.1.38"
 nav-types = "0.3.0"

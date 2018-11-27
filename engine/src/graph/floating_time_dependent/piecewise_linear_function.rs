@@ -373,6 +373,24 @@ impl<'a> PiecewiseLinearFunction<'a> {
         points.push(point)
     }
 
+    #[cfg(not(feature = "tdcch-approx"))]
+    pub fn approximate(&self) -> Vec<TTFPoint> {
+        unimplemented!()
+    }
+
+    #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
+    pub fn approximate(&self) -> Vec<TTFPoint> {
+        let mut result = Vec::new();
+        self.douglas_peuker(&mut result);
+        result
+    }
+
+    #[cfg(feature = "tdcch-approx-imai-iri")]
+    pub fn approximate(&self) -> Vec<TTFPoint> {
+        Imai::new(self.ipps, APPROX.into(), APPROX.into(), true, true).compute()
+    }
+
+    #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
     fn douglas_peuker(&self, result: &mut Vec<TTFPoint>) {
         if self.ipps.len() <= 2 {
             result.extend_from_slice(self.ipps);
@@ -396,12 +414,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
             result.push(first.clone());
             result.push(last.clone());
         }
-    }
-
-    pub fn approximate(&self) -> Vec<TTFPoint> {
-        let mut result = Vec::new();
-        self.douglas_peuker(&mut result);
-        result
     }
 }
 

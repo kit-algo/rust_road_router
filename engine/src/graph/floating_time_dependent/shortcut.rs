@@ -71,10 +71,9 @@ impl Shortcut {
             if self_plf.lower_bound() >= other_upper_bound {
                 self.upper_bound = min(self.upper_bound, PiecewiseLinearFunction::new(&linked_ipps).upper_bound());
                 debug_assert!(self.upper_bound >= self.lower_bound);
-                if linked_ipps.len() > 1_000_000 {
+                if cfg!(feature = "tdcch-approx") && linked_ipps.len() > 250 {
                     let old = linked_ipps.len();
                     CONSIDERED_FOR_APPROX.with(|count| count.set(count.get() + old));
-                    // linked_ipps = Imai::new(&linked_ipps, APPROX.into(), APPROX.into(), true, true).compute();
                     linked_ipps = PiecewiseLinearFunction::new(&linked_ipps).approximate();
                     SAVED_BY_APPROX.with(|count| count.set(count.get() + old - linked_ipps.len()));
                 }
@@ -88,10 +87,9 @@ impl Shortcut {
 
             ACTUALLY_MERGED.with(|count| count.set(count.get() + 1));
             let (mut merged, intersection_data) = self_plf.merge(&linked);
-            if merged.len() > 1_000_000 {
+            if cfg!(feature = "tdcch-approx") && merged.len() > 250 {
                 let old = merged.len();
                 CONSIDERED_FOR_APPROX.with(|count| count.set(count.get() + old));
-                // merged = Imai::new(&merged, APPROX.into(), APPROX.into(), true, true).compute();
                 merged = PiecewiseLinearFunction::new(&merged).approximate();
                 SAVED_BY_APPROX.with(|count| count.set(count.get() + old - merged.len()));
             }
@@ -217,10 +215,9 @@ impl Shortcut {
     pub fn evaluate<F>(&self, t: Timestamp, shortcut_graph: &ShortcutGraph, f: &mut F) -> FlWeight
         where F: (FnMut(bool, EdgeId, Timestamp) -> bool)
     {
-        // TODO benchmark
-        // if self.lower_bound == self.upper_bound {
-        //     return self.lower_bound;
-        // }
+        if cfg!(not(feature = "tdcch-approx")) && self.lower_bound == self.upper_bound {
+            return self.lower_bound;
+        }
 
         if let Some(ipps) = &self.ttf {
             return PiecewiseLinearFunction::new(ipps).evaluate(t)

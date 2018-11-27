@@ -126,7 +126,11 @@ fn main() {
                 println!("TDCCH ✅ {:?} {:?}", ea, ea_ground_truth);
             } else {
                 println!("TDCCH ❌ {:?} {:?}", ea, ea_ground_truth);
-                assert!(ea_ground_truth.fuzzy_lt(ea.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY)))), "{} {} {:?}", from, to, at);
+            }
+            if cfg!(feature = "tdcch-approx") {
+                assert!(!ea.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY))).fuzzy_lt(ea_ground_truth), "{} {} {:?}", from, to, at);
+            } else {
+                assert!(ea_ground_truth.fuzzy_eq(ea.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY)))), "{} {} {:?}", from, to, at);
             }
         });
     }
@@ -176,7 +180,11 @@ fn main() {
                     println!("TDCCH ✅ {:?} {:?}", dist, ground_truth);
                 } else {
                     println!("TDCCH ❌ {:?} {:?}", dist, ground_truth);
-                    assert!(ground_truth.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY))).fuzzy_lt(dist.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY)))), "{} {} {:?}", from, to, at);
+                }
+                if cfg!(feature = "tdcch-approx") {
+                    assert!(!dist.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY))).fuzzy_lt(ground_truth.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY)))), "{} {} {:?}", from, to, at);
+                } else {
+                    assert!(dist.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY))).fuzzy_eq(ground_truth.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY)))));
                 }
             }).1;
         }

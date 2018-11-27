@@ -1,6 +1,9 @@
 use super::*;
 
 mod point;
-mod imai_iri;
 pub use self::point::*;
+
+#[cfg(feature = "tdcch-approx-imai-iri")]
+mod imai_iri;
+#[cfg(feature = "tdcch-approx-imai-iri")]
 pub use self::imai_iri::*;
