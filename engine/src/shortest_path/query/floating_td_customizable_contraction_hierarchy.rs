@@ -124,33 +124,36 @@ impl<'a> Server<'a> {
         let cch_graph = &self.cch_graph;
         let shortcut_queue = &mut self.shortcut_queue;
         let distances = &mut self.distances;
+        let parents = &mut self.parents;
 
         for &shortcut_id in shortcut_queue.iter().rev() {
             let tail = cch_graph.edge_id_to_tail(shortcut_id);
             let head = cch_graph.head(shortcut_id);
             let t_cur = distances[tail as usize];
-            let t_next = t_cur + shortcut_graph.get_outgoing(shortcut_id).evaluate(t_cur, shortcut_graph, &mut |up, shortcut_id, t| {
-                // true
-                if up {
-                    let tail = cch_graph.edge_id_to_tail(shortcut_id);
-                    if t <= distances[tail as usize] {
-                        distances[tail as usize] = t;
-                        true
+            if t_cur < distances[head as usize] {
+                let t_next = t_cur + shortcut_graph.get_outgoing(shortcut_id).evaluate(t_cur, shortcut_graph, &mut |up, shortcut_id, t| {
+                    if up {
+                        let tail = cch_graph.edge_id_to_tail(shortcut_id);
+                        if t <= distances[tail as usize] {
+                            distances[tail as usize] = t;
+                            true
+                        } else {
+                            false
+                        }
                     } else {
-                        false
+                        let head = cch_graph.head(shortcut_id);
+                        if t <= distances[head as usize] {
+                            distances[head as usize] = t;
+                            true
+                        } else {
+                            false
+                        }
                     }
-                } else {
-                    let head = cch_graph.head(shortcut_id);
-                    if t <= distances[head as usize] {
-                        distances[head as usize] = t;
-                        true
-                    } else {
-                        false
-                    }
+                });
+                if t_next < distances[head as usize] {
+                    distances[head as usize] = t_next;
+                    // parents[head as usize] = (tail, shortcut_id);
                 }
-            });
-            if t_next < distances[head as usize] {
-                distances[head as usize] = t_next;
             }
         }
 
@@ -161,28 +164,30 @@ impl<'a> Server<'a> {
                     let tail = node;
                     let head = label.parent;
                     let t_cur = distances[tail as usize];
-                    let t_next = t_cur + shortcut_graph.get_incoming(label.shortcut_id).evaluate(t_cur, shortcut_graph, &mut |up, shortcut_id, t| {
-                        // true
-                        if up {
-                            let tail = cch_graph.edge_id_to_tail(shortcut_id);
-                            if t <= distances[tail as usize] {
-                                distances[tail as usize] = t;
-                                true
+                    if t_cur < distances[head as usize] {
+                        let t_next = t_cur + shortcut_graph.get_incoming(label.shortcut_id).evaluate(t_cur, shortcut_graph, &mut |up, shortcut_id, t| {
+                            if up {
+                                let tail = cch_graph.edge_id_to_tail(shortcut_id);
+                                if t <= distances[tail as usize] {
+                                    distances[tail as usize] = t;
+                                    true
+                                } else {
+                                    false
+                                }
                             } else {
-                                false
+                                let head = cch_graph.head(shortcut_id);
+                                if t <= distances[head as usize] {
+                                    distances[head as usize] = t;
+                                    true
+                                } else {
+                                    false
+                                }
                             }
-                        } else {
-                            let head = cch_graph.head(shortcut_id);
-                            if t <= distances[head as usize] {
-                                distances[head as usize] = t;
-                                true
-                            } else {
-                                false
-                            }
+                        });
+                        if t_next < distances[head as usize] {
+                            distances[head as usize] = t_next;
+                            // parents[head as usize] = (tail, label.shortcut_id);
                         }
-                    });
-                    if t_next < distances[head as usize] {
-                        distances[head as usize] = t_next;
                     }
                 }
             }
