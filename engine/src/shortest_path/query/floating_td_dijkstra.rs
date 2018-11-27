@@ -53,13 +53,13 @@ impl Server {
         self.dijkstra.tentative_distance(node) < Timestamp::new(f64::from(INFINITY))
     }
 
-    pub fn path(&self) -> LinkedList<(NodeId, FlWeight)> {
+    pub fn path(&self) -> LinkedList<(NodeId, Timestamp)> {
         let mut path = LinkedList::new();
-        path.push_front((self.query.unwrap().to, self.dijkstra.tentative_distance(self.query.unwrap().to) - self.query.unwrap().departure_time));
+        path.push_front((self.query.unwrap().to, self.dijkstra.tentative_distance(self.query.unwrap().to)));
 
         while path.front().unwrap().0 != self.query.unwrap().from {
             let next = self.dijkstra.predecessor(path.front().unwrap().0);
-            let t = self.dijkstra.tentative_distance(next) - self.query.unwrap().departure_time;
+            let t = self.dijkstra.tentative_distance(next);
             path.push_front((next, t));
         }
 

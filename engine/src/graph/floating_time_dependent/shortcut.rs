@@ -53,7 +53,7 @@ impl Shortcut {
                 let linked = first_plf.link(&second_plf);
 
                 self.upper_bound = min(self.upper_bound, PiecewiseLinearFunction::new(&linked).upper_bound());
-                debug_assert!(self.upper_bound >= self.lower_bound);
+                debug_assert!(!self.upper_bound.fuzzy_lt(self.lower_bound), "lower {:?} upper {:?}", self.lower_bound, self.upper_bound);
                 self.ttf = Some(linked);
                 self.sources = Sources::One(other_data);
                 return;
@@ -97,7 +97,7 @@ impl Shortcut {
             }
 
             self.upper_bound = min(self.upper_bound, PiecewiseLinearFunction::new(&merged).upper_bound());
-            debug_assert!(self.upper_bound >= self.lower_bound);
+            debug_assert!(!self.upper_bound.fuzzy_lt(self.lower_bound), "lower {:?} upper {:?}", self.lower_bound, self.upper_bound);
             self.ttf = Some(merged);
             let mut sources = Sources::None;
             std::mem::swap(&mut sources, &mut self.sources);
@@ -218,9 +218,9 @@ impl Shortcut {
         where F: (FnMut(bool, EdgeId, Timestamp) -> bool)
     {
         // TODO benchmark
-        if self.lower_bound == self.upper_bound {
-            return self.lower_bound;
-        }
+        // if self.lower_bound == self.upper_bound {
+        //     return self.lower_bound;
+        // }
 
         if let Some(ipps) = &self.ttf {
             return PiecewiseLinearFunction::new(ipps).evaluate(t)

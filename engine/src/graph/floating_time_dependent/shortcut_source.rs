@@ -15,11 +15,18 @@ impl ShortcutSource {
             ShortcutSource::Shortcut(down, up) => {
                 if !f(false, down, t) { return FlWeight::new(f64::from(INFINITY)); }
                 let first_val = shortcut_graph.get_incoming(down).evaluate(t, shortcut_graph, f);
+                debug_assert!(first_val >= FlWeight::zero());
                 let t_mid = t + first_val;
                 if !f(true, up, t_mid) { return FlWeight::new(f64::from(INFINITY)); }
-                first_val + shortcut_graph.get_outgoing(up).evaluate(t_mid, shortcut_graph, f)
+                let second_val = shortcut_graph.get_outgoing(up).evaluate(t_mid, shortcut_graph, f);
+                debug_assert!(second_val >= FlWeight::zero());
+                first_val + second_val
             },
-            ShortcutSource::OriginalEdge(edge) => shortcut_graph.original_graph().travel_time_function(edge).evaluate(t),
+            ShortcutSource::OriginalEdge(edge) => {
+                let res = shortcut_graph.original_graph().travel_time_function(edge).evaluate(t);
+                debug_assert!(res >= FlWeight::zero());
+                res
+            },
         }
     }
 }
