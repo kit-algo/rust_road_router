@@ -1,2 +1,2 @@
 [workspace]
-members = ["engine", "server", "search_space_visualization"]
+members = ["engine", "server"]
