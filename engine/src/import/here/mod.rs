@@ -8,7 +8,6 @@ use std::fmt;
 
 use nav_types::WGS84;
 
-pub mod postgres_source;
 pub mod csv_source;
 pub mod link_id_mapper;
 
