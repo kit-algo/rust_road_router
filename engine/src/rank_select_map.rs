@@ -11,6 +11,7 @@ use crate::io::*;
 
 // the number of bytes in one L1 cache line
 // hardcoded for now, no idea, if we can retreave it during compilation
+// if calculated at compile time we must ensure its >= 8
 const CACHE_LINE_WIDTH: usize = 64; // bytes
 
 // number of bits (not bytes) in one 64 bit uint
@@ -39,6 +40,7 @@ impl BitVec {
             // TODO: freeing will supply a different alignment (the one of u64)
             // appearently this is not a problem, but it could be some day
             // so we probably should also do the dropping ourselves
+            #[allow(clippy::cast_ptr_alignment)] // was actually allocated with greater alignment
             Vec::from_raw_parts(pointer.as_ptr() as *mut u64, num_ints, num_ints)
         };
 
@@ -65,6 +67,10 @@ impl BitVec {
 
     pub fn len(&self) -> usize {
         self.size
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 
@@ -124,6 +130,10 @@ impl RankSelectMap {
             Some(&len) => len,
             None => 0,
         }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     fn compile(&mut self) {
@@ -209,7 +219,7 @@ impl InvertableRankSelectMap {
     pub fn inverse(&self, value: usize) -> usize {
         debug_assert!(value < self.map.len());
         let group = value / GROUPED_LOCALS;
-        let block_index = match self.map.prefix_sum[self.blocks[group]..self.blocks[group+1]+1].binary_search(&value) {
+        let block_index = match self.map.prefix_sum[self.blocks[group]..=self.blocks[group+1]].binary_search(&value) {
             Ok(block_index) => block_index,
             Err(block_index) => block_index - 1,
         } + self.blocks[group];
