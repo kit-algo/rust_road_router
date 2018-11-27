@@ -42,7 +42,7 @@ impl Ord for NonNan {
     }
 }
 
-fn print_usage(program: &str, opts: Options) {
+fn print_usage(program: &str, opts: &Options) {
     let brief = format!("Usage: {} GRAPH_DIR [options]", program);
     print!("{}", opts.usage(&brief));
 }
@@ -63,16 +63,16 @@ fn main() {
     };
 
     if matches.opt_present("h") {
-        print_usage(&program, opts);
+        print_usage(&program, &opts);
         return;
     }
     let path = if !matches.free.is_empty() {
         Path::new(&matches.free[0])
     } else {
-        print_usage(&program, opts);
+        print_usage(&program, &opts);
         return;
     };
-    let output = matches.opt_str("o").unwrap_or("image.svg".to_owned());
+    let output = matches.opt_str("o").unwrap_or_else(|| "image.svg".to_owned());
 
     let first_out = Vec::load_from(path.join("first_out").to_str().unwrap()).expect("could not read first_out");
     let lat: Vec<f32> = Vec::load_from(path.join("latitude").to_str().unwrap()).expect("could not read first_out");
@@ -92,9 +92,9 @@ fn main() {
     let select_node = |arg: Option<String>| -> NodeId {
         match arg {
             Some(coord) => {
-                let coords: Vec<f32> = coord.split(",").map(|val| val.parse::<f32>().expect(&format!("could not parse {}", val))).collect();
-                match coords.as_slice() {
-                    &[lat, lon] => find_closest((lat, lon)),
+                let coords: Vec<f32> = coord.split(',').map(|val| val.parse::<f32>().unwrap_or_else(|_| panic!("could not parse {}", val))).collect();
+                match *coords.as_slice() {
+                    [lat, lon] => find_closest((lat, lon)),
                     _ => panic!("wrong number of dimensions in {}", coord),
                 }
 
@@ -145,19 +145,16 @@ fn main() {
 
     let mut prev = None;
     for &node in query_server.path().iter() {
-        match prev {
-            Some(prev_node) => {
-                let line = Line::new()
-                    .set("x1", format!("{}", lon[node as usize]))
-                    .set("y1", format!("{}", lat[node as usize]))
-                    .set("x2", format!("{}", lon[prev_node as usize]))
-                    .set("y2", format!("{}", lat[prev_node as usize]))
-                    .set("class", "shortest_path");
+        if let Some(prev_node) = prev {
+        let line = Line::new()
+            .set("x1", format!("{}", lon[node as usize]))
+            .set("y1", format!("{}", lat[node as usize]))
+            .set("x2", format!("{}", lon[prev_node as usize]))
+            .set("y2", format!("{}", lat[prev_node as usize]))
+            .set("class", "shortest_path");
 
-                document = document.add(line);
-            },
-            None => (),
-        }
+        document = document.add(line);
+}
         prev = Some(node);
     }
 
