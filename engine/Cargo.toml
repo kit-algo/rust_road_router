@@ -5,10 +5,10 @@ authors = ["Tim \"S.D.Eagle\" Zeitz <dev.tim.zeitz@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-time = "0.1.38"
-nav-types = "0.3.0"
-csv = "^1.0.0-beta.4"
-glob = "0.2.11"
+time = "^0.1.40"
+nav-types = "^0.3.0"
+csv = "^1.0.2"
+glob = "^0.2.11"
 
 # [profile.release]
 # debug = true
