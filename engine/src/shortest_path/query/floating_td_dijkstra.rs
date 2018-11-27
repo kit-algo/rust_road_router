@@ -3,8 +3,6 @@ use crate::shortest_path::floating_td_stepped_dijkstra::FloatingTDSteppedDijkstr
 use crate::graph::floating_time_dependent::*;
 use super::floating_td_stepped_dijkstra::{QueryProgress, State};
 
-use std::collections::LinkedList;
-
 #[derive(Debug)]
 pub struct Server {
     dijkstra: FloatingTDSteppedDijkstra,
@@ -53,16 +51,17 @@ impl Server {
         self.dijkstra.tentative_distance(node) < Timestamp::new(f64::from(INFINITY))
     }
 
-    pub fn path(&self) -> LinkedList<(NodeId, Timestamp)> {
-        let mut path = LinkedList::new();
-        path.push_front((self.query.unwrap().to, self.dijkstra.tentative_distance(self.query.unwrap().to)));
+    pub fn path(&self) -> Vec<(NodeId, Timestamp)> {
+        let mut path = Vec::new();
+        path.push((self.query.unwrap().to, self.dijkstra.tentative_distance(self.query.unwrap().to)));
 
-        while path.front().unwrap().0 != self.query.unwrap().from {
-            let next = self.dijkstra.predecessor(path.front().unwrap().0);
+        while path.last().unwrap().0 != self.query.unwrap().from {
+            let next = self.dijkstra.predecessor(path.last().unwrap().0);
             let t = self.dijkstra.tentative_distance(next);
-            path.push_front((next, t));
+            path.push((next, t));
         }
 
+        path.reverse();
         path
     }
 }
