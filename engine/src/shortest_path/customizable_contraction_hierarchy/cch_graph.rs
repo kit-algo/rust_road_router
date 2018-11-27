@@ -3,7 +3,6 @@ use crate::shortest_path::node_order::NodeOrder;
 use crate::in_range_option::InRangeOption;
 use crate::benchmark::{report_time, Timer};
 use self::first_out_graph::degrees_to_first_out;
-use crate::graph::link_id_to_tail_mapper::*;
 
 use std;
 use std::ops::Range;
