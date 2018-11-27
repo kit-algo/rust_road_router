@@ -20,8 +20,11 @@ pub struct Server<'a> {
     backward_tree_path: Vec<NodeId>,
     shortcut_queue: Vec<EdgeId>,
     distances: TimestampedVector<Timestamp>,
+    parents: Vec<(NodeId, EdgeId)>,
     backward_tree_mask: BitVec,
     forward_tree_mask: BitVec,
+    from: NodeId,
+    to: NodeId,
 }
 
 impl<'a> Server<'a> {
@@ -38,8 +41,11 @@ impl<'a> Server<'a> {
             backward_tree_path: Vec::new(),
             shortcut_queue: Vec::new(),
             distances: TimestampedVector::new(n, Timestamp::new(f64::from(INFINITY))),
+            parents: vec![(std::u32::MAX, std::u32::MAX); n],
             forward_tree_mask: BitVec::new(n),
             backward_tree_mask: BitVec::new(n),
+            from: 0,
+            to: 0
         }
     }
 
@@ -48,6 +54,8 @@ impl<'a> Server<'a> {
     pub fn distance(&mut self, from: NodeId, to: NodeId, departure_time: Timestamp) -> Option<FlWeight> {
         let from = self.cch_graph.node_order().rank(from);
         let to = self.cch_graph.node_order().rank(to);
+        self.from = from;
+        self.to = to;
 
         let n = self.shortcut_graph.original_graph().num_nodes();
 
@@ -152,7 +160,7 @@ impl<'a> Server<'a> {
                 });
                 if t_next < distances[head as usize] {
                     distances[head as usize] = t_next;
-                    // parents[head as usize] = (tail, shortcut_id);
+                    parents[head as usize] = (tail, shortcut_id);
                 }
             }
         }
@@ -186,7 +194,7 @@ impl<'a> Server<'a> {
                         });
                         if t_next < distances[head as usize] {
                             distances[head as usize] = t_next;
-                            // parents[head as usize] = (tail, label.shortcut_id);
+                            parents[head as usize] = (tail, label.shortcut_id);
                         }
                     }
                 }
@@ -198,5 +206,31 @@ impl<'a> Server<'a> {
         } else {
             None
         }
+    }
+
+    pub fn path(&self) -> Vec<(NodeId, Timestamp)> {
+        let mut path = Vec::new();
+        path.push((self.cch_graph.node_order().node(self.to), self.distances[self.to as usize]));
+
+        while let Some((node, t)) = path.pop() {
+            debug_assert_eq!(t, self.distances[self.cch_graph.node_order().rank(node) as usize]);
+            if self.cch_graph.node_order().rank(node) == self.from {
+                path.push((node, t));
+                break;
+            }
+            let (parent, shortcut_id) = self.parents[self.cch_graph.node_order().rank(node) as usize];
+            debug_assert_ne!(self.cch_graph.node_order().rank(node), parent);
+            let t = self.distances[parent as usize];
+            let mut shortcut_path = if parent > self.cch_graph.node_order().rank(node) {
+                self.shortcut_graph.get_incoming(shortcut_id).unpack_at(t, &self.shortcut_graph)
+            } else {
+                self.shortcut_graph.get_outgoing(shortcut_id).unpack_at(t, &self.shortcut_graph)
+            };
+            shortcut_path.reverse();
+            path.append(&mut shortcut_path);
+            debug_assert_eq!(path.last().unwrap().0, self.cch_graph.node_order().node(parent));
+        }
+        path.reverse();
+        path
     }
 }

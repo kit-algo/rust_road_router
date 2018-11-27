@@ -36,6 +36,18 @@ impl Graph {
     pub fn head(&self) -> &[NodeId] {
         &self.head[..]
     }
+
+    pub fn check_path(&self, path: Vec<(NodeId, Timestamp)>) {
+        let mut iter = path.into_iter();
+        let mut prev = iter.next().unwrap();
+        for (node, t) in iter {
+            let (prev_node, prev_t) = prev;
+            let edge = self.edge_index(prev_node, node).expect("path contained nonexisting edge");
+            let evaled = prev_t + self.travel_time_function(edge).evaluate(prev_t);
+            assert!(t.fuzzy_eq(evaled), "expected {:?} - got {:?} at edge {} from {} to {}", evaled, t, edge, prev_node, node);
+            prev = (node, t);
+        }
+    }
 }
 
 impl GraphTrait for Graph {

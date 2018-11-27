@@ -122,6 +122,7 @@ fn main() {
         td_dijk_server.ranks(from, at, |to, ea_ground_truth, rank| {
             let (ea, duration) = measure(|| server.distance(from, to, at).map(|dist| dist + at));
             rank_times[rank].push(duration);
+            graph.check_path(server.path());
             if ea.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY))).fuzzy_eq(ea_ground_truth) {
                 println!("TDCCH ✅ {:?} {:?}", ea, ea_ground_truth);
             } else {
