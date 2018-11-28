@@ -121,7 +121,6 @@ fn main() {
         let at = Timestamp::new(rng.gen_range(0.0, f64::from(period())));
         td_dijk_server.ranks(from, at, |to, ea_ground_truth, rank| {
             let (ea, duration) = measure(|| server.distance(from, to, at).map(|dist| dist + at));
-            rank_times[rank].push(duration);
             if ea.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY))).fuzzy_eq(ea_ground_truth) {
                 println!("TDCCH ✅ {:?} {:?}", ea, ea_ground_truth);
             } else {
@@ -132,7 +131,8 @@ fn main() {
             } else {
                 assert!(ea_ground_truth.fuzzy_eq(ea.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY)))), "{} {} {:?}", from, to, at);
             }
-            let path = server.path();
+            let (path, unpacking_duration) = measure(|| server.path());
+            rank_times[rank].push((duration, unpacking_duration));
             graph.check_path(path);
         });
     }
@@ -140,9 +140,10 @@ fn main() {
     for (rank, rank_times) in rank_times.into_iter().enumerate() {
         let count = rank_times.len();
         if count > 0 {
-            let sum = rank_times.into_iter().fold(Duration::zero(), std::ops::Add::add);
+            let (sum, sum_unpacking) = rank_times.into_iter().fold((Duration::zero(), Duration::zero()), |(acc1, acc2), (t1, t2)| (acc1 + t1, acc2 + t2));
             let avg = sum / count as i32;
-            println!("rank: {} - avg running time: {}", rank, avg);
+            let avg_unpacking = sum_unpacking / count as i32;
+            println!("rank: {} - avg running time: {} - avg unpacking time: {}", rank, avg, avg_unpacking);
         }
     }
 
