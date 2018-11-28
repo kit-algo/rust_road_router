@@ -250,10 +250,10 @@ impl Shortcut {
         }
     }
 
-    pub fn unpack_at(&self, t: Timestamp, shortcut_graph: &ShortcutGraph) -> Vec<(NodeId, Timestamp)> {
+    pub fn unpack_at(&self, t: Timestamp, shortcut_graph: &ShortcutGraph, result: &mut Vec<(EdgeId, Timestamp)>) {
         match &self.sources {
             Sources::None => panic!("can't unpack empty shortcut"),
-            Sources::One(source) => ShortcutSource::from(*source).unpack_at(t, shortcut_graph),
+            Sources::One(source) => ShortcutSource::from(*source).unpack_at(t, shortcut_graph, result),
             Sources::Multi(data) => {
                 let (_, t_period) = t.split_of_period();
                 debug_assert!(data[0].0 == Timestamp::zero(), "{:?}", data);
@@ -267,7 +267,7 @@ impl Shortcut {
                         data[i-1]
                     }
                 };
-                ShortcutSource::from(source).unpack_at(t, shortcut_graph)
+                ShortcutSource::from(source).unpack_at(t, shortcut_graph, result)
             },
         }
     }

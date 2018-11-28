@@ -254,24 +254,18 @@ impl<'a> Server<'a> {
             let (parent, shortcut_id) = self.parents[rank as usize];
             let t_parent = self.distances[parent as usize];
 
-            let mut shortcut_path = if parent > rank {
-                self.shortcut_graph.get_incoming(shortcut_id).unpack_at(t_parent, &self.shortcut_graph)
+            let mut shortcut_path = Vec::new();
+            if parent > rank {
+                self.shortcut_graph.get_incoming(shortcut_id).unpack_at(t_parent, &self.shortcut_graph, &mut shortcut_path);
             } else {
-                self.shortcut_graph.get_outgoing(shortcut_id).unpack_at(t_parent, &self.shortcut_graph)
+                self.shortcut_graph.get_outgoing(shortcut_id).unpack_at(t_parent, &self.shortcut_graph, &mut shortcut_path);
             };
-            self.shortcut_graph.original_graph().check_path(shortcut_path.clone());
-            for nodes in shortcut_path.windows(2) {
-                debug_assert!(self.shortcut_graph.original_graph().edge_index(nodes[0].0, nodes[1].0).is_some());
+
+            for (edge, arrival) in shortcut_path.into_iter().rev() {
+                path.push((self.cch_graph.node_order().rank(self.shortcut_graph.original_graph().head()[edge as usize]), arrival));
             }
-            shortcut_path.reverse();
-            for (node, _) in &mut shortcut_path {
-                *node = self.cch_graph.node_order().rank(*node);
-            }
-            debug_assert_eq!(Some(rank), shortcut_path.first().map(|&(node, _)| node));
-            debug_assert!(shortcut_path.first().map(|&(node, t)| self.distances[node as usize].fuzzy_eq(t)).unwrap_or(true));
-            debug_assert_eq!(shortcut_path.last(), Some(&(parent, t_parent)));
-            path.append(&mut shortcut_path);
-            debug_assert_eq!(path.last(), Some(&(parent, t_parent)));
+
+            path.push((parent, t_parent));
         }
 
         path.reverse();

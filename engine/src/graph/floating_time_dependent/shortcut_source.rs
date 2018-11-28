@@ -30,29 +30,16 @@ impl ShortcutSource {
         }
     }
 
-    pub(super) fn unpack_at(&self, t: Timestamp, shortcut_graph: &ShortcutGraph) -> Vec<(NodeId, Timestamp)> {
+    pub(super) fn unpack_at(&self, t: Timestamp, shortcut_graph: &ShortcutGraph, result: &mut Vec<(EdgeId, Timestamp)>) {
         match *self {
             ShortcutSource::Shortcut(down, up) => {
-                let first_val = shortcut_graph.get_incoming(down).evaluate(t, shortcut_graph, &mut |_,_,_| true);
-                let t_mid = t + first_val;
-                let mut res = shortcut_graph.get_incoming(down).unpack_at(t, shortcut_graph);
-                let (_, t_last) = res.pop().unwrap();
-                debug_assert!(t_last.fuzzy_eq(t_mid), "expected {:?} got {:?} on {:?}", t_last, t_mid, self);
-                res.append(&mut shortcut_graph.get_outgoing(up).unpack_at(t_mid, shortcut_graph));
-                res
+                shortcut_graph.get_incoming(down).unpack_at(t, shortcut_graph, result);
+                let t_mid = result.last().unwrap().1;
+                shortcut_graph.get_outgoing(up).unpack_at(t_mid, shortcut_graph, result);
             },
             ShortcutSource::OriginalEdge(edge) => {
                 let arr = t + shortcut_graph.original_graph().travel_time_function(edge).evaluate(t);
-                let mut res = Vec::new();
-                let head = shortcut_graph.original_graph().head()[edge as usize];
-                let tail = match shortcut_graph.original_graph().first_out().binary_search(&edge) {
-                    Ok(i) => i,
-                    Err(i) => i - 1
-                } as NodeId;
-                debug_assert!(arr >= t);
-                res.push((tail, t));
-                res.push((head, arr));
-                res
+                result.push((edge, arr))
             },
         }
     }
