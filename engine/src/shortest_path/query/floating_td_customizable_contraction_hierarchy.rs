@@ -51,21 +51,19 @@ impl<'a> Server<'a> {
 
     #[allow(clippy::collapsible_if)]
     #[allow(clippy::cyclomatic_complexity)]
-    pub fn distance(&mut self, from: NodeId, to: NodeId, departure_time: Timestamp) -> Option<FlWeight> {
-        let from = self.cch_graph.node_order().rank(from);
-        let to = self.cch_graph.node_order().rank(to);
-        self.from = from;
-        self.to = to;
+    pub fn distance(&mut self, from_node: NodeId, to_node: NodeId, departure_time: Timestamp) -> Option<FlWeight> {
+        self.from = self.cch_graph.node_order().rank(from_node);
+        self.to = self.cch_graph.node_order().rank(to_node);
 
         let n = self.shortcut_graph.original_graph().num_nodes();
 
         // initialize
         self.tentative_distance = (FlWeight::new(f64::from(INFINITY)), FlWeight::new(f64::from(INFINITY)));
         self.distances.reset();
-        self.distances.set(from as usize, departure_time);
+        self.distances.set(self.from as usize, departure_time);
         self.meeting_nodes.clear();
-        self.forward.initialize_query(from);
-        self.backward.initialize_query(to);
+        self.forward.initialize_query(self.from);
+        self.backward.initialize_query(self.to);
 
         // TODO get rid of reinit
         self.forward_tree_path.clear();
@@ -139,28 +137,45 @@ impl<'a> Server<'a> {
             let head = cch_graph.head(shortcut_id);
             let t_cur = distances[tail as usize];
             if t_cur < distances[head as usize] {
+                let mut parent = tail;
+                let mut parent_shortcut_id = shortcut_id;
                 let t_next = t_cur + shortcut_graph.get_outgoing(shortcut_id).evaluate(t_cur, shortcut_graph, &mut |up, shortcut_id, t| {
                     if up {
                         let tail = cch_graph.edge_id_to_tail(shortcut_id);
-                        if t <= distances[tail as usize] {
+                        let res = if t <= distances[tail as usize] {
                             distances[tail as usize] = t;
+                            debug_assert_ne!(distances[parent as usize], Timestamp::new(f64::from(INFINITY)));
+                            if tail != parent {
+                                parents[tail as usize] = (parent, parent_shortcut_id);
+                            }
                             true
                         } else {
                             false
-                        }
+                        };
+                        parent = tail;
+                        parent_shortcut_id = shortcut_id;
+                        res
                     } else {
                         let head = cch_graph.head(shortcut_id);
-                        if t <= distances[head as usize] {
+                        let res = if t <= distances[head as usize] {
                             distances[head as usize] = t;
+                            debug_assert_ne!(distances[parent as usize], Timestamp::new(f64::from(INFINITY)));
+                            if head != parent {
+                                parents[head as usize] = (parent, parent_shortcut_id);
+                            }
                             true
                         } else {
                             false
-                        }
+                        };
+                        parent = head;
+                        parent_shortcut_id = shortcut_id;
+                        res
                     }
                 });
                 if t_next < distances[head as usize] {
                     distances[head as usize] = t_next;
-                    parents[head as usize] = (tail, shortcut_id);
+                    parents[head as usize] = (parent, parent_shortcut_id);
+                    debug_assert_ne!(distances[parent as usize], Timestamp::new(f64::from(INFINITY)));
                 }
             }
         }
@@ -173,36 +188,53 @@ impl<'a> Server<'a> {
                     let head = label.parent;
                     let t_cur = distances[tail as usize];
                     if t_cur < distances[head as usize] {
+                        let mut parent = tail;
+                        let mut parent_shortcut_id = label.shortcut_id;
                         let t_next = t_cur + shortcut_graph.get_incoming(label.shortcut_id).evaluate(t_cur, shortcut_graph, &mut |up, shortcut_id, t| {
                             if up {
                                 let tail = cch_graph.edge_id_to_tail(shortcut_id);
-                                if t <= distances[tail as usize] {
+                                let res = if t <= distances[tail as usize] {
                                     distances[tail as usize] = t;
+                                    debug_assert_ne!(distances[parent as usize], Timestamp::new(f64::from(INFINITY)));
+                                    if tail != parent {
+                                        parents[tail as usize] = (parent, parent_shortcut_id);
+                                    }
                                     true
                                 } else {
                                     false
-                                }
+                                };
+                                parent = tail;
+                                parent_shortcut_id = shortcut_id;
+                                res
                             } else {
                                 let head = cch_graph.head(shortcut_id);
-                                if t <= distances[head as usize] {
+                                let res = if t <= distances[head as usize] {
                                     distances[head as usize] = t;
+                                    debug_assert_ne!(distances[parent as usize], Timestamp::new(f64::from(INFINITY)));
+                                    if head != parent {
+                                        parents[head as usize] = (parent, parent_shortcut_id);
+                                    }
                                     true
                                 } else {
                                     false
-                                }
+                                };
+                                parent = head;
+                                parent_shortcut_id = shortcut_id;
+                                res
                             }
                         });
                         if t_next < distances[head as usize] {
                             distances[head as usize] = t_next;
-                            parents[head as usize] = (tail, label.shortcut_id);
+                            parents[head as usize] = (parent, parent_shortcut_id);
+                            debug_assert_ne!(distances[parent as usize], Timestamp::new(f64::from(INFINITY)));
                         }
                     }
                 }
             }
         }
 
-        if self.distances[to as usize] < Timestamp::new(f64::from(INFINITY)) {
-            Some(self.distances[to as usize] - departure_time)
+        if self.distances[self.to as usize] < Timestamp::new(f64::from(INFINITY)) {
+            Some(self.distances[self.to as usize] - departure_time)
         } else {
             None
         }
@@ -210,27 +242,44 @@ impl<'a> Server<'a> {
 
     pub fn path(&self) -> Vec<(NodeId, Timestamp)> {
         let mut path = Vec::new();
-        path.push((self.cch_graph.node_order().node(self.to), self.distances[self.to as usize]));
+        path.push((self.to, self.distances[self.to as usize]));
 
-        while let Some((node, t)) = path.pop() {
-            debug_assert_eq!(t, self.distances[self.cch_graph.node_order().rank(node) as usize]);
-            if self.cch_graph.node_order().rank(node) == self.from {
-                path.push((node, t));
+        while let Some((rank, t_prev)) = path.pop() {
+            debug_assert_eq!(t_prev, self.distances[rank as usize]);
+            if rank == self.from {
+                path.push((rank, t_prev));
                 break;
             }
-            let (parent, shortcut_id) = self.parents[self.cch_graph.node_order().rank(node) as usize];
-            debug_assert_ne!(self.cch_graph.node_order().rank(node), parent);
-            let t = self.distances[parent as usize];
-            let mut shortcut_path = if parent > self.cch_graph.node_order().rank(node) {
-                self.shortcut_graph.get_incoming(shortcut_id).unpack_at(t, &self.shortcut_graph)
+
+            let (parent, shortcut_id) = self.parents[rank as usize];
+            let t_parent = self.distances[parent as usize];
+
+            let mut shortcut_path = if parent > rank {
+                self.shortcut_graph.get_incoming(shortcut_id).unpack_at(t_parent, &self.shortcut_graph)
             } else {
-                self.shortcut_graph.get_outgoing(shortcut_id).unpack_at(t, &self.shortcut_graph)
+                self.shortcut_graph.get_outgoing(shortcut_id).unpack_at(t_parent, &self.shortcut_graph)
             };
+            self.shortcut_graph.original_graph().check_path(shortcut_path.clone());
+            for nodes in shortcut_path.windows(2) {
+                debug_assert!(self.shortcut_graph.original_graph().edge_index(nodes[0].0, nodes[1].0).is_some());
+            }
             shortcut_path.reverse();
+            for (node, _) in &mut shortcut_path {
+                *node = self.cch_graph.node_order().rank(*node);
+            }
+            debug_assert_eq!(Some(rank), shortcut_path.first().map(|&(node, _)| node));
+            debug_assert!(shortcut_path.first().map(|&(node, t)| self.distances[node as usize].fuzzy_eq(t)).unwrap_or(true));
+            debug_assert_eq!(shortcut_path.last(), Some(&(parent, t_parent)));
             path.append(&mut shortcut_path);
-            debug_assert_eq!(path.last().unwrap().0, self.cch_graph.node_order().node(parent));
+            debug_assert_eq!(path.last(), Some(&(parent, t_parent)));
         }
+
         path.reverse();
+
+        for (rank, _) in &mut path {
+            *rank = self.cch_graph.node_order().node(*rank);
+        }
+
         path
     }
 }
