@@ -65,6 +65,7 @@ fn main() {
     let mut new_ipp_travel_time = Vec::with_capacity(ipp_departure_time.len() + 2 * head.len());
 
     let mut added = 0;
+    let mut constant = 0;
 
     for i in 0..head.len() {
         let range = first_ipp_of_arc[i] as usize .. first_ipp_of_arc[i+1] as usize;
@@ -84,13 +85,14 @@ fn main() {
             new_ipp_travel_time.push(ipp_travel_time[range.start]);
             added += 1;
         } else {
+            constant += 1;
             new_ipp_departure_time.push(0);
             new_ipp_travel_time.push(ipp_travel_time[range.start]);
         }
     }
     first_ipp_of_arc[head.len()] += added;
 
-    println!("nodes: {}, arcs: {}, ipps: {}", first_out.len() - 1, head.len(), new_ipp_departure_time.len());
+    println!("nodes: {}, arcs: {}, constant: {}, ipps: {}", first_out.len() - 1, head.len(), constant, new_ipp_departure_time.len());
 
     let points = new_ipp_departure_time.into_iter().zip(new_ipp_travel_time.into_iter()).map(|(dt, tt)| {
         TTFPoint { at: Timestamp::new(f64::from(dt) / 1000.0), val: FlWeight::new(f64::from(tt) / 1000.0) }
