@@ -1,8 +1,11 @@
 use super::*;
-use crate::shortest_path::node_order::NodeOrder;
-use crate::in_range_option::InRangeOption;
-use crate::benchmark::{report_time, Timer};
-use self::first_out_graph::degrees_to_first_out;
+use crate::{
+    graph::first_out_graph::degrees_to_first_out,
+    shortest_path::node_order::NodeOrder,
+    in_range_option::InRangeOption,
+    benchmark::*,
+    io::*,
+};
 
 use std;
 use std::ops::Range;
@@ -14,7 +17,6 @@ pub struct SeparatorTree {
 }
 
 #[derive(Debug)]
-#[allow(dead_code)]
 pub struct CCHGraph {
     first_out: Vec<EdgeId>,
     head: Vec<NodeId>,
@@ -24,41 +26,65 @@ pub struct CCHGraph {
     elimination_tree: Vec<InRangeOption<NodeId>>,
 }
 
+impl Deconstruct for CCHGraph {
+    fn store_each(&self, store: &Fn(&str, &dyn Store) -> std::io::Result<()>) -> std::io::Result<()> {
+        store("cch_first_out", &self.first_out)?;
+        store("cch_head", &self.head)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct CCHGraphReconstrctor<'g, Graph: for<'a> LinkIterGraph<'a>> {
+    original_graph: &'g Graph,
+    node_order: NodeOrder,
+}
+
+impl<'g, Graph: for<'a> LinkIterGraph<'a>> ReconstructPrepared<CCHGraph> for CCHGraphReconstrctor<'g, Graph> {
+    fn reconstruct_with(self, loader: Loader) -> std::io::Result<CCHGraph> {
+        let head: Vec<NodeId> = loader.load("cch_head")?;
+        let m = head.len();
+        let cch_graph = OwnedGraph::new(loader.load("cch_first_out")?, head, vec![INFINITY; m]);
+        assert_eq!(cch_graph.num_nodes(), self.original_graph.num_nodes());
+        Ok(CCHGraph::new_from(self.original_graph, self.node_order, cch_graph))
+    }
+}
+
 impl CCHGraph {
     pub(super) fn new<Graph: for<'a> LinkIterGraph<'a>>(contracted_graph: ContractedGraph<Graph>) -> CCHGraph {
-        let elimination_tree = contracted_graph.elimination_tree();
         let ContractedGraph(contracted_graph) = contracted_graph;
-        let node_order = contracted_graph.node_order;
-        let original_graph = contracted_graph.original_graph;
-
         let graph = Self::adjancecy_lists_to_first_out_graph(contracted_graph.nodes);
-        let n = graph.num_nodes() as NodeId;
-        let m = graph.num_arcs();
+        Self::new_from(contracted_graph.original_graph, contracted_graph.node_order, graph)
+    }
 
+    fn new_from<Graph: for<'a> LinkIterGraph<'a>>(original_graph: &Graph, node_order: NodeOrder, contracted_graph: OwnedGraph) -> Self {
+        let elimination_tree = Self::build_elimination_tree(&contracted_graph);
+        let n = contracted_graph.num_nodes() as NodeId;
+        let m = contracted_graph.num_arcs();
         let mut tail = vec![0; m];
 
         let original_edge_to_ch_edge = (0..n).flat_map(|node| {
             {
-                let graph = &graph;
+                let contracted_graph = &contracted_graph;
                 let node_order = &node_order;
 
                 original_graph.neighbor_iter(node).map(move |Link { node: neighbor, .. }| {
                     let node_rank = node_order.rank(node);
                     let neighbor_rank = node_order.rank(neighbor);
                     if node_rank < neighbor_rank {
-                        graph.edge_index(node_rank, neighbor_rank).unwrap()
+                        contracted_graph.edge_index(node_rank, neighbor_rank).unwrap()
                     } else {
-                        graph.edge_index(neighbor_rank, node_rank).unwrap()
+                        contracted_graph.edge_index(neighbor_rank, node_rank).unwrap()
                     }
                 })
             }
         }).collect();
 
         for node in 0..n {
-            tail[graph.neighbor_edge_indices_usize(node)].iter_mut().for_each(|tail| *tail = node);
+            tail[contracted_graph.neighbor_edge_indices_usize(node)].iter_mut().for_each(|tail| *tail = node);
         }
 
-        let (first_out, head, _) = graph.decompose();
+        let (first_out, head, _) = contracted_graph.decompose();
 
         CCHGraph {
             first_out,
@@ -120,6 +146,10 @@ impl CCHGraph {
 
         let m = head.len();
         OwnedGraph::new(first_out, head, vec![INFINITY; m])
+    }
+
+    fn build_elimination_tree(graph: &OwnedGraph) -> Vec<InRangeOption<NodeId>> {
+        (0..graph.num_nodes()).map(|node_id| graph.neighbor_iter(node_id as NodeId).map(|l| l.node).min()).map(InRangeOption::new).collect()
     }
 
     pub fn customize<Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph>(&self, metric: &Graph) ->

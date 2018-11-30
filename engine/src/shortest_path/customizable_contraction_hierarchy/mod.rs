@@ -156,12 +156,6 @@ impl<'a> PartialContractionGraph<'a> {
 #[derive(Debug)]
 pub struct ContractedGraph<'a, Graph: for<'b> LinkIterGraph<'b> + 'a>(ContractionGraph<'a, Graph>);
 
-impl<'a, Graph: for<'b> LinkIterGraph<'b>> ContractedGraph<'a, Graph> {
-    fn elimination_tree(&self) -> Vec<InRangeOption<NodeId>> {
-        self.0.nodes.iter().map(|node| node.edges.iter().cloned().min()).map(InRangeOption::new).collect()
-    }
-}
-
 pub fn contract<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, node_order: NodeOrder) -> CCHGraph {
     CCHGraph::new(ContractionGraph::new(graph, node_order).contract())
 }
