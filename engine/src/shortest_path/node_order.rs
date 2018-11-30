@@ -1,4 +1,5 @@
 use super::*;
+use crate::io::*;
 
 pub type Rank = NodeId;
 
@@ -45,5 +46,17 @@ impl NodeOrder {
 
     pub fn node(&self, rank: Rank) -> NodeId {
         self.node_order[rank as usize]
+    }
+}
+
+impl Deconstruct for NodeOrder {
+    fn store_each(&self, store: &Fn(&str, &dyn Store) -> std::io::Result<()>) -> std::io::Result<()> {
+        store("ranks", &self.ranks)
+    }
+}
+
+impl Reconstruct for NodeOrder {
+    fn reconstruct_with(loader: Loader) -> std::io::Result<Self> {
+        loader.load("ranks").map(Self::from_ranks)
     }
 }
