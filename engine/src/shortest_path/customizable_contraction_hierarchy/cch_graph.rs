@@ -36,8 +36,8 @@ impl Deconstruct for CCHGraph {
 
 #[derive(Debug)]
 pub struct CCHGraphReconstrctor<'g, Graph: for<'a> LinkIterGraph<'a>> {
-    original_graph: &'g Graph,
-    node_order: NodeOrder,
+    pub original_graph: &'g Graph,
+    pub node_order: NodeOrder,
 }
 
 impl<'g, Graph: for<'a> LinkIterGraph<'a>> ReconstructPrepared<CCHGraph> for CCHGraphReconstrctor<'g, Graph> {

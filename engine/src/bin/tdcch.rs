@@ -11,14 +11,14 @@ use bmw_routing_engine::{
         time_dependent::period as int_period,
     },
     shortest_path::{
-        customizable_contraction_hierarchy::{self, cch_graph::SeparatorTree},
+        customizable_contraction_hierarchy::{self, cch_graph::*},
         node_order::NodeOrder,
         query::{
             floating_td_customizable_contraction_hierarchy::Server,
             floating_td_dijkstra::Server as DijkServer
         },
     },
-    io::Load,
+    io::*,
     benchmark::*,
 };
 
@@ -100,14 +100,29 @@ fn main() {
 
     let graph = TDGraph::new(first_out, head, first_ipp_of_arc, points);
 
-    let cch_order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm"));
-    let cch = customizable_contraction_hierarchy::contract(&graph, cch_order);
+    let cch_folder = path.join("cch");
 
-    let cch_order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm"));
-    let latitude = Vec::<f32>::load_from(path.join("latitude").to_str().unwrap()).expect("could not read latitude");
-    let longitude = Vec::<f32>::load_from(path.join("longitude").to_str().unwrap()).expect("could not read longitude");
-    let cch_order = CCHReordering { node_order: cch_order, latitude, longitude }.reorder(cch.separators());
-    let cch = customizable_contraction_hierarchy::contract(&graph, cch_order);
+    let cch = if !cch_folder.exists() {
+        std::fs::create_dir(&cch_folder).expect("could not create cch folder");
+
+        let cch_order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm"));
+        let cch = customizable_contraction_hierarchy::contract(&graph, cch_order);
+
+        let latitude = Vec::<f32>::load_from(path.join("latitude").to_str().unwrap()).expect("could not read latitude");
+        let longitude = Vec::<f32>::load_from(path.join("longitude").to_str().unwrap()).expect("could not read longitude");
+        let cch_order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm"));
+
+        let cch_order = CCHReordering { node_order: cch_order, latitude, longitude }.reorder(cch.separators());
+        cch_order.deconstruct_to(cch_folder.to_str().unwrap()).expect("could not save cch order");
+
+        let cch = customizable_contraction_hierarchy::contract(&graph, cch_order);
+        cch.deconstruct_to(cch_folder.to_str().unwrap()).expect("could not save cch");
+
+        cch
+    } else {
+        let node_order = NodeOrder::reconstruct_from(cch_folder.to_str().unwrap()).expect("could not read node order");
+        CCHGraphReconstrctor { original_graph: &graph, node_order }.reconstruct_from(cch_folder.to_str().unwrap()).expect("could not read cch")
+    };
 
     let td_cch_graph = cch.customize_floating_td(&graph);
 
