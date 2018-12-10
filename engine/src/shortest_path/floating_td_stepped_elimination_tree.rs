@@ -12,8 +12,7 @@ pub enum QueryProgress {
 
 #[derive(Debug, Clone)]
 pub struct Label {
-    pub upper_bound: FlWeight,
-    pub lower_bound: FlWeight, // TODO do we need this one?
+    pub lower_bound: FlWeight,
     pub parent: NodeId,
     pub shortcut_id: EdgeId
 }
@@ -81,20 +80,20 @@ impl<'a, 'b> FloatingTDSteppedEliminationTree<'a, 'b> {
                 let next = Label {
                     parent: node,
                     lower_bound: shortcut.lower_bound + current_state_lower_bound,
-                    upper_bound: shortcut.upper_bound + current_state_upper_bound,
                     shortcut_id
                 };
+                let next_upper_bound = shortcut.upper_bound + current_state_upper_bound;
 
-                debug_assert!(next.lower_bound <= next.upper_bound, "{:?}, {:?}", next, shortcut);
+                debug_assert!(next.lower_bound <= next_upper_bound, "{:?}, {:?}", next, shortcut);
 
-                if next.upper_bound <= self.distances[target as usize].lower_bound {
+                if next_upper_bound <= self.distances[target as usize].lower_bound {
                     self.distances[target as usize].lower_bound = next.lower_bound;
-                    self.distances[target as usize].upper_bound = next.upper_bound;
+                    self.distances[target as usize].upper_bound = next_upper_bound;
                     self.distances[target as usize].labels.clear();
                     self.distances[target as usize].labels.push(next);
                 } else if next.lower_bound < self.distances[target as usize].upper_bound {
                     self.distances[target as usize].lower_bound = min(next.lower_bound, self.distances[target as usize].lower_bound);
-                    self.distances[target as usize].upper_bound = min(next.upper_bound, self.distances[target as usize].upper_bound);
+                    self.distances[target as usize].upper_bound = min(next_upper_bound, self.distances[target as usize].upper_bound);
                     let upper_bound = self.distances[target as usize].upper_bound;
                     self.distances[target as usize].labels.retain(|other| other.lower_bound <= upper_bound);
                     self.distances[target as usize].labels.push(next);
