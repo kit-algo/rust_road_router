@@ -18,7 +18,7 @@ pub struct Server<'a> {
     meeting_nodes: Vec<(NodeId, FlWeight)>,
     forward_tree_path: Vec<NodeId>,
     backward_tree_path: Vec<NodeId>,
-    shortcut_queue: Vec<EdgeId>,
+    shortcut_queue: Vec<(EdgeId, NodeId, NodeId)>,
     distances: TimestampedVector<Timestamp>,
     parents: Vec<(NodeId, EdgeId)>,
     backward_tree_mask: BitVec,
@@ -121,7 +121,7 @@ impl<'a> Server<'a> {
             if self.forward_tree_mask.get(node as usize) {
                 for label in &self.forward.node_data(node).labels {
                     self.forward_tree_mask.set(label.parent as usize);
-                    self.shortcut_queue.push(label.shortcut_id);
+                    self.shortcut_queue.push((label.shortcut_id, label.parent, node));
                 }
             }
         }
@@ -132,9 +132,7 @@ impl<'a> Server<'a> {
         let distances = &mut self.distances;
         let parents = &mut self.parents;
 
-        for &shortcut_id in shortcut_queue.iter().rev() {
-            let tail = cch_graph.edge_id_to_tail(shortcut_id);
-            let head = cch_graph.head(shortcut_id);
+        for &(shortcut_id, tail, head) in shortcut_queue.iter().rev() {
             let t_cur = distances[tail as usize];
             if t_cur < distances[head as usize] {
                 let mut parent = tail;
