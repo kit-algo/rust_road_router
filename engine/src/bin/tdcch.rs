@@ -148,9 +148,11 @@ fn main() {
             } else {
                 assert!(ea_ground_truth.fuzzy_eq(ea.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY)))), "{} {} {:?}", from, to, at);
             }
-            let (path, unpacking_duration) = measure(|| server.path());
-            rank_times[rank].push((duration, unpacking_duration));
-            graph.check_path(path);
+            if ea.is_some() {
+                let (path, unpacking_duration) = measure(|| server.path());
+                rank_times[rank].push((duration, unpacking_duration));
+                graph.check_path(path);
+            }
         });
     }
 

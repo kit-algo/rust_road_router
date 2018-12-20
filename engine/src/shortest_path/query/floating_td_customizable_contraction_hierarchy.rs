@@ -117,10 +117,9 @@ impl<'a> Server<'a> {
         }
 
         let tentative_upper_bound = self.tentative_distance.1;
+        let tentative_latest_arrival = departure_time + tentative_upper_bound;
 
-        self.meeting_nodes.retain(|&(_, lower_bound)| lower_bound <= tentative_upper_bound);
-
-        for &(node, _) in &self.meeting_nodes {
+        for &(node, _) in self.meeting_nodes.iter().filter(|(_, lower_bound)| *lower_bound <= tentative_upper_bound) {
             self.forward_tree_mask.set(node as usize);
             self.backward_tree_mask.set(node as usize);
         }
@@ -144,7 +143,8 @@ impl<'a> Server<'a> {
 
         for &(shortcut_id, tail, head) in shortcut_queue.iter().rev() {
             let t_cur = distances[tail as usize];
-            if t_cur < distances[head as usize] {
+            let pruning_bound = min(tentative_latest_arrival, distances[head as usize]);
+            if !pruning_bound.fuzzy_lt(t_cur + shortcut_graph.get_outgoing(shortcut_id).lower_bound) {
                 let mut parent = tail;
                 let mut parent_shortcut_id = shortcut_id;
                 let t_next = t_cur + shortcut_graph.get_outgoing(shortcut_id).evaluate(t_cur, shortcut_graph, &mut |up, shortcut_id, t| {
@@ -196,7 +196,8 @@ impl<'a> Server<'a> {
                     let tail = node;
                     let head = label.parent;
                     let t_cur = distances[tail as usize];
-                    if t_cur < distances[head as usize] {
+                    let pruning_bound = min(tentative_latest_arrival, distances[head as usize]);
+                    if !pruning_bound.fuzzy_lt(t_cur + shortcut_graph.get_incoming(label.shortcut_id).lower_bound) {
                         let mut parent = tail;
                         let mut parent_shortcut_id = label.shortcut_id;
                         let t_next = t_cur + shortcut_graph.get_incoming(label.shortcut_id).evaluate(t_cur, shortcut_graph, &mut |up, shortcut_id, t| {
