@@ -127,7 +127,9 @@ impl<'a> Server<'a> {
 
         while let Some(node) = self.forward_tree_path.pop() {
             if self.forward_tree_mask.get(node as usize) {
-                for label in &self.forward.node_data(node).labels {
+                let upper_bound = self.forward.node_data(node).upper_bound;
+
+                for label in self.forward.node_data(node).labels.iter().filter(|label| label.lower_bound <= upper_bound) {
                     self.forward_tree_mask.set(label.parent as usize);
                     self.shortcut_queue.push((label.shortcut_id, label.parent, node));
                 }
@@ -188,7 +190,8 @@ impl<'a> Server<'a> {
 
         while let Some(node) = self.backward_tree_path.pop() {
             if self.backward_tree_mask.get(node as usize) {
-                for label in &self.backward.node_data(node).labels {
+                let upper_bound = self.backward.node_data(node).upper_bound;
+                for label in self.backward.node_data(node).labels.iter().filter(|label| label.lower_bound <= upper_bound) {
                     self.backward_tree_mask.set(label.parent as usize);
                     let tail = node;
                     let head = label.parent;

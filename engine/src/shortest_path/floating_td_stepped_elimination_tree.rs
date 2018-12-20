@@ -86,16 +86,9 @@ impl<'a, 'b> FloatingTDSteppedEliminationTree<'a, 'b> {
 
                 debug_assert!(next.lower_bound <= next_upper_bound, "{:?}, {:?}", next, shortcut);
 
-                if next_upper_bound <= self.distances[target as usize].lower_bound {
-                    self.distances[target as usize].lower_bound = next.lower_bound;
-                    self.distances[target as usize].upper_bound = next_upper_bound;
-                    self.distances[target as usize].labels.clear();
-                    self.distances[target as usize].labels.push(next);
-                } else if next.lower_bound < self.distances[target as usize].upper_bound {
+                if next.lower_bound < self.distances[target as usize].upper_bound {
                     self.distances[target as usize].lower_bound = min(next.lower_bound, self.distances[target as usize].lower_bound);
                     self.distances[target as usize].upper_bound = min(next_upper_bound, self.distances[target as usize].upper_bound);
-                    let upper_bound = self.distances[target as usize].upper_bound;
-                    self.distances[target as usize].labels.retain(|other| other.lower_bound <= upper_bound);
                     self.distances[target as usize].labels.push(next);
                 }
             }
