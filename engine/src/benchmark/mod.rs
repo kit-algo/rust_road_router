@@ -35,4 +35,8 @@ impl Timer {
     pub fn get_passed_ms(&self) -> i64 {
         (time::now() - self.start).num_milliseconds()
     }
+
+    pub fn get_passed(&self) -> time::Duration {
+        time::now() - self.start
+    }
 }
