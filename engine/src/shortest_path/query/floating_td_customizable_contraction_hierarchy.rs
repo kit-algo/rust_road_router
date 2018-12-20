@@ -72,7 +72,16 @@ impl<'a> Server<'a> {
 
         while self.forward.peek_next().is_some() || self.backward.peek_next().is_some() {
             if self.forward.peek_next().unwrap_or(n as NodeId) <= self.backward.peek_next().unwrap_or(n as NodeId) {
-                if self.forward.node_data(self.forward.peek_next().unwrap()).lower_bound > self.tentative_distance.1 {
+                let stall = || {
+                    for ((target, _), shortcut) in self.shortcut_graph.downward_graph().neighbor_iter(self.forward.peek_next().unwrap()) {
+                        if self.forward.node_data(target).upper_bound + shortcut.upper_bound < self.forward.node_data(self.forward.peek_next().unwrap()).lower_bound {
+                            return true;
+                        }
+                    }
+                    false
+                };
+
+                if self.forward.node_data(self.forward.peek_next().unwrap()).lower_bound > self.tentative_distance.1 || (cfg!(tdcch_stall_on_demand) && stall()) {
                     self.forward.skip_next();
                 } else if let QueryProgress::Progress(node) = self.forward.next_step() {
                     self.forward_tree_mask.unset_all_around(node as usize);

@@ -6,6 +6,7 @@ edition = "2018"
 
 [features]
 default = []
+tdcch-stall-on-demand = []
 tdcch-approx = []
 tdcch-approx-imai-iri = ["tdcch-approx"]
 
