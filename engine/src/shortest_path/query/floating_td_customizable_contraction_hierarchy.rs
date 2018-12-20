@@ -65,7 +65,6 @@ impl<'a> Server<'a> {
         self.forward.initialize_query(self.from);
         self.backward.initialize_query(self.to);
 
-        // TODO get rid of reinit
         self.forward_tree_path.clear();
         self.backward_tree_path.clear();
         self.shortcut_queue.clear();

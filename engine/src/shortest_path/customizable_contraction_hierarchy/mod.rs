@@ -1,6 +1,5 @@
 use super::*;
 use crate::shortest_path::node_order::NodeOrder;
-use crate::in_range_option::InRangeOption;
 use crate::benchmark::report_time;
 
 pub mod cch_graph;
