@@ -7,6 +7,7 @@ use crate::graph::floating_time_dependent::*;
 use crate::shortest_path::customizable_contraction_hierarchy::cch_graph::CCHGraph;
 use crate::shortest_path::timestamped_vector::TimestampedVector;
 use crate::rank_select_map::BitVec;
+use crate::benchmark::Timer;
 
 #[derive(Debug)]
 pub struct Server<'a> {
@@ -52,6 +53,8 @@ impl<'a> Server<'a> {
     #[allow(clippy::collapsible_if)]
     #[allow(clippy::cyclomatic_complexity)]
     pub fn distance(&mut self, from_node: NodeId, to_node: NodeId, departure_time: Timestamp) -> Option<FlWeight> {
+        let timer = Timer::new();
+
         self.from = self.cch_graph.node_order().rank(from_node);
         self.to = self.cch_graph.node_order().rank(to_node);
 
@@ -68,6 +71,8 @@ impl<'a> Server<'a> {
         self.forward_tree_path.clear();
         self.backward_tree_path.clear();
         self.shortcut_queue.clear();
+
+        let init_time = timer.get_passed();
 
         while self.forward.peek_next().is_some() || self.backward.peek_next().is_some() {
             if self.forward.peek_next().unwrap_or(n as NodeId) <= self.backward.peek_next().unwrap_or(n as NodeId) {
@@ -116,6 +121,8 @@ impl<'a> Server<'a> {
             }
         }
 
+        let elimination_tree_time = timer.get_passed();
+
         let tentative_upper_bound = self.tentative_distance.1;
         let tentative_latest_arrival = departure_time + tentative_upper_bound;
 
@@ -134,6 +141,8 @@ impl<'a> Server<'a> {
                 }
             }
         }
+
+        let forward_select_time = timer.get_passed();
 
         let shortcut_graph = &self.shortcut_graph;
         let cch_graph = &self.cch_graph;
@@ -187,6 +196,8 @@ impl<'a> Server<'a> {
                 }
             }
         }
+
+        let forward_relax_time = timer.get_passed();
 
         while let Some(node) = self.backward_tree_path.pop() {
             if self.backward_tree_mask.get(node as usize) {
@@ -242,6 +253,14 @@ impl<'a> Server<'a> {
                 }
             }
         }
+
+        let backward_relax_time = timer.get_passed();
+
+        // println!("init: {} {:?}%", init_time, 100 * init_time.num_nanoseconds().unwrap() / backward_relax_time.num_nanoseconds().unwrap());
+        println!("elimination tree: {} {:?}%", elimination_tree_time - init_time, 100 * ((elimination_tree_time - init_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
+        println!("fw select: {} {:?}%", forward_select_time - elimination_tree_time, 100 * ((forward_select_time - elimination_tree_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
+        println!("fw relax: {} {:?}%", forward_relax_time - forward_select_time, 100 * ((forward_relax_time - forward_select_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
+        println!("bw relax: {} {:?}%", backward_relax_time - forward_relax_time, 100 * ((backward_relax_time - forward_relax_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
 
         if self.distances[self.to as usize] < Timestamp::new(f64::from(INFINITY)) {
             Some(self.distances[self.to as usize] - departure_time)
