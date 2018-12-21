@@ -260,7 +260,7 @@ impl CCHReordering {
     fn to_ordering(&self, seperators: SeparatorTree, order: &mut Vec<NodeId>) {
         order.extend(seperators.nodes);
         for child in seperators.children {
-            self.to_ordering(*child, order);
+            self.to_ordering(child, order);
         }
     }
 

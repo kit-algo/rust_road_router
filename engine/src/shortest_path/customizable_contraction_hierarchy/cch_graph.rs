@@ -13,7 +13,7 @@ use std::ops::Range;
 #[derive(Debug)]
 pub struct SeparatorTree {
     pub nodes: Vec<NodeId>,
-    pub children: Vec<Box<SeparatorTree>>,
+    pub children: Vec<SeparatorTree>,
 }
 
 #[derive(Debug)]
@@ -110,7 +110,7 @@ impl CCHGraph {
 
         SeparatorTree {
             nodes: Vec::new(),
-            children: roots.into_iter().map(|root| Self::aggregate_chain(root, &children)).map(Box::new).collect()
+            children: roots.into_iter().map(|root| Self::aggregate_chain(root, &children)).collect()
         }
     }
 
@@ -126,7 +126,7 @@ impl CCHGraph {
 
         SeparatorTree {
             nodes,
-            children: children[node as usize].iter().map(|&child| Self::aggregate_chain(child, children)).map(Box::new).collect()
+            children: children[node as usize].iter().map(|&child| Self::aggregate_chain(child, children)).collect()
         }
     }
 
