@@ -39,7 +39,7 @@ impl<'a, 'b> FloatingTDSteppedEliminationTree<'a, 'b> {
 
         FloatingTDSteppedEliminationTree {
             graph,
-            distances: vec![NodeData { labels: Vec::new(), lower_bound: FlWeight::new(f64::from(INFINITY)), upper_bound: FlWeight::new(f64::from(INFINITY)) }; n],
+            distances: vec![NodeData { labels: Vec::new(), lower_bound: FlWeight::INFINITY, upper_bound: FlWeight::INFINITY }; n],
             elimination_tree,
             next: None,
             origin: None
@@ -51,8 +51,8 @@ impl<'a, 'b> FloatingTDSteppedEliminationTree<'a, 'b> {
             let mut next = Some(from);
             while let Some(node) = next {
                 self.distances[node as usize].labels.clear();
-                self.distances[node as usize].upper_bound = FlWeight::new(f64::from(INFINITY));
-                self.distances[node as usize].lower_bound = FlWeight::new(f64::from(INFINITY));
+                self.distances[node as usize].upper_bound = FlWeight::INFINITY;
+                self.distances[node as usize].lower_bound = FlWeight::INFINITY;
                 next = self.elimination_tree[node as usize].value();
             }
         }

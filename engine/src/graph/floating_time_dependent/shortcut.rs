@@ -23,7 +23,7 @@ impl Shortcut {
                     constant: false,
                 }
             },
-            None => Shortcut { sources: Sources::None, ttf: None, lower_bound: FlWeight::new(f64::from(INFINITY)), upper_bound: FlWeight::new(f64::from(INFINITY)), constant: false },
+            None => Shortcut { sources: Sources::None, ttf: None, lower_bound: FlWeight::INFINITY, upper_bound: FlWeight::INFINITY, constant: false },
         }
     }
 

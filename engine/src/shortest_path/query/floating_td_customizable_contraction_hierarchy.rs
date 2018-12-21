@@ -36,12 +36,12 @@ impl<'a> Server<'a> {
             backward: FloatingTDSteppedEliminationTree::new(customized_graph.downward_bounds_graph(), cch_graph.elimination_tree()),
             cch_graph,
             meeting_nodes: Vec::new(),
-            tentative_distance: (FlWeight::new(f64::from(INFINITY)), FlWeight::new(f64::from(INFINITY))),
+            tentative_distance: (FlWeight::INFINITY, FlWeight::INFINITY),
             customized_graph,
             forward_tree_path: Vec::new(),
             backward_tree_path: Vec::new(),
             shortcut_queue: Vec::new(),
-            distances: TimestampedVector::new(n, Timestamp::new(f64::from(INFINITY))),
+            distances: TimestampedVector::new(n, Timestamp::NEVER),
             parents: vec![(std::u32::MAX, std::u32::MAX); n],
             forward_tree_mask: BitVec::new(n),
             backward_tree_mask: BitVec::new(n),
@@ -61,7 +61,7 @@ impl<'a> Server<'a> {
         let n = self.customized_graph.original_graph.num_nodes();
 
         // initialize
-        self.tentative_distance = (FlWeight::new(f64::from(INFINITY)), FlWeight::new(f64::from(INFINITY)));
+        self.tentative_distance = (FlWeight::INFINITY, FlWeight::INFINITY);
         self.distances.reset();
         self.distances.set(self.from as usize, departure_time);
         self.meeting_nodes.clear();
@@ -166,7 +166,7 @@ impl<'a> Server<'a> {
                         let tail = cch_graph.edge_id_to_tail(shortcut_id);
                         let res = if t <= distances[tail as usize] {
                             distances[tail as usize] = t;
-                            debug_assert_ne!(distances[parent as usize], Timestamp::new(f64::from(INFINITY)));
+                            debug_assert_ne!(distances[parent as usize], Timestamp::NEVER);
                             if tail != parent {
                                 parents[tail as usize] = (parent, parent_shortcut_id);
                             }
@@ -181,7 +181,7 @@ impl<'a> Server<'a> {
                         let head = cch_graph.head(shortcut_id);
                         let res = if t <= distances[head as usize] {
                             distances[head as usize] = t;
-                            debug_assert_ne!(distances[parent as usize], Timestamp::new(f64::from(INFINITY)));
+                            debug_assert_ne!(distances[parent as usize], Timestamp::NEVER);
                             if head != parent {
                                 parents[head as usize] = (parent, parent_shortcut_id);
                             }
@@ -197,7 +197,7 @@ impl<'a> Server<'a> {
                 if t_next < distances[head as usize] {
                     distances[head as usize] = t_next;
                     parents[head as usize] = (parent, parent_shortcut_id);
-                    debug_assert_ne!(distances[parent as usize], Timestamp::new(f64::from(INFINITY)));
+                    debug_assert_ne!(distances[parent as usize], Timestamp::NEVER);
                 }
             }
         }
@@ -221,7 +221,7 @@ impl<'a> Server<'a> {
                                 let tail = cch_graph.edge_id_to_tail(shortcut_id);
                                 let res = if t <= distances[tail as usize] {
                                     distances[tail as usize] = t;
-                                    debug_assert_ne!(distances[parent as usize], Timestamp::new(f64::from(INFINITY)));
+                                    debug_assert_ne!(distances[parent as usize], Timestamp::NEVER);
                                     if tail != parent {
                                         parents[tail as usize] = (parent, parent_shortcut_id);
                                     }
@@ -236,7 +236,7 @@ impl<'a> Server<'a> {
                                 let head = cch_graph.head(shortcut_id);
                                 let res = if t <= distances[head as usize] {
                                     distances[head as usize] = t;
-                                    debug_assert_ne!(distances[parent as usize], Timestamp::new(f64::from(INFINITY)));
+                                    debug_assert_ne!(distances[parent as usize], Timestamp::NEVER);
                                     if head != parent {
                                         parents[head as usize] = (parent, parent_shortcut_id);
                                     }
@@ -252,7 +252,7 @@ impl<'a> Server<'a> {
                         if t_next < distances[head as usize] {
                             distances[head as usize] = t_next;
                             parents[head as usize] = (parent, parent_shortcut_id);
-                            debug_assert_ne!(distances[parent as usize], Timestamp::new(f64::from(INFINITY)));
+                            debug_assert_ne!(distances[parent as usize], Timestamp::NEVER);
                         }
                     }
                 }
@@ -267,7 +267,7 @@ impl<'a> Server<'a> {
         println!("fw relax: {} {:?}%", forward_relax_time - forward_select_time, 100 * ((forward_relax_time - forward_select_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
         println!("bw relax: {} {:?}%", backward_relax_time - forward_relax_time, 100 * ((backward_relax_time - forward_relax_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
 
-        if self.distances[self.to as usize] < Timestamp::new(f64::from(INFINITY)) {
+        if self.distances[self.to as usize] < Timestamp::NEVER {
             Some(self.distances[self.to as usize] - departure_time)
         } else {
             None

@@ -36,7 +36,7 @@ impl FloatingTDSteppedDijkstra {
         FloatingTDSteppedDijkstra {
             graph,
             // initialize tentative distances to INFINITY
-            distances: TimestampedVector::new(n, Timestamp::new(f64::from(INFINITY))),
+            distances: TimestampedVector::new(n, Timestamp::NEVER),
             predecessors: vec![n as NodeId; n],
             closest_node_priority_queue: IndexdMinHeap::new(n),
         }

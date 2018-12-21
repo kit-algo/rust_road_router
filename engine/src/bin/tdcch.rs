@@ -138,15 +138,15 @@ fn main() {
         let at = Timestamp::new(rng.gen_range(0.0, f64::from(period())));
         td_dijk_server.ranks(from, at, |to, ea_ground_truth, rank| {
             let (ea, duration) = measure(|| server.distance(from, to, at).map(|dist| dist + at));
-            if ea.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY))).fuzzy_eq(ea_ground_truth) {
+            if ea.unwrap_or(Timestamp::NEVER).fuzzy_eq(ea_ground_truth) {
                 println!("TDCCH ✅ {:?} {:?}", ea, ea_ground_truth);
             } else {
                 println!("TDCCH ❌ {:?} {:?}", ea, ea_ground_truth);
             }
             if cfg!(feature = "tdcch-approx") {
-                assert!(!ea.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY))).fuzzy_lt(ea_ground_truth), "{} {} {:?}", from, to, at);
+                assert!(!ea.unwrap_or(Timestamp::NEVER).fuzzy_lt(ea_ground_truth), "{} {} {:?}", from, to, at);
             } else {
-                assert!(ea_ground_truth.fuzzy_eq(ea.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY)))), "{} {} {:?}", from, to, at);
+                assert!(ea_ground_truth.fuzzy_eq(ea.unwrap_or(Timestamp::NEVER)), "{} {} {:?}", from, to, at);
             }
             if ea.is_some() {
                 let (path, unpacking_duration) = measure(|| server.path());
@@ -198,15 +198,15 @@ fn main() {
 
             tdcch_time = tdcch_time + measure(|| {
                 let dist = server.distance(from, to, at).map(|dist| dist + at);
-                if dist.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY))).fuzzy_eq(ground_truth.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY)))) {
+                if dist.unwrap_or(Timestamp::NEVER).fuzzy_eq(ground_truth.unwrap_or(Timestamp::NEVER)) {
                     println!("TDCCH ✅ {:?} {:?}", dist, ground_truth);
                 } else {
                     println!("TDCCH ❌ {:?} {:?}", dist, ground_truth);
                 }
                 if cfg!(feature = "tdcch-approx") {
-                    assert!(!dist.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY))).fuzzy_lt(ground_truth.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY)))), "{} {} {:?}", from, to, at);
+                    assert!(!dist.unwrap_or(Timestamp::NEVER).fuzzy_lt(ground_truth.unwrap_or(Timestamp::NEVER)), "{} {} {:?}", from, to, at);
                 } else {
-                    assert!(dist.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY))).fuzzy_eq(ground_truth.unwrap_or_else(|| Timestamp::new(f64::from(INFINITY)))));
+                    assert!(dist.unwrap_or(Timestamp::NEVER).fuzzy_eq(ground_truth.unwrap_or(Timestamp::NEVER)));
                 }
             }).1;
         }

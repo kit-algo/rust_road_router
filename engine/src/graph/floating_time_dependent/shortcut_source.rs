@@ -13,11 +13,11 @@ impl ShortcutSource {
     {
         match *self {
             ShortcutSource::Shortcut(down, up) => {
-                if !f(false, down, t) { return FlWeight::new(f64::from(INFINITY)); }
+                if !f(false, down, t) { return FlWeight::INFINITY; }
                 let first_val = customized_graph.incoming.evaluate(down, t, customized_graph, f);
                 debug_assert!(first_val >= FlWeight::zero());
                 let t_mid = t + first_val;
-                if !f(true, up, t_mid) { return FlWeight::new(f64::from(INFINITY)); }
+                if !f(true, up, t_mid) { return FlWeight::INFINITY; }
                 let second_val = customized_graph.outgoing.evaluate(up, t_mid, customized_graph, f);
                 debug_assert!(second_val >= FlWeight::zero());
                 first_val + second_val

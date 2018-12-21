@@ -238,7 +238,7 @@ impl Imai {
         p_lower_vertex.succ_lower = self.i;
         self.tunnel.push(p_lower_vertex);
 
-        debug_assert!(self.tunnel.last().unwrap().lower_coord.val < FlWeight::new(f64::from(INFINITY)));
+        debug_assert!(self.tunnel.last().unwrap().lower_coord.val < FlWeight::INFINITY);
         debug_assert!(self.tunnel.last().unwrap().lower_coord.val > FlWeight::new(-f64::from(INFINITY)));
 
         self.p_lower = self.tunnel.len()-1;
@@ -282,7 +282,7 @@ impl Imai {
         p_upper_vertex.succ_upper = self.i;
         self.tunnel.push(p_upper_vertex);
 
-        debug_assert!(self.tunnel.last().unwrap().lower_coord.val < FlWeight::new(f64::from(INFINITY)));
+        debug_assert!(self.tunnel.last().unwrap().lower_coord.val < FlWeight::INFINITY);
         debug_assert!(self.tunnel.last().unwrap().lower_coord.val > FlWeight::new(-f64::from(INFINITY)));
 
         self.p_upper = self.tunnel.len() - 1;

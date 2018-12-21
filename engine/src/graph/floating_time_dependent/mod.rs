@@ -50,6 +50,8 @@ mod time {
     pub const APPROX: FlWeight = FlWeight(10.0);
 
     impl FlWeight {
+        pub const INFINITY: Self = FlWeight(2_147_483_647.0);
+
         pub fn new(t: f64) -> Self {
             debug_assert_ne!(t, NAN);
             FlWeight(t)
@@ -152,6 +154,8 @@ mod time {
     pub struct Timestamp(f64);
 
     impl Timestamp {
+        pub const NEVER: Self = Timestamp(2_147_483_647.0);
+
         pub fn new(t: f64) -> Self {
             debug_assert_ne!(t, NAN);
             Timestamp(t)

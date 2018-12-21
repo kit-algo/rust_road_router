@@ -145,7 +145,7 @@ impl<'a> CustomizedSingleDirGraph<'a> {
             return self.bounds[edge_idx].0;
         }
 
-        self.edge_source_at(edge_idx, t).map(|&source| ShortcutSource::from(source).evaluate(t, customized_graph, f)).unwrap_or(FlWeight::new(f64::from(INFINITY)))
+        self.edge_source_at(edge_idx, t).map(|&source| ShortcutSource::from(source).evaluate(t, customized_graph, f)).unwrap_or(FlWeight::INFINITY)
     }
 
     pub fn unpack_at(&self, edge_id: EdgeId, t: Timestamp, customized_graph: &CustomizedGraph, result: &mut Vec<(EdgeId, Timestamp)>) {

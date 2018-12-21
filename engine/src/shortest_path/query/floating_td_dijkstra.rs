@@ -48,7 +48,7 @@ impl Server {
     }
 
     pub fn is_in_searchspace(&self, node: NodeId) -> bool {
-        self.dijkstra.tentative_distance(node) < Timestamp::new(f64::from(INFINITY))
+        self.dijkstra.tentative_distance(node) < Timestamp::NEVER
     }
 
     pub fn path(&self) -> Vec<(NodeId, Timestamp)> {
