@@ -1,6 +1,7 @@
 use super::*;
 use crate::graph::first_out_graph::degrees_to_first_out;
 use crate::rank_select_map::BitVec;
+use crate::io::*;
 use std::mem::swap;
 
 #[derive(Debug)]
@@ -86,8 +87,8 @@ impl<'a> From<ShortcutGraph<'a>> for CustomizedGraph<'a> {
 
                 bounds: shortcut_graph.outgoing.iter().map(|shortcut| (shortcut.lower_bound, shortcut.upper_bound)).collect(),
                 constant: outgoing_constant,
-                first_data: degrees_to_first_out(shortcut_graph.outgoing.iter().map(|shortcut| shortcut.num_sources() as u32)).collect(),
-                source_data: shortcut_graph.outgoing.iter().map(|shortcut| shortcut.sources_iter().map(|(t, &s)| (t, s))).flatten().collect(),
+                first_source: degrees_to_first_out(shortcut_graph.outgoing.iter().map(|shortcut| shortcut.num_sources() as u32)).collect(),
+                sources: shortcut_graph.outgoing.iter().map(|shortcut| shortcut.sources_iter().map(|(t, &s)| (t, s))).flatten().collect(),
             },
 
             incoming: CustomizedSingleDirGraph {
@@ -96,8 +97,8 @@ impl<'a> From<ShortcutGraph<'a>> for CustomizedGraph<'a> {
 
                 bounds: shortcut_graph.incoming.iter().map(|shortcut| (shortcut.lower_bound, shortcut.upper_bound)).collect(),
                 constant: incoming_constant,
-                first_data: degrees_to_first_out(shortcut_graph.incoming.iter().map(|shortcut| shortcut.num_sources() as u32)).collect(),
-                source_data: shortcut_graph.incoming.iter().map(|shortcut| shortcut.sources_iter().map(|(t, &s)| (t, s))).flatten().collect(),
+                first_source: degrees_to_first_out(shortcut_graph.incoming.iter().map(|shortcut| shortcut.num_sources() as u32)).collect(),
+                sources: shortcut_graph.incoming.iter().map(|shortcut| shortcut.sources_iter().map(|(t, &s)| (t, s))).flatten().collect(),
             },
         }
     }
@@ -121,6 +122,57 @@ impl<'a> CustomizedGraph<'a> {
     }
 }
 
+impl<'a> Deconstruct for CustomizedGraph<'a> {
+    fn store_each(&self, store: &Fn(&str, &dyn Store) -> std::io::Result<()>) -> std::io::Result<()> {
+        store("outgoing_bounds", &self.outgoing.bounds)?;
+        store("outgoing_constant", &self.outgoing.constant)?;
+        store("outgoing_first_source", &self.outgoing.first_source)?;
+        store("outgoing_sources", &self.outgoing.sources)?;
+        store("incoming_bounds", &self.incoming.bounds)?;
+        store("incoming_constant", &self.incoming.constant)?;
+        store("incoming_first_source", &self.incoming.first_source)?;
+        store("incoming_sources", &self.incoming.sources)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct CustomizedGraphReconstrctor<'a> {
+    pub original_graph: &'a TDGraph,
+    pub first_out: &'a [EdgeId],
+    pub head: &'a [NodeId],
+}
+
+impl<'a> ReconstructPrepared<CustomizedGraph<'a>> for CustomizedGraphReconstrctor<'a> {
+    fn reconstruct_with(self, loader: Loader) -> std::io::Result<CustomizedGraph<'a>> {
+        Ok(CustomizedGraph {
+            original_graph: self.original_graph,
+            first_out: self.first_out,
+            head: self.head,
+
+            outgoing: CustomizedSingleDirGraph {
+                first_out: self.first_out,
+                head: self.head,
+
+                bounds: loader.load("outgoing_bounds")?,
+                constant: loader.load("outgoing_constant")?,
+                first_source: loader.load("outgoing_first_source")?,
+                sources: loader.load("outgoing_sources")?,
+            },
+
+            incoming: CustomizedSingleDirGraph {
+                first_out: self.first_out,
+                head: self.head,
+
+                bounds: loader.load("incoming_bounds")?,
+                constant: loader.load("incoming_constant")?,
+                first_source: loader.load("incoming_first_source")?,
+                sources: loader.load("incoming_sources")?,
+            },
+        })
+    }
+}
+
 #[derive(Debug)]
 pub struct CustomizedSingleDirGraph<'a> {
     first_out: &'a [EdgeId], // TODO do not store here
@@ -128,8 +180,8 @@ pub struct CustomizedSingleDirGraph<'a> {
 
     bounds: Vec<(FlWeight, FlWeight)>,
     constant: BitVec,
-    first_data: Vec<u32>,
-    source_data: Vec<(Timestamp, ShortcutSourceData)>,
+    first_source: Vec<u32>,
+    sources: Vec<(Timestamp, ShortcutSourceData)>,
 }
 
 impl<'a> CustomizedSingleDirGraph<'a> {
@@ -177,7 +229,7 @@ impl<'a> CustomizedSingleDirGraph<'a> {
     }
 
     fn edge_sources(&self, edge_idx: usize) -> &[(Timestamp, ShortcutSourceData)] {
-        &self.source_data[(self.first_data[edge_idx] as usize)..(self.first_data[edge_idx + 1] as usize)]
+        &self.sources[(self.first_source[edge_idx] as usize)..(self.first_source[edge_idx + 1] as usize)]
     }
 }
 

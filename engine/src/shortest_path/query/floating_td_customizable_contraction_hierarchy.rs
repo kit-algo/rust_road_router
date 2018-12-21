@@ -178,7 +178,7 @@ impl<'a> Server<'a> {
                         parent_shortcut_id = shortcut_id;
                         res
                     } else {
-                        let head = cch_graph.head(shortcut_id);
+                        let head = cch_graph.head()[shortcut_id as usize];
                         let res = if t <= distances[head as usize] {
                             distances[head as usize] = t;
                             debug_assert_ne!(distances[parent as usize], Timestamp::NEVER);
@@ -233,7 +233,7 @@ impl<'a> Server<'a> {
                                 parent_shortcut_id = shortcut_id;
                                 res
                             } else {
-                                let head = cch_graph.head(shortcut_id);
+                                let head = cch_graph.head()[shortcut_id as usize];
                                 let res = if t <= distances[head as usize] {
                                     distances[head as usize] = t;
                                     debug_assert_ne!(distances[parent as usize], Timestamp::NEVER);

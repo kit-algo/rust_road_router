@@ -72,3 +72,13 @@ impl From<ShortcutSourceData> for ShortcutSource {
         }
     }
 }
+
+// TODO Default should be valid
+impl Default for ShortcutSourceData {
+    fn default() -> Self {
+        Self {
+            down_arc: InRangeOption::new(None),
+            up_arc: std::u32::MAX,
+        }
+    }
+}

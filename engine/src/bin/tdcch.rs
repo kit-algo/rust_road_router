@@ -7,7 +7,7 @@ use std::{
 use bmw_routing_engine::{
     graph::{
         *,
-        floating_time_dependent::*,
+        floating_time_dependent::{*, shortcut_graph::CustomizedGraphReconstrctor},
         time_dependent::period as int_period,
     },
     shortest_path::{
@@ -124,7 +124,16 @@ fn main() {
         CCHGraphReconstrctor { original_graph: &graph, node_order }.reconstruct_from(cch_folder.to_str().unwrap()).expect("could not read cch")
     };
 
-    let td_cch_graph = cch.customize_floating_td(&graph).into();
+    let customized_folder = path.join("customized");
+
+    let td_cch_graph = if !customized_folder.exists() {
+        std::fs::create_dir(&customized_folder).expect("could not create cch folder");
+        let td_cch_graph: CustomizedGraph = cch.customize_floating_td(&graph).into();
+        td_cch_graph.deconstruct_to(customized_folder.to_str().unwrap()).expect("could not save customized");
+        td_cch_graph
+    } else {
+        CustomizedGraphReconstrctor { original_graph: &graph, first_out: cch.first_out(), head: cch.head() }.reconstruct_from(customized_folder.to_str().unwrap()).expect("could not read customized")
+    };
 
     let mut td_dijk_server = DijkServer::new(graph.clone());
     let mut server = Server::new(&cch, &td_cch_graph);

@@ -482,8 +482,12 @@ impl CCHGraph {
         self.tail[edge_id as usize]
     }
 
-    pub fn head(&self, edge_id: EdgeId) -> NodeId {
-        self.head[edge_id as usize]
+    pub fn first_out(&self) -> &[EdgeId] {
+        &self.first_out
+    }
+
+    pub fn head(&self) -> &[NodeId] {
+        &self.head
     }
 
     fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {

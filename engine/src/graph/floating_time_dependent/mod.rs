@@ -150,6 +150,12 @@ mod time {
         }
     }
 
+    impl Default for FlWeight {
+        fn default() -> Self {
+            Self::zero()
+        }
+    }
+
     #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
     pub struct Timestamp(f64);
 
@@ -221,6 +227,12 @@ mod time {
     impl From<Timestamp> for f64 {
         fn from(t: Timestamp) -> Self {
             t.0
+        }
+    }
+
+    impl Default for Timestamp {
+        fn default() -> Self {
+            Self::zero()
         }
     }
 }
