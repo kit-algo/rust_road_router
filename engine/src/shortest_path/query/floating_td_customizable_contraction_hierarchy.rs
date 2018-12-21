@@ -14,7 +14,7 @@ pub struct Server<'a> {
     forward: FloatingTDSteppedEliminationTree<'a, 'a>,
     backward: FloatingTDSteppedEliminationTree<'a, 'a>,
     cch_graph: &'a CCHGraph,
-    shortcut_graph: &'a ShortcutGraph<'a>,
+    customized_graph: &'a CustomizedGraph<'a>,
     tentative_distance: (FlWeight, FlWeight),
     meeting_nodes: Vec<(NodeId, FlWeight)>,
     forward_tree_path: Vec<NodeId>,
@@ -29,15 +29,15 @@ pub struct Server<'a> {
 }
 
 impl<'a> Server<'a> {
-    pub fn new(cch_graph: &'a CCHGraph, shortcut_graph: &'a ShortcutGraph<'a>) -> Self {
-        let n = shortcut_graph.original_graph().num_nodes();
+    pub fn new(cch_graph: &'a CCHGraph, customized_graph: &'a CustomizedGraph<'a>) -> Self {
+        let n = customized_graph.original_graph.num_nodes();
         Self {
-            forward: FloatingTDSteppedEliminationTree::new(shortcut_graph.upward_graph(), cch_graph.elimination_tree()),
-            backward: FloatingTDSteppedEliminationTree::new(shortcut_graph.downward_graph(), cch_graph.elimination_tree()),
+            forward: FloatingTDSteppedEliminationTree::new(customized_graph.upward_bounds_graph(), cch_graph.elimination_tree()),
+            backward: FloatingTDSteppedEliminationTree::new(customized_graph.downward_bounds_graph(), cch_graph.elimination_tree()),
             cch_graph,
             meeting_nodes: Vec::new(),
             tentative_distance: (FlWeight::new(f64::from(INFINITY)), FlWeight::new(f64::from(INFINITY))),
-            shortcut_graph,
+            customized_graph,
             forward_tree_path: Vec::new(),
             backward_tree_path: Vec::new(),
             shortcut_queue: Vec::new(),
@@ -58,7 +58,7 @@ impl<'a> Server<'a> {
         self.from = self.cch_graph.node_order().rank(from_node);
         self.to = self.cch_graph.node_order().rank(to_node);
 
-        let n = self.shortcut_graph.original_graph().num_nodes();
+        let n = self.customized_graph.original_graph.num_nodes();
 
         // initialize
         self.tentative_distance = (FlWeight::new(f64::from(INFINITY)), FlWeight::new(f64::from(INFINITY)));
@@ -77,8 +77,8 @@ impl<'a> Server<'a> {
         while self.forward.peek_next().is_some() || self.backward.peek_next().is_some() {
             if self.forward.peek_next().unwrap_or(n as NodeId) <= self.backward.peek_next().unwrap_or(n as NodeId) {
                 let stall = || {
-                    for ((target, _), shortcut) in self.shortcut_graph.downward_graph().neighbor_iter(self.forward.peek_next().unwrap()) {
-                        if self.forward.node_data(target).upper_bound + shortcut.upper_bound < self.forward.node_data(self.forward.peek_next().unwrap()).lower_bound {
+                    for ((target, _), (_, shortcut_upper_bound)) in self.customized_graph.downward_bounds_graph().neighbor_iter(self.forward.peek_next().unwrap()) {
+                        if self.forward.node_data(target).upper_bound + shortcut_upper_bound < self.forward.node_data(self.forward.peek_next().unwrap()).lower_bound {
                             return true;
                         }
                     }
@@ -92,9 +92,13 @@ impl<'a> Server<'a> {
                     self.forward_tree_path.push(node);
 
                     let lower_bound = self.forward.node_data(node).lower_bound + self.backward.node_data(node).lower_bound;
+                    let upper_bound = self.forward.node_data(node).upper_bound + self.backward.node_data(node).upper_bound;
+
+                    self.distances[node as usize] = min(self.distances[node as usize], departure_time + upper_bound + FlWeight::new(EPSILON));
+
                     if lower_bound < self.tentative_distance.1 {
                         self.tentative_distance.0 = min(self.tentative_distance.0, lower_bound);
-                        self.tentative_distance.1 = min(self.tentative_distance.1, self.forward.node_data(node).upper_bound + self.backward.node_data(node).upper_bound);
+                        self.tentative_distance.1 = min(self.tentative_distance.1, upper_bound);
                         debug_assert!(self.tentative_distance.0 <= self.tentative_distance.1);
                         self.meeting_nodes.push((node, lower_bound));
                     }
@@ -144,7 +148,8 @@ impl<'a> Server<'a> {
 
         let forward_select_time = timer.get_passed();
 
-        let shortcut_graph = &self.shortcut_graph;
+        // TODO kill double refs
+        let customized_graph = &self.customized_graph;
         let cch_graph = &self.cch_graph;
         let shortcut_queue = &mut self.shortcut_queue;
         let distances = &mut self.distances;
@@ -153,10 +158,10 @@ impl<'a> Server<'a> {
         for &(shortcut_id, tail, head) in shortcut_queue.iter().rev() {
             let t_cur = distances[tail as usize];
             let pruning_bound = min(tentative_latest_arrival, distances[head as usize]);
-            if !pruning_bound.fuzzy_lt(t_cur + shortcut_graph.get_outgoing(shortcut_id).lower_bound) {
+            if !pruning_bound.fuzzy_lt(t_cur + customized_graph.outgoing.bounds()[shortcut_id as usize].0) {
                 let mut parent = tail;
                 let mut parent_shortcut_id = shortcut_id;
-                let t_next = t_cur + shortcut_graph.get_outgoing(shortcut_id).evaluate(t_cur, shortcut_graph, &mut |up, shortcut_id, t| {
+                let t_next = t_cur + customized_graph.outgoing.evaluate(shortcut_id, t_cur, customized_graph, &mut |up, shortcut_id, t| {
                     if up {
                         let tail = cch_graph.edge_id_to_tail(shortcut_id);
                         let res = if t <= distances[tail as usize] {
@@ -208,10 +213,10 @@ impl<'a> Server<'a> {
                     let head = label.parent;
                     let t_cur = distances[tail as usize];
                     let pruning_bound = min(tentative_latest_arrival, distances[head as usize]);
-                    if !pruning_bound.fuzzy_lt(t_cur + shortcut_graph.get_incoming(label.shortcut_id).lower_bound) {
+                    if !pruning_bound.fuzzy_lt(t_cur + customized_graph.incoming.bounds()[label.shortcut_id as usize].0) {
                         let mut parent = tail;
                         let mut parent_shortcut_id = label.shortcut_id;
-                        let t_next = t_cur + shortcut_graph.get_incoming(label.shortcut_id).evaluate(t_cur, shortcut_graph, &mut |up, shortcut_id, t| {
+                        let t_next = t_cur + customized_graph.incoming.evaluate(label.shortcut_id, t_cur, customized_graph, &mut |up, shortcut_id, t| {
                             if up {
                                 let tail = cch_graph.edge_id_to_tail(shortcut_id);
                                 let res = if t <= distances[tail as usize] {
@@ -285,13 +290,13 @@ impl<'a> Server<'a> {
 
             let mut shortcut_path = Vec::new();
             if parent > rank {
-                self.shortcut_graph.get_incoming(shortcut_id).unpack_at(t_parent, &self.shortcut_graph, &mut shortcut_path);
+                self.customized_graph.incoming.unpack_at(shortcut_id, t_parent, &self.customized_graph, &mut shortcut_path);
             } else {
-                self.shortcut_graph.get_outgoing(shortcut_id).unpack_at(t_parent, &self.shortcut_graph, &mut shortcut_path);
+                self.customized_graph.outgoing.unpack_at(shortcut_id, t_parent, &self.customized_graph, &mut shortcut_path);
             };
 
             for (edge, arrival) in shortcut_path.into_iter().rev() {
-                path.push((self.cch_graph.node_order().rank(self.shortcut_graph.original_graph().head()[edge as usize]), arrival));
+                path.push((self.cch_graph.node_order().rank(self.customized_graph.original_graph.head()[edge as usize]), arrival));
             }
 
             path.push((parent, t_parent));

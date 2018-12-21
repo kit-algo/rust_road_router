@@ -218,58 +218,16 @@ impl Shortcut {
         Sources::Multi(new_sources)
     }
 
-    pub fn evaluate<F>(&self, t: Timestamp, shortcut_graph: &ShortcutGraph, f: &mut F) -> FlWeight
-        where F: (FnMut(bool, EdgeId, Timestamp) -> bool)
-    {
-        if self.constant {
-            return self.lower_bound;
-        }
-
-        if let Some(ipps) = &self.ttf {
-            return PiecewiseLinearFunction::new(ipps).evaluate(t)
-        }
-
-        match &self.sources {
-            Sources::None => FlWeight::new(f64::from(INFINITY)),
-            Sources::One(source) => ShortcutSource::from(*source).evaluate(t, shortcut_graph, f),
-            Sources::Multi(data) => {
-                let (_, t_period) = t.split_of_period();
-                debug_assert!(data[0].0 == Timestamp::zero(), "{:?}", data);
-                let (_, source) = match data.binary_search_by_key(&t_period, |(t, _)| *t) {
-                    Ok(i) => data[i],
-                    Err(i) => {
-                        debug_assert!(data[i-1].0 < t_period);
-                        if i < data.len() {
-                            debug_assert!(t_period < data[i].0);
-                        }
-                        data[i-1]
-                    }
-                };
-                ShortcutSource::from(source).evaluate(t, shortcut_graph, f)
-            },
-        }
+    pub fn num_sources(&self) -> usize {
+        self.sources.len()
     }
 
-    pub fn unpack_at(&self, t: Timestamp, shortcut_graph: &ShortcutGraph, result: &mut Vec<(EdgeId, Timestamp)>) {
-        match &self.sources {
-            Sources::None => panic!("can't unpack empty shortcut"),
-            Sources::One(source) => ShortcutSource::from(*source).unpack_at(t, shortcut_graph, result),
-            Sources::Multi(data) => {
-                let (_, t_period) = t.split_of_period();
-                debug_assert!(data[0].0 == Timestamp::zero(), "{:?}", data);
-                let (_, source) = match data.binary_search_by_key(&t_period, |(t, _)| *t) {
-                    Ok(i) => data[i],
-                    Err(i) => {
-                        debug_assert!(data[i-1].0 < t_period);
-                        if i < data.len() {
-                            debug_assert!(t_period < data[i].0);
-                        }
-                        data[i-1]
-                    }
-                };
-                ShortcutSource::from(source).unpack_at(t, shortcut_graph, result)
-            },
-        }
+    pub fn sources_iter(&self) -> impl Iterator<Item = (Timestamp, &ShortcutSourceData)> {
+        self.sources.iter()
+    }
+
+    pub fn is_constant(&self) -> bool {
+        self.constant
     }
 }
 

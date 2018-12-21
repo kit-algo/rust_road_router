@@ -18,7 +18,8 @@ use self::shortcut_source::*;
 
 pub mod shortcut_graph;
 pub use self::shortcut_graph::ShortcutGraph;
-pub use self::shortcut_graph::SingleDirShortcutGraph;
+pub use self::shortcut_graph::CustomizedGraph;
+pub use self::shortcut_graph::SingleDirBoundsGraph;
 
 #[allow(clippy::float_cmp)]
 mod time {

@@ -2,7 +2,7 @@ use crate::graph::floating_time_dependent::*;
 use std::cmp::min;
 use super::*;
 use crate::in_range_option::InRangeOption;
-use crate::graph::floating_time_dependent::SingleDirShortcutGraph;
+use crate::graph::floating_time_dependent::SingleDirBoundsGraph;
 
 #[derive(Debug, Clone)]
 pub enum QueryProgress {
@@ -26,7 +26,7 @@ pub struct NodeData {
 
 #[derive(Debug)]
 pub struct FloatingTDSteppedEliminationTree<'a, 'b> {
-    graph: SingleDirShortcutGraph<'a>,
+    graph: SingleDirBoundsGraph<'a>,
     distances: Vec<NodeData>,
     elimination_tree: &'b [InRangeOption<NodeId>],
     next: Option<NodeId>,
@@ -34,7 +34,7 @@ pub struct FloatingTDSteppedEliminationTree<'a, 'b> {
 }
 
 impl<'a, 'b> FloatingTDSteppedEliminationTree<'a, 'b> {
-    pub fn new(graph: SingleDirShortcutGraph<'a>, elimination_tree: &'b [InRangeOption<NodeId>]) -> FloatingTDSteppedEliminationTree<'a, 'b> {
+    pub fn new(graph: SingleDirBoundsGraph<'a>, elimination_tree: &'b [InRangeOption<NodeId>]) -> FloatingTDSteppedEliminationTree<'a, 'b> {
         let n = graph.num_nodes();
 
         FloatingTDSteppedEliminationTree {
@@ -76,15 +76,15 @@ impl<'a, 'b> FloatingTDSteppedEliminationTree<'a, 'b> {
             let current_state_upper_bound = self.distances[node as usize].upper_bound;
             self.next = self.elimination_tree[node as usize].value();
 
-            for ((target, shortcut_id), shortcut) in self.graph.neighbor_iter(node) {
+            for ((target, shortcut_id), (shortcut_lower_bound, shortcut_upper_bound)) in self.graph.neighbor_iter(node) {
                 let next = Label {
                     parent: node,
-                    lower_bound: shortcut.lower_bound + current_state_lower_bound,
+                    lower_bound: shortcut_lower_bound + current_state_lower_bound,
                     shortcut_id
                 };
-                let next_upper_bound = shortcut.upper_bound + current_state_upper_bound;
+                let next_upper_bound = shortcut_upper_bound + current_state_upper_bound;
 
-                debug_assert!(next.lower_bound <= next_upper_bound, "{:?}, {:?}", next, shortcut);
+                debug_assert!(next.lower_bound <= next_upper_bound, "{:?}", next);
 
                 if next.lower_bound < self.distances[target as usize].upper_bound {
                     self.distances[target as usize].lower_bound = min(next.lower_bound, self.distances[target as usize].lower_bound);

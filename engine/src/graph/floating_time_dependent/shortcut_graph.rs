@@ -1,4 +1,6 @@
 use super::*;
+use crate::graph::first_out_graph::degrees_to_first_out;
+use crate::rank_select_map::BitVec;
 use std::mem::swap;
 
 #[derive(Debug)]
@@ -29,14 +31,14 @@ impl<'a> ShortcutGraph<'a> {
     // the mutation just needs to guarantee that it will never refetch the edge under mutation.
     // But this is usually no problem since we know that a shortcut can only consist of paths of edges lower in the graph
     pub fn borrow_mut_outgoing<F: FnOnce(&mut Shortcut, &ShortcutGraph)>(&mut self, edge_id: EdgeId, f: F) {
-        let mut shortcut = Shortcut::new(None, self.original_graph());
+        let mut shortcut = Shortcut::new(None, self.original_graph);
         swap(&mut self.outgoing[edge_id as usize], &mut shortcut);
         f(&mut shortcut, &self);
         swap(&mut self.outgoing[edge_id as usize], &mut shortcut);
     }
 
     pub fn borrow_mut_incoming<F: FnOnce(&mut Shortcut, &ShortcutGraph)>(&mut self, edge_id: EdgeId, f: F) {
-        let mut shortcut = Shortcut::new(None, self.original_graph());
+        let mut shortcut = Shortcut::new(None, self.original_graph);
         swap(&mut self.incoming[edge_id as usize], &mut shortcut);
         f(&mut shortcut, &self);
         swap(&mut self.incoming[edge_id as usize], &mut shortcut);
@@ -45,32 +47,148 @@ impl<'a> ShortcutGraph<'a> {
     pub fn original_graph(&self) -> &TDGraph {
         self.original_graph
     }
+}
 
-    pub fn upward_graph(&self) -> SingleDirShortcutGraph {
-        SingleDirShortcutGraph {
+#[derive(Debug)]
+pub struct CustomizedGraph<'a> {
+    pub original_graph: &'a TDGraph,
+    first_out: &'a [EdgeId],
+    head: &'a [NodeId],
+    pub outgoing: CustomizedSingleDirGraph<'a>,
+    pub incoming: CustomizedSingleDirGraph<'a>,
+}
+
+impl<'a> From<ShortcutGraph<'a>> for CustomizedGraph<'a> {
+    fn from(shortcut_graph: ShortcutGraph<'a>) -> Self {
+        let mut outgoing_constant = BitVec::new(shortcut_graph.head.len());
+        let mut incoming_constant = BitVec::new(shortcut_graph.head.len());
+
+        for (idx, shortcut) in shortcut_graph.outgoing.iter().enumerate() {
+            if shortcut.is_constant() {
+                outgoing_constant.set(idx);
+            }
+        }
+
+        for (idx, shortcut) in shortcut_graph.incoming.iter().enumerate() {
+            if shortcut.is_constant() {
+                incoming_constant.set(idx);
+            }
+        }
+
+        CustomizedGraph {
+            original_graph: shortcut_graph.original_graph,
+            first_out: shortcut_graph.first_out,
+            head: shortcut_graph.head,
+
+            outgoing: CustomizedSingleDirGraph {
+                first_out: shortcut_graph.first_out,
+                head: shortcut_graph.head,
+
+                bounds: shortcut_graph.outgoing.iter().map(|shortcut| (shortcut.lower_bound, shortcut.upper_bound)).collect(),
+                constant: outgoing_constant,
+                first_data: degrees_to_first_out(shortcut_graph.outgoing.iter().map(|shortcut| shortcut.num_sources() as u32)).collect(),
+                source_data: shortcut_graph.outgoing.iter().map(|shortcut| shortcut.sources_iter().map(|(t, &s)| (t, s))).flatten().collect(),
+            },
+
+            incoming: CustomizedSingleDirGraph {
+                first_out: shortcut_graph.first_out,
+                head: shortcut_graph.head,
+
+                bounds: shortcut_graph.incoming.iter().map(|shortcut| (shortcut.lower_bound, shortcut.upper_bound)).collect(),
+                constant: incoming_constant,
+                first_data: degrees_to_first_out(shortcut_graph.incoming.iter().map(|shortcut| shortcut.num_sources() as u32)).collect(),
+                source_data: shortcut_graph.incoming.iter().map(|shortcut| shortcut.sources_iter().map(|(t, &s)| (t, s))).flatten().collect(),
+            },
+        }
+    }
+}
+
+impl<'a> CustomizedGraph<'a> {
+    pub fn upward_bounds_graph(&self) -> SingleDirBoundsGraph {
+        SingleDirBoundsGraph {
             first_out: self.first_out,
             head: self.head,
-            shortcuts: &self.outgoing[..]
+            bounds: &self.outgoing.bounds[..]
         }
     }
 
-    pub fn downward_graph(&self) -> SingleDirShortcutGraph {
-        SingleDirShortcutGraph {
+    pub fn downward_bounds_graph(&self) -> SingleDirBoundsGraph {
+        SingleDirBoundsGraph {
             first_out: self.first_out,
             head: self.head,
-            shortcuts: &self.incoming[..]
+            bounds: &self.incoming.bounds[..]
         }
     }
 }
 
 #[derive(Debug)]
-pub struct SingleDirShortcutGraph<'a> {
-    first_out: &'a [EdgeId],
+pub struct CustomizedSingleDirGraph<'a> {
+    first_out: &'a [EdgeId], // TODO do not store here
     head: &'a [NodeId],
-    shortcuts: &'a [Shortcut],
+
+    bounds: Vec<(FlWeight, FlWeight)>,
+    constant: BitVec,
+    first_data: Vec<u32>,
+    source_data: Vec<(Timestamp, ShortcutSourceData)>,
 }
 
-impl<'a> SingleDirShortcutGraph<'a> {
+impl<'a> CustomizedSingleDirGraph<'a> {
+    pub fn bounds(&self) -> &[(FlWeight, FlWeight)] {
+        &self.bounds[..]
+    }
+
+    pub fn evaluate<F>(&self, edge_id: EdgeId, t: Timestamp, customized_graph: &CustomizedGraph, f: &mut F) -> FlWeight
+        where F: (FnMut(bool, EdgeId, Timestamp) -> bool)
+    {
+        let edge_idx = edge_id as usize;
+        if self.constant.get(edge_idx) {
+            return self.bounds[edge_idx].0;
+        }
+
+        self.edge_source_at(edge_idx, t).map(|&source| ShortcutSource::from(source).evaluate(t, customized_graph, f)).unwrap_or(FlWeight::new(f64::from(INFINITY)))
+    }
+
+    pub fn unpack_at(&self, edge_id: EdgeId, t: Timestamp, customized_graph: &CustomizedGraph, result: &mut Vec<(EdgeId, Timestamp)>) {
+        self.edge_source_at(edge_id as usize, t).map(|&source| ShortcutSource::from(source).unpack_at(t, customized_graph, result)).expect("can't unpack empty shortcut");
+    }
+
+    fn edge_source_at(&self, edge_idx: usize, t: Timestamp) -> Option<&ShortcutSourceData> {
+        let data = self.edge_sources(edge_idx);
+
+        if data.is_empty() {
+            return None
+        }
+        if data.len() == 1 {
+            return Some(&data[0].1)
+        }
+
+        let (_, t_period) = t.split_of_period();
+        debug_assert!(data.first().map(|&(t, _)| t == Timestamp::zero()).unwrap_or(true), "{:?}", data);
+        match data.binary_search_by_key(&t_period, |(t, _)| *t) {
+            Ok(i) => data.get(i),
+            Err(i) => {
+                debug_assert!(data.get(i-1).map(|&(t, _)| t < t_period).unwrap_or(true));
+                if i < data.len() {
+                    debug_assert!(t_period < data[i].0);
+                }
+                data.get(i-1)
+            }
+        }.map(|(_, s)| s)
+    }
+
+    fn edge_sources(&self, edge_idx: usize) -> &[(Timestamp, ShortcutSourceData)] {
+        &self.source_data[(self.first_data[edge_idx] as usize)..(self.first_data[edge_idx + 1] as usize)]
+    }
+}
+
+#[derive(Debug)]
+pub struct SingleDirBoundsGraph<'a> {
+    first_out: &'a [EdgeId],
+    head: &'a [NodeId],
+    bounds: &'a [(FlWeight, FlWeight)],
+}
+
+impl<'a> SingleDirBoundsGraph<'a> {
     pub fn num_nodes(&self) -> usize {
         self.first_out.len() - 1
     }
@@ -79,9 +197,9 @@ impl<'a> SingleDirShortcutGraph<'a> {
         (self.first_out[node as usize] as usize)..(self.first_out[(node + 1) as usize] as usize)
     }
 
-    pub fn neighbor_iter(&self, node: NodeId) -> impl Iterator<Item = ((NodeId, EdgeId), &Shortcut)> {
+    pub fn neighbor_iter(&self, node: NodeId) -> impl Iterator<Item = ((NodeId, EdgeId), &(FlWeight, FlWeight))> {
         let range = self.neighbor_edge_indices_usize(node);
         let edge_ids = range.start as EdgeId .. range.end as EdgeId;
-        self.head[range.clone()].iter().cloned().zip(edge_ids).zip(self.shortcuts[range].iter())
+        self.head[range.clone()].iter().cloned().zip(edge_ids).zip(self.bounds[range].iter())
     }
 }

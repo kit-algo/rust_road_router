@@ -124,7 +124,7 @@ fn main() {
         CCHGraphReconstrctor { original_graph: &graph, node_order }.reconstruct_from(cch_folder.to_str().unwrap()).expect("could not read cch")
     };
 
-    let td_cch_graph = cch.customize_floating_td(&graph);
+    let td_cch_graph = cch.customize_floating_td(&graph).into();
 
     let mut td_dijk_server = DijkServer::new(graph.clone());
     let mut server = Server::new(&cch, &td_cch_graph);
