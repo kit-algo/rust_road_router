@@ -149,8 +149,10 @@ fn main() {
             let (ea, duration) = measure(|| server.distance(from, to, at).map(|dist| dist + at));
             if ea.unwrap_or(Timestamp::NEVER).fuzzy_eq(ea_ground_truth) {
                 println!("TDCCH ✅ {:?} {:?}", ea, ea_ground_truth);
+                println!("Rel Err for rank {}: 0.0", rank);
             } else {
                 println!("TDCCH ❌ {:?} {:?}", ea, ea_ground_truth);
+                println!("Rel Err for rank {}: {}", rank, f64::from((ea.unwrap_or(Timestamp::NEVER) - at) / (ea_ground_truth - at)) - 1.0);
             }
             if cfg!(feature = "tdcch-approx") {
                 assert!(!ea.unwrap_or(Timestamp::NEVER).fuzzy_lt(ea_ground_truth), "{} {} {:?}", from, to, at);
@@ -209,8 +211,10 @@ fn main() {
                 let dist = server.distance(from, to, at).map(|dist| dist + at);
                 if dist.unwrap_or(Timestamp::NEVER).fuzzy_eq(ground_truth.unwrap_or(Timestamp::NEVER)) {
                     println!("TDCCH ✅ {:?} {:?}", dist, ground_truth);
+                    println!("Rel Err 0.0");
                 } else {
                     println!("TDCCH ❌ {:?} {:?}", dist, ground_truth);
+                    println!("Rel Err {}", f64::from((dist.unwrap_or(Timestamp::NEVER) - at) / (ground_truth.unwrap_or(Timestamp::NEVER) - at)) - 1.0);
                 }
                 if cfg!(feature = "tdcch-approx") {
                     assert!(!dist.unwrap_or(Timestamp::NEVER).fuzzy_lt(ground_truth.unwrap_or(Timestamp::NEVER)), "{} {} {:?}", from, to, at);
