@@ -179,7 +179,7 @@ mod time {
         }
 
         pub fn split_of_period(self) -> (FlWeight, Timestamp) {
-            (FlWeight::new(self.0.div_euc(super::period().0)), Timestamp::new(self.0.mod_euc(super::period().0)))
+            (FlWeight::new(self.0.div_euclid(super::period().0)), Timestamp::new(self.0.rem_euclid(super::period().0)))
         }
     }
 
