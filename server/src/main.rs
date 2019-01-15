@@ -1,44 +1,39 @@
-#![feature(plugin)]
-#![feature(custom_derive)]
-#![plugin(rocket_codegen)]
+#![feature(proc_macro_hygiene, decl_macro)]
 
-extern crate serde;
-extern crate serde_json;
-#[macro_use]
-extern crate serde_derive;
+#[macro_use] extern crate rocket;
+#[macro_use] extern crate serde_derive;
 
-extern crate rocket;
-extern crate rocket_contrib;
+use std::{
+    env,
+    path::{Path, PathBuf},
+    iter::once,
 
-extern crate kdtree;
-extern crate crossbeam_utils;
-extern crate bmw_routing_engine;
+    sync::{Mutex, Arc},
+    thread,
+    sync::mpsc::{self, Sender},
+};
 
-use std::path::{Path, PathBuf};
-use std::env;
-use std::iter::once;
-
-use std::thread;
-use std::sync::mpsc;
-use mpsc::Sender;
-use std::sync::{Mutex, Arc};
-
-use rocket::response::NamedFile;
-use rocket::State;
-use rocket_contrib::Json;
+use rocket::{
+    response::NamedFile,
+    request::Form,
+    State,
+};
+use rocket_contrib::json::Json;
 
 use kdtree::kdtree::{KdtreePointTrait, Kdtree};
 
-use bmw_routing_engine::*;
-use graph::*;
-use rank_select_map::*;
-use import::here::link_id_mapper::*;
-use shortest_path::customizable_contraction_hierarchy;
-use shortest_path::node_order::NodeOrder;
-use shortest_path::query::customizable_contraction_hierarchy::Server;
-use io::*;
-use bmw_routing_engine::benchmark::report_time;
-use graph::link_id_to_tail_mapper::*;
+use bmw_routing_engine::{
+    graph::{*, link_id_to_tail_mapper::*},
+    rank_select_map::*,
+    import::here::link_id_mapper::*,
+    shortest_path::{
+        customizable_contraction_hierarchy,
+        node_order::NodeOrder,
+        query::customizable_contraction_hierarchy::Server,
+    },
+    io::*,
+    benchmark::report_time,
+};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 struct NodeCoord {
@@ -100,15 +95,15 @@ fn files(file: PathBuf) -> Option<NamedFile> {
     NamedFile::open(Path::new("static/").join(file)).ok()
 }
 
-#[get("/query?<query_params>", format = "application/json")]
-fn query(query_params: GeoQuery, state: State<Mutex<Sender<Request>>>) -> Json<Option<GeoResponse>> {
+#[get("/query?<query_params..>", format = "application/json")]
+fn query(query_params: Form<GeoQuery>, state: State<Mutex<Sender<Request>>>) -> Json<Option<GeoResponse>> {
     let result = report_time("Total Query Request Time", || {
         println!("Received Query: {:?}", query_params);
 
         let tx_query = state.lock().unwrap();
         let (tx_result, rx_result) = mpsc::channel::<Option<GeoResponse>>();
 
-        tx_query.send(Request::Geo((query_params, tx_result))).unwrap();
+        tx_query.send(Request::Geo((*query_params, tx_result))).unwrap();
         rx_result.recv().expect("routing engine crashed or hung up")
     });
 
@@ -116,15 +111,15 @@ fn query(query_params: GeoQuery, state: State<Mutex<Sender<Request>>>) -> Json<O
     Json(result)
 }
 
-#[get("/here_query?<query_params>", format = "application/json")]
-fn here_query(query_params: HereQuery, state: State<Mutex<Sender<Request>>>) -> Json<Option<HereResponse>> {
+#[get("/here_query?<query_params..>", format = "application/json")]
+fn here_query(query_params: Form<HereQuery>, state: State<Mutex<Sender<Request>>>) -> Json<Option<HereResponse>> {
     let result = report_time("Total Query Request Time", || {
         println!("Received Query: {:?}", query_params);
 
         let tx_query = state.lock().unwrap();
         let (tx_result, rx_result) = mpsc::channel::<Option<HereResponse>>();
 
-        tx_query.send(Request::Here((query_params, tx_result))).unwrap();
+        tx_query.send(Request::Here((*query_params, tx_result))).unwrap();
         rx_result.recv().expect("routing engine crashed or hung up")
     });
 
