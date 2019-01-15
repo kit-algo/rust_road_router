@@ -3,7 +3,6 @@
 #![feature(euclidean_division)]
 #![feature(range_contains)]
 #![feature(nll)]
-#![feature(uniform_paths)]
 
 pub mod shortest_path;
 pub mod graph;
