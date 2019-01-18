@@ -170,7 +170,9 @@ impl<'a> Server<'a> {
                             if tail != parent {
                                 parents[tail as usize] = (parent, parent_shortcut_id);
                             }
-                            true
+
+                            let head = cch_graph.head()[shortcut_id as usize];
+                            !distances[head as usize].fuzzy_lt(t + customized_graph.outgoing.bounds()[shortcut_id as usize].0)
                         } else {
                             false
                         };
@@ -185,7 +187,9 @@ impl<'a> Server<'a> {
                             if head != parent {
                                 parents[head as usize] = (parent, parent_shortcut_id);
                             }
-                            true
+
+                            let tail = cch_graph.edge_id_to_tail(shortcut_id);
+                            !distances[tail as usize].fuzzy_lt(t + customized_graph.incoming.bounds()[shortcut_id as usize].0)
                         } else {
                             false
                         };
@@ -225,7 +229,9 @@ impl<'a> Server<'a> {
                                     if tail != parent {
                                         parents[tail as usize] = (parent, parent_shortcut_id);
                                     }
-                                    true
+
+                                    let head = cch_graph.head()[shortcut_id as usize];
+                                    !distances[head as usize].fuzzy_lt(t + customized_graph.outgoing.bounds()[shortcut_id as usize].0)
                                 } else {
                                     false
                                 };
@@ -240,7 +246,9 @@ impl<'a> Server<'a> {
                                     if head != parent {
                                         parents[head as usize] = (parent, parent_shortcut_id);
                                     }
-                                    true
+
+                                    let tail = cch_graph.edge_id_to_tail(shortcut_id);
+                                    !distances[tail as usize].fuzzy_lt(t + customized_graph.incoming.bounds()[shortcut_id as usize].0)
                                 } else {
                                     false
                                 };
