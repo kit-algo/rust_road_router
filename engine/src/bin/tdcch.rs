@@ -53,6 +53,9 @@ fn main() {
 
     report!("program", "tdcch");
     report!("args", env::args().collect::<Vec<String>>());
+    // TODO hostname, git state
+    let seed = Default::default();
+    report!("seed", seed);
 
     let mut args = env::args();
     args.next();
@@ -66,7 +69,7 @@ fn main() {
     let ipp_departure_time = Vec::<u32>::load_from(path.join("ipp_departure_time").to_str().unwrap()).expect("could not read ipp_departure_time");
     let ipp_travel_time = Vec::<u32>::load_from(path.join("ipp_travel_time").to_str().unwrap()).expect("could not read ipp_travel_time");
 
-    eprintln!("nodes: {}, arcs: {}, ipps: {}", first_out.len() - 1, head.len(), ipp_departure_time.len());
+    report!("unprocessed_graph", { "num_nodes": first_out.len() - 1, "num_arcs": head.len(), "num_ipps": ipp_departure_time.len() });
 
     let mut new_ipp_departure_time = Vec::with_capacity(ipp_departure_time.len() + 2 * head.len());
     let mut new_ipp_travel_time = Vec::with_capacity(ipp_departure_time.len() + 2 * head.len());
@@ -99,11 +102,13 @@ fn main() {
     }
     first_ipp_of_arc[head.len()] += added;
 
-    eprintln!("nodes: {}, arcs: {}, constant: {}, ipps: {}", first_out.len() - 1, head.len(), constant, new_ipp_departure_time.len());
+    report!("graph", { "num_nodes": first_out.len() - 1, "num_arcs": head.len(), "num_ipps": new_ipp_departure_time.len(), "num_constant_ttfs": constant });
 
     let points = new_ipp_departure_time.into_iter().zip(new_ipp_travel_time.into_iter()).map(|(dt, tt)| {
         TTFPoint { at: Timestamp::new(f64::from(dt) / 1000.0), val: FlWeight::new(f64::from(tt) / 1000.0) }
     }).collect();
+
+    let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
 
     let graph = TDGraph::new(first_out, head, first_ipp_of_arc, points);
 
@@ -113,7 +118,9 @@ fn main() {
         std::fs::create_dir(&cch_folder).expect("could not create cch folder");
 
         let cch_order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm"));
+        let cch_build_ctxt = algo_runs_ctxt.push_collection_item();
         let cch = customizable_contraction_hierarchy::contract(&graph, cch_order);
+        drop(cch_build_ctxt);
 
         let latitude = Vec::<f32>::load_from(path.join("latitude").to_str().unwrap()).expect("could not read latitude");
         let longitude = Vec::<f32>::load_from(path.join("longitude").to_str().unwrap()).expect("could not read longitude");
@@ -122,6 +129,7 @@ fn main() {
         let cch_order = CCHReordering { node_order: cch_order, latitude, longitude }.reorder(cch.separators());
         cch_order.deconstruct_to(cch_folder.to_str().unwrap()).expect("could not save cch order");
 
+        let _cch_build_ctxt = algo_runs_ctxt.push_collection_item();
         let cch = customizable_contraction_hierarchy::contract(&graph, cch_order);
         cch.deconstruct_to(cch_folder.to_str().unwrap()).expect("could not save cch");
 
@@ -135,6 +143,7 @@ fn main() {
 
     let td_cch_graph = if !customized_folder.exists() {
         std::fs::create_dir(&customized_folder).expect("could not create cch folder");
+        let _cch_customization_ctxt = algo_runs_ctxt.push_collection_item();
         let td_cch_graph: CustomizedGraph = cch.customize_floating_td(&graph).into();
         td_cch_graph.deconstruct_to(customized_folder.to_str().unwrap()).expect("could not save customized");
         td_cch_graph
@@ -145,7 +154,7 @@ fn main() {
     let mut td_dijk_server = DijkServer::new(graph.clone());
     let mut server = Server::new(&cch, &td_cch_graph);
 
-    let mut rng = StdRng::from_seed(Default::default());
+    let mut rng = StdRng::from_seed(seed);
 
     let mut rank_times = vec![Vec::new(); 64];
 
@@ -153,21 +162,32 @@ fn main() {
         let from: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
         let at = Timestamp::new(rng.gen_range(0.0, f64::from(period())));
         td_dijk_server.ranks(from, at, |to, ea_ground_truth, rank| {
+            let _tdcch_query_ctxt = algo_runs_ctxt.push_collection_item();
             let (ea, duration) = measure(|| server.distance(from, to, at).map(|dist| dist + at));
+
+            report!("from", from);
+            report!("to", to);
+            report!("departure_time", f64::from(at));
+            report!("rank", rank);
+            report!("ground_truth", f64::from(ea_ground_truth));
+            report!("running_time_ms", duration.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+            if let Some(ea) = ea {
+                report!("earliest_arrival", f64::from(ea));
+            }
+
             if ea.unwrap_or(Timestamp::NEVER).fuzzy_eq(ea_ground_truth) {
-                println!("TDCCH ✅ {:?} {:?}", ea, ea_ground_truth);
-                println!("Rel Err for rank {}: 0.0", rank);
+                eprintln!("TDCCH ✅");
             } else {
-                println!("TDCCH ❌ {:?} {:?}", ea, ea_ground_truth);
-                println!("Rel Err for rank {}: {}", rank, f64::from((ea.unwrap_or(Timestamp::NEVER) - at) / (ea_ground_truth - at)) - 1.0);
+                eprintln!("TDCCH ❌ Rel Err for rank {}: {}", rank, f64::from((ea.unwrap_or(Timestamp::NEVER) - at) / (ea_ground_truth - at)) - 1.0);
             }
             if cfg!(feature = "tdcch-approx") {
                 assert!(!ea.unwrap_or(Timestamp::NEVER).fuzzy_lt(ea_ground_truth), "{} {} {:?}", from, to, at);
             } else {
                 assert!(ea_ground_truth.fuzzy_eq(ea.unwrap_or(Timestamp::NEVER)), "{} {} {:?}", from, to, at);
             }
-            if ea.is_some() {
+            if !cfg!(feature = "tdcch-approx") || ea.is_some() {
                 let (path, unpacking_duration) = measure(|| server.path());
+                report!("unpacking_running_time_ms", unpacking_duration.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
                 rank_times[rank].push((duration, unpacking_duration));
                 graph.check_path(path);
             }
@@ -180,7 +200,7 @@ fn main() {
             let (sum, sum_unpacking) = rank_times.into_iter().fold((Duration::zero(), Duration::zero()), |(acc1, acc2), (t1, t2)| (acc1 + t1, acc2 + t2));
             let avg = sum / count as i32;
             let avg_unpacking = sum_unpacking / count as i32;
-            println!("rank: {} - avg running time: {} - avg unpacking time: {}", rank, avg, avg_unpacking);
+            eprintln!("rank: {} - avg running time: {} - avg unpacking time: {}", rank, avg, avg_unpacking);
         }
     }
 
@@ -208,30 +228,54 @@ fn main() {
 
         for ((from, to), at) in from.into_iter().zip(to.into_iter()).zip(at.into_iter()).take(num_queries) {
             let at = Timestamp::new(f64::from(at) / 1000.0);
+
+            let dijkstra_query_ctxt = algo_runs_ctxt.push_collection_item();
             let (ground_truth, time) = measure(|| {
                 td_dijk_server.distance(from, to, at).map(|dist| dist + at)
             });
-            println!("from {} to {} at {:?} - EA {:?}", from, to, at, ground_truth);
-            dijkstra_time =  dijkstra_time + time;
+            eprintln!("from {} to {} at {:?} - EA {:?}", from, to, at, ground_truth);
+            report!("from", from);
+            report!("to", to);
+            report!("departure_time", f64::from(at));
+            report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+            if let Some(ground_truth) = ground_truth {
+                report!("earliest_arrival", f64::from(ground_truth));
+            }
+            drop(dijkstra_query_ctxt);
 
-            tdcch_time = tdcch_time + measure(|| {
-                let dist = server.distance(from, to, at).map(|dist| dist + at);
-                if dist.unwrap_or(Timestamp::NEVER).fuzzy_eq(ground_truth.unwrap_or(Timestamp::NEVER)) {
-                    println!("TDCCH ✅ {:?} {:?}", dist, ground_truth);
-                    println!("Rel Err 0.0");
-                } else {
-                    println!("TDCCH ❌ {:?} {:?}", dist, ground_truth);
-                    println!("Rel Err {}", f64::from((dist.unwrap_or(Timestamp::NEVER) - at) / (ground_truth.unwrap_or(Timestamp::NEVER) - at)) - 1.0);
-                }
-                if cfg!(feature = "tdcch-approx") {
-                    assert!(!dist.unwrap_or(Timestamp::NEVER).fuzzy_lt(ground_truth.unwrap_or(Timestamp::NEVER)), "{} {} {:?}", from, to, at);
-                } else {
-                    assert!(dist.unwrap_or(Timestamp::NEVER).fuzzy_eq(ground_truth.unwrap_or(Timestamp::NEVER)));
-                }
-            }).1;
+            dijkstra_time = dijkstra_time + time;
+
+            let _tdcch_query_ctxt = algo_runs_ctxt.push_collection_item();
+            let (ea, time) = measure(|| {
+                server.distance(from, to, at).map(|dist| dist + at)
+            });
+            tdcch_time = tdcch_time + time;
+
+            report!("from", from);
+            report!("to", to);
+            report!("departure_time", f64::from(at));
+            report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+            if let Some(ground_truth) = ground_truth {
+                report!("ground_truth", f64::from(ground_truth));
+            }
+            if let Some(ea) = ea {
+                report!("earliest_arrival", f64::from(ea));
+            }
+
+            if ea.unwrap_or(Timestamp::NEVER).fuzzy_eq(ground_truth.unwrap_or(Timestamp::NEVER)) {
+                eprintln!("TDCCH ✅");
+            } else {
+                eprintln!("TDCCH ❌ Rel Err {}", f64::from((ea.unwrap_or(Timestamp::NEVER) - at) / (ground_truth.unwrap_or(Timestamp::NEVER) - at)) - 1.0);
+            }
+
+            if cfg!(feature = "tdcch-approx") {
+                assert!(!ea.unwrap_or(Timestamp::NEVER).fuzzy_lt(ground_truth.unwrap_or(Timestamp::NEVER)), "{} {} {:?}", from, to, at);
+            } else {
+                assert!(ea.unwrap_or(Timestamp::NEVER).fuzzy_eq(ground_truth.unwrap_or(Timestamp::NEVER)));
+            }
         }
-        println!("Dijkstra {}", dijkstra_time / (num_queries as i32));
-        println!("TDCCH {}", tdcch_time / (num_queries as i32));
+        eprintln!("Dijkstra {}", dijkstra_time / (num_queries as i32));
+        eprintln!("TDCCH {}", tdcch_time / (num_queries as i32));
     }
 }
 

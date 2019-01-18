@@ -1,4 +1,5 @@
 use std::cmp::*;
+use crate::report::*;
 
 use super::*;
 use super::floating_td_stepped_elimination_tree::{*, QueryProgress};
@@ -53,6 +54,7 @@ impl<'a> Server<'a> {
     #[allow(clippy::collapsible_if)]
     #[allow(clippy::cyclomatic_complexity)]
     pub fn distance(&mut self, from_node: NodeId, to_node: NodeId, departure_time: Timestamp) -> Option<FlWeight> {
+        report!("algo", "Floating TDCCH Query");
         let timer = Timer::new();
 
         self.from = self.cch_graph.node_order().rank(from_node);
@@ -269,11 +271,10 @@ impl<'a> Server<'a> {
 
         let backward_relax_time = timer.get_passed();
 
-        // println!("init: {} {:?}%", init_time, 100 * init_time.num_nanoseconds().unwrap() / backward_relax_time.num_nanoseconds().unwrap());
-        println!("elimination tree: {} {:?}%", elimination_tree_time - init_time, 100 * ((elimination_tree_time - init_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
-        println!("fw select: {} {:?}%", forward_select_time - elimination_tree_time, 100 * ((forward_select_time - elimination_tree_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
-        println!("fw relax: {} {:?}%", forward_relax_time - forward_select_time, 100 * ((forward_relax_time - forward_select_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
-        println!("bw relax: {} {:?}%", backward_relax_time - forward_relax_time, 100 * ((backward_relax_time - forward_relax_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
+        eprintln!("elimination tree: {} {:?}%", elimination_tree_time - init_time, 100 * ((elimination_tree_time - init_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
+        eprintln!("fw select: {} {:?}%", forward_select_time - elimination_tree_time, 100 * ((forward_select_time - elimination_tree_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
+        eprintln!("fw relax: {} {:?}%", forward_relax_time - forward_select_time, 100 * ((forward_relax_time - forward_select_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
+        eprintln!("bw relax: {} {:?}%", backward_relax_time - forward_relax_time, 100 * ((backward_relax_time - forward_relax_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
 
         if self.distances[self.to as usize] < Timestamp::NEVER {
             Some(self.distances[self.to as usize] - departure_time)

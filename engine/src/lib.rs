@@ -4,6 +4,7 @@
 #![feature(range_contains)]
 #![feature(nll)]
 
+#[macro_use] pub mod report;
 pub mod shortest_path;
 pub mod graph;
 pub mod io;
@@ -12,7 +13,6 @@ pub mod rank_select_map;
 pub mod import;
 pub mod link_speed_estimates;
 pub mod export;
-pub mod report;
 
 mod index_heap;
 mod in_range_option;

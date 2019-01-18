@@ -1,10 +1,13 @@
+use crate::report::*;
 use time;
 
 pub fn report_time<Out, F: FnOnce() -> Out>(name: &str, f: F) -> Out {
     let start = time::now();
-    println!("starting {}", name);
+    eprintln!("starting {}", name);
     let res = f();
-    println!("{} done - took: {}ms", name, (time::now() - start).num_milliseconds());
+    let t_passed = (time::now() - start).num_milliseconds();
+    eprintln!("{} done - took: {}ms", name, t_passed);
+    report!("running_time_ms", t_passed);
     res
 }
 

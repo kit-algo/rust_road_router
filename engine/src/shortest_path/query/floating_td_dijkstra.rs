@@ -1,4 +1,5 @@
 use super::*;
+use crate::report::*;
 use crate::shortest_path::floating_td_stepped_dijkstra::FloatingTDSteppedDijkstra;
 use crate::graph::floating_time_dependent::*;
 use super::floating_td_stepped_dijkstra::{QueryProgress, State};
@@ -32,6 +33,7 @@ impl Server {
     }
 
     pub fn distance(&mut self, from: NodeId, to: NodeId, departure_time: Timestamp) -> Option<FlWeight> {
+        report!("algo", "Floating TD-Dijkstra");
         self.query = Some(FlTDQuery { from, to, departure_time });
         self.dijkstra.initialize_query(from, departure_time);
 

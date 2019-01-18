@@ -1,6 +1,7 @@
 use super::*;
 use crate::shortest_path::node_order::NodeOrder;
 use crate::benchmark::report_time;
+use crate::report::*;
 
 pub mod cch_graph;
 
@@ -83,6 +84,7 @@ impl<'a, Graph: for<'b> LinkIterGraph<'b>> ContractionGraph<'a, Graph> {
     }
 
     fn contract(mut self) -> ContractedGraph<'a, Graph> {
+        report!("algo", "CCH Contraction");
         report_time("CCH Contraction", || {
             let mut num_shortcut_arcs = 0;
             let mut graph = self.partial_graph();
@@ -102,7 +104,7 @@ impl<'a, Graph: for<'b> LinkIterGraph<'b>> ContractionGraph<'a, Graph> {
                 graph = subgraph;
             }
 
-            println!("Number of arcs inserted during contraction: {:?}", num_shortcut_arcs);
+            report!("num_arcs_inserted", num_shortcut_arcs);
         });
 
 

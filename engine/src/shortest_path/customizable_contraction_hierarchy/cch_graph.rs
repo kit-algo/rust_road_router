@@ -342,7 +342,10 @@ impl CCHGraph {
 
     pub fn customize_floating_td<'a, 'b: 'a>(&'a self, metric: &'b floating_time_dependent::TDGraph) -> floating_time_dependent::ShortcutGraph<'a> {
         use crate::graph::floating_time_dependent::*;
+        use crate::report::*;
         use std::cmp::min;
+
+        report!("algo", "Floating TDCCH Customization");
 
         let n = (self.first_out.len() - 1) as NodeId;
         let m = self.head.len();
@@ -350,6 +353,7 @@ impl CCHGraph {
         let mut upward = vec![Shortcut::new(None, metric); m];
         let mut downward = vec![Shortcut::new(None, metric); m];
 
+        let subctxt = push_context("weight_applying".to_string());
         report_time("TD-CCH apply weights", || {
             for node in 0..n {
                 for (edge_id, neighbor) in metric.neighbor_edge_indices(node).zip(metric.neighbor_iter(node).map(|link| link.node)) {
@@ -363,7 +367,9 @@ impl CCHGraph {
                 }
             }
         });
+        drop(subctxt);
 
+        let subctxt = push_context("precustomization".to_string());
         report_time("TD-CCH Pre-Customization", || {
             let mut node_edge_ids = vec![InRangeOption::new(None); n as usize];
 
@@ -395,34 +401,39 @@ impl CCHGraph {
                 }
             }
         });
+        drop(subctxt);
 
         let mut shortcut_graph = ShortcutGraph::new(metric, &self.first_out, &self.head, upward, downward);
 
+        let mut merge_count = 0;
+
+        let subctxt = push_context("main".to_string());
         report_time("TD-CCH Customization", || {
-            let mut node_edge_ids = vec![InRangeOption::new(None); n as usize];
+            let mut events_ctxt = push_collection_context("events".to_string());
 
             let timer = Timer::new();
-            let mut merge_count = 0;
+
+            let mut node_edge_ids = vec![InRangeOption::new(None); n as usize];
 
             for current_node in 0..n {
                 if current_node > 0 && current_node % (n / 100) == 0 || self.degree(current_node) > 50 {
-                    println!("t: {}s, rank {} (deg {}), {} ipps on {} active shortcuts (avg {} each, reduced {}/{}), {} switch points, close ipps: {:.5}%, merged {} plfs, linked {} plfs ({} unnec.), {} triangles",
-                        timer.get_passed_ms() / 1000,
-                        current_node,
-                        self.degree(current_node),
-                        IPP_COUNT.with(|count| count.get()),
-                        ACTIVE_SHORTCUTS.with(|count| count.get()),
-                        IPP_COUNT.with(|count| count.get()) / (ACTIVE_SHORTCUTS.with(|count| count.get())+1),
-                        SAVED_BY_APPROX.with(|count| count.get()),
-                        CONSIDERED_FOR_APPROX.with(|count| count.get()),
-                        PATH_SOURCES_COUNT.with(|count| count.get()),
-                        CLOSE_IPPS_COUNT.with(|count| count.get()) as f64 / f64::from(merge_count) / 100.0,
-                        ACTUALLY_MERGED.with(|count| count.get()),
-                        ACTUALLY_LINKED.with(|count| count.get()),
-                        UNNECESSARY_LINKED.with(|count| count.get()),
-                        merge_count,
-                        );
+                    let _event = events_ctxt.push_collection_item();
+
+                    report!("at_s", timer.get_passed_ms() / 1000);
+                    report!("current_rank", current_node);
+                    report!("current_node_degree", self.degree(current_node));
+                    report!("num_ipps_stored", IPP_COUNT.with(|count| count.get()));
+                    report!("num_shortcuts_active", ACTIVE_SHORTCUTS.with(|count| count.get()));
+                    report!("num_ipps_reduced_by_approx", SAVED_BY_APPROX.with(|count| count.get()));
+                    report!("num_ipps_considered_for_approx", CONSIDERED_FOR_APPROX.with(|count| count.get()));
+                    report!("num_shortcut_merge_points", PATH_SOURCES_COUNT.with(|count| count.get()));
+                    report!("percent_close_ipps", CLOSE_IPPS_COUNT.with(|count| count.get()) as f64 / f64::from(merge_count) / 100.0);
+                    report!("num_performed_merges", ACTUALLY_MERGED.with(|count| count.get()));
+                    report!("num_performed_links", ACTUALLY_LINKED.with(|count| count.get()));
+                    report!("num_performed_unnecessary_links", UNNECESSARY_LINKED.with(|count| count.get()));
+                    report!("num_processed_triangles", merge_count);
                 }
+
                 for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
                     shortcut_graph.borrow_mut_outgoing(edge_id, |shortcut, _| shortcut.finalize_lower_bound());
                     shortcut_graph.borrow_mut_incoming(edge_id, |shortcut, _| shortcut.finalize_lower_bound());
@@ -451,21 +462,19 @@ impl CCHGraph {
                 }
             }
 
-            println!("t: {}s, done, {} ipps on {} active shortcuts (avg {} each, reduced {}/{}), {} switch points, close ipps: {:.5}%, merged {} plfs, linked {} plfs ({} unnec.), {} triangles",
-                timer.get_passed_ms() / 1000,
-                IPP_COUNT.with(|count| count.get()),
-                ACTIVE_SHORTCUTS.with(|count| count.get()),
-                IPP_COUNT.with(|count| count.get()) / (ACTIVE_SHORTCUTS.with(|count| count.get())+1),
-                SAVED_BY_APPROX.with(|count| count.get()),
-                CONSIDERED_FOR_APPROX.with(|count| count.get()),
-                PATH_SOURCES_COUNT.with(|count| count.get()),
-                CLOSE_IPPS_COUNT.with(|count| count.get()) as f64 / f64::from(merge_count) / 100.0,
-                ACTUALLY_MERGED.with(|count| count.get()),
-                ACTUALLY_LINKED.with(|count| count.get()),
-                UNNECESSARY_LINKED.with(|count| count.get()),
-                merge_count,
-                );
         });
+        drop(subctxt);
+
+        report!("num_ipps_stored", IPP_COUNT.with(|count| count.get()));
+        report!("num_shortcuts_active", ACTIVE_SHORTCUTS.with(|count| count.get()));
+        report!("num_ipps_reduced_by_approx", SAVED_BY_APPROX.with(|count| count.get()));
+        report!("num_ipps_considered_for_approx", CONSIDERED_FOR_APPROX.with(|count| count.get()));
+        report!("num_shortcut_merge_points", PATH_SOURCES_COUNT.with(|count| count.get()));
+        report!("percent_close_ipps", CLOSE_IPPS_COUNT.with(|count| count.get()) as f64 / f64::from(merge_count) / 100.0);
+        report!("num_performed_merges", ACTUALLY_MERGED.with(|count| count.get()));
+        report!("num_performed_links", ACTUALLY_LINKED.with(|count| count.get()));
+        report!("num_performed_unnecessary_links", UNNECESSARY_LINKED.with(|count| count.get()));
+        report!("num_processed_triangles", merge_count);
 
         shortcut_graph
     }
