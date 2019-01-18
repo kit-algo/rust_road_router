@@ -175,9 +175,7 @@ fn main() {
                 report!("earliest_arrival", f64::from(ea));
             }
 
-            if ea.unwrap_or(Timestamp::NEVER).fuzzy_eq(ea_ground_truth) {
-                eprintln!("TDCCH ✅");
-            } else {
+            if !ea.unwrap_or(Timestamp::NEVER).fuzzy_eq(ea_ground_truth) {
                 eprintln!("TDCCH ❌ Rel Err for rank {}: {}", rank, f64::from((ea.unwrap_or(Timestamp::NEVER) - at) / (ea_ground_truth - at)) - 1.0);
             }
             if cfg!(feature = "tdcch-approx") {
@@ -233,7 +231,6 @@ fn main() {
             let (ground_truth, time) = measure(|| {
                 td_dijk_server.distance(from, to, at).map(|dist| dist + at)
             });
-            eprintln!("from {} to {} at {:?} - EA {:?}", from, to, at, ground_truth);
             report!("from", from);
             report!("to", to);
             report!("departure_time", f64::from(at));
@@ -262,9 +259,7 @@ fn main() {
                 report!("earliest_arrival", f64::from(ea));
             }
 
-            if ea.unwrap_or(Timestamp::NEVER).fuzzy_eq(ground_truth.unwrap_or(Timestamp::NEVER)) {
-                eprintln!("TDCCH ✅");
-            } else {
+            if !ea.unwrap_or(Timestamp::NEVER).fuzzy_eq(ground_truth.unwrap_or(Timestamp::NEVER)) {
                 eprintln!("TDCCH ❌ Rel Err {}", f64::from((ea.unwrap_or(Timestamp::NEVER) - at) / (ground_truth.unwrap_or(Timestamp::NEVER) - at)) - 1.0);
             }
 

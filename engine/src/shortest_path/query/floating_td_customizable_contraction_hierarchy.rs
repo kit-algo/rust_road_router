@@ -8,6 +8,7 @@ use crate::graph::floating_time_dependent::*;
 use crate::shortest_path::customizable_contraction_hierarchy::cch_graph::CCHGraph;
 use crate::shortest_path::timestamped_vector::TimestampedVector;
 use crate::rank_select_map::BitVec;
+#[cfg(feature = "tdcch-query-detailed-timing")]
 use crate::benchmark::Timer;
 
 #[derive(Debug)]
@@ -55,6 +56,8 @@ impl<'a> Server<'a> {
     #[allow(clippy::cyclomatic_complexity)]
     pub fn distance(&mut self, from_node: NodeId, to_node: NodeId, departure_time: Timestamp) -> Option<FlWeight> {
         report!("algo", "Floating TDCCH Query");
+
+        #[cfg(feature = "tdcch-query-detailed-timing")]
         let timer = Timer::new();
 
         self.from = self.cch_graph.node_order().rank(from_node);
@@ -74,6 +77,7 @@ impl<'a> Server<'a> {
         self.backward_tree_path.clear();
         self.shortcut_queue.clear();
 
+        #[cfg(feature = "tdcch-query-detailed-timing")]
         let init_time = timer.get_passed();
 
         while self.forward.peek_next().is_some() || self.backward.peek_next().is_some() {
@@ -127,6 +131,7 @@ impl<'a> Server<'a> {
             }
         }
 
+        #[cfg(feature = "tdcch-query-detailed-timing")]
         let elimination_tree_time = timer.get_passed();
 
         let tentative_upper_bound = self.tentative_distance.1;
@@ -148,6 +153,7 @@ impl<'a> Server<'a> {
             }
         }
 
+        #[cfg(feature = "tdcch-query-detailed-timing")]
         let forward_select_time = timer.get_passed();
 
         // TODO kill double refs
@@ -208,6 +214,7 @@ impl<'a> Server<'a> {
             }
         }
 
+        #[cfg(feature = "tdcch-query-detailed-timing")]
         let forward_relax_time = timer.get_passed();
 
         while let Some(node) = self.backward_tree_path.pop() {
@@ -269,12 +276,16 @@ impl<'a> Server<'a> {
             }
         }
 
+        #[cfg(feature = "tdcch-query-detailed-timing")]
         let backward_relax_time = timer.get_passed();
 
-        eprintln!("elimination tree: {} {:?}%", elimination_tree_time - init_time, 100 * ((elimination_tree_time - init_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
-        eprintln!("fw select: {} {:?}%", forward_select_time - elimination_tree_time, 100 * ((forward_select_time - elimination_tree_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
-        eprintln!("fw relax: {} {:?}%", forward_relax_time - forward_select_time, 100 * ((forward_relax_time - forward_select_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
-        eprintln!("bw relax: {} {:?}%", backward_relax_time - forward_relax_time, 100 * ((backward_relax_time - forward_relax_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
+        #[cfg(feature = "tdcch-query-detailed-timing")]
+        {
+            eprintln!("elimination tree: {} {:?}%", elimination_tree_time - init_time, 100 * ((elimination_tree_time - init_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
+            eprintln!("fw select: {} {:?}%", forward_select_time - elimination_tree_time, 100 * ((forward_select_time - elimination_tree_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
+            eprintln!("fw relax: {} {:?}%", forward_relax_time - forward_select_time, 100 * ((forward_relax_time - forward_select_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
+            eprintln!("bw relax: {} {:?}%", backward_relax_time - forward_relax_time, 100 * ((backward_relax_time - forward_relax_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
+        }
 
         if self.distances[self.to as usize] < Timestamp::NEVER {
             Some(self.distances[self.to as usize] - departure_time)
