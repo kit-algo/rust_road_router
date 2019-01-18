@@ -4,6 +4,7 @@ use std::{
     env,
 };
 
+#[macro_use] extern crate bmw_routing_engine;
 use bmw_routing_engine::{
     graph::{
         *,
@@ -20,6 +21,7 @@ use bmw_routing_engine::{
     },
     io::*,
     benchmark::*,
+    report::*,
 };
 
 use time::Duration;
@@ -47,6 +49,11 @@ impl Ord for NonNan {
 }
 
 fn main() {
+    let _reporter = enable_reporting();
+
+    report!("program", "tdcch");
+    report!("args", env::args().collect::<Vec<String>>());
+
     let mut args = env::args();
     args.next();
 
@@ -59,7 +66,7 @@ fn main() {
     let ipp_departure_time = Vec::<u32>::load_from(path.join("ipp_departure_time").to_str().unwrap()).expect("could not read ipp_departure_time");
     let ipp_travel_time = Vec::<u32>::load_from(path.join("ipp_travel_time").to_str().unwrap()).expect("could not read ipp_travel_time");
 
-    println!("nodes: {}, arcs: {}, ipps: {}", first_out.len() - 1, head.len(), ipp_departure_time.len());
+    eprintln!("nodes: {}, arcs: {}, ipps: {}", first_out.len() - 1, head.len(), ipp_departure_time.len());
 
     let mut new_ipp_departure_time = Vec::with_capacity(ipp_departure_time.len() + 2 * head.len());
     let mut new_ipp_travel_time = Vec::with_capacity(ipp_departure_time.len() + 2 * head.len());
@@ -92,7 +99,7 @@ fn main() {
     }
     first_ipp_of_arc[head.len()] += added;
 
-    println!("nodes: {}, arcs: {}, constant: {}, ipps: {}", first_out.len() - 1, head.len(), constant, new_ipp_departure_time.len());
+    eprintln!("nodes: {}, arcs: {}, constant: {}, ipps: {}", first_out.len() - 1, head.len(), constant, new_ipp_departure_time.len());
 
     let points = new_ipp_departure_time.into_iter().zip(new_ipp_travel_time.into_iter()).map(|(dt, tt)| {
         TTFPoint { at: Timestamp::new(f64::from(dt) / 1000.0), val: FlWeight::new(f64::from(tt) / 1000.0) }
