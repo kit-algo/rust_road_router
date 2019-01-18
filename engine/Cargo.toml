@@ -1,8 +1,9 @@
 [package]
 name = "bmw_routing_engine"
 version = "0.1.0"
-authors = ["Tim \"S.D.Eagle\" Zeitz <dev.tim.zeitz@gmail.com>"]
+authors = ["Tim 'S.D.Eagle' Zeitz <dev.tim.zeitz@gmail.com>"]
 edition = "2018"
+build = "build.rs"
 
 [features]
 default = []
@@ -18,3 +19,6 @@ csv = "^1.0.2"
 glob = "^0.2.11"
 rand = "^0.6.1"
 serde_json = "^1.0.35"
+
+[build-dependencies]
+built = "^0.3.0"

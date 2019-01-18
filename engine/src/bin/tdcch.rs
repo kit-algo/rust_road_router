@@ -53,7 +53,6 @@ fn main() {
 
     report!("program", "tdcch");
     report!("args", env::args().collect::<Vec<String>>());
-    // TODO hostname, git state
     let seed = Default::default();
     report!("seed", seed);
 

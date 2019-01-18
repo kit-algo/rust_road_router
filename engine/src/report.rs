@@ -3,6 +3,7 @@ use std::{
     mem::swap,
 };
 use serde_json::{Value, Map};
+use crate::built_info;
 
 pub use serde_json::json;
 
@@ -211,12 +212,24 @@ impl Drop for ReportingGuard {
     }
 }
 
-pub fn enable_reporting() -> ReportingGuard {
-    REPORTER.with(|reporter| reporter.replace(Some(Reporter::default())));
-    ReportingGuard(())
-}
-
 #[macro_export]
 macro_rules! report {
     ($k:expr, $($json:tt)+) => { report($k.to_string(), json!($($json)+)) };
+}
+
+pub fn enable_reporting() -> ReportingGuard {
+    REPORTER.with(|reporter| reporter.replace(Some(Reporter::default())));
+
+    report!("git_revision", built_info::GIT_VERSION.unwrap_or(""));
+    report!("build_target", built_info::TARGET);
+    report!("build_profile", built_info::PROFILE);
+    report!("feature_flags", built_info::FEATURES_STR);
+    report!("build_time", built_info::BUILT_TIME_UTC);
+    report!("build_with_rustc", built_info::RUSTC_VERSION);
+
+    if let Ok(hostname) = std::process::Command::new("hostname").output() {
+        report!("hostname", String::from_utf8(hostname.stdout).unwrap().trim());
+    }
+
+    ReportingGuard(())
 }
