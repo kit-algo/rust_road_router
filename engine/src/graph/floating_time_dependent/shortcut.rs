@@ -8,6 +8,7 @@ pub struct Shortcut {
     pub lower_bound: FlWeight,
     pub upper_bound: FlWeight,
     constant: bool,
+    pub required: bool,
 }
 
 impl Shortcut {
@@ -21,13 +22,16 @@ impl Shortcut {
                     lower_bound: original_graph.travel_time_function(edge_id).lower_bound(),
                     upper_bound: original_graph.travel_time_function(edge_id).upper_bound(),
                     constant: false,
+                    required: true,
                 }
             },
-            None => Shortcut { sources: Sources::None, ttf: None, lower_bound: FlWeight::INFINITY, upper_bound: FlWeight::INFINITY, constant: false },
+            None => Shortcut { sources: Sources::None, ttf: None, lower_bound: FlWeight::INFINITY, upper_bound: FlWeight::INFINITY, constant: false, required: true },
         }
     }
 
     pub fn merge(&mut self, linked_ids: (EdgeId, EdgeId), shortcut_graph: &ShortcutGraph) {
+        if !self.required { return }
+
         IPP_COUNT.with(|count| count.set(count.get() - self.ttf.as_ref().map(|ipps| ipps.len()).unwrap_or(0)));
         PATH_SOURCES_COUNT.with(|count| count.set(count.get() - self.sources.len()));
         if self.ttf.is_some() { ACTIVE_SHORTCUTS.with(|count| count.set(count.get() - 1)); }
@@ -118,10 +122,10 @@ impl Shortcut {
             Sources::One(source) => {
                 match source.into() {
                     ShortcutSource::OriginalEdge(id) => shortcut_graph.original_graph().travel_time_function(id),
-                    _ => panic!("invalid state of shortcut: ipps must be cached when shortcut not trivial"),
+                    _ => panic!("invalid state of shortcut: ipps must be cached when shortcut not trivial {:?}", self),
                 }
             },
-            _ => panic!("invalid state of shortcut: ipps must be cached when shortcut not trivial"),
+            _ => panic!("invalid state of shortcut: ipps must be cached when shortcut not trivial {:?}", self),
         }
     }
 
@@ -132,13 +136,23 @@ impl Shortcut {
         }
     }
 
-    pub fn finalize_lower_bound(&mut self) {
-        if let Some(points) = &self.ttf {
-            let new_lower_bound = PiecewiseLinearFunction::new(points).lower_bound();
-            debug_assert!(!new_lower_bound.fuzzy_lt(self.lower_bound), "{:?}, {:?}", new_lower_bound, self);
-            debug_assert!(new_lower_bound <= self.upper_bound, "{:?}, {:?}", new_lower_bound, self);
-            self.lower_bound = new_lower_bound;
+    pub fn finalize_bounds(&mut self, shortcut_graph: &ShortcutGraph) {
+        if !self.required { return }
+
+        if let Sources::None = self.sources {
+            self.lower_bound = FlWeight::INFINITY;
+            self.upper_bound = FlWeight::INFINITY;
+            return
         }
+
+        let new_lower_bound = self.plf(shortcut_graph).lower_bound();
+        debug_assert!(!new_lower_bound.fuzzy_lt(self.lower_bound), "{:?}, {:?}", new_lower_bound, self);
+        debug_assert!(!self.upper_bound.fuzzy_lt(new_lower_bound), "{:?}, {:?}", new_lower_bound, self);
+        self.lower_bound = new_lower_bound;
+        // let new_upper_bound = self.plf(shortcut_graph).upper_bound();
+        // debug_assert!(!new_upper_bound.fuzzy_lt(self.upper_bound), "{:?}, {:?}", new_upper_bound, self);
+        // debug_assert!(!new_upper_bound.fuzzy_lt(self.lower_bound), "{:?}, {:?}", new_upper_bound, self);
+        // self.upper_bound = new_upper_bound;
     }
 
     pub fn update_is_constant(&mut self) {

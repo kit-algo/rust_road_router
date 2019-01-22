@@ -194,6 +194,8 @@ impl<'a> CustomizedSingleDirGraph<'a> {
     {
         let edge_idx = edge_id as usize;
         if self.constant.get(edge_idx) {
+            debug_assert_eq!(self.bounds[edge_idx].0, self.edge_source_at(edge_idx, t).map(|&source| ShortcutSource::from(source).evaluate(t, customized_graph, &mut always)).unwrap_or(FlWeight::INFINITY),
+                "{:?}, {:?}", self.bounds[edge_idx], self.edge_sources(edge_idx));
             return self.bounds[edge_idx].0;
         }
 
@@ -254,4 +256,9 @@ impl<'a> SingleDirBoundsGraph<'a> {
         let edge_ids = range.start as EdgeId .. range.end as EdgeId;
         self.head[range.clone()].iter().cloned().zip(edge_ids).zip(self.bounds[range].iter())
     }
+}
+
+
+fn always(_up: bool, _shortcut_id: EdgeId, _t: Timestamp) -> bool {
+    true
 }

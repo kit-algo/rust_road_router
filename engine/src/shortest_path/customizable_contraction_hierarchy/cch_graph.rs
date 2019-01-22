@@ -400,6 +400,54 @@ impl CCHGraph {
                     node_edge_ids[node as usize] = InRangeOption::new(None);
                 }
             }
+
+            let upward_preliminary_bounds: Vec<_> = upward.iter().map(|s| s.lower_bound).collect();
+            let downward_preliminary_bounds: Vec<_> = downward.iter().map(|s| s.lower_bound).collect();
+
+            for current_node in (0..n).rev() {
+                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
+                    node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
+                }
+
+                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
+                    let shortcut_edge_ids = self.neighbor_edge_indices(node);
+                    for (target, shortcut_edge_id) in self.neighbor_iter(node).zip(shortcut_edge_ids) {
+                        if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
+                            upward[other_edge_id as usize].upper_bound = min(upward[other_edge_id as usize].upper_bound, upward[edge_id as usize].upper_bound + upward[shortcut_edge_id as usize].upper_bound);
+                            upward[other_edge_id as usize].lower_bound = min(upward[other_edge_id as usize].lower_bound, upward[edge_id as usize].lower_bound + upward[shortcut_edge_id as usize].lower_bound);
+
+                            upward[edge_id as usize].upper_bound = min(upward[edge_id as usize].upper_bound, upward[other_edge_id as usize].upper_bound + downward[shortcut_edge_id as usize].upper_bound);
+                            upward[edge_id as usize].lower_bound = min(upward[edge_id as usize].lower_bound, upward[other_edge_id as usize].lower_bound + downward[shortcut_edge_id as usize].lower_bound);
+
+                            downward[other_edge_id as usize].upper_bound = min(downward[other_edge_id as usize].upper_bound, downward[edge_id as usize].upper_bound + downward[shortcut_edge_id as usize].upper_bound);
+                            downward[other_edge_id as usize].lower_bound = min(downward[other_edge_id as usize].lower_bound, downward[edge_id as usize].lower_bound + downward[shortcut_edge_id as usize].lower_bound);
+
+                            downward[edge_id as usize].upper_bound = min(downward[edge_id as usize].upper_bound, downward[other_edge_id as usize].upper_bound + upward[shortcut_edge_id as usize].upper_bound);
+                            downward[edge_id as usize].lower_bound = min(downward[edge_id as usize].lower_bound, downward[other_edge_id as usize].lower_bound + upward[shortcut_edge_id as usize].lower_bound);
+                        }
+                    }
+                }
+
+                for node in self.neighbor_iter(current_node) {
+                    node_edge_ids[node as usize] = InRangeOption::new(None);
+                }
+            }
+
+            for (shortcut, lower_bound) in upward.iter_mut().zip(upward_preliminary_bounds.into_iter()) {
+                if shortcut.upper_bound.fuzzy_lt(lower_bound) {
+                    shortcut.required = false;
+                    shortcut.lower_bound = FlWeight::INFINITY;
+                    shortcut.upper_bound = FlWeight::INFINITY;
+                }
+            }
+
+            for (shortcut, lower_bound) in downward.iter_mut().zip(downward_preliminary_bounds.into_iter()) {
+                if shortcut.upper_bound.fuzzy_lt(lower_bound) {
+                    shortcut.required = false;
+                    shortcut.lower_bound = FlWeight::INFINITY;
+                    shortcut.upper_bound = FlWeight::INFINITY;
+                }
+            }
         });
         drop(subctxt);
 
@@ -435,8 +483,8 @@ impl CCHGraph {
                 }
 
                 for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
-                    shortcut_graph.borrow_mut_outgoing(edge_id, |shortcut, _| shortcut.finalize_lower_bound());
-                    shortcut_graph.borrow_mut_incoming(edge_id, |shortcut, _| shortcut.finalize_lower_bound());
+                    shortcut_graph.borrow_mut_outgoing(edge_id, |shortcut, shortcut_graph| shortcut.finalize_bounds(shortcut_graph));
+                    shortcut_graph.borrow_mut_incoming(edge_id, |shortcut, shortcut_graph| shortcut.finalize_bounds(shortcut_graph));
                     node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
                 }
 
