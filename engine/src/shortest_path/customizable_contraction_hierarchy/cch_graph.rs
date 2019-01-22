@@ -503,7 +503,7 @@ impl CCHGraph {
         (self.first_out[node as usize] as EdgeId)..(self.first_out[(node + 1) as usize] as EdgeId)
     }
 
-    fn degree(&self, node: NodeId) -> usize {
+    pub fn degree(&self, node: NodeId) -> usize {
         let range = self.neighbor_edge_indices_usize(node);
         range.end - range.start
     }

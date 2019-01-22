@@ -80,6 +80,10 @@ impl<'a> Server<'a> {
         #[cfg(feature = "tdcch-query-detailed-timing")]
         let init_time = timer.get_passed();
 
+        let mut nodes_in_elimination_tree_search_space = 0;
+        let mut relaxed_elimination_tree_arcs = 0;
+        let mut relaxed_shortcut_arcs = 0;
+
         while self.forward.peek_next().is_some() || self.backward.peek_next().is_some() {
             if self.forward.peek_next().unwrap_or(n as NodeId) <= self.backward.peek_next().unwrap_or(n as NodeId) {
                 let stall = || {
@@ -94,6 +98,9 @@ impl<'a> Server<'a> {
                 if self.forward.node_data(self.forward.peek_next().unwrap()).lower_bound > self.tentative_distance.1 || (cfg!(tdcch_stall_on_demand) && stall()) {
                     self.forward.skip_next();
                 } else if let QueryProgress::Progress(node) = self.forward.next_step() {
+                    nodes_in_elimination_tree_search_space += 1;
+                    relaxed_elimination_tree_arcs += self.cch_graph.degree(node);
+
                     self.forward_tree_mask.unset_all_around(node as usize);
                     self.forward_tree_path.push(node);
 
@@ -115,6 +122,9 @@ impl<'a> Server<'a> {
                 if self.backward.node_data(self.backward.peek_next().unwrap()).lower_bound > self.tentative_distance.1 {
                     self.backward.skip_next();
                 } else if let QueryProgress::Progress(node) = self.backward.next_step() {
+                    nodes_in_elimination_tree_search_space += 1;
+                    relaxed_elimination_tree_arcs += self.cch_graph.degree(node);
+
                     self.backward_tree_mask.unset_all_around(node as usize);
                     self.backward_tree_path.push(node);
 
@@ -130,6 +140,10 @@ impl<'a> Server<'a> {
                 }
             }
         }
+
+        report!("num_nodes_in_elimination_tree_search_space", nodes_in_elimination_tree_search_space);
+        report!("num_relaxed_elimination_tree_arcs", relaxed_elimination_tree_arcs);
+        report!("num_meeting_nodes", self.meeting_nodes.len());
 
         #[cfg(feature = "tdcch-query-detailed-timing")]
         let elimination_tree_time = timer.get_passed();
@@ -167,9 +181,13 @@ impl<'a> Server<'a> {
             let t_cur = distances[tail as usize];
             let pruning_bound = min(tentative_latest_arrival, distances[head as usize]);
             if !pruning_bound.fuzzy_lt(t_cur + customized_graph.outgoing.bounds()[shortcut_id as usize].0) {
+                relaxed_shortcut_arcs += 1;
+
                 let mut parent = tail;
                 let mut parent_shortcut_id = shortcut_id;
                 let t_next = t_cur + customized_graph.outgoing.evaluate(shortcut_id, t_cur, customized_graph, &mut |up, shortcut_id, t| {
+                    relaxed_shortcut_arcs += 1;
+
                     if up {
                         let tail = cch_graph.edge_id_to_tail(shortcut_id);
                         let res = if t <= distances[tail as usize] {
@@ -227,9 +245,13 @@ impl<'a> Server<'a> {
                     let t_cur = distances[tail as usize];
                     let pruning_bound = min(tentative_latest_arrival, distances[head as usize]);
                     if !pruning_bound.fuzzy_lt(t_cur + customized_graph.incoming.bounds()[label.shortcut_id as usize].0) {
+                        relaxed_shortcut_arcs += 1;
+
                         let mut parent = tail;
                         let mut parent_shortcut_id = label.shortcut_id;
                         let t_next = t_cur + customized_graph.incoming.evaluate(label.shortcut_id, t_cur, customized_graph, &mut |up, shortcut_id, t| {
+                            relaxed_shortcut_arcs += 1;
+
                             if up {
                                 let tail = cch_graph.edge_id_to_tail(shortcut_id);
                                 let res = if t <= distances[tail as usize] {
@@ -275,6 +297,8 @@ impl<'a> Server<'a> {
                 }
             }
         }
+
+        report!("num_relaxed_shortcut_arcs", relaxed_shortcut_arcs);
 
         #[cfg(feature = "tdcch-query-detailed-timing")]
         let backward_relax_time = timer.get_passed();
