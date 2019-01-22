@@ -52,6 +52,7 @@ fn main() {
     let _reporter = enable_reporting();
 
     report!("program", "tdcch");
+    report!("start_time", format!("{}", time::now_utc().rfc822()));
     report!("args", env::args().collect::<Vec<String>>());
     let seed = Default::default();
     report!("seed", seed);
