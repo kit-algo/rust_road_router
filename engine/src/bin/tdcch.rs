@@ -115,8 +115,6 @@ fn main() {
     let cch_folder = path.join("cch");
 
     let cch = if !cch_folder.exists() {
-        std::fs::create_dir(&cch_folder).expect("could not create cch folder");
-
         let cch_order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm"));
         let cch_build_ctxt = algo_runs_ctxt.push_collection_item();
         let cch = customizable_contraction_hierarchy::contract(&graph, cch_order);
@@ -127,6 +125,7 @@ fn main() {
         let cch_order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm"));
 
         let cch_order = CCHReordering { node_order: cch_order, latitude, longitude }.reorder(cch.separators());
+        std::fs::create_dir(&cch_folder).expect("could not create cch folder");
         cch_order.deconstruct_to(cch_folder.to_str().unwrap()).expect("could not save cch order");
 
         let _cch_build_ctxt = algo_runs_ctxt.push_collection_item();
@@ -142,9 +141,9 @@ fn main() {
     let customized_folder = path.join("customized");
 
     let td_cch_graph = if !customized_folder.exists() {
-        std::fs::create_dir(&customized_folder).expect("could not create cch folder");
         let _cch_customization_ctxt = algo_runs_ctxt.push_collection_item();
         let td_cch_graph: CustomizedGraph = cch.customize_floating_td(&graph).into();
+        std::fs::create_dir(&customized_folder).expect("could not create cch folder");
         td_cch_graph.deconstruct_to(customized_folder.to_str().unwrap()).expect("could not save customized");
         td_cch_graph
     } else {
