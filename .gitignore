@@ -3,3 +3,4 @@
 **/.gdb_history
 target/
 *callgrind.out*
+.ipynb_checkpoints
