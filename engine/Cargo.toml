@@ -11,6 +11,7 @@ tdcch-query-detailed-timing = []
 tdcch-stall-on-demand = []
 tdcch-approx = []
 tdcch-approx-imai-iri = ["tdcch-approx"]
+report-to-stderr = []
 
 [dependencies]
 time = "^0.1.40"

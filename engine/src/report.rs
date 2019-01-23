@@ -189,6 +189,9 @@ impl<'a> Drop for CollectionItemContextGuard<'a> {
 }
 
 pub fn report(key: String, val: Value) {
+    if cfg!(feature = "report-to-stderr") {
+        eprintln!("{}: {}", key, val.to_string());
+    }
     REPORTER.with(|reporter| reporter.borrow_mut().as_mut().map(|r| r.report(key, val)));
 }
 
