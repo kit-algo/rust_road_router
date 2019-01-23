@@ -180,25 +180,33 @@ impl<'a> Server<'a> {
         for &(shortcut_id, tail, head) in shortcut_queue.iter().rev() {
             let t_cur = distances[tail as usize];
             let pruning_bound = min(tentative_latest_arrival, distances[head as usize]);
+            debug_assert!(customized_graph.outgoing.bounds()[shortcut_id as usize].0 < FlWeight::INFINITY);
+            debug_assert!(customized_graph.outgoing.bounds()[shortcut_id as usize].1 < FlWeight::INFINITY);
             if !pruning_bound.fuzzy_lt(t_cur + customized_graph.outgoing.bounds()[shortcut_id as usize].0) {
                 relaxed_shortcut_arcs += 1;
 
                 let mut parent = tail;
                 let mut parent_shortcut_id = shortcut_id;
                 let t_next = t_cur + customized_graph.outgoing.evaluate(shortcut_id, t_cur, customized_graph, &mut |up, shortcut_id, t| {
-                    relaxed_shortcut_arcs += 1;
 
                     if up {
+                        debug_assert!(customized_graph.outgoing.bounds()[shortcut_id as usize].0 < FlWeight::INFINITY);
+                        debug_assert!(customized_graph.outgoing.bounds()[shortcut_id as usize].1 < FlWeight::INFINITY);
                         let tail = cch_graph.edge_id_to_tail(shortcut_id);
                         let res = if t <= distances[tail as usize] {
                             distances[tail as usize] = t;
-                            debug_assert_ne!(distances[parent as usize], Timestamp::NEVER);
+                            debug_assert!(distances[parent as usize] < Timestamp::NEVER);
                             if tail != parent {
                                 parents[tail as usize] = (parent, parent_shortcut_id);
                             }
 
                             let head = cch_graph.head()[shortcut_id as usize];
-                            !distances[head as usize].fuzzy_lt(t + customized_graph.outgoing.bounds()[shortcut_id as usize].0)
+                            if distances[head as usize].fuzzy_lt(t + customized_graph.outgoing.bounds()[shortcut_id as usize].0) {
+                                false
+                            } else {
+                                relaxed_shortcut_arcs += 1;
+                                true
+                            }
                         } else {
                             false
                         };
@@ -206,16 +214,23 @@ impl<'a> Server<'a> {
                         parent_shortcut_id = shortcut_id;
                         res
                     } else {
+                        debug_assert!(customized_graph.incoming.bounds()[shortcut_id as usize].0 < FlWeight::INFINITY);
+                        debug_assert!(customized_graph.incoming.bounds()[shortcut_id as usize].1 < FlWeight::INFINITY);
                         let head = cch_graph.head()[shortcut_id as usize];
                         let res = if t <= distances[head as usize] {
                             distances[head as usize] = t;
-                            debug_assert_ne!(distances[parent as usize], Timestamp::NEVER);
+                            debug_assert!(distances[parent as usize] < Timestamp::NEVER);
                             if head != parent {
                                 parents[head as usize] = (parent, parent_shortcut_id);
                             }
 
                             let tail = cch_graph.edge_id_to_tail(shortcut_id);
-                            !distances[tail as usize].fuzzy_lt(t + customized_graph.incoming.bounds()[shortcut_id as usize].0)
+                            if distances[tail as usize].fuzzy_lt(t + customized_graph.incoming.bounds()[shortcut_id as usize].0) {
+                                false
+                            } else {
+                                relaxed_shortcut_arcs += 1;
+                                true
+                            }
                         } else {
                             false
                         };
@@ -227,7 +242,7 @@ impl<'a> Server<'a> {
                 if t_next < distances[head as usize] {
                     distances[head as usize] = t_next;
                     parents[head as usize] = (parent, parent_shortcut_id);
-                    debug_assert_ne!(distances[parent as usize], Timestamp::NEVER);
+                    debug_assert!(distances[parent as usize] < Timestamp::NEVER);
                 }
             }
         }
@@ -240,6 +255,8 @@ impl<'a> Server<'a> {
                 let upper_bound = self.backward.node_data(node).upper_bound;
                 for label in self.backward.node_data(node).labels.iter().filter(|label| label.lower_bound <= upper_bound) {
                     self.backward_tree_mask.set(label.parent as usize);
+                    debug_assert!(customized_graph.incoming.bounds()[label.shortcut_id as usize].0 < FlWeight::INFINITY);
+                    debug_assert!(customized_graph.incoming.bounds()[label.shortcut_id as usize].1 < FlWeight::INFINITY);
                     let tail = node;
                     let head = label.parent;
                     let t_cur = distances[tail as usize];
@@ -250,19 +267,25 @@ impl<'a> Server<'a> {
                         let mut parent = tail;
                         let mut parent_shortcut_id = label.shortcut_id;
                         let t_next = t_cur + customized_graph.incoming.evaluate(label.shortcut_id, t_cur, customized_graph, &mut |up, shortcut_id, t| {
-                            relaxed_shortcut_arcs += 1;
 
                             if up {
+                                debug_assert!(customized_graph.outgoing.bounds()[shortcut_id as usize].0 < FlWeight::INFINITY);
+                                debug_assert!(customized_graph.outgoing.bounds()[shortcut_id as usize].1 < FlWeight::INFINITY);
                                 let tail = cch_graph.edge_id_to_tail(shortcut_id);
                                 let res = if t <= distances[tail as usize] {
                                     distances[tail as usize] = t;
-                                    debug_assert_ne!(distances[parent as usize], Timestamp::NEVER);
+                                    debug_assert!(distances[parent as usize] < Timestamp::NEVER);
                                     if tail != parent {
                                         parents[tail as usize] = (parent, parent_shortcut_id);
                                     }
 
                                     let head = cch_graph.head()[shortcut_id as usize];
-                                    !distances[head as usize].fuzzy_lt(t + customized_graph.outgoing.bounds()[shortcut_id as usize].0)
+                                    if distances[head as usize].fuzzy_lt(t + customized_graph.outgoing.bounds()[shortcut_id as usize].0) {
+                                        false
+                                    } else {
+                                        relaxed_shortcut_arcs += 1;
+                                        true
+                                    }
                                 } else {
                                     false
                                 };
@@ -270,16 +293,23 @@ impl<'a> Server<'a> {
                                 parent_shortcut_id = shortcut_id;
                                 res
                             } else {
+                                debug_assert!(customized_graph.incoming.bounds()[shortcut_id as usize].0 < FlWeight::INFINITY);
+                                debug_assert!(customized_graph.incoming.bounds()[shortcut_id as usize].1 < FlWeight::INFINITY);
                                 let head = cch_graph.head()[shortcut_id as usize];
                                 let res = if t <= distances[head as usize] {
                                     distances[head as usize] = t;
-                                    debug_assert_ne!(distances[parent as usize], Timestamp::NEVER);
+                                    debug_assert!(distances[parent as usize] < Timestamp::NEVER);
                                     if head != parent {
                                         parents[head as usize] = (parent, parent_shortcut_id);
                                     }
 
                                     let tail = cch_graph.edge_id_to_tail(shortcut_id);
-                                    !distances[tail as usize].fuzzy_lt(t + customized_graph.incoming.bounds()[shortcut_id as usize].0)
+                                    if distances[tail as usize].fuzzy_lt(t + customized_graph.incoming.bounds()[shortcut_id as usize].0) {
+                                        false
+                                    } else {
+                                        relaxed_shortcut_arcs += 1;
+                                        true
+                                    }
                                 } else {
                                     false
                                 };
@@ -291,7 +321,7 @@ impl<'a> Server<'a> {
                         if t_next < distances[head as usize] {
                             distances[head as usize] = t_next;
                             parents[head as usize] = (parent, parent_shortcut_id);
-                            debug_assert_ne!(distances[parent as usize], Timestamp::NEVER);
+                            debug_assert!(distances[parent as usize] < Timestamp::NEVER);
                         }
                     }
                 }
