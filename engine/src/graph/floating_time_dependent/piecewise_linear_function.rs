@@ -67,11 +67,12 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 return vec![TTFPoint { at: Timestamp::zero(), val: val + other }]
             } else {
                 let zero_val = other.evaluate(val.into());
+                let (_, val_offset) = Timestamp::from(val).split_of_period();
                 return std::iter::once(TTFPoint { at: Timestamp::zero(), val: zero_val + val })
                     .chain(
-                        other.ipps.iter().filter(|p| p.at > val.into()).map(|p| TTFPoint { at: p.at - val, val: p.val + val })
+                        other.ipps.iter().filter(|p| p.at > val_offset).map(|p| TTFPoint { at: p.at - FlWeight::from(val_offset), val: p.val + val })
                     ).chain(
-                        other.ipps.iter().filter(|p| p.at < val.into()).map(|p| TTFPoint { at: p.at + FlWeight::from(period()) - val, val: p.val + val })
+                        other.ipps.iter().filter(|p| p.at < val_offset).map(|p| TTFPoint { at: p.at + FlWeight::from(period()) - FlWeight::from(val_offset), val: p.val + val })
                     ).chain(std::iter::once(TTFPoint { at: period(), val: zero_val + val }))
                     .fold(Vec::with_capacity(other.ipps.len() + 2), |mut acc, p| {
                         Self::append_point(&mut acc, p);
@@ -368,7 +369,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         if let Some(p) = points.last() {
             if p.at.fuzzy_eq(point.at) && p.val.fuzzy_eq(point.val) { return }
         }
-        debug_assert!(points.last().map(|p| p.at.fuzzy_lt(point.at) || p.val.fuzzy_eq(point.val)).unwrap_or(true));
+        debug_assert!(points.last().map(|p| p.at.fuzzy_lt(point.at)).unwrap_or(true), "last: {:?}, append: {:?}", points.last(), point);
 
         points.push(point)
     }
@@ -545,6 +546,21 @@ mod tests {
 
             let linked = PiecewiseLinearFunction::new(&ipps1).link(&PiecewiseLinearFunction::new(&ipps2));
             assert_eq!(5, linked.len())
+        });
+    }
+
+    #[test]
+    fn test_linking_with_period_crossing_and_first_static() {
+        run_test_with_periodicity(Timestamp::new(100.0), || {
+            let ipps1 = [TTFPoint { at: Timestamp::zero(), val: FlWeight::new(110.0) }];
+
+            let ipps2 = [
+                TTFPoint { at: Timestamp::zero(), val: FlWeight::new(10.0) },
+                TTFPoint { at: Timestamp::new(60.0), val: FlWeight::new(15.0) },
+                TTFPoint { at: period(), val: FlWeight::new(10.0) }];
+
+            let linked = PiecewiseLinearFunction::new(&ipps1).link(&PiecewiseLinearFunction::new(&ipps2));
+            assert_eq!(4, linked.len())
         });
     }
 }
