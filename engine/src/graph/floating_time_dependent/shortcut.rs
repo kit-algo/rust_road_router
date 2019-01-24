@@ -47,7 +47,7 @@ impl Shortcut {
 
             let other_lower_bound = first.lower_bound + second.lower_bound;
 
-            if other_lower_bound > self.upper_bound {
+            if self.upper_bound.fuzzy_lt(other_lower_bound) {
                 return
             }
 
@@ -74,7 +74,7 @@ impl Shortcut {
             let other_lower_bound = linked.lower_bound();
             let other_upper_bound = linked.upper_bound();
 
-            if self_plf.lower_bound() >= other_upper_bound {
+            if !self_plf.lower_bound().fuzzy_lt(other_upper_bound) {
                 self.upper_bound = min(self.upper_bound, PiecewiseLinearFunction::new(&linked_ipps).upper_bound());
                 debug_assert!(self.upper_bound >= self.lower_bound);
                 if cfg!(feature = "tdcch-approx") && linked_ipps.len() > 250 {
@@ -87,7 +87,7 @@ impl Shortcut {
                 self.sources = Sources::One(other_data);
                 UNNECESSARY_LINKED.with(|count| count.set(count.get() + 1));
                 return;
-            } else if other_lower_bound > self.upper_bound {
+            } else if self.upper_bound.fuzzy_lt(other_lower_bound) {
                 return;
             }
 
