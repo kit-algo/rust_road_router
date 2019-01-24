@@ -146,6 +146,15 @@ impl Shortcut {
         }
 
         let new_lower_bound = self.plf(shortcut_graph).lower_bound();
+
+        if self.upper_bound.fuzzy_lt(new_lower_bound) {
+            self.required = false;
+            self.sources = Sources::None;
+            self.lower_bound = FlWeight::INFINITY;
+            self.upper_bound = FlWeight::INFINITY;
+            return
+        }
+
         debug_assert!(!new_lower_bound.fuzzy_lt(self.lower_bound), "{:?}, {:?}", new_lower_bound, self);
         debug_assert!(!self.upper_bound.fuzzy_lt(new_lower_bound), "{:?}, {:?}", new_lower_bound, self);
         self.lower_bound = new_lower_bound;
