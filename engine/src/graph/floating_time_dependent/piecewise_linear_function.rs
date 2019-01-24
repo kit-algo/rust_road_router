@@ -245,7 +245,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     debug_assert!(better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
 
                     if !better.last().unwrap().1 {
-                        println!("Missed Intersection!");
+                        eprintln!("Missed Intersection!");
                         let intersection = intersection_point(&f.prev(), &f.cur(), &g.prev(), &g.cur());
                         better.push((intersection.at, true));
                     }
@@ -257,7 +257,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     debug_assert!(!better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
 
                     if better.last().unwrap().1 {
-                        println!("Missed Intersection!");
+                        eprintln!("Missed Intersection!");
                         let intersection = intersection_point(&f.prev(), &f.cur(), &g.prev(), &g.cur());
                         better.push((intersection.at, false));
                     }
@@ -277,7 +277,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     debug_assert!(better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
 
                     if !better.last().unwrap().1 {
-                        println!("Missed Intersection!");
+                        eprintln!("Missed Intersection!");
                         let intersection = intersection_point(&f.prev(), &f.cur(), &g.prev(), &g.cur());
                         better.push((intersection.at, true));
                     }
@@ -309,7 +309,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     debug_assert!(!better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
 
                     if better.last().unwrap().1 {
-                        println!("Missed Intersection!");
+                        eprintln!("Missed Intersection!");
                         let intersection = intersection_point(&f.prev(), &f.cur(), &g.prev(), &g.cur());
                         better.push((intersection.at, false));
                     }
@@ -430,7 +430,8 @@ impl<'a> Cursor<'a> {
     }
 
     fn starting_at_or_after(ipps: &'a [TTFPoint], t: Timestamp) -> Self {
-        let (offset, t) = t.split_of_period();
+        let (times_period, t) = t.split_of_period();
+        let offset = times_period * FlWeight::from(period());
 
         if ipps.len() == 1 {
             return Self::new(ipps)
@@ -445,6 +446,7 @@ impl<'a> Cursor<'a> {
                 Ordering::Greater
             }
         });
+
 
         match pos {
             Ok(i) => Cursor { ipps, current_index: i, offset },
@@ -527,6 +529,24 @@ mod tests {
             assert_eq!(cursor.prev(), TTFPoint { at: Timestamp::new(5.0), val: FlWeight::new(7.0) });
         });
     }
+
+    #[test]
+    fn test_linking_with_period_crossing() {
+        run_test_with_periodicity(Timestamp::new(100.0), || {
+            let ipps1 = [
+                TTFPoint { at: Timestamp::zero(), val: FlWeight::new(105.0) },
+                TTFPoint { at: Timestamp::new(50.0), val: FlWeight::new(95.0) },
+                TTFPoint { at: period(), val: FlWeight::new(105.0) }];
+
+            let ipps2 = [
+                TTFPoint { at: Timestamp::zero(), val: FlWeight::new(10.0) },
+                TTFPoint { at: Timestamp::new(60.0), val: FlWeight::new(15.0) },
+                TTFPoint { at: period(), val: FlWeight::new(10.0) }];
+
+            let linked = PiecewiseLinearFunction::new(&ipps1).link(&PiecewiseLinearFunction::new(&ipps2));
+            assert_eq!(5, linked.len())
+        });
+    }
 }
 
 mod debug {
@@ -539,13 +559,13 @@ mod debug {
 
     pub fn debug_merge(f: &Cursor, g: &Cursor, merged: &[TTFPoint], better: &[(Timestamp, bool)]) {
         if let Ok(mut file) = File::create(format!("debug-{}-{}.py", f64::from(f.cur().at), f64::from(g.cur().at))) {
-            write_python(&mut file, f, g, merged, better).unwrap_or_else(|_| println!("failed to write debug script to file"));
+            write_python(&mut file, f, g, merged, better).unwrap_or_else(|_| eprintln!("failed to write debug script to file"));
         }
 
         if env::var("TDCCH_INTERACTIVE_DEBUG").is_ok() {
             if let Ok(mut child) = Command::new("python3").stdin(Stdio::piped()).spawn() {
                 if let Some(mut stdin) = child.stdin.as_mut() {
-                    write_python(&mut stdin, f, g, merged, better).unwrap_or_else(|_| println!("failed to execute debug script"));
+                    write_python(&mut stdin, f, g, merged, better).unwrap_or_else(|_| eprintln!("failed to execute debug script"));
                 }
             }
         }
