@@ -68,7 +68,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
             } else {
                 let zero_val = other.evaluate(val.into());
                 let (_, val_offset) = Timestamp::from(val).split_of_period();
-                return std::iter::once(TTFPoint { at: Timestamp::zero(), val: zero_val + val })
+                let mut result = std::iter::once(TTFPoint { at: Timestamp::zero(), val: zero_val + val })
                     .chain(
                         other.ipps.iter().filter(|p| p.at > val_offset).map(|p| TTFPoint { at: p.at - FlWeight::from(val_offset), val: p.val + val })
                     ).chain(
@@ -77,7 +77,11 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     .fold(Vec::with_capacity(other.ipps.len() + 2), |mut acc, p| {
                         Self::append_point(&mut acc, p);
                         acc
-                    })
+                    });
+
+                result.last_mut().unwrap().at = period();
+
+                return result
             }
         }
         if let [TTFPoint { val, .. }] = &other.ipps {
@@ -128,6 +132,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
         let zero_val = result[0].val;
         Self::append_point(&mut result, TTFPoint { at: period(), val: zero_val });
+        result.last_mut().unwrap().at = period();
 
         debug_assert!(result.len() <= self.ipps.len() + other.ipps.len() + 1);
 
