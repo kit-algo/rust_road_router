@@ -84,7 +84,7 @@ impl<'a, 'b> FloatingTDSteppedEliminationTree<'a, 'b> {
                 };
                 let next_upper_bound = shortcut_upper_bound + current_state_upper_bound;
 
-                debug_assert!(next.lower_bound <= next_upper_bound, "{:?}", next);
+                debug_assert!(!next_upper_bound.fuzzy_lt(next.lower_bound), "{:?} {:?}", next, next_upper_bound);
 
                 if next.lower_bound < self.distances[target as usize].upper_bound {
                     self.distances[target as usize].lower_bound = min(next.lower_bound, self.distances[target as usize].lower_bound);
