@@ -240,7 +240,7 @@ pub use self::time::*;
 
 #[cfg(test)]
 thread_local! {
-    static TEST_PERIOD_MOCK: Cell<Option<Timestamp>> = Cell::new(None);
+    static TEST_PERIOD_MOCK: std::cell::Cell<Option<Timestamp>> = std::cell::Cell::new(None);
 }
 
 #[cfg(test)]
