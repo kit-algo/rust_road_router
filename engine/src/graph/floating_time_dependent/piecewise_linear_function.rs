@@ -14,7 +14,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         debug_assert!(ipps.len() == 1 || ipps.last().unwrap().at == period(), "{:?}", ipps);
 
         for points in ipps.windows(2) {
-            debug_assert!(points[0].at < points[1].at);
+            debug_assert!(points[0].at < points[1].at, "{:?}", ipps);
         }
 
         PiecewiseLinearFunction { ipps }
@@ -66,7 +66,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
             if let [TTFPoint { val: other, .. }] = &other.ipps {
                 return vec![TTFPoint { at: Timestamp::zero(), val: val + other }]
             } else {
-                let zero_val = other.eval(val.into());
+                let zero_val = other.evaluate(val.into());
                 return std::iter::once(TTFPoint { at: Timestamp::zero(), val: zero_val + val })
                     .chain(
                         other.ipps.iter().filter(|p| p.at > val.into()).map(|p| TTFPoint { at: p.at - val, val: p.val + val })
