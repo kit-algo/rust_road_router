@@ -45,6 +45,26 @@ impl<'a> ShortcutGraph<'a> {
         swap(&mut self.incoming[edge_id as usize], &mut shortcut);
     }
 
+    pub fn swap_out_outgoing(&mut self, edge_id: EdgeId) -> Shortcut {
+        let mut shortcut = Shortcut::new(None, self.original_graph);
+        swap(&mut self.outgoing[edge_id as usize], &mut shortcut);
+        shortcut
+    }
+
+    pub fn swap_out_incoming(&mut self, edge_id: EdgeId) -> Shortcut {
+        let mut shortcut = Shortcut::new(None, self.original_graph);
+        swap(&mut self.incoming[edge_id as usize], &mut shortcut);
+        shortcut
+    }
+
+    pub fn swap_in_outgoing(&mut self, edge_id: EdgeId, mut shortcut: Shortcut) {
+        swap(&mut self.outgoing[edge_id as usize], &mut shortcut);
+    }
+
+    pub fn swap_in_incoming(&mut self, edge_id: EdgeId, mut shortcut: Shortcut) {
+        swap(&mut self.incoming[edge_id as usize], &mut shortcut);
+    }
+
     pub fn original_graph(&self) -> &TDGraph {
         self.original_graph
     }

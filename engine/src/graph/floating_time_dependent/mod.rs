@@ -238,8 +238,6 @@ mod time {
 }
 pub use self::time::*;
 
-use std::cell::Cell;
-
 #[cfg(test)]
 thread_local! {
     static TEST_PERIOD_MOCK: Cell<Option<Timestamp>> = Cell::new(None);
@@ -282,12 +280,14 @@ pub fn period() -> Timestamp {
     Timestamp::new(86_400.0)
 }
 
-thread_local! { pub static IPP_COUNT: Cell<usize> = Cell::new(0); }
-thread_local! { pub static PATH_SOURCES_COUNT: Cell<usize> = Cell::new(0); }
-thread_local! { pub static CLOSE_IPPS_COUNT: Cell<usize> = Cell::new(0); }
-thread_local! { pub static ACTUALLY_MERGED: Cell<usize> = Cell::new(0); }
-thread_local! { pub static ACTUALLY_LINKED: Cell<usize> = Cell::new(0); }
-thread_local! { pub static ACTIVE_SHORTCUTS: Cell<usize> = Cell::new(0); }
-thread_local! { pub static UNNECESSARY_LINKED: Cell<usize> = Cell::new(0); }
-thread_local! { pub static CONSIDERED_FOR_APPROX: Cell<usize> = Cell::new(0); }
-thread_local! { pub static SAVED_BY_APPROX: Cell<usize> = Cell::new(0); }
+use std::sync::atomic::AtomicUsize;
+
+pub static IPP_COUNT: AtomicUsize = AtomicUsize::new(0);
+pub static PATH_SOURCES_COUNT: AtomicUsize = AtomicUsize::new(0);
+pub static CLOSE_IPPS_COUNT: AtomicUsize = AtomicUsize::new(0);
+pub static ACTUALLY_MERGED: AtomicUsize = AtomicUsize::new(0);
+pub static ACTUALLY_LINKED: AtomicUsize = AtomicUsize::new(0);
+pub static ACTIVE_SHORTCUTS: AtomicUsize = AtomicUsize::new(0);
+pub static UNNECESSARY_LINKED: AtomicUsize = AtomicUsize::new(0);
+pub static CONSIDERED_FOR_APPROX: AtomicUsize = AtomicUsize::new(0);
+pub static SAVED_BY_APPROX: AtomicUsize = AtomicUsize::new(0);

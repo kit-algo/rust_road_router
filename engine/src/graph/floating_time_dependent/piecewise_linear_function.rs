@@ -201,7 +201,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
 
         if !needs_merging {
-            CLOSE_IPPS_COUNT.with(|count| count.set(count.get() + (close_ipps_counter * 10000) / (f.ipps.len() + g.ipps.len())));
+            CLOSE_IPPS_COUNT.fetch_add((close_ipps_counter * 10000) / (f.ipps.len() + g.ipps.len()), std::sync::atomic::Ordering::Relaxed);
             return ((if better.last().unwrap().1 { self.ipps } else { other.ipps }).to_vec(), better)
         }
 
@@ -345,7 +345,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
             }
         }
 
-        CLOSE_IPPS_COUNT.with(|count| count.set(count.get() + (close_ipps_counter * 10000) / (f.ipps.len() + g.ipps.len())));
+        CLOSE_IPPS_COUNT.fetch_add((close_ipps_counter * 10000) / (f.ipps.len() + g.ipps.len()), std::sync::atomic::Ordering::Relaxed);
 
         if result.len() > 1 {
             let p = TTFPoint { at: period(), val: result[0].val };

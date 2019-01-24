@@ -9,6 +9,9 @@ use crate::{
 
 use std;
 use std::ops::Range;
+use std::sync::atomic::Ordering;
+
+use rayon::prelude::*;
 
 #[derive(Debug)]
 pub struct SeparatorTree {
@@ -464,6 +467,8 @@ impl CCHGraph {
 
             let mut node_edge_ids = vec![InRangeOption::new(None); n as usize];
 
+            let mut triangles = Vec::new();
+
             for current_node in 0..n {
                 let now = timer.get_passed_ms();
                 if current_node > 0 && now - prev_event > 1000 {
@@ -473,15 +478,15 @@ impl CCHGraph {
                     report!("at_s", now / 1000);
                     report!("current_rank", current_node);
                     report!("current_node_degree", self.degree(current_node));
-                    report!("num_ipps_stored", IPP_COUNT.with(|count| count.get()));
-                    report!("num_shortcuts_active", ACTIVE_SHORTCUTS.with(|count| count.get()));
-                    report!("num_ipps_reduced_by_approx", SAVED_BY_APPROX.with(|count| count.get()));
-                    report!("num_ipps_considered_for_approx", CONSIDERED_FOR_APPROX.with(|count| count.get()));
-                    report!("num_shortcut_merge_points", PATH_SOURCES_COUNT.with(|count| count.get()));
-                    report!("percent_close_ipps", CLOSE_IPPS_COUNT.with(|count| count.get()) as f64 / f64::from(merge_count) / 100.0);
-                    report!("num_performed_merges", ACTUALLY_MERGED.with(|count| count.get()));
-                    report!("num_performed_links", ACTUALLY_LINKED.with(|count| count.get()));
-                    report!("num_performed_unnecessary_links", UNNECESSARY_LINKED.with(|count| count.get()));
+                    report!("num_ipps_stored", IPP_COUNT.load(Ordering::Relaxed));
+                    report!("num_shortcuts_active", ACTIVE_SHORTCUTS.load(Ordering::Relaxed));
+                    report!("num_ipps_reduced_by_approx", SAVED_BY_APPROX.load(Ordering::Relaxed));
+                    report!("num_ipps_considered_for_approx", CONSIDERED_FOR_APPROX.load(Ordering::Relaxed));
+                    report!("num_shortcut_merge_points", PATH_SOURCES_COUNT.load(Ordering::Relaxed));
+                    report!("percent_close_ipps", CLOSE_IPPS_COUNT.load(Ordering::Relaxed) as f64 / f64::from(merge_count) / 100.0);
+                    report!("num_performed_merges", ACTUALLY_MERGED.load(Ordering::Relaxed));
+                    report!("num_performed_links", ACTUALLY_LINKED.load(Ordering::Relaxed));
+                    report!("num_performed_unnecessary_links", UNNECESSARY_LINKED.load(Ordering::Relaxed));
                     report!("num_processed_triangles", merge_count);
                 }
 
@@ -499,10 +504,22 @@ impl CCHGraph {
                         if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
                             debug_assert!(shortcut_edge_id > edge_id);
                             debug_assert!(shortcut_edge_id > other_edge_id);
-                            shortcut_graph.borrow_mut_outgoing(shortcut_edge_id, |shortcut, shortcut_graph| shortcut.merge((edge_id, other_edge_id), shortcut_graph));
-                            shortcut_graph.borrow_mut_incoming(shortcut_edge_id, |shortcut, shortcut_graph| shortcut.merge((other_edge_id, edge_id), shortcut_graph));
+                            triangles.push(((edge_id, other_edge_id), shortcut_edge_id, true, shortcut_graph.swap_out_outgoing(shortcut_edge_id)));
+                            triangles.push(((other_edge_id, edge_id), shortcut_edge_id, false, shortcut_graph.swap_out_incoming(shortcut_edge_id)));
                             merge_count += 2;
                         }
+                    }
+                }
+
+                triangles.par_iter_mut().for_each(|(lower, _, _, shortcut)| {
+                    shortcut.merge(*lower, &shortcut_graph);
+                });
+
+                for (_, shortcut_edge_id, up, shortcut) in triangles.drain(..) {
+                    if up {
+                        shortcut_graph.swap_in_outgoing(shortcut_edge_id, shortcut);
+                    } else {
+                        shortcut_graph.swap_in_incoming(shortcut_edge_id, shortcut);
                     }
                 }
 
@@ -516,15 +533,15 @@ impl CCHGraph {
         });
         drop(subctxt);
 
-        report!("num_ipps_stored", IPP_COUNT.with(|count| count.get()));
-        report!("num_shortcuts_active", ACTIVE_SHORTCUTS.with(|count| count.get()));
-        report!("num_ipps_reduced_by_approx", SAVED_BY_APPROX.with(|count| count.get()));
-        report!("num_ipps_considered_for_approx", CONSIDERED_FOR_APPROX.with(|count| count.get()));
-        report!("num_shortcut_merge_points", PATH_SOURCES_COUNT.with(|count| count.get()));
-        report!("percent_close_ipps", CLOSE_IPPS_COUNT.with(|count| count.get()) as f64 / f64::from(merge_count) / 100.0);
-        report!("num_performed_merges", ACTUALLY_MERGED.with(|count| count.get()));
-        report!("num_performed_links", ACTUALLY_LINKED.with(|count| count.get()));
-        report!("num_performed_unnecessary_links", UNNECESSARY_LINKED.with(|count| count.get()));
+        report!("num_ipps_stored", IPP_COUNT.load(Ordering::Relaxed));
+        report!("num_shortcuts_active", ACTIVE_SHORTCUTS.load(Ordering::Relaxed));
+        report!("num_ipps_reduced_by_approx", SAVED_BY_APPROX.load(Ordering::Relaxed));
+        report!("num_ipps_considered_for_approx", CONSIDERED_FOR_APPROX.load(Ordering::Relaxed));
+        report!("num_shortcut_merge_points", PATH_SOURCES_COUNT.load(Ordering::Relaxed));
+        report!("percent_close_ipps", CLOSE_IPPS_COUNT.load(Ordering::Relaxed) as f64 / f64::from(merge_count) / 100.0);
+        report!("num_performed_merges", ACTUALLY_MERGED.load(Ordering::Relaxed));
+        report!("num_performed_links", ACTUALLY_LINKED.load(Ordering::Relaxed));
+        report!("num_performed_unnecessary_links", UNNECESSARY_LINKED.load(Ordering::Relaxed));
         report!("num_processed_triangles", merge_count);
 
         shortcut_graph
