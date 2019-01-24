@@ -460,14 +460,17 @@ impl CCHGraph {
             let mut events_ctxt = push_collection_context("events".to_string());
 
             let timer = Timer::new();
+            let mut prev_event = 0;
 
             let mut node_edge_ids = vec![InRangeOption::new(None); n as usize];
 
             for current_node in 0..n {
-                if current_node > 0 && current_node % (n / 100) == 0 || self.degree(current_node) > 50 {
+                let now = timer.get_passed_ms();
+                if current_node > 0 && now - prev_event > 1000 {
+                    prev_event = now;
                     let _event = events_ctxt.push_collection_item();
 
-                    report!("at_s", timer.get_passed_ms() / 1000);
+                    report!("at_s", now / 1000);
                     report!("current_rank", current_node);
                     report!("current_node_degree", self.degree(current_node));
                     report!("num_ipps_stored", IPP_COUNT.with(|count| count.get()));
