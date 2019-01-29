@@ -247,7 +247,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 } else if f.cur().val < g.cur().val {
 
                     Self::append_point(&mut result, f.cur().clone());
-                    debug_assert!(f.cur().val.fuzzy_lt(g.cur().val));
+                    debug_assert!(f.cur().val.fuzzy_lt(g.cur().val), "{:?}", debug_merge(&f, &g, &result, &better));
                     debug_assert!(better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
 
                     if !better.last().unwrap().1 {
@@ -259,7 +259,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 } else {
 
                     Self::append_point(&mut result, g.cur().clone());
-                    debug_assert!(g.cur().val < f.cur().val);
+                    debug_assert!(g.cur().val < f.cur().val, "{:?}", debug_merge(&f, &g, &result, &better));
                     debug_assert!(!better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
 
                     if better.last().unwrap().1 {
@@ -339,8 +339,8 @@ impl<'a> PiecewiseLinearFunction<'a> {
             }
         };
 
-        debug_assert_eq!(f.cur().at, period());
-        debug_assert_eq!(g.cur().at, period());
+        debug_assert_eq!(f.cur().at, period(), "{:?}", debug_merge(&f, &g, &result, &better));
+        debug_assert_eq!(g.cur().at, period(), "{:?}", debug_merge(&f, &g, &result, &better));
 
         if intersect(&f.prev(), &f.cur(), &g.prev(), &g.cur()) {
             let intersection = intersection_point(&f.prev(), &f.cur(), &g.prev(), &g.cur());

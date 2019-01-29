@@ -41,7 +41,7 @@ mod time {
         !fuzzy_eq(x, y)
     }
     pub fn fuzzy_lt(x: f64, y: f64) -> bool {
-        x < y - EPSILON
+        (x - y) < -EPSILON
     }
 
     #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
