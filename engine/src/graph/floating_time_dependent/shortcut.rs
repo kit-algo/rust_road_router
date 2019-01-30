@@ -5,7 +5,7 @@ use std::sync::atomic::Ordering;
 #[derive(Debug, Clone)]
 pub struct Shortcut {
     sources: Sources,
-    ttf: Option<Vec<TTFPoint>>,
+    ttf: Option<Box<[TTFPoint]>>,
     pub lower_bound: FlWeight,
     pub upper_bound: FlWeight,
     constant: bool,
@@ -239,7 +239,7 @@ impl Shortcut {
         for sources in new_sources.windows(2) {
             debug_assert!(sources[0].0 < sources[1].0);
         }
-        Sources::Multi(new_sources)
+        Sources::Multi(new_sources.into_boxed_slice())
     }
 
     pub fn num_sources(&self) -> usize {
@@ -259,7 +259,7 @@ impl Shortcut {
 enum Sources {
     None,
     One(ShortcutSourceData),
-    Multi(Vec<(Timestamp, ShortcutSourceData)>)
+    Multi(Box<[(Timestamp, ShortcutSourceData)]>)
 }
 
 impl Sources {

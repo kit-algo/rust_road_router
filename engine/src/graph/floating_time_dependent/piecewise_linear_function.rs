@@ -61,10 +61,10 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
-    pub fn link(&self, other: &Self) -> Vec<TTFPoint> {
+    pub fn link(&self, other: &Self) -> Box<[TTFPoint]> {
         if let [TTFPoint { val, .. }] = &self.ipps {
             if let [TTFPoint { val: other, .. }] = &other.ipps {
-                return vec![TTFPoint { at: Timestamp::zero(), val: val + other }]
+                return vec![TTFPoint { at: Timestamp::zero(), val: val + other }].into_boxed_slice()
             } else {
                 let zero_val = other.evaluate(val.into());
                 let (_, val_offset) = Timestamp::from(val).split_of_period();
@@ -81,7 +81,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
                 result.last_mut().unwrap().at = period();
 
-                return result
+                return result.into_boxed_slice()
             }
         }
         if let [TTFPoint { val, .. }] = &other.ipps {
@@ -136,15 +136,15 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
         debug_assert!(result.len() <= self.ipps.len() + other.ipps.len() + 1);
 
-        result
+        result.into_boxed_slice()
     }
 
     #[allow(clippy::cyclomatic_complexity)]
-    pub fn merge(&self, other: &Self) -> (Vec<TTFPoint>, Vec<(Timestamp, bool)>) {
+    pub fn merge(&self, other: &Self) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
         if self.upper_bound() < other.lower_bound() {
-            return (self.ipps.to_vec(), vec![(Timestamp::zero(), true)])
+            return (self.ipps.to_vec().into_boxed_slice(), vec![(Timestamp::zero(), true)])
         } else if other.upper_bound() < self.lower_bound() {
-            return (other.ipps.to_vec(), vec![(Timestamp::zero(), false)])
+            return (other.ipps.to_vec().into_boxed_slice(), vec![(Timestamp::zero(), false)])
         }
 
         let mut result = Vec::with_capacity(2 * self.ipps.len() + 2 * other.ipps.len() + 2);
@@ -208,7 +208,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
         if !needs_merging {
             CLOSE_IPPS_COUNT.fetch_add((close_ipps_counter * 10000) / (f.ipps.len() + g.ipps.len()), std::sync::atomic::Ordering::Relaxed);
-            return ((if better.last().unwrap().1 { self.ipps } else { other.ipps }).to_vec(), better)
+            return ((if better.last().unwrap().1 { self.ipps } else { other.ipps }).to_vec().into_boxed_slice(), better)
         }
 
         let mut f = Cursor::new(&self.ipps);
@@ -366,7 +366,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
             debug_assert_eq!(better.first().map(|(_, better_fn)| better_fn), better.last().map(|(_, better_fn)| better_fn), "{:?}", debug_merge(&f, &g, &result, &better));
         }
 
-        (result, better)
+        (result.into_boxed_slice(), better)
     }
 
     fn append_point(points: &mut Vec<TTFPoint>, point: TTFPoint) {
@@ -380,20 +380,20 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     #[cfg(not(feature = "tdcch-approx"))]
-    pub fn approximate(&self) -> Vec<TTFPoint> {
+    pub fn approximate(&self) -> Box<[TTFPoint]> {
         unimplemented!()
     }
 
     #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
-    pub fn approximate(&self) -> Vec<TTFPoint> {
+    pub fn approximate(&self) -> Box<[TTFPoint]> {
         let mut result = Vec::new();
         self.douglas_peuker(&mut result);
-        result
+        result.into_boxed_slice()
     }
 
     #[cfg(feature = "tdcch-approx-imai-iri")]
-    pub fn approximate(&self) -> Vec<TTFPoint> {
-        Imai::new(self.ipps, APPROX.into(), APPROX.into(), true, true).compute()
+    pub fn approximate(&self) -> Box<[TTFPoint]> {
+        Imai::new(self.ipps, APPROX.into(), APPROX.into(), true, true).compute().into_boxed_slice()
     }
 
     #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
