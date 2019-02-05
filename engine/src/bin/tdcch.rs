@@ -56,6 +56,7 @@ fn main() {
     report!("args", env::args().collect::<Vec<String>>());
     let seed = Default::default();
     report!("seed", seed);
+    report!("num_threads", rayon::current_num_threads());
 
     let mut args = env::args();
     args.next();
