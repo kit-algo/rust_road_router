@@ -44,7 +44,7 @@ impl Graph {
             let (prev_node, prev_t) = prev;
             let edge = self.edge_index(prev_node, node).expect("path contained nonexisting edge");
             let evaled = prev_t + self.travel_time_function(edge).evaluate(prev_t);
-            assert!(t.fuzzy_eq(evaled), "expected {:?} - got {:?} at edge {} from {} to {}", evaled, t, edge, prev_node, node);
+            assert!(t.fuzzy_eq(evaled), "expected {:?} - got {:?} at edge {} from {} (at {:?}) to {}", evaled, t, edge, prev_node, prev_t, node);
             prev = (node, t);
         }
     }

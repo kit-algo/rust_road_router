@@ -141,6 +141,7 @@ impl Shortcut {
         if !self.required { return }
 
         if let Sources::None = self.sources {
+            self.required = false;
             self.lower_bound = FlWeight::INFINITY;
             self.upper_bound = FlWeight::INFINITY;
             return

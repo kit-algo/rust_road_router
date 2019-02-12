@@ -116,7 +116,7 @@ impl<'a> Server<'a> {
                         self.meeting_nodes.push((node, lower_bound));
                     }
                 } else {
-                    debug_assert!(false, "inconsistent elimination tree state");
+                    unreachable!("inconsistent elimination tree state");
                 }
             } else {
                 if self.backward.node_data(self.backward.peek_next().unwrap()).lower_bound > self.tentative_distance.1 {
@@ -136,7 +136,7 @@ impl<'a> Server<'a> {
                         self.meeting_nodes.push((node, lower_bound));
                     }
                 } else {
-                    debug_assert!(false, "inconsistent elimination tree state");
+                    unreachable!("inconsistent elimination tree state");
                 }
             }
         }

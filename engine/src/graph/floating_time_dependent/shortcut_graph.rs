@@ -319,7 +319,7 @@ impl CustomizedSingleDirGraph {
         let edge_idx = edge_id as usize;
         if self.constant.get(edge_idx) {
             debug_assert_eq!(self.bounds[edge_idx].0, self.edge_source_at(edge_idx, t).map(|&source| ShortcutSource::from(source).evaluate(t, customized_graph, &mut always)).unwrap_or(FlWeight::INFINITY),
-                "{:?}, {:?}", self.bounds[edge_idx], self.edge_sources(edge_idx));
+                "{:?}, {:?}, {}", self.bounds[edge_idx], self.edge_sources(edge_idx), edge_id);
             return self.bounds[edge_idx].0;
         }
 

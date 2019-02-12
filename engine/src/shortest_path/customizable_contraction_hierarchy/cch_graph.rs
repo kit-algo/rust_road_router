@@ -441,6 +441,8 @@ impl CCHGraph {
                     shortcut.required = false;
                     shortcut.lower_bound = FlWeight::INFINITY;
                     shortcut.upper_bound = FlWeight::INFINITY;
+                } else {
+                    shortcut.lower_bound = lower_bound;
                 }
             }
 
@@ -449,6 +451,8 @@ impl CCHGraph {
                     shortcut.required = false;
                     shortcut.lower_bound = FlWeight::INFINITY;
                     shortcut.upper_bound = FlWeight::INFINITY;
+                } else {
+                    shortcut.lower_bound = lower_bound;
                 }
             }
         });
