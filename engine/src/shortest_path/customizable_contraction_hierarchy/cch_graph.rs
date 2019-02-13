@@ -353,8 +353,8 @@ impl CCHGraph {
         let n = (self.first_out.len() - 1) as NodeId;
         let m = self.head.len();
 
-        let mut upward = vec![Shortcut::new(None, metric); m];
-        let mut downward = vec![Shortcut::new(None, metric); m];
+        let mut upward: Vec<_> = std::iter::repeat_with(|| Shortcut::new(None, metric)).take(m).collect();
+        let mut downward: Vec<_> = std::iter::repeat_with(|| Shortcut::new(None, metric)).take(m).collect();
 
         let subctxt = push_context("weight_applying".to_string());
         report_time("TD-CCH apply weights", || {

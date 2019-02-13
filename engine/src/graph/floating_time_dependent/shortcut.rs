@@ -2,10 +2,28 @@ use super::*;
 use std::sync::atomic::Ordering::Relaxed;
 use std::cmp::{min, max, Ordering};
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
+enum TTFCache {
+    Exact(Box<[TTFPoint]>),
+    Approx(Box<[TTFPoint]>, Box<[TTFPoint]>),
+}
+
+impl TTFCache {
+
+    fn num_points(&self) -> usize {
+        use TTFCache::*;
+
+        match &self {
+            Exact(points) => points.len(),
+            Approx(lower, upper) => lower.len() + upper.len(),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct Shortcut {
     sources: Sources,
-    ttf: Option<Box<[TTFPoint]>>,
+    cache: Option<TTFCache>,
     pub lower_bound: FlWeight,
     pub upper_bound: FlWeight,
     constant: bool,
@@ -19,23 +37,23 @@ impl Shortcut {
                 PATH_SOURCES_COUNT.fetch_add(1, Relaxed);
                 Shortcut {
                     sources: Sources::One(ShortcutSource::OriginalEdge(edge_id).into()),
-                    ttf: None,
+                    cache: None,
                     lower_bound: original_graph.travel_time_function(edge_id).lower_bound(),
                     upper_bound: original_graph.travel_time_function(edge_id).upper_bound(),
                     constant: false,
                     required: true,
                 }
             },
-            None => Shortcut { sources: Sources::None, ttf: None, lower_bound: FlWeight::INFINITY, upper_bound: FlWeight::INFINITY, constant: false, required: true },
+            None => Shortcut { sources: Sources::None, cache: None, lower_bound: FlWeight::INFINITY, upper_bound: FlWeight::INFINITY, constant: false, required: true },
         }
     }
 
     pub fn merge(&mut self, linked_ids: (EdgeId, EdgeId), shortcut_graph: &ShortcutGraph) {
         if !self.required { return }
 
-        IPP_COUNT.fetch_sub(self.ttf.as_ref().map(|ipps| ipps.len()).unwrap_or(0), Relaxed);
+        IPP_COUNT.fetch_sub(self.cache.as_ref().map(|ipps| ipps.num_points()).unwrap_or(0), Relaxed);
         PATH_SOURCES_COUNT.fetch_sub(self.sources.len(), Relaxed);
-        if self.ttf.is_some() { ACTIVE_SHORTCUTS.fetch_sub(1, Relaxed); }
+        if self.cache.is_some() { ACTIVE_SHORTCUTS.fetch_sub(1, Relaxed); }
 
         #[allow(clippy::redundant_closure_call)]
         (|| {
@@ -61,7 +79,7 @@ impl Shortcut {
 
                 self.upper_bound = min(self.upper_bound, PiecewiseLinearFunction::new(&linked).upper_bound());
                 debug_assert!(!self.upper_bound.fuzzy_lt(self.lower_bound), "lower {:?} upper {:?}", self.lower_bound, self.upper_bound);
-                self.ttf = Some(linked);
+                self.cache = Some(TTFCache::Exact(linked));
                 self.sources = Sources::One(other_data);
                 return;
             }
@@ -84,7 +102,7 @@ impl Shortcut {
                     linked_ipps = PiecewiseLinearFunction::new(&linked_ipps).approximate();
                     SAVED_BY_APPROX.fetch_add(old - linked_ipps.len(), Relaxed);
                 }
-                self.ttf = Some(linked_ipps);
+                self.cache = Some(TTFCache::Exact(linked_ipps));
                 self.sources = Sources::One(other_data);
                 UNNECESSARY_LINKED.fetch_add(1, Relaxed);
                 return;
@@ -103,19 +121,19 @@ impl Shortcut {
 
             self.upper_bound = min(self.upper_bound, PiecewiseLinearFunction::new(&merged).upper_bound());
             debug_assert!(!self.upper_bound.fuzzy_lt(self.lower_bound), "lower {:?} upper {:?}", self.lower_bound, self.upper_bound);
-            self.ttf = Some(merged);
+            self.cache = Some(TTFCache::Exact(merged));
             let mut sources = Sources::None;
             std::mem::swap(&mut sources, &mut self.sources);
             self.sources = Shortcut::combine(sources, intersection_data, other_data);
         }) ();
 
-        IPP_COUNT.fetch_add(self.ttf.as_ref().map(|ipps| ipps.len()).unwrap_or(0), Relaxed);
+        IPP_COUNT.fetch_add(self.cache.as_ref().map(|ipps| ipps.num_points()).unwrap_or(0), Relaxed);
         PATH_SOURCES_COUNT.fetch_add(self.sources.len(), Relaxed);
-        if self.ttf.is_some() { ACTIVE_SHORTCUTS.fetch_add(1, Relaxed); }
+        if self.cache.is_some() { ACTIVE_SHORTCUTS.fetch_add(1, Relaxed); }
     }
 
     fn plf<'s>(&'s self, shortcut_graph: &'s ShortcutGraph) -> PiecewiseLinearFunction<'s> {
-        if let Some(ipps) = &self.ttf {
+        if let Some(TTFCache::Exact(ipps)) = &self.cache {
             return PiecewiseLinearFunction::new(ipps)
         }
 
@@ -171,9 +189,9 @@ impl Shortcut {
     }
 
     pub fn clear_plf(&mut self) {
-        IPP_COUNT.fetch_sub(self.ttf.as_ref().map(|ipps| ipps.len()).unwrap_or(0), Relaxed);
-        if self.ttf.is_some() { ACTIVE_SHORTCUTS.fetch_sub(1, Relaxed); }
-        self.ttf = None;
+        IPP_COUNT.fetch_sub(self.cache.as_ref().map(|ipps| ipps.num_points()).unwrap_or(0), Relaxed);
+        if self.cache.is_some() { ACTIVE_SHORTCUTS.fetch_sub(1, Relaxed); }
+        self.cache = None;
     }
 
     fn combine(sources: Sources, intersection_data: Vec<(Timestamp, bool)>, other_data: ShortcutSourceData) -> Sources {
