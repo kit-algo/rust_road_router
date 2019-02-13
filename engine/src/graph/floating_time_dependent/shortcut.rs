@@ -138,6 +138,10 @@ impl<'a> TTF<'a> {
                     }
                     result.extend(iter);
 
+                    if !result.last().unwrap().1 {
+                        result.push((next_t_self, true));
+                    }
+
                     dominating = true;
                     self_dominating_intersections.next();
                 } else if next_t_other < next_t_self {
@@ -150,6 +154,10 @@ impl<'a> TTF<'a> {
                         result.push(first_intersection);
                     }
                     result.extend(iter);
+
+                    if result.last().unwrap().1 {
+                        result.push((next_t_other, false));
+                    }
 
                     dominating = true;
                     other_dominating_intersections.next();
@@ -290,7 +298,7 @@ impl Shortcut {
             let (mut merged, intersection_data) = self_plf.merge(&linked, |start, end| {
                 let self_ipps = self.exact_ttf_for(start, end, shortcut_graph);
                 let other_ipps = ShortcutSource::from(other_data).exact_ttf_for(start, end, shortcut_graph);
-                PiecewiseLinearFunction::merge_partials(self_ipps, other_ipps)
+                PiecewiseLinearFunction::merge_partials(self_ipps, other_ipps, start, end)
             });
             if cfg!(feature = "tdcch-approx") && merged.num_points() > 250 {
                 let old = merged.num_points();
