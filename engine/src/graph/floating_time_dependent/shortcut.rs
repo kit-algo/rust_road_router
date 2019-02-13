@@ -559,7 +559,7 @@ impl<'a> SourceCursor<'a> {
 
     fn next(&self) -> (Timestamp, ShortcutSourceData) {
         if self.current_index + 1 == self.sources.len() {
-            (self.sources[self.current_index + 1].0 + self.offset + FlWeight::from(period()), self.sources[0].1)
+            (self.sources[0].0 + self.offset + FlWeight::from(period()), self.sources[0].1)
         } else {
             (self.sources[self.current_index + 1].0 + self.offset, self.sources[self.current_index + 1].1)
         }
