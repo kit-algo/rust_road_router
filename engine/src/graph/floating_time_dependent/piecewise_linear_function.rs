@@ -162,7 +162,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     pub(super) fn link_partials(first: Vec<TTFPoint>, second: Vec<TTFPoint>) -> Vec<TTFPoint> {
-        debug_assert!((first[0].at + first[0].val).fuzzy_eq(second[0].at));
+        debug_assert!((first[0].at + first[0].val).fuzzy_eq(second[0].at), "first: {:?}\n second: {:?}", first, second);
         debug_assert!((first.last().unwrap().at + first.last().unwrap().val).fuzzy_eq(second.last().unwrap().at));
 
         let mut result = Vec::with_capacity(first.len() + second.len() + 1);
@@ -585,7 +585,11 @@ impl<'a> Cursor<'a> {
         let offset = times_period * FlWeight::from(period());
 
         if ipps.len() == 1 {
-            return Self::new(ipps)
+            return if t > Timestamp::zero() {
+                Cursor { ipps, current_index: 0, offset: (period() + offset).into() }
+            } else {
+                Cursor { ipps, current_index: 0, offset }
+            }
         }
 
         let pos = ipps.binary_search_by(|p| {
@@ -711,6 +715,16 @@ mod tests {
 
             let linked = PiecewiseLinearFunction::new(&ipps1).link(&PiecewiseLinearFunction::new(&ipps2));
             assert_eq!(4, linked.len())
+        });
+    }
+
+    #[test]
+    fn test_copy_range_for_constant_plf() {
+        run_test_with_periodicity(Timestamp::new(100.0), || {
+            let ipps = [TTFPoint { at: Timestamp::zero(), val: FlWeight::new(10.0) }];
+            assert_eq!(
+                PiecewiseLinearFunction::new(&ipps).copy_range(Timestamp::new(40.0), Timestamp::new(50.0)),
+                vec![TTFPoint { at: Timestamp::new(40.0), val: FlWeight::new(10.0) }, TTFPoint { at: Timestamp::new(50.0), val: FlWeight::new(10.0) }]);
         });
     }
 }
