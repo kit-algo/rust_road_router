@@ -2,7 +2,7 @@ use super::*;
 use std::cmp::{min, max, Ordering};
 use self::debug::debug_merge;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct PiecewiseLinearFunction<'a> {
     ipps: &'a [TTFPoint],
 }
@@ -209,6 +209,17 @@ impl<'a> PiecewiseLinearFunction<'a> {
         debug_assert!(result.len() <= first.len() + second.len() + 1);
 
         result
+    }
+
+    pub fn merge_partials(first: Vec<TTFPoint>, second: Vec<TTFPoint>) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
+        debug_assert!(first.first().unwrap().at >= Timestamp::zero());
+        debug_assert!(second.first().unwrap().at >= Timestamp::zero());
+        debug_assert!(first.last().unwrap().at <= period());
+        debug_assert!(second.last().unwrap().at <= period());
+        debug_assert!(first.first().unwrap().at.fuzzy_eq(second.first().unwrap().at));
+        debug_assert!(first.last().unwrap().at.fuzzy_eq(second.last().unwrap().at));
+
+        PiecewiseLinearFunction { ipps: &first }.merge(&PiecewiseLinearFunction { ipps: &second })
     }
 
     #[allow(clippy::cyclomatic_complexity)]

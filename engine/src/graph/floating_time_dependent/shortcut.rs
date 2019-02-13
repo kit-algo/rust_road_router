@@ -9,13 +9,189 @@ enum TTFCache {
 }
 
 impl TTFCache {
-
     fn num_points(&self) -> usize {
         use TTFCache::*;
 
         match &self {
             Exact(points) => points.len(),
             Approx(lower, upper) => lower.len() + upper.len(),
+        }
+    }
+}
+
+#[derive(Debug)]
+enum TTF<'a> {
+    Exact(PiecewiseLinearFunction<'a>),
+    Approx(PiecewiseLinearFunction<'a>, PiecewiseLinearFunction<'a>),
+}
+
+impl<'a> From<&'a TTFCache> for TTF<'a> {
+    fn from(cache: &'a TTFCache) -> Self {
+        match cache {
+            TTFCache::Exact(ipps) => TTF::Exact(PiecewiseLinearFunction::new(ipps)),
+            TTFCache::Approx(lower_ipps, upper_ipps) => TTF::Approx(PiecewiseLinearFunction::new(lower_ipps), PiecewiseLinearFunction::new(upper_ipps)),
+        }
+    }
+}
+
+impl<'a> TTF<'a> {
+    fn static_lower_bound(&self) -> FlWeight {
+        use TTF::*;
+
+        match self {
+            Exact(plf) => plf.lower_bound(),
+            Approx(lower_plf, _) => lower_plf.lower_bound(),
+        }
+    }
+
+    fn static_upper_bound(&self) -> FlWeight {
+        use TTF::*;
+
+        match self {
+            Exact(plf) => plf.upper_bound(),
+            Approx(_, upper_plf) => upper_plf.upper_bound(),
+        }
+    }
+
+    fn link(&self, second: &TTF) -> TTFCache {
+        use TTF::*;
+
+        if let (Exact(first), Exact(second)) = (self, second) {
+            return TTFCache::Exact(first.link(second))
+        }
+
+        let (first_lower, first_upper) = self.bound_plfs();
+        let (second_lower, second_upper) = second.bound_plfs();
+
+        TTFCache::Approx(
+            first_lower.link(&second_lower),
+            first_upper.link(&second_upper)
+        )
+    }
+
+    #[allow(clippy::collapsible_if)]
+    #[allow(clippy::cyclomatic_complexity)]
+    fn merge(&self, other: &TTF, merge_exact: impl Fn(Timestamp, Timestamp) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>)) -> (TTFCache, Vec<(Timestamp, bool)>) {
+        use TTF::*;
+
+        if let (Exact(self_plf), Exact(other)) = (self, other) {
+            let (plf, intersections) = self_plf.merge(other);
+            return (TTFCache::Exact(plf), intersections);
+        }
+
+        let (self_lower, self_upper) = self.bound_plfs();
+        let (other_lower, other_upper) = other.bound_plfs();
+
+        let (_, self_dominating_intersections) = self_upper.merge(&other_lower);
+        let (_, other_dominating_intersections) = other_upper.merge(&self_lower);
+
+        let mut dominating = false;
+        let mut start_of_unclear = Timestamp::zero();
+        let mut self_dominating_intersections = self_dominating_intersections.iter().peekable();
+        let mut other_dominating_intersections = other_dominating_intersections.iter().peekable();
+        let mut result = Vec::new();
+
+        if self_dominating_intersections.peek().unwrap().1 {
+            dominating = true;
+            result.push((Timestamp::zero(), true));
+        }
+        if other_dominating_intersections.peek().unwrap().1 {
+            dominating = true;
+            result.push((Timestamp::zero(), false));
+        }
+
+        self_dominating_intersections.next();
+        other_dominating_intersections.next();
+
+        while self_dominating_intersections.peek().is_some() || other_dominating_intersections.peek().is_some() {
+            let next_t_self = self_dominating_intersections.peek().map(|(t, _)| *t).unwrap_or(Timestamp::NEVER);
+            let next_t_other = other_dominating_intersections.peek().map(|(t, _)| *t).unwrap_or(Timestamp::NEVER);
+
+            if dominating {
+                if next_t_self < next_t_other {
+                    debug_assert!(!self_dominating_intersections.peek().unwrap().1);
+                    debug_assert!(result.last().unwrap().1);
+                    dominating = false;
+                    start_of_unclear = next_t_self;
+                    self_dominating_intersections.next();
+                } else if next_t_other < next_t_self {
+                    debug_assert!(!other_dominating_intersections.peek().unwrap().1);
+                    debug_assert!(!result.last().unwrap().1);
+                    dominating = false;
+                    start_of_unclear = next_t_other;
+                    other_dominating_intersections.next();
+                } else {
+                    debug_assert_ne!(self_dominating_intersections.peek().unwrap().1, other_dominating_intersections.peek().unwrap().1);
+                    result.push((next_t_self, self_dominating_intersections.peek().unwrap().1));
+                    self_dominating_intersections.next();
+                    other_dominating_intersections.next();
+                }
+            } else {
+                if next_t_self < next_t_other {
+                    debug_assert!(self_dominating_intersections.peek().unwrap().1);
+
+                    let (_, intersections) = merge_exact(start_of_unclear, next_t_self);
+                    let mut iter = intersections.into_iter();
+                    let first_intersection = iter.next().unwrap();
+                    if result.last().map(|(_, self_better)| *self_better != first_intersection.1).unwrap_or(true) {
+                        result.push(first_intersection);
+                    }
+                    result.extend(iter);
+
+                    dominating = true;
+                    self_dominating_intersections.next();
+                } else if next_t_other < next_t_self {
+                    debug_assert!(other_dominating_intersections.peek().unwrap().1);
+
+                    let (_, intersections) = merge_exact(start_of_unclear, next_t_other);
+                    let mut iter = intersections.into_iter();
+                    let first_intersection = iter.next().unwrap();
+                    if result.last().map(|(_, self_better)| *self_better != first_intersection.1).unwrap_or(true) {
+                        result.push(first_intersection);
+                    }
+                    result.extend(iter);
+
+                    dominating = true;
+                    other_dominating_intersections.next();
+                } else {
+                    debug_assert!(!self_dominating_intersections.peek().unwrap().1);
+                    debug_assert!(!other_dominating_intersections.peek().unwrap().1);
+                    self_dominating_intersections.next();
+                    other_dominating_intersections.next();
+                }
+            }
+        }
+
+        if !dominating {
+            let (_, intersections) = merge_exact(start_of_unclear, period());
+            let mut iter = intersections.into_iter();
+            let first_intersection = iter.next().unwrap();
+            if result.last().map(|(_, self_better)| *self_better != first_intersection.1).unwrap_or(true) {
+                result.push(first_intersection);
+            }
+            result.extend(iter);
+        }
+
+        let (lower, _) = self_lower.merge(&other_lower);
+        let (upper, _) = self_upper.merge(&other_upper);
+        (TTFCache::Approx(lower, upper), result)
+    }
+
+    fn approximate(&self) -> TTFCache {
+        use TTF::*;
+
+        match self {
+            Exact(plf) => TTFCache::Approx(plf.lower_bound_ttf(), plf.upper_bound_ttf()),
+            Approx(lower_plf, upper_plf) => TTFCache::Approx(lower_plf.lower_bound_ttf(), upper_plf.upper_bound_ttf()),
+        }
+    }
+
+    fn bound_plfs(&self) -> (PiecewiseLinearFunction<'a>, PiecewiseLinearFunction<'a>) {
+        use TTF::*;
+
+        match self {
+            Exact(plf) => (*plf, *plf),
+            Approx(lower_plf, upper_plf) => (*lower_plf, *upper_plf),
         }
     }
 }
@@ -77,9 +253,9 @@ impl Shortcut {
                 ACTUALLY_LINKED.fetch_add(1, Relaxed);
                 let linked = first_plf.link(&second_plf);
 
-                self.upper_bound = min(self.upper_bound, PiecewiseLinearFunction::new(&linked).upper_bound());
+                self.upper_bound = min(self.upper_bound, TTF::from(&linked).static_upper_bound());
                 debug_assert!(!self.upper_bound.fuzzy_lt(self.lower_bound), "lower {:?} upper {:?}", self.lower_bound, self.upper_bound);
-                self.cache = Some(TTFCache::Exact(linked));
+                self.cache = Some(linked);
                 self.sources = Sources::One(other_data);
                 return;
             }
@@ -89,20 +265,20 @@ impl Shortcut {
             let mut linked_ipps = first_plf.link(&second_plf);
             ACTUALLY_LINKED.fetch_add(1, Relaxed);
 
-            let linked = PiecewiseLinearFunction::new(&linked_ipps);
-            let other_lower_bound = linked.lower_bound();
-            let other_upper_bound = linked.upper_bound();
+            let linked = TTF::from(&linked_ipps);
+            let other_lower_bound = linked.static_lower_bound();
+            let other_upper_bound = linked.static_upper_bound();
 
-            if !self_plf.lower_bound().fuzzy_lt(other_upper_bound) {
-                self.upper_bound = min(self.upper_bound, PiecewiseLinearFunction::new(&linked_ipps).upper_bound());
+            if !self_plf.static_lower_bound().fuzzy_lt(other_upper_bound) {
+                self.upper_bound = min(self.upper_bound, other_upper_bound);
                 debug_assert!(self.upper_bound >= self.lower_bound);
-                if cfg!(feature = "tdcch-approx") && linked_ipps.len() > 250 {
-                    let old = linked_ipps.len();
+                if cfg!(feature = "tdcch-approx") && linked_ipps.num_points() > 250 {
+                    let old = linked_ipps.num_points();
                     CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed);
-                    linked_ipps = PiecewiseLinearFunction::new(&linked_ipps).approximate();
-                    SAVED_BY_APPROX.fetch_add(old - linked_ipps.len(), Relaxed);
+                    linked_ipps = linked.approximate();
+                    SAVED_BY_APPROX.fetch_add(old - linked_ipps.num_points(), Relaxed);
                 }
-                self.cache = Some(TTFCache::Exact(linked_ipps));
+                self.cache = Some(linked_ipps);
                 self.sources = Sources::One(other_data);
                 UNNECESSARY_LINKED.fetch_add(1, Relaxed);
                 return;
@@ -111,17 +287,21 @@ impl Shortcut {
             }
 
             ACTUALLY_MERGED.fetch_add(1, Relaxed);
-            let (mut merged, intersection_data) = self_plf.merge(&linked);
-            if cfg!(feature = "tdcch-approx") && merged.len() > 250 {
-                let old = merged.len();
+            let (mut merged, intersection_data) = self_plf.merge(&linked, |start, end| {
+                let self_ipps = self.exact_ttf_for(start, end, shortcut_graph);
+                let other_ipps = ShortcutSource::from(other_data).exact_ttf_for(start, end, shortcut_graph);
+                PiecewiseLinearFunction::merge_partials(self_ipps, other_ipps)
+            });
+            if cfg!(feature = "tdcch-approx") && merged.num_points() > 250 {
+                let old = merged.num_points();
                 CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed);
-                merged = PiecewiseLinearFunction::new(&merged).approximate();
-                SAVED_BY_APPROX.fetch_add(old - merged.len(), Relaxed);
+                merged = TTF::from(&merged).approximate();
+                SAVED_BY_APPROX.fetch_add(old - merged.num_points(), Relaxed);
             }
 
-            self.upper_bound = min(self.upper_bound, PiecewiseLinearFunction::new(&merged).upper_bound());
+            self.upper_bound = min(self.upper_bound, TTF::from(&merged).static_upper_bound());
             debug_assert!(!self.upper_bound.fuzzy_lt(self.lower_bound), "lower {:?} upper {:?}", self.lower_bound, self.upper_bound);
-            self.cache = Some(TTFCache::Exact(merged));
+            self.cache = Some(merged);
             let mut sources = Sources::None;
             std::mem::swap(&mut sources, &mut self.sources);
             self.sources = Shortcut::combine(sources, intersection_data, other_data);
@@ -132,15 +312,15 @@ impl Shortcut {
         if self.cache.is_some() { ACTIVE_SHORTCUTS.fetch_add(1, Relaxed); }
     }
 
-    fn plf<'s>(&'s self, shortcut_graph: &'s ShortcutGraph) -> PiecewiseLinearFunction<'s> {
-        if let Some(TTFCache::Exact(ipps)) = &self.cache {
-            return PiecewiseLinearFunction::new(ipps)
+    fn plf<'s>(&'s self, shortcut_graph: &'s ShortcutGraph) -> TTF<'s> {
+        if let Some(cache) = &self.cache {
+            return cache.into()
         }
 
         match self.sources {
             Sources::One(source) => {
                 match source.into() {
-                    ShortcutSource::OriginalEdge(id) => shortcut_graph.original_graph().travel_time_function(id),
+                    ShortcutSource::OriginalEdge(id) => TTF::Exact(shortcut_graph.original_graph().travel_time_function(id)),
                     _ => panic!("invalid state of shortcut: ipps must be cached when shortcut not trivial {:?}", self),
                 }
             },
@@ -165,7 +345,7 @@ impl Shortcut {
             return
         }
 
-        let new_lower_bound = self.plf(shortcut_graph).lower_bound();
+        let new_lower_bound = self.plf(shortcut_graph).static_lower_bound();
 
         if self.upper_bound.fuzzy_lt(new_lower_bound) {
             self.required = false;
