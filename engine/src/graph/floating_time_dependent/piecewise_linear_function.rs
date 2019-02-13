@@ -219,18 +219,18 @@ impl<'a> PiecewiseLinearFunction<'a> {
         debug_assert!(first.last().unwrap().at.fuzzy_eq(end));
         debug_assert!(second.last().unwrap().at.fuzzy_eq(end));
 
-        first.push(TTFPoint { at: period() + FlWeight::new(1.0), val: first[0].val }); // todo fix this ugly workaround
-        second.push(TTFPoint { at: period() + FlWeight::new(1.0), val: second[0].val }); // todo fix this ugly workaround
+        first.push(TTFPoint { at: period() + FlWeight::new(1.0), val: first.last().unwrap().val }); // todo fix this ugly workaround
+        second.push(TTFPoint { at: period() + FlWeight::new(1.0), val: second.last().unwrap().val }); // todo fix this ugly workaround
 
-        PiecewiseLinearFunction { ipps: &first }.merge_in_bounds(&PiecewiseLinearFunction { ipps: &second }, start, end)
+        PiecewiseLinearFunction { ipps: &first }.merge_in_bounds::<PartialPlfCursor>(&PiecewiseLinearFunction { ipps: &second }, start, end)
     }
 
     pub fn merge(&self, other: &Self) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
-        self.merge_in_bounds(other, Timestamp::zero(), period())
+        self.merge_in_bounds::<Cursor>(other, Timestamp::zero(), period())
     }
 
     #[allow(clippy::cyclomatic_complexity)]
-    fn merge_in_bounds(&self, other: &Self, start: Timestamp, end: Timestamp) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
+    fn merge_in_bounds<C: MergeCursor<'a>>(&self, other: &Self, start: Timestamp, end: Timestamp) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
         if self.upper_bound() < other.lower_bound() {
             return (self.ipps.to_vec().into_boxed_slice(), vec![(start, true)])
         } else if other.upper_bound() < self.lower_bound() {
@@ -240,8 +240,8 @@ impl<'a> PiecewiseLinearFunction<'a> {
         let mut result = Vec::with_capacity(2 * self.ipps.len() + 2 * other.ipps.len() + 2);
         let mut better = Vec::new();
 
-        let mut f = Cursor::new(&self.ipps);
-        let mut g = Cursor::new(&other.ipps);
+        let mut f = C::new(&self.ipps);
+        let mut g = C::new(&other.ipps);
 
         let mut close_ipps_counter = 0;
 
@@ -297,12 +297,12 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
 
         if !needs_merging {
-            CLOSE_IPPS_COUNT.fetch_add((close_ipps_counter * 10000) / (f.ipps.len() + g.ipps.len()), std::sync::atomic::Ordering::Relaxed);
+            CLOSE_IPPS_COUNT.fetch_add((close_ipps_counter * 10000) / (f.ipps().len() + g.ipps().len()), std::sync::atomic::Ordering::Relaxed);
             return ((if better.last().unwrap().1 { self.ipps } else { other.ipps }).to_vec().into_boxed_slice(), better)
         }
 
-        let mut f = Cursor::new(&self.ipps);
-        let mut g = Cursor::new(&other.ipps);
+        let mut f = C::new(&self.ipps);
+        let mut g = C::new(&other.ipps);
 
         while f.cur().at < end || g.cur().at < end {
 
@@ -441,7 +441,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
             }
         }
 
-        CLOSE_IPPS_COUNT.fetch_add((close_ipps_counter * 10000) / (f.ipps.len() + g.ipps.len()), std::sync::atomic::Ordering::Relaxed);
+        CLOSE_IPPS_COUNT.fetch_add((close_ipps_counter * 10000) / (f.ipps().len() + g.ipps().len()), std::sync::atomic::Ordering::Relaxed);
 
         if result.len() > 1 {
             let p = TTFPoint { at: end, val: result[0].val };
@@ -452,9 +452,9 @@ impl<'a> PiecewiseLinearFunction<'a> {
         for better_fns in better.windows(2) {
             debug_assert_ne!(better_fns[0].1, better_fns[1].1, "{:?}", debug_merge(&f, &g, &result, &better));
         }
-        // if !f.cur().val.fuzzy_eq(g.cur().val) {
-        //     debug_assert_eq!(better.first().map(|(_, better_fn)| better_fn), better.last().map(|(_, better_fn)| better_fn), "{:?}", debug_merge(&f, &g, &result, &better));
-        // }
+        if !f.cur().val.fuzzy_eq(g.cur().val) && start == Timestamp::zero() && end == period() {
+            debug_assert_eq!(better.first().map(|(_, better_fn)| better_fn), better.last().map(|(_, better_fn)| better_fn), "{:?}", debug_merge(&f, &g, &result, &better));
+        }
 
         (result.into_boxed_slice(), better)
     }
@@ -575,6 +575,16 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 }
 
+trait MergeCursor<'a> {
+    fn new(ipps: &'a [TTFPoint]) -> Self;
+    fn cur(&self) -> TTFPoint;
+    fn next(&self) -> TTFPoint;
+    fn prev(&self) -> TTFPoint;
+    fn advance(&mut self);
+
+    fn ipps(&self) -> &'a [TTFPoint];
+}
+
 #[derive(Debug)]
 pub struct Cursor<'a> {
     ipps: &'a [TTFPoint],
@@ -583,10 +593,6 @@ pub struct Cursor<'a> {
 }
 
 impl<'a> Cursor<'a> {
-    fn new(ipps: &'a [TTFPoint]) -> Self {
-        Cursor { ipps, current_index: 0, offset: FlWeight::new(0.0) }
-    }
-
     fn starting_at_or_after(ipps: &'a [TTFPoint], t: Timestamp) -> Self {
         let (times_period, t) = t.split_of_period();
         let offset = times_period * FlWeight::from(period());
@@ -621,6 +627,12 @@ impl<'a> Cursor<'a> {
             }
         }
     }
+}
+
+impl<'a> MergeCursor<'a> for Cursor<'a> {
+    fn new(ipps: &'a [TTFPoint]) -> Cursor<'a> {
+        Cursor { ipps, current_index: 0, offset: FlWeight::new(0.0) }
+    }
 
     fn cur(&self) -> TTFPoint {
         self.ipps[self.current_index].shifted(self.offset)
@@ -651,6 +663,51 @@ impl<'a> Cursor<'a> {
             self.offset = self.offset + FlWeight::from(period());
             self.current_index = 0;
         }
+    }
+
+    fn ipps(&self) -> &'a [TTFPoint] {
+        self.ipps
+    }
+}
+
+#[derive(Debug)]
+pub struct PartialPlfCursor<'a> {
+    ipps: &'a [TTFPoint],
+    current_index: usize,
+}
+
+impl<'a> MergeCursor<'a> for PartialPlfCursor<'a> {
+    fn new(ipps: &'a [TTFPoint]) -> Self {
+        PartialPlfCursor { ipps, current_index: 0 }
+    }
+
+    fn cur(&self) -> TTFPoint {
+        self.ipps[self.current_index].clone()
+    }
+
+    fn next(&self) -> TTFPoint {
+        if self.current_index != self.ipps.len() {
+            self.ipps[self.current_index + 1].clone()
+        } else {
+            self.ipps[self.current_index].shifted(FlWeight::from(period()))
+        }
+    }
+
+    fn prev(&self) -> TTFPoint {
+        if self.current_index == 0 {
+            self.ipps[0].shifted(FlWeight::from(period()) * FlWeight::new(-1.0))
+        } else {
+            self.ipps[self.current_index - 1].clone()
+        }
+    }
+
+    fn advance(&mut self) {
+        self.current_index += 1;
+        debug_assert_ne!(self.current_index, self.ipps.len());
+    }
+
+    fn ipps(&self) -> &'a [TTFPoint] {
+        self.ipps
     }
 }
 
@@ -744,7 +801,7 @@ mod debug {
     use std::process::{Command, Stdio};
     use std::env;
 
-    pub fn debug_merge(f: &Cursor, g: &Cursor, merged: &[TTFPoint], better: &[(Timestamp, bool)]) {
+    pub(super) fn debug_merge<'a, C: MergeCursor<'a>>(f: &C, g: &C, merged: &[TTFPoint], better: &[(Timestamp, bool)]) {
         if let Ok(mut file) = File::create(format!("debug-{}-{}.py", f64::from(f.cur().at), f64::from(g.cur().at))) {
             write_python(&mut file, f, g, merged, better).unwrap_or_else(|_| eprintln!("failed to write debug script to file"));
         }
@@ -758,7 +815,7 @@ mod debug {
         }
     }
 
-    fn write_python<O: Write>(output: &mut O, f: &Cursor, g: &Cursor, merged: &[TTFPoint], better: &[(Timestamp, bool)]) -> Result<(), Error> {
+    fn write_python<'a, C: MergeCursor<'a>, O: Write>(output: &mut O, f: &C, g: &C, merged: &[TTFPoint], better: &[(Timestamp, bool)]) -> Result<(), Error> {
         writeln!(output, "
 import numpy as np
 import matplotlib as mpl
@@ -772,13 +829,13 @@ def plot_coords(coords, *args, **kwargs):
 "
         )?;
         write!(output, "plot_coords([")?;
-        for p in f.ipps {
+        for p in f.ipps() {
             write!(output, "({}, {}), ", f64::from(p.at), f64::from(p.val))?;
         }
         writeln!(output, "], 'r+-', label='f', linewidth=1, markersize=5)")?;
 
         write!(output, "plot_coords([")?;
-        for p in g.ipps {
+        for p in g.ipps() {
             write!(output, "({}, {}), ", f64::from(p.at), f64::from(p.val))?;
         }
         writeln!(output, "], 'gx-', label='g', linewidth=1, markersize=5)")?;
@@ -794,11 +851,11 @@ def plot_coords(coords, *args, **kwargs):
             writeln!(output, "], 'bo-', label='merged', linewidth=1, markersize=1)")?;
         }
 
-        let max_val = f.ipps.iter().map(|p| p.val).max().unwrap();
-        let max_val = max(g.ipps.iter().map(|p| p.val).max().unwrap(), max_val);
+        let max_val = f.ipps().iter().map(|p| p.val).max().unwrap();
+        let max_val = max(g.ipps().iter().map(|p| p.val).max().unwrap(), max_val);
 
-        let min_val = f.ipps.iter().map(|p| p.val).min().unwrap();
-        let min_val = min(g.ipps.iter().map(|p| p.val).min().unwrap(), min_val);
+        let min_val = f.ipps().iter().map(|p| p.val).min().unwrap();
+        let min_val = min(g.ipps().iter().map(|p| p.val).min().unwrap(), min_val);
 
         for &(t, f_better) in better {
             writeln!(output, "plt.vlines({}, {}, {}, '{}', linewidth=1)", f64::from(t), f64::from(min_val), f64::from(max_val), if f_better { 'r' } else { 'g' })?;
