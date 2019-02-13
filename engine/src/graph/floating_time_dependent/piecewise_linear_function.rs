@@ -211,23 +211,30 @@ impl<'a> PiecewiseLinearFunction<'a> {
         result
     }
 
-    pub fn merge_partials(first: Vec<TTFPoint>, second: Vec<TTFPoint>) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
-        debug_assert!(first.first().unwrap().at >= Timestamp::zero());
-        debug_assert!(second.first().unwrap().at >= Timestamp::zero());
-        debug_assert!(first.last().unwrap().at <= period());
-        debug_assert!(second.last().unwrap().at <= period());
-        debug_assert!(first.first().unwrap().at.fuzzy_eq(second.first().unwrap().at));
-        debug_assert!(first.last().unwrap().at.fuzzy_eq(second.last().unwrap().at));
+    pub fn merge_partials(mut first: Vec<TTFPoint>, mut second: Vec<TTFPoint>, start: Timestamp, end: Timestamp) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
+        debug_assert!(start >= Timestamp::zero());
+        debug_assert!(end <= period());
+        debug_assert!(first.first().unwrap().at.fuzzy_eq(start));
+        debug_assert!(second.first().unwrap().at.fuzzy_eq(start));
+        debug_assert!(first.last().unwrap().at.fuzzy_eq(end));
+        debug_assert!(second.last().unwrap().at.fuzzy_eq(end));
 
-        PiecewiseLinearFunction { ipps: &first }.merge(&PiecewiseLinearFunction { ipps: &second })
+        first.push(TTFPoint { at: period() + FlWeight::new(1.0), val: first[0].val }); // todo fix this ugly workaround
+        second.push(TTFPoint { at: period() + FlWeight::new(1.0), val: second[0].val }); // todo fix this ugly workaround
+
+        PiecewiseLinearFunction { ipps: &first }.merge_in_bounds(&PiecewiseLinearFunction { ipps: &second }, start, end)
+    }
+
+    pub fn merge(&self, other: &Self) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
+        self.merge_in_bounds(other, Timestamp::zero(), period())
     }
 
     #[allow(clippy::cyclomatic_complexity)]
-    pub fn merge(&self, other: &Self) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
+    fn merge_in_bounds(&self, other: &Self, start: Timestamp, end: Timestamp) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
         if self.upper_bound() < other.lower_bound() {
-            return (self.ipps.to_vec().into_boxed_slice(), vec![(Timestamp::zero(), true)])
+            return (self.ipps.to_vec().into_boxed_slice(), vec![(start, true)])
         } else if other.upper_bound() < self.lower_bound() {
-            return (other.ipps.to_vec().into_boxed_slice(), vec![(Timestamp::zero(), false)])
+            return (other.ipps.to_vec().into_boxed_slice(), vec![(start, false)])
         }
 
         let mut result = Vec::with_capacity(2 * self.ipps.len() + 2 * other.ipps.len() + 2);
@@ -240,13 +247,13 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
         // non fuzzy cmp on purpose!
         if f.cur().val == g.cur().val {
-            better.push((Timestamp::zero(), !clockwise(&f.cur(), &f.next(), &g.next())));
+            better.push((start, !clockwise(&f.cur(), &f.next(), &g.next())));
         } else {
-            better.push((Timestamp::zero(), f.cur().val < g.cur().val));
+            better.push((start, f.cur().val < g.cur().val));
         }
 
         let mut needs_merging = false;
-        while f.cur().at < period() || g.cur().at < period() {
+        while f.cur().at <= end || g.cur().at <= end {
             if f.cur().at.fuzzy_eq(g.cur().at) {
                 if !f.cur().val.fuzzy_eq(g.cur().val) && (f.cur().val < g.cur().val) != better.last().unwrap().1 {
                     needs_merging = true;
@@ -297,11 +304,11 @@ impl<'a> PiecewiseLinearFunction<'a> {
         let mut f = Cursor::new(&self.ipps);
         let mut g = Cursor::new(&other.ipps);
 
-        while f.cur().at < period() || g.cur().at < period() {
+        while f.cur().at < end || g.cur().at < end {
 
             if intersect(&f.prev(), &f.cur(), &g.prev(), &g.cur()) {
                 let intersection = intersection_point(&f.prev(), &f.cur(), &g.prev(), &g.cur());
-                if intersection.at >= Timestamp::zero() {
+                if intersection.at >= start {
                     debug_assert_ne!(better.last().unwrap().1, counter_clockwise(&g.prev(), &f.cur(), &g.cur()), "{:?}", debug_merge(&f, &g, &result, &better));
                     better.push((intersection.at, counter_clockwise(&g.prev(), &f.cur(), &g.cur())));
                     Self::append_point(&mut result, intersection);
@@ -422,12 +429,12 @@ impl<'a> PiecewiseLinearFunction<'a> {
             }
         };
 
-        debug_assert_eq!(f.cur().at, period(), "{:?}", debug_merge(&f, &g, &result, &better));
-        debug_assert_eq!(g.cur().at, period(), "{:?}", debug_merge(&f, &g, &result, &better));
+        debug_assert_eq!(f.cur().at, end, "{:?}", debug_merge(&f, &g, &result, &better));
+        debug_assert_eq!(g.cur().at, end, "{:?}", debug_merge(&f, &g, &result, &better));
 
         if intersect(&f.prev(), &f.cur(), &g.prev(), &g.cur()) {
             let intersection = intersection_point(&f.prev(), &f.cur(), &g.prev(), &g.cur());
-            if intersection.at < period() {
+            if intersection.at < end {
                 better.push((intersection.at, counter_clockwise(&intersection, &f.cur(), &g.cur())));
                 Self::append_point(&mut result, intersection);
                 close_ipps_counter += 1;
@@ -437,17 +444,17 @@ impl<'a> PiecewiseLinearFunction<'a> {
         CLOSE_IPPS_COUNT.fetch_add((close_ipps_counter * 10000) / (f.ipps.len() + g.ipps.len()), std::sync::atomic::Ordering::Relaxed);
 
         if result.len() > 1 {
-            let p = TTFPoint { at: period(), val: result[0].val };
-            Self::append_point(&mut result, p);
+            let p = TTFPoint { at: end, val: result[0].val };
+            Self::append_point(&mut result, p); // TODO here be dragons for partial merging
         }
 
         debug_assert!(result.len() <= 2 * self.ipps.len() + 2 * other.ipps.len() + 2);
         for better_fns in better.windows(2) {
             debug_assert_ne!(better_fns[0].1, better_fns[1].1, "{:?}", debug_merge(&f, &g, &result, &better));
         }
-        if !f.cur().val.fuzzy_eq(g.cur().val) {
-            debug_assert_eq!(better.first().map(|(_, better_fn)| better_fn), better.last().map(|(_, better_fn)| better_fn), "{:?}", debug_merge(&f, &g, &result, &better));
-        }
+        // if !f.cur().val.fuzzy_eq(g.cur().val) {
+        //     debug_assert_eq!(better.first().map(|(_, better_fn)| better_fn), better.last().map(|(_, better_fn)| better_fn), "{:?}", debug_merge(&f, &g, &result, &better));
+        // }
 
         (result.into_boxed_slice(), better)
     }
