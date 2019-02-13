@@ -43,6 +43,21 @@ impl ShortcutSource {
             },
         }
     }
+
+    pub(super) fn exact_ttf_for(&self, start: Timestamp, end: Timestamp, shortcut_graph: &ShortcutGraph) -> Vec<TTFPoint> {
+        match *self {
+            ShortcutSource::Shortcut(down, up) => {
+                let first = shortcut_graph.get_incoming(down).exact_ttf_for(start, end, shortcut_graph);
+                let second_start = first.first().unwrap().at + first.first().unwrap().val;
+                let second_end = first.last().unwrap().at + first.last().unwrap().val;
+                let second = shortcut_graph.get_outgoing(up).exact_ttf_for(second_start, second_end, shortcut_graph);
+                PiecewiseLinearFunction::link_partials(first, second)
+            }
+            ShortcutSource::OriginalEdge(edge) => {
+                shortcut_graph.original_graph().travel_time_function(edge).copy_range(start, end)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

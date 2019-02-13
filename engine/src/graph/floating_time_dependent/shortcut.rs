@@ -1,6 +1,6 @@
 use super::*;
-use std::cmp::min;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::Ordering::Relaxed;
+use std::cmp::{min, max, Ordering};
 
 #[derive(Debug, Clone)]
 pub struct Shortcut {
@@ -16,7 +16,7 @@ impl Shortcut {
     pub fn new(source: Option<EdgeId>, original_graph: &TDGraph) -> Self {
         match source {
             Some(edge_id) => {
-                PATH_SOURCES_COUNT.fetch_add(1, Ordering::Relaxed);
+                PATH_SOURCES_COUNT.fetch_add(1, Relaxed);
                 Shortcut {
                     sources: Sources::One(ShortcutSource::OriginalEdge(edge_id).into()),
                     ttf: None,
@@ -33,9 +33,9 @@ impl Shortcut {
     pub fn merge(&mut self, linked_ids: (EdgeId, EdgeId), shortcut_graph: &ShortcutGraph) {
         if !self.required { return }
 
-        IPP_COUNT.fetch_sub(self.ttf.as_ref().map(|ipps| ipps.len()).unwrap_or(0), Ordering::Relaxed);
-        PATH_SOURCES_COUNT.fetch_sub(self.sources.len(), Ordering::Relaxed);
-        if self.ttf.is_some() { ACTIVE_SHORTCUTS.fetch_sub(1, Ordering::Relaxed); }
+        IPP_COUNT.fetch_sub(self.ttf.as_ref().map(|ipps| ipps.len()).unwrap_or(0), Relaxed);
+        PATH_SOURCES_COUNT.fetch_sub(self.sources.len(), Relaxed);
+        if self.ttf.is_some() { ACTIVE_SHORTCUTS.fetch_sub(1, Relaxed); }
 
         #[allow(clippy::redundant_closure_call)]
         (|| {
@@ -56,7 +56,7 @@ impl Shortcut {
             let second_plf = second.plf(shortcut_graph);
 
             if !self.is_valid_path() {
-                ACTUALLY_LINKED.fetch_add(1, Ordering::Relaxed);
+                ACTUALLY_LINKED.fetch_add(1, Relaxed);
                 let linked = first_plf.link(&second_plf);
 
                 self.upper_bound = min(self.upper_bound, PiecewiseLinearFunction::new(&linked).upper_bound());
@@ -69,7 +69,7 @@ impl Shortcut {
             let self_plf = self.plf(shortcut_graph);
 
             let mut linked_ipps = first_plf.link(&second_plf);
-            ACTUALLY_LINKED.fetch_add(1, Ordering::Relaxed);
+            ACTUALLY_LINKED.fetch_add(1, Relaxed);
 
             let linked = PiecewiseLinearFunction::new(&linked_ipps);
             let other_lower_bound = linked.lower_bound();
@@ -80,25 +80,25 @@ impl Shortcut {
                 debug_assert!(self.upper_bound >= self.lower_bound);
                 if cfg!(feature = "tdcch-approx") && linked_ipps.len() > 250 {
                     let old = linked_ipps.len();
-                    CONSIDERED_FOR_APPROX.fetch_add(old, Ordering::Relaxed);
+                    CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed);
                     linked_ipps = PiecewiseLinearFunction::new(&linked_ipps).approximate();
-                    SAVED_BY_APPROX.fetch_add(old - linked_ipps.len(), Ordering::Relaxed);
+                    SAVED_BY_APPROX.fetch_add(old - linked_ipps.len(), Relaxed);
                 }
                 self.ttf = Some(linked_ipps);
                 self.sources = Sources::One(other_data);
-                UNNECESSARY_LINKED.fetch_add(1, Ordering::Relaxed);
+                UNNECESSARY_LINKED.fetch_add(1, Relaxed);
                 return;
             } else if self.upper_bound.fuzzy_lt(other_lower_bound) {
                 return;
             }
 
-            ACTUALLY_MERGED.fetch_add(1, Ordering::Relaxed);
+            ACTUALLY_MERGED.fetch_add(1, Relaxed);
             let (mut merged, intersection_data) = self_plf.merge(&linked);
             if cfg!(feature = "tdcch-approx") && merged.len() > 250 {
                 let old = merged.len();
-                CONSIDERED_FOR_APPROX.fetch_add(old, Ordering::Relaxed);
+                CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed);
                 merged = PiecewiseLinearFunction::new(&merged).approximate();
-                SAVED_BY_APPROX.fetch_add(old - merged.len(), Ordering::Relaxed);
+                SAVED_BY_APPROX.fetch_add(old - merged.len(), Relaxed);
             }
 
             self.upper_bound = min(self.upper_bound, PiecewiseLinearFunction::new(&merged).upper_bound());
@@ -109,9 +109,9 @@ impl Shortcut {
             self.sources = Shortcut::combine(sources, intersection_data, other_data);
         }) ();
 
-        IPP_COUNT.fetch_add(self.ttf.as_ref().map(|ipps| ipps.len()).unwrap_or(0), Ordering::Relaxed);
-        PATH_SOURCES_COUNT.fetch_add(self.sources.len(), Ordering::Relaxed);
-        if self.ttf.is_some() { ACTIVE_SHORTCUTS.fetch_add(1, Ordering::Relaxed); }
+        IPP_COUNT.fetch_add(self.ttf.as_ref().map(|ipps| ipps.len()).unwrap_or(0), Relaxed);
+        PATH_SOURCES_COUNT.fetch_add(self.sources.len(), Relaxed);
+        if self.ttf.is_some() { ACTIVE_SHORTCUTS.fetch_add(1, Relaxed); }
     }
 
     fn plf<'s>(&'s self, shortcut_graph: &'s ShortcutGraph) -> PiecewiseLinearFunction<'s> {
@@ -171,8 +171,8 @@ impl Shortcut {
     }
 
     pub fn clear_plf(&mut self) {
-        IPP_COUNT.fetch_sub(self.ttf.as_ref().map(|ipps| ipps.len()).unwrap_or(0), Ordering::Relaxed);
-        if self.ttf.is_some() { ACTIVE_SHORTCUTS.fetch_sub(1, Ordering::Relaxed); }
+        IPP_COUNT.fetch_sub(self.ttf.as_ref().map(|ipps| ipps.len()).unwrap_or(0), Relaxed);
+        if self.ttf.is_some() { ACTIVE_SHORTCUTS.fetch_sub(1, Relaxed); }
         self.ttf = None;
     }
 
@@ -243,6 +243,30 @@ impl Shortcut {
         Sources::Multi(new_sources.into_boxed_slice())
     }
 
+    pub(super) fn exact_ttf_for(&self, start: Timestamp, end: Timestamp, shortcut_graph: &ShortcutGraph) -> Vec<TTFPoint> {
+        match &self.sources {
+            Sources::None => unreachable!("There are no TTFs for empty shortcuts"),
+            Sources::One(source) => ShortcutSource::from(*source).exact_ttf_for(start, end, shortcut_graph),
+            Sources::Multi(sources) => {
+                let mut result = Vec::new();
+                let mut c = SourceCursor::valid_at(sources, start);
+
+                loop {
+                    let prev_last = result.pop();
+                    let mut ttf = ShortcutSource::from(c.cur().1).exact_ttf_for(max(start, c.cur().0), min(end, c.next().0), shortcut_graph);
+                    debug_assert!(prev_last.map(|p: TTFPoint| p.at.fuzzy_eq(ttf.first().unwrap().at) && p.val.fuzzy_eq(ttf.first().unwrap().val)).unwrap_or(true));
+                    result.append(&mut ttf);
+                    c.advance();
+                    if !c.cur().0.fuzzy_lt(end) {
+                        break
+                    }
+                }
+
+                result
+            },
+        }
+    }
+
     pub fn num_sources(&self) -> usize {
         self.sources.len()
     }
@@ -296,6 +320,58 @@ impl<'a> Iterator for SourcesIter<'a> {
             SourcesIter::None => None,
             SourcesIter::One(iter) => iter.next().map(|source| (Timestamp::zero(), source)),
             SourcesIter::Multi(iter) => iter.next().map(|(t, source)| (*t, source)),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct SourceCursor<'a> {
+    sources: &'a [(Timestamp, ShortcutSourceData)],
+    current_index: usize,
+    offset: FlWeight,
+}
+
+impl<'a> SourceCursor<'a> {
+    fn valid_at(sources: &'a [(Timestamp, ShortcutSourceData)], t: Timestamp) -> Self {
+        debug_assert!(sources.len() > 1);
+
+        let (times_period, t) = t.split_of_period();
+        let offset = times_period * FlWeight::from(period());
+
+        let pos = sources.binary_search_by(|p| {
+            if p.0.fuzzy_eq(t) {
+                Ordering::Equal
+            } else if p.0 < t {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            }
+        });
+
+
+        match pos {
+            Ok(i) => Self { sources, current_index: i, offset },
+            Err(i) => Self { sources, current_index: i - 1, offset }
+        }
+    }
+
+    fn cur(&self) -> (Timestamp, ShortcutSourceData) {
+        (self.sources[self.current_index].0 + self.offset, self.sources[self.current_index].1)
+    }
+
+    fn next(&self) -> (Timestamp, ShortcutSourceData) {
+        if self.current_index + 1 == self.sources.len() {
+            (self.sources[self.current_index + 1].0 + self.offset + FlWeight::from(period()), self.sources[0].1)
+        } else {
+            (self.sources[self.current_index + 1].0 + self.offset, self.sources[self.current_index + 1].1)
+        }
+    }
+
+    fn advance(&mut self) {
+        self.current_index += 1;
+        if self.current_index == self.sources.len() {
+            self.offset = self.offset + FlWeight::from(period());
+            self.current_index = 0;
         }
     }
 }

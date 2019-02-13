@@ -61,6 +61,28 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
+    pub(super) fn copy_range(&self, start: Timestamp, end: Timestamp) -> Vec<TTFPoint> {
+        let mut result = Vec::with_capacity(self.ipps.len());
+        let mut f = Cursor::starting_at_or_after(&self.ipps, start);
+
+        if start.fuzzy_lt(f.cur().at) {
+            result.push(TTFPoint { at: start, val: interpolate_linear(&f.prev(), &f.cur(), start) });
+        }
+
+        while f.cur().at.fuzzy_lt(end) {
+            result.push(f.cur());
+            f.advance();
+        }
+
+        if f.cur().at.fuzzy_eq(end) {
+            result.push(f.cur());
+        } else {
+            result.push(TTFPoint { at: end, val: interpolate_linear(&f.prev(), &f.cur(), end) });
+        }
+
+        result
+    }
+
     pub fn link(&self, other: &Self) -> Box<[TTFPoint]> {
         if let [TTFPoint { val, .. }] = &self.ipps {
             if let [TTFPoint { val: other, .. }] = &other.ipps {
@@ -137,6 +159,56 @@ impl<'a> PiecewiseLinearFunction<'a> {
         debug_assert!(result.len() <= self.ipps.len() + other.ipps.len() + 1);
 
         result.into_boxed_slice()
+    }
+
+    pub(super) fn link_partials(first: Vec<TTFPoint>, second: Vec<TTFPoint>) -> Vec<TTFPoint> {
+        debug_assert!((first[0].at + first[0].val).fuzzy_eq(second[0].at));
+        debug_assert!((first.last().unwrap().at + first.last().unwrap().val).fuzzy_eq(second.last().unwrap().at));
+
+        let mut result = Vec::with_capacity(first.len() + second.len() + 1);
+
+        let mut i = 0;
+        let mut j = 0;
+
+        loop {
+            let x;
+            let y;
+
+            if second[j].at.fuzzy_eq(first[i].at + first[i].val) {
+                x = first[i].at;
+                y = second[j].val + first[i].val;
+
+                j += 1;
+                i += 1;
+            } else if second[j].at < first[i].at + first[i].val {
+                debug_assert!(second[j].at.fuzzy_lt(first[i].at + first[i].val));
+
+                let m_arr_f_inverse = (first[i].at - first[i-1].at) / (first[i].at + first[i].val - first[i-1].at - first[i-1].val);
+                x = m_arr_f_inverse * (second[j].at - first[i-1].at - first[i-1].val) + first[i-1].at;
+                y = second[j].at + second[j].val - x;
+
+                j += 1;
+            } else {
+                debug_assert!((first[i].at + first[i].val).fuzzy_lt(second[j].at));
+
+                x = first[i].at;
+                let m_g = (second[j].val - second[j-1].val) / (second[j].at - second[j-1].at);
+                y = second[j-1].val + m_g * (first[i].at + first[i].val - second[j-1].at) + first[i].val;
+
+                i += 1
+            }
+
+            Self::append_point(&mut result, TTFPoint { at: x, val: y });
+
+            if i == first.len() {
+                debug_assert_eq!(j, second.len());
+                break;
+            }
+        }
+
+        debug_assert!(result.len() <= first.len() + second.len() + 1);
+
+        result
     }
 
     #[allow(clippy::cyclomatic_complexity)]
