@@ -80,6 +80,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
             result.push(TTFPoint { at: end, val: interpolate_linear(&f.prev(), &f.cur(), end) });
         }
 
+        debug_assert!(result.len() > 1);
         result
     }
 
@@ -201,11 +202,16 @@ impl<'a> PiecewiseLinearFunction<'a> {
             Self::append_point(&mut result, TTFPoint { at: x, val: y });
 
             if i == first.len() {
-                debug_assert_eq!(j, second.len());
+                debug_assert_eq!(j, second.len(), "{:?}\n{:?}", first, second);
                 break;
             }
         }
 
+        if let [TTFPoint { val, .. }] = &result[..] {
+            result.push(TTFPoint { at: first.last().unwrap().at, val: *val });
+        }
+
+        debug_assert!(result.len() > 1);
         debug_assert!(result.len() <= first.len() + second.len() + 1);
 
         result
