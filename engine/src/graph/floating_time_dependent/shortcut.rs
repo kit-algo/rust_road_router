@@ -108,13 +108,13 @@ impl<'a> TTF<'a> {
             let next_t_other = other_dominating_intersections.peek().map(|(t, _)| *t).unwrap_or(Timestamp::NEVER);
 
             if dominating {
-                if next_t_self < next_t_other {
+                if next_t_self.fuzzy_lt(next_t_other) {
                     debug_assert!(!self_dominating_intersections.peek().unwrap().1);
                     debug_assert!(result.last().unwrap().1);
                     dominating = false;
                     start_of_unclear = next_t_self;
                     self_dominating_intersections.next();
-                } else if next_t_other < next_t_self {
+                } else if next_t_other.fuzzy_lt(next_t_self) {
                     debug_assert!(!other_dominating_intersections.peek().unwrap().1);
                     debug_assert!(!result.last().unwrap().1);
                     dominating = false;
@@ -127,7 +127,7 @@ impl<'a> TTF<'a> {
                     other_dominating_intersections.next();
                 }
             } else {
-                if next_t_self < next_t_other {
+                if next_t_self.fuzzy_lt(next_t_other) {
                     debug_assert!(self_dominating_intersections.peek().unwrap().1);
 
                     let (_, intersections) = merge_exact(start_of_unclear, next_t_self);
@@ -144,7 +144,7 @@ impl<'a> TTF<'a> {
 
                     dominating = true;
                     self_dominating_intersections.next();
-                } else if next_t_other < next_t_self {
+                } else if next_t_other.fuzzy_lt(next_t_self) {
                     debug_assert!(other_dominating_intersections.peek().unwrap().1);
 
                     let (_, intersections) = merge_exact(start_of_unclear, next_t_other);
