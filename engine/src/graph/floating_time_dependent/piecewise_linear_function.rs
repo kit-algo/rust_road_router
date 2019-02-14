@@ -438,7 +438,8 @@ impl<'a> PiecewiseLinearFunction<'a> {
         if intersect(&f.prev(), &f.cur(), &g.prev(), &g.cur()) {
             let intersection = intersection_point(&f.prev(), &f.cur(), &g.prev(), &g.cur());
             if intersection.at < end {
-                better.push((intersection.at, counter_clockwise(&intersection, &f.cur(), &g.cur())));
+                debug_assert_ne!(better.last().unwrap().1, counter_clockwise(&g.prev(), &f.cur(), &g.cur()), "{:?}", debug_merge(&f, &g, &result, &better));
+                better.push((intersection.at, counter_clockwise(&g.prev(), &f.cur(), &g.cur())));
                 Self::append_point(&mut result, intersection);
                 close_ipps_counter += 1;
             }
