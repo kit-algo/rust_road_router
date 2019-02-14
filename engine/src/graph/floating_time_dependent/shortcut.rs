@@ -284,7 +284,7 @@ impl Shortcut {
                     let old = linked_ipps.num_points();
                     CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed);
                     linked_ipps = linked.approximate();
-                    SAVED_BY_APPROX.fetch_add(old - linked_ipps.num_points(), Relaxed);
+                    SAVED_BY_APPROX.fetch_add(old as isize - linked_ipps.num_points() as isize, Relaxed);
                 }
                 self.cache = Some(linked_ipps);
                 self.sources = Sources::One(other_data);
@@ -304,7 +304,7 @@ impl Shortcut {
                 let old = merged.num_points();
                 CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed);
                 merged = TTF::from(&merged).approximate();
-                SAVED_BY_APPROX.fetch_add(old - merged.num_points(), Relaxed);
+                SAVED_BY_APPROX.fetch_add(old as isize - merged.num_points() as isize, Relaxed);
             }
 
             self.upper_bound = min(self.upper_bound, TTF::from(&merged).static_upper_bound());

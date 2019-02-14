@@ -280,7 +280,7 @@ pub fn period() -> Timestamp {
     Timestamp::new(86_400.0)
 }
 
-use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{AtomicUsize, AtomicIsize};
 
 pub static IPP_COUNT: AtomicUsize = AtomicUsize::new(0);
 pub static PATH_SOURCES_COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -290,4 +290,4 @@ pub static ACTUALLY_LINKED: AtomicUsize = AtomicUsize::new(0);
 pub static ACTIVE_SHORTCUTS: AtomicUsize = AtomicUsize::new(0);
 pub static UNNECESSARY_LINKED: AtomicUsize = AtomicUsize::new(0);
 pub static CONSIDERED_FOR_APPROX: AtomicUsize = AtomicUsize::new(0);
-pub static SAVED_BY_APPROX: AtomicUsize = AtomicUsize::new(0);
+pub static SAVED_BY_APPROX: AtomicIsize = AtomicIsize::new(0);
