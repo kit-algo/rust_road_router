@@ -217,16 +217,13 @@ impl<'a> PiecewiseLinearFunction<'a> {
         result
     }
 
-    pub fn merge_partials(mut first: Vec<TTFPoint>, mut second: Vec<TTFPoint>, start: Timestamp, end: Timestamp) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
+    pub fn merge_partials(first: Vec<TTFPoint>, second: Vec<TTFPoint>, start: Timestamp, end: Timestamp) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
         debug_assert!(start >= Timestamp::zero());
         debug_assert!(end <= period());
         debug_assert!(first.first().unwrap().at.fuzzy_eq(start));
         debug_assert!(second.first().unwrap().at.fuzzy_eq(start));
         debug_assert!(first.last().unwrap().at.fuzzy_eq(end));
         debug_assert!(second.last().unwrap().at.fuzzy_eq(end));
-
-        first.push(TTFPoint { at: period() + FlWeight::new(1.0), val: first.last().unwrap().val }); // todo fix this ugly workaround
-        second.push(TTFPoint { at: period() + FlWeight::new(1.0), val: second.last().unwrap().val }); // todo fix this ugly workaround
 
         PiecewiseLinearFunction { ipps: &first }.merge_in_bounds::<PartialPlfCursor>(&PiecewiseLinearFunction { ipps: &second }, start, end)
     }
@@ -688,28 +685,36 @@ impl<'a> MergeCursor<'a> for PartialPlfCursor<'a> {
     }
 
     fn cur(&self) -> TTFPoint {
-        self.ipps[self.current_index].clone()
+        if self.current_index < self.ipps.len() {
+            self.ipps[self.current_index].clone()
+        } else {
+            let offset = FlWeight::new((self.current_index - self.ipps.len() + 1) as f64);
+            self.ipps.last().unwrap().shifted(offset)
+        }
     }
 
     fn next(&self) -> TTFPoint {
-        if self.current_index != self.ipps.len() {
+        if self.current_index + 1 < self.ipps.len() {
             self.ipps[self.current_index + 1].clone()
         } else {
-            self.ipps[self.current_index].shifted(FlWeight::from(period()))
+            let offset = FlWeight::new((self.current_index + 2 - self.ipps.len()) as f64);
+            self.ipps.last().unwrap().shifted(offset)
         }
     }
 
     fn prev(&self) -> TTFPoint {
         if self.current_index == 0 {
             self.ipps[0].shifted(FlWeight::from(period()) * FlWeight::new(-1.0))
-        } else {
+        } else if self.current_index - 1 < self.ipps.len() {
             self.ipps[self.current_index - 1].clone()
+        } else {
+            let offset = FlWeight::new((self.current_index - self.ipps.len()) as f64);
+            self.ipps.last().unwrap().shifted(offset)
         }
     }
 
     fn advance(&mut self) {
         self.current_index += 1;
-        debug_assert_ne!(self.current_index, self.ipps.len());
     }
 
     fn ipps(&self) -> &'a [TTFPoint] {
