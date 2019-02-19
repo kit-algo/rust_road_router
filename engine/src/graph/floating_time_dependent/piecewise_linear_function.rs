@@ -20,6 +20,10 @@ impl<'a> PiecewiseLinearFunction<'a> {
         PiecewiseLinearFunction { ipps }
     }
 
+    pub fn len(&self) -> usize {
+        self.ipps.len()
+    }
+
     pub fn lower_bound(&self) -> FlWeight {
         self.ipps.iter().map(|p| p.val).min().unwrap()
     }
@@ -61,27 +65,28 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
-    pub(super) fn copy_range(&self, start: Timestamp, end: Timestamp) -> Vec<TTFPoint> {
-        let mut result = Vec::with_capacity(self.ipps.len());
+    pub(super) fn copy_range(&self, start: Timestamp, end: Timestamp, target: &mut Vec<TTFPoint>) {
         let mut f = Cursor::starting_at_or_after(&self.ipps, start);
 
         if start.fuzzy_lt(f.cur().at) {
-            result.push(TTFPoint { at: start, val: interpolate_linear(&f.prev(), &f.cur(), start) });
+            target.push(TTFPoint { at: start, val: interpolate_linear(&f.prev(), &f.cur(), start) });
+        } else {
+            target.push(TTFPoint { at: start, val: f.cur().val });
+            f.advance();
         }
 
         while f.cur().at.fuzzy_lt(end) {
-            result.push(f.cur());
+            target.push(f.cur());
             f.advance();
         }
 
         if f.cur().at.fuzzy_eq(end) {
-            result.push(f.cur());
+            target.push(TTFPoint { at: end, val: f.cur().val });
         } else {
-            result.push(TTFPoint { at: end, val: interpolate_linear(&f.prev(), &f.cur(), end) });
+            target.push(TTFPoint { at: end, val: interpolate_linear(&f.prev(), &f.cur(), end) });
         }
 
-        debug_assert!(result.len() > 1);
-        result
+        debug_assert!(target.len() > 1);
     }
 
     pub fn link(&self, other: &Self) -> Box<[TTFPoint]> {
@@ -798,8 +803,10 @@ mod tests {
     fn test_copy_range_for_constant_plf() {
         run_test_with_periodicity(Timestamp::new(100.0), || {
             let ipps = [TTFPoint { at: Timestamp::zero(), val: FlWeight::new(10.0) }];
+            let mut result = Vec::new();
+            PiecewiseLinearFunction::new(&ipps).copy_range(Timestamp::new(40.0), Timestamp::new(50.0), &mut result);
             assert_eq!(
-                PiecewiseLinearFunction::new(&ipps).copy_range(Timestamp::new(40.0), Timestamp::new(50.0)),
+                result,
                 vec![TTFPoint { at: Timestamp::new(40.0), val: FlWeight::new(10.0) }, TTFPoint { at: Timestamp::new(50.0), val: FlWeight::new(10.0) }]);
         });
     }

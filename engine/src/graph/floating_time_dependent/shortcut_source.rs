@@ -54,7 +54,10 @@ impl ShortcutSource {
                 PiecewiseLinearFunction::link_partials(first, second)
             }
             ShortcutSource::OriginalEdge(edge) => {
-                shortcut_graph.original_graph().travel_time_function(edge).copy_range(start, end)
+                let ttf = shortcut_graph.original_graph().travel_time_function(edge);
+                let mut result = Vec::with_capacity(ttf.len());
+                ttf.copy_range(start, end, &mut result);
+                result
             }
         }
     }
