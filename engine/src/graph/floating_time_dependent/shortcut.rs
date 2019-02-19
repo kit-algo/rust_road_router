@@ -180,6 +180,12 @@ impl<'a> TTF<'a> {
             result.extend(iter);
         }
 
+        debug_assert!(result.first().unwrap().0 == Timestamp::zero());
+        for better in result.windows(2) {
+            debug_assert!(better[0].0 < better[1].0, "{:?}", (|| { dbg!(self_dominating_intersections); dbg!(other_dominating_intersections); })());
+            debug_assert_ne!(better[0].1, better[1].1, "{:?}", (|| { dbg!(self_dominating_intersections); dbg!(other_dominating_intersections); })());
+        }
+
         let (lower, _) = self_lower.merge(&other_lower);
         let (upper, _) = self_upper.merge(&other_upper);
         (TTFCache::Approx(lower, upper), result)
@@ -279,7 +285,7 @@ impl Shortcut {
 
             if !self_plf.static_lower_bound().fuzzy_lt(other_upper_bound) {
                 self.upper_bound = min(self.upper_bound, other_upper_bound);
-                debug_assert!(self.upper_bound >= self.lower_bound);
+                debug_assert!(!self.upper_bound.fuzzy_lt(self.lower_bound), "lower {:?} upper {:?}", self.lower_bound, self.upper_bound);
                 if cfg!(feature = "tdcch-approx") && linked_ipps.num_points() > 250 {
                     let old = linked_ipps.num_points();
                     CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed);
