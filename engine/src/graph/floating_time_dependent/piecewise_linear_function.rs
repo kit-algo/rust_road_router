@@ -248,8 +248,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
         let mut close_ipps_counter = 0;
 
-        // non fuzzy cmp on purpose!
-        if f.cur().val == g.cur().val {
+        if f.cur().val.fuzzy_eq(g.cur().val) {
             better.push((start, !clockwise(&f.cur(), &f.next(), &g.next())));
         } else {
             better.push((start, f.cur().val < g.cur().val));
