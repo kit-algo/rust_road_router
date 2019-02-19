@@ -275,7 +275,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
             } else if f.cur().at < g.cur().at {
 
-                let delta = f.cur().val - interpolate_linear(&g.prev(), &g.next(), f.cur().at);
+                let delta = f.cur().val - interpolate_linear(&g.prev(), &g.cur(), f.cur().at);
 
                 if !delta.fuzzy_eq(FlWeight::zero()) && (delta < FlWeight::zero()) != better.last().unwrap().1 {
                     needs_merging = true;
@@ -289,7 +289,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
             } else {
 
-                let delta = g.cur().val - interpolate_linear(&f.prev(), &f.next(), g.cur().at);
+                let delta = g.cur().val - interpolate_linear(&f.prev(), &f.cur(), g.cur().at);
 
                 if !delta.fuzzy_eq(FlWeight::zero()) && (delta > FlWeight::zero()) != better.last().unwrap().1 {
                     needs_merging = true;
