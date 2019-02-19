@@ -112,19 +112,19 @@ impl<'a> TTF<'a> {
 
             if dominating {
                 if next_t_self.fuzzy_lt(next_t_other) {
-                    debug_assert!(!self_dominating_iter.peek().unwrap().1);
-                    debug_assert!(result.last().unwrap().1);
+                    debug_assert!(!self_dominating_iter.peek().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections));
+                    debug_assert!(result.last().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections));
                     dominating = false;
                     start_of_unclear = next_t_self;
                     self_dominating_iter.next();
                 } else if next_t_other.fuzzy_lt(next_t_self) {
-                    debug_assert!(!other_dominating_iter.peek().unwrap().1);
-                    debug_assert!(!result.last().unwrap().1);
+                    debug_assert!(!other_dominating_iter.peek().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections));
+                    debug_assert!(!result.last().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections));
                     dominating = false;
                     start_of_unclear = next_t_other;
                     other_dominating_iter.next();
                 } else {
-                    debug_assert_ne!(self_dominating_iter.peek().unwrap().1, other_dominating_iter.peek().unwrap().1);
+                    debug_assert_ne!(self_dominating_iter.peek().unwrap().1, other_dominating_iter.peek().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections));
                     result.push((next_t_self, self_dominating_iter.peek().unwrap().1));
                     self_dominating_iter.next();
                     other_dominating_iter.next();
@@ -175,8 +175,8 @@ impl<'a> TTF<'a> {
                     dominating = true;
                     other_dominating_iter.next();
                 } else {
-                    debug_assert!(!self_dominating_iter.peek().unwrap().1);
-                    debug_assert!(!other_dominating_iter.peek().unwrap().1);
+                    debug_assert!(!self_dominating_iter.peek().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections));
+                    debug_assert!(!other_dominating_iter.peek().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections));
                     self_dominating_iter.next();
                     other_dominating_iter.next();
                 }
@@ -195,8 +195,8 @@ impl<'a> TTF<'a> {
 
         debug_assert!(result.first().unwrap().0 == Timestamp::zero());
         for better in result.windows(2) {
-            debug_assert!(better[0].0 < better[1].0, "{:?}", (|| { dbg!(self_dominating_intersections); dbg!(other_dominating_intersections); })());
-            debug_assert_ne!(better[0].1, better[1].1, "{:?}", (|| { dbg!(self_dominating_intersections); dbg!(other_dominating_intersections); })());
+            debug_assert!(better[0].0 < better[1].0, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections));
+            debug_assert_ne!(better[0].1, better[1].1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections));
         }
 
         let (lower, _) = self_lower.merge(&other_lower);

@@ -3,6 +3,18 @@
 #![feature(euclidean_division)]
 #![feature(range_contains)]
 #![feature(nll)]
+#![feature(stmt_expr_attributes)]
+
+macro_rules! dbg_each {
+    ($($val:expr),+) => {
+        #[allow(clippy::redundant_closure_call)]
+        (|| {
+            $(
+                dbg!($val);
+            )+
+        }) ()
+    };
+}
 
 #[macro_use] pub mod report;
 pub mod shortest_path;
