@@ -87,48 +87,50 @@ impl<'a> TTF<'a> {
 
         let mut dominating = false;
         let mut start_of_unclear = Timestamp::zero();
-        let mut self_dominating_intersections = self_dominating_intersections.iter().peekable();
-        let mut other_dominating_intersections = other_dominating_intersections.iter().peekable();
+        let mut self_dominating_iter = self_dominating_intersections.iter().peekable();
+        let mut other_dominating_iter = other_dominating_intersections.iter().peekable();
         let mut result = Vec::new();
 
-        if self_dominating_intersections.peek().unwrap().1 {
-            dominating = true;
-            result.push((Timestamp::zero(), true));
-        }
-        if other_dominating_intersections.peek().unwrap().1 {
-            dominating = true;
-            result.push((Timestamp::zero(), false));
+        match (self_dominating_iter.peek().unwrap().1, other_dominating_iter.peek().unwrap().1) {
+            (true, false) => {
+                dominating = true;
+                result.push((Timestamp::zero(), true));
+            },
+            (false, true) => {
+                dominating = true;
+                result.push((Timestamp::zero(), false));
+            },
+            _ => {} // in BOTH cases (especially the broken true true case) everything is unclear and we need to do exact merging
         }
 
-        self_dominating_intersections.next();
-        other_dominating_intersections.next();
+        self_dominating_iter.next();
+        other_dominating_iter.next();
 
-        while self_dominating_intersections.peek().is_some() || other_dominating_intersections.peek().is_some() {
-            let next_t_self = self_dominating_intersections.peek().map(|(t, _)| *t).unwrap_or(Timestamp::NEVER);
-            let next_t_other = other_dominating_intersections.peek().map(|(t, _)| *t).unwrap_or(Timestamp::NEVER);
+        while self_dominating_iter.peek().is_some() || other_dominating_iter.peek().is_some() {
+            let next_t_self = self_dominating_iter.peek().map(|(t, _)| *t).unwrap_or(Timestamp::NEVER);
+            let next_t_other = other_dominating_iter.peek().map(|(t, _)| *t).unwrap_or(Timestamp::NEVER);
 
             if dominating {
                 if next_t_self.fuzzy_lt(next_t_other) {
-                    debug_assert!(!self_dominating_intersections.peek().unwrap().1);
+                    debug_assert!(!self_dominating_iter.peek().unwrap().1);
                     debug_assert!(result.last().unwrap().1);
                     dominating = false;
                     start_of_unclear = next_t_self;
-                    self_dominating_intersections.next();
+                    self_dominating_iter.next();
                 } else if next_t_other.fuzzy_lt(next_t_self) {
-                    debug_assert!(!other_dominating_intersections.peek().unwrap().1);
+                    debug_assert!(!other_dominating_iter.peek().unwrap().1);
                     debug_assert!(!result.last().unwrap().1);
                     dominating = false;
                     start_of_unclear = next_t_other;
-                    other_dominating_intersections.next();
+                    other_dominating_iter.next();
                 } else {
-                    debug_assert_ne!(self_dominating_intersections.peek().unwrap().1, other_dominating_intersections.peek().unwrap().1);
-                    result.push((next_t_self, self_dominating_intersections.peek().unwrap().1));
-                    self_dominating_intersections.next();
-                    other_dominating_intersections.next();
+                    debug_assert_ne!(self_dominating_iter.peek().unwrap().1, other_dominating_iter.peek().unwrap().1);
+                    result.push((next_t_self, self_dominating_iter.peek().unwrap().1));
+                    self_dominating_iter.next();
+                    other_dominating_iter.next();
                 }
             } else {
                 if next_t_self.fuzzy_lt(next_t_other) {
-                    debug_assert!(self_dominating_intersections.peek().unwrap().1);
 
                     let (_, intersections) = merge_exact(start_of_unclear, next_t_self);
                     let mut iter = intersections.into_iter();
@@ -138,14 +140,19 @@ impl<'a> TTF<'a> {
                     }
                     result.extend(iter);
 
-                    if !result.last().unwrap().1 {
-                        result.push((next_t_self, true));
+                    if self_dominating_iter.peek().unwrap().1 {
+                        if !result.last().unwrap().1 {
+                            result.push((next_t_self, true));
+                        }
+                    } else {
+                        if result.last().unwrap().1 {
+                            result.push((next_t_self, false));
+                        }
                     }
 
                     dominating = true;
-                    self_dominating_intersections.next();
+                    self_dominating_iter.next();
                 } else if next_t_other.fuzzy_lt(next_t_self) {
-                    debug_assert!(other_dominating_intersections.peek().unwrap().1);
 
                     let (_, intersections) = merge_exact(start_of_unclear, next_t_other);
                     let mut iter = intersections.into_iter();
@@ -155,17 +162,23 @@ impl<'a> TTF<'a> {
                     }
                     result.extend(iter);
 
-                    if result.last().unwrap().1 {
-                        result.push((next_t_other, false));
+                    if other_dominating_iter.peek().unwrap().1 {
+                        if result.last().unwrap().1 {
+                            result.push((next_t_other, false));
+                        }
+                    } else {
+                        if !result.last().unwrap().1 {
+                            result.push((next_t_other, true));
+                        }
                     }
 
                     dominating = true;
-                    other_dominating_intersections.next();
+                    other_dominating_iter.next();
                 } else {
-                    debug_assert!(!self_dominating_intersections.peek().unwrap().1);
-                    debug_assert!(!other_dominating_intersections.peek().unwrap().1);
-                    self_dominating_intersections.next();
-                    other_dominating_intersections.next();
+                    debug_assert!(!self_dominating_iter.peek().unwrap().1);
+                    debug_assert!(!other_dominating_iter.peek().unwrap().1);
+                    self_dominating_iter.next();
+                    other_dominating_iter.next();
                 }
             }
         }
