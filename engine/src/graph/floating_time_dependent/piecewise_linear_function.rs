@@ -481,7 +481,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
     #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
     pub fn approximate(&self) -> Box<[TTFPoint]> {
-        let mut result = Vec::new();
+        let mut result = Vec::with_capacity(self.ipps.len());
         self.douglas_peuker(&mut result);
         result.into_boxed_slice()
     }
@@ -492,13 +492,13 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     pub fn lower_bound_ttf(&self) -> Box<[TTFPoint]> {
-        let mut result = Vec::new();
+        let mut result = Vec::with_capacity(self.ipps.len());
         self.douglas_peuker_lower(&mut result);
         result.into_boxed_slice()
     }
 
     pub fn upper_bound_ttf(&self) -> Box<[TTFPoint]> {
-        let mut result = Vec::new();
+        let mut result = Vec::with_capacity(self.ipps.len());
         self.douglas_peuker_upper(&mut result);
         result.into_boxed_slice()
     }
