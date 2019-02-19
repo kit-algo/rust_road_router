@@ -454,6 +454,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
         debug_assert!(result.len() <= 2 * self.ipps.len() + 2 * other.ipps.len() + 2);
         for better_fns in better.windows(2) {
+            debug_assert!(better_fns[0].0 < better_fns[1].0, "{:?}", debug_merge(&f, &g, &result, &better));
             debug_assert_ne!(better_fns[0].1, better_fns[1].1, "{:?}", debug_merge(&f, &g, &result, &better));
         }
         if !f.cur().val.fuzzy_eq(g.cur().val) && start == Timestamp::zero() && end == period() {
