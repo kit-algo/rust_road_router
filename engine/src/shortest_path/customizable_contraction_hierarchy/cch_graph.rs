@@ -474,6 +474,9 @@ impl CCHGraph {
             let mut triangles = Vec::new();
 
             for current_node in 0..n {
+                #[cfg(debug_assertions)]
+                let mut crash_rank_logger = RankLogger { rank: Some(current_node) };
+
                 let now = timer.get_passed_ms();
                 if current_node > 0 && now - prev_event > 1000 {
                     prev_event = now;
@@ -531,6 +534,8 @@ impl CCHGraph {
                     shortcut_graph.borrow_mut_incoming(edge_id, |shortcut, _| shortcut.clear_plf());
                     node_edge_ids[node as usize] = InRangeOption::new(None);
                 }
+
+                #[cfg(debug_assertions)] { crash_rank_logger.rank = None; }
             }
 
         });
@@ -594,5 +599,20 @@ impl CCHGraph {
 
     pub fn num_nodes(&self) -> usize {
         self.first_out.len() - 1
+    }
+}
+
+#[cfg(debug_assertions)]
+#[derive(Debug)]
+struct RankLogger {
+    rank: Option<NodeId>
+}
+
+#[cfg(debug_assertions)]
+impl Drop for RankLogger {
+    fn drop(&mut self) {
+        if let Some(rank) = self.rank {
+            dbg!(rank);
+        }
     }
 }
