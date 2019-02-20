@@ -255,8 +255,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
         let mut f = C::new(&self.ipps);
         let mut g = C::new(&other.ipps);
 
-        let mut close_ipps_counter = 0;
-
         if f.cur().val.fuzzy_eq(g.cur().val) {
             better.push((start, !clockwise(&f.cur(), &f.next(), &g.next())));
         } else {
@@ -270,10 +268,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     needs_merging = true;
                 }
 
-                if (f.cur().val - g.cur().val).abs() <= APPROX {
-                    close_ipps_counter += 2;
-                }
-
                 f.advance();
                 g.advance();
 
@@ -283,10 +277,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
                 if !delta.fuzzy_eq(FlWeight::zero()) && (delta < FlWeight::zero()) != better.last().unwrap().1 {
                     needs_merging = true;
-                }
-
-                if delta.abs() <= APPROX {
-                    close_ipps_counter += 1;
                 }
 
                 f.advance();
@@ -299,16 +289,11 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     needs_merging = true;
                 }
 
-                if delta.abs() <= APPROX {
-                    close_ipps_counter += 1;
-                }
-
                 g.advance();
             }
         }
 
         if !needs_merging {
-            CLOSE_IPPS_COUNT.fetch_add((close_ipps_counter * 10000) / (f.ipps().len() + g.ipps().len()), std::sync::atomic::Ordering::Relaxed);
             return ((if better.last().unwrap().1 { self.ipps } else { other.ipps }).to_vec().into_boxed_slice(), better)
         }
 
@@ -323,7 +308,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     debug_assert_ne!(better.last().unwrap().1, counter_clockwise(&g.prev(), &f.cur(), &g.cur()), "{:?}", debug_merge(&f, &g, &result, &better));
                     better.push((intersection.at, counter_clockwise(&g.prev(), &f.cur(), &g.cur())));
                     Self::append_point(&mut result, intersection);
-                    close_ipps_counter += 1;
                 }
             }
 
@@ -449,11 +433,8 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 debug_assert_ne!(better.last().unwrap().1, counter_clockwise(&g.prev(), &f.cur(), &g.cur()), "{:?}", debug_merge(&f, &g, &result, &better));
                 better.push((intersection.at, counter_clockwise(&g.prev(), &f.cur(), &g.cur())));
                 Self::append_point(&mut result, intersection);
-                close_ipps_counter += 1;
             }
         }
-
-        CLOSE_IPPS_COUNT.fetch_add((close_ipps_counter * 10000) / (f.ipps().len() + g.ipps().len()), std::sync::atomic::Ordering::Relaxed);
 
         if start == Timestamp::zero() && end == period() {
             if result.len() > 1 {

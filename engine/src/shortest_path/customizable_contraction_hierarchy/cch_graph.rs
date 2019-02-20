@@ -487,7 +487,6 @@ impl CCHGraph {
                     report!("num_ipps_reduced_by_approx", SAVED_BY_APPROX.load(Ordering::Relaxed));
                     report!("num_ipps_considered_for_approx", CONSIDERED_FOR_APPROX.load(Ordering::Relaxed));
                     report!("num_shortcut_merge_points", PATH_SOURCES_COUNT.load(Ordering::Relaxed));
-                    report!("percent_close_ipps", CLOSE_IPPS_COUNT.load(Ordering::Relaxed) as f64 / f64::from(merge_count) / 100.0);
                     report!("num_performed_merges", ACTUALLY_MERGED.load(Ordering::Relaxed));
                     report!("num_performed_links", ACTUALLY_LINKED.load(Ordering::Relaxed));
                     report!("num_performed_unnecessary_links", UNNECESSARY_LINKED.load(Ordering::Relaxed));
@@ -542,7 +541,6 @@ impl CCHGraph {
         report!("num_ipps_reduced_by_approx", SAVED_BY_APPROX.load(Ordering::Relaxed));
         report!("num_ipps_considered_for_approx", CONSIDERED_FOR_APPROX.load(Ordering::Relaxed));
         report!("num_shortcut_merge_points", PATH_SOURCES_COUNT.load(Ordering::Relaxed));
-        report!("percent_close_ipps", CLOSE_IPPS_COUNT.load(Ordering::Relaxed) as f64 / f64::from(merge_count) / 100.0);
         report!("num_performed_merges", ACTUALLY_MERGED.load(Ordering::Relaxed));
         report!("num_performed_links", ACTUALLY_LINKED.load(Ordering::Relaxed));
         report!("num_performed_unnecessary_links", UNNECESSARY_LINKED.load(Ordering::Relaxed));

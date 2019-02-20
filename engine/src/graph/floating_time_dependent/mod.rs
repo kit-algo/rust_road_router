@@ -284,7 +284,6 @@ use std::sync::atomic::{AtomicUsize, AtomicIsize};
 
 pub static IPP_COUNT: AtomicUsize = AtomicUsize::new(0);
 pub static PATH_SOURCES_COUNT: AtomicUsize = AtomicUsize::new(0);
-pub static CLOSE_IPPS_COUNT: AtomicUsize = AtomicUsize::new(0);
 pub static ACTUALLY_MERGED: AtomicUsize = AtomicUsize::new(0);
 pub static ACTUALLY_LINKED: AtomicUsize = AtomicUsize::new(0);
 pub static ACTIVE_SHORTCUTS: AtomicUsize = AtomicUsize::new(0);
