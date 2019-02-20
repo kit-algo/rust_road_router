@@ -10,7 +10,7 @@ pub struct PiecewiseLinearFunction<'a> {
 impl<'a> PiecewiseLinearFunction<'a> {
     pub fn new(ipps: &'a [TTFPoint]) -> PiecewiseLinearFunction<'a> {
         debug_assert!(ipps.first().unwrap().at == Timestamp::zero(), "{:?}", ipps);
-        debug_assert!(ipps.first().unwrap().val == ipps.last().unwrap().val, "{:?}", ipps); // intentional non fuzzy cmp
+        debug_assert!(ipps.first().unwrap().val.fuzzy_eq(ipps.last().unwrap().val), "{:?}", ipps);
         debug_assert!(ipps.len() == 1 || ipps.last().unwrap().at == period(), "{:?}", ipps);
 
         for points in ipps.windows(2) {
@@ -22,6 +22,10 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
     pub fn len(&self) -> usize {
         self.ipps.len()
+    }
+
+    pub fn ipps(&self) -> &'a [TTFPoint] {
+        self.ipps
     }
 
     pub fn lower_bound(&self) -> FlWeight {
@@ -222,7 +226,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         result
     }
 
-    pub fn merge_partials(first: Vec<TTFPoint>, second: Vec<TTFPoint>, start: Timestamp, end: Timestamp) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
+    pub fn merge_partials(first: &[TTFPoint], second: &[TTFPoint], start: Timestamp, end: Timestamp) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
         debug_assert!(start >= Timestamp::zero());
         debug_assert!(end <= period());
         debug_assert!(first.first().unwrap().at.fuzzy_eq(start));
@@ -230,7 +234,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         debug_assert!(first.last().unwrap().at.fuzzy_eq(end));
         debug_assert!(second.last().unwrap().at.fuzzy_eq(end));
 
-        PiecewiseLinearFunction { ipps: &first }.merge_in_bounds::<PartialPlfCursor>(&PiecewiseLinearFunction { ipps: &second }, start, end)
+        PiecewiseLinearFunction { ipps: first }.merge_in_bounds::<PartialPlfCursor>(&PiecewiseLinearFunction { ipps: second }, start, end)
     }
 
     pub fn merge(&self, other: &Self) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
@@ -451,9 +455,17 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
         CLOSE_IPPS_COUNT.fetch_add((close_ipps_counter * 10000) / (f.ipps().len() + g.ipps().len()), std::sync::atomic::Ordering::Relaxed);
 
-        if result.len() > 1 {
-            let p = TTFPoint { at: end, val: result[0].val };
-            Self::append_point(&mut result, p); // TODO here be dragons for partial merging
+        if start == Timestamp::zero() && end == period() {
+            if result.len() > 1 {
+                let p = TTFPoint { at: end, val: result[0].val };
+                Self::append_point(&mut result, p);
+            }
+        } else {
+            if better.last().unwrap().1 {
+                Self::append_point(&mut result, f.cur().clone());
+            } else {
+                Self::append_point(&mut result, g.cur().clone());
+            }
         }
 
         debug_assert!(result.len() <= 2 * self.ipps.len() + 2 * other.ipps.len() + 2);

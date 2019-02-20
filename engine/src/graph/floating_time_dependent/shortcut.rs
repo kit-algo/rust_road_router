@@ -82,11 +82,17 @@ impl<'a> TTF<'a> {
         let (self_lower, self_upper) = self.bound_plfs();
         let (other_lower, other_upper) = other.bound_plfs();
 
+        let mut self_buffer = Vec::with_capacity(max(self_lower.len(), self_upper.len()));
+        let mut other_buffer = Vec::with_capacity(max(other_lower.len(), other_upper.len()));
+
+        let mut result_lower = Vec::with_capacity(2 * self_lower.len() + 2 * other_lower.len() + 2);
+        let mut result_upper = Vec::with_capacity(2 * self_upper.len() + 2 * other_upper.len() + 2);
+
         let (_, self_dominating_intersections) = self_upper.merge(&other_lower);
         let (_, other_dominating_intersections) = other_upper.merge(&self_lower);
 
         let mut dominating = false;
-        let mut start_of_unclear = Timestamp::zero();
+        let mut start_of_segment = Timestamp::zero();
         let mut self_dominating_iter = self_dominating_intersections.iter().peekable();
         let mut other_dominating_iter = other_dominating_intersections.iter().peekable();
         let mut result = Vec::new();
@@ -112,27 +118,51 @@ impl<'a> TTF<'a> {
 
             if dominating {
                 if next_t_self.fuzzy_lt(next_t_other) {
-                    debug_assert!(!self_dominating_iter.peek().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections));
-                    debug_assert!(result.last().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections));
+                    debug_assert!(!self_dominating_iter.peek().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections, &self_lower, &self_upper, &other_lower, &other_upper));
+                    debug_assert!(result.last().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections, &self_lower, &self_upper, &other_lower, &other_upper));
                     dominating = false;
-                    start_of_unclear = next_t_self;
+
+                    result_lower.pop();
+                    self_lower.copy_range(start_of_segment, next_t_self, &mut result_lower);
+                    result_upper.pop();
+                    self_upper.copy_range(start_of_segment, next_t_self, &mut result_upper);
+
+                    start_of_segment = next_t_self;
                     self_dominating_iter.next();
                 } else if next_t_other.fuzzy_lt(next_t_self) {
-                    debug_assert!(!other_dominating_iter.peek().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections));
-                    debug_assert!(!result.last().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections));
+                    debug_assert!(!other_dominating_iter.peek().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections, &self_lower, &self_upper, &other_lower, &other_upper)); // <--
+                    debug_assert!(!result.last().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections, &self_lower, &self_upper, &other_lower, &other_upper));
                     dominating = false;
-                    start_of_unclear = next_t_other;
+
+                    result_lower.pop();
+                    other_lower.copy_range(start_of_segment, next_t_other, &mut result_lower);
+                    result_upper.pop();
+                    other_upper.copy_range(start_of_segment, next_t_other, &mut result_upper);
+
+                    start_of_segment = next_t_other;
                     other_dominating_iter.next();
                 } else {
-                    debug_assert_ne!(self_dominating_iter.peek().unwrap().1, other_dominating_iter.peek().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections));
+                    debug_assert_ne!(self_dominating_iter.peek().unwrap().1, other_dominating_iter.peek().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections, &self_lower, &self_upper, &other_lower, &other_upper));
                     result.push((next_t_self, self_dominating_iter.peek().unwrap().1));
+
+                    result_lower.pop();
+                    result_upper.pop();
+                    if self_dominating_iter.peek().unwrap().1 {
+                        other_lower.copy_range(start_of_segment, next_t_self, &mut result_lower);
+                        other_upper.copy_range(start_of_segment, next_t_self, &mut result_upper);
+                    } else {
+                        self_lower.copy_range(start_of_segment, next_t_self, &mut result_lower);
+                        self_upper.copy_range(start_of_segment, next_t_self, &mut result_upper);
+                    }
+
+                    start_of_segment = next_t_self;
                     self_dominating_iter.next();
                     other_dominating_iter.next();
                 }
             } else {
                 if next_t_self.fuzzy_lt(next_t_other) {
 
-                    let (_, intersections) = merge_exact(start_of_unclear, next_t_self);
+                    let (_, intersections) = merge_exact(start_of_segment, next_t_self);
                     let mut iter = intersections.into_iter();
                     let first_intersection = iter.next().unwrap();
                     if result.last().map(|(_, self_better)| *self_better != first_intersection.1).unwrap_or(true) {
@@ -150,11 +180,28 @@ impl<'a> TTF<'a> {
                         }
                     }
 
+                    self_buffer.clear();
+                    self_lower.copy_range(start_of_segment, next_t_self, &mut self_buffer);
+                    other_buffer.clear();
+                    other_lower.copy_range(start_of_segment, next_t_self, &mut other_buffer);
+                    let (partial_lower, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_self);
+                    result_lower.pop();
+                    result_lower.append(&mut partial_lower.into_vec());
+
+                    self_buffer.clear();
+                    self_upper.copy_range(start_of_segment, next_t_self, &mut self_buffer);
+                    other_buffer.clear();
+                    other_upper.copy_range(start_of_segment, next_t_self, &mut other_buffer);
+                    let (partial_upper, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_self);
+                    result_upper.pop();
+                    result_upper.append(&mut partial_upper.into_vec());
+
+                    start_of_segment = next_t_self;
                     dominating = true;
                     self_dominating_iter.next();
                 } else if next_t_other.fuzzy_lt(next_t_self) {
 
-                    let (_, intersections) = merge_exact(start_of_unclear, next_t_other);
+                    let (_, intersections) = merge_exact(start_of_segment, next_t_other);
                     let mut iter = intersections.into_iter();
                     let first_intersection = iter.next().unwrap();
                     if result.last().map(|(_, self_better)| *self_better != first_intersection.1).unwrap_or(true) {
@@ -172,11 +219,26 @@ impl<'a> TTF<'a> {
                         }
                     }
 
+                    self_buffer.clear();
+                    self_lower.copy_range(start_of_segment, next_t_other, &mut self_buffer);
+                    other_buffer.clear();
+                    other_lower.copy_range(start_of_segment, next_t_other, &mut other_buffer);
+                    let (partial_lower, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_other);
+                    result_lower.pop();
+                    result_lower.append(&mut partial_lower.into_vec());
+
+                    self_buffer.clear();
+                    self_upper.copy_range(start_of_segment, next_t_other, &mut self_buffer);
+                    other_buffer.clear();
+                    other_upper.copy_range(start_of_segment, next_t_other, &mut other_buffer);
+                    let (partial_upper, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_other);
+                    result_upper.pop();
+                    result_upper.append(&mut partial_upper.into_vec());
+
+                    start_of_segment = next_t_other;
                     dominating = true;
                     other_dominating_iter.next();
                 } else {
-                    debug_assert!(!self_dominating_iter.peek().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections));
-                    debug_assert!(!other_dominating_iter.peek().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections));
                     self_dominating_iter.next();
                     other_dominating_iter.next();
                 }
@@ -184,13 +246,39 @@ impl<'a> TTF<'a> {
         }
 
         if !dominating {
-            let (_, intersections) = merge_exact(start_of_unclear, period());
+            let (_, intersections) = merge_exact(start_of_segment, period());
             let mut iter = intersections.into_iter();
             let first_intersection = iter.next().unwrap();
             if result.last().map(|(_, self_better)| *self_better != first_intersection.1).unwrap_or(true) {
                 result.push(first_intersection);
             }
             result.extend(iter);
+
+            self_buffer.clear();
+            self_lower.copy_range(start_of_segment, period(), &mut self_buffer);
+            other_buffer.clear();
+            other_lower.copy_range(start_of_segment, period(), &mut other_buffer);
+            let (partial_lower, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, period());
+            result_lower.pop();
+            result_lower.append(&mut partial_lower.into_vec());
+
+            self_buffer.clear();
+            self_upper.copy_range(start_of_segment, period(), &mut self_buffer);
+            other_buffer.clear();
+            other_upper.copy_range(start_of_segment, period(), &mut other_buffer);
+            let (partial_upper, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, period());
+            result_upper.pop();
+            result_upper.append(&mut partial_upper.into_vec());
+        } else {
+            result_lower.pop();
+            result_upper.pop();
+            if result.last().unwrap().1 {
+                self_lower.copy_range(start_of_segment, period(), &mut result_lower);
+                self_upper.copy_range(start_of_segment, period(), &mut result_upper);
+            } else {
+                other_lower.copy_range(start_of_segment, period(), &mut result_lower);
+                other_upper.copy_range(start_of_segment, period(), &mut result_upper);
+            }
         }
 
         debug_assert!(result.first().unwrap().0 == Timestamp::zero());
@@ -199,9 +287,7 @@ impl<'a> TTF<'a> {
             debug_assert_ne!(better[0].1, better[1].1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections));
         }
 
-        let (lower, _) = self_lower.merge(&other_lower);
-        let (upper, _) = self_upper.merge(&other_upper);
-        (TTFCache::Approx(lower, upper), result)
+        (TTFCache::Approx(result_lower.into_boxed_slice(), result_upper.into_boxed_slice()), result)
     }
 
     fn approximate(&self) -> TTFCache {
@@ -317,7 +403,7 @@ impl Shortcut {
             let (mut merged, intersection_data) = self_plf.merge(&linked, |start, end| {
                 let self_ipps = self.exact_ttf_for(start, end, shortcut_graph);
                 let other_ipps = ShortcutSource::from(other_data).exact_ttf_for(start, end, shortcut_graph);
-                PiecewiseLinearFunction::merge_partials(self_ipps, other_ipps, start, end)
+                PiecewiseLinearFunction::merge_partials(&self_ipps, &other_ipps, start, end)
             });
             if cfg!(feature = "tdcch-approx") && merged.num_points() > 250 {
                 let old = merged.num_points();
