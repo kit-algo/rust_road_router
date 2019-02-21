@@ -47,7 +47,7 @@ mod time {
     #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
     pub struct FlWeight(f64);
 
-    pub const APPROX: FlWeight = FlWeight(10.0);
+    pub const APPROX: FlWeight = FlWeight(1.0);
 
     impl FlWeight {
         pub const INFINITY: Self = FlWeight(2_147_483_647.0);
