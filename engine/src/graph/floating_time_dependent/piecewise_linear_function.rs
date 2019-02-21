@@ -70,6 +70,8 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     pub(super) fn copy_range(&self, start: Timestamp, end: Timestamp, target: &mut Vec<TTFPoint>) {
+        debug_assert!(start.fuzzy_lt(end), "{:?} - {:?}", start, end);
+
         let mut f = Cursor::starting_at_or_after(&self.ipps, start);
 
         if start.fuzzy_lt(f.cur().at) {
@@ -91,6 +93,10 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
 
         debug_assert!(target.len() > 1);
+
+        for points in target.windows(2) {
+            debug_assert!(points[0].at.fuzzy_lt(points[1].at), "{:?}", dbg_each!(&points[0], &target, start, end));
+        }
     }
 
     pub fn link(&self, other: &Self) -> Box<[TTFPoint]> {
@@ -222,6 +228,9 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
         debug_assert!(result.len() > 1);
         debug_assert!(result.len() <= first.len() + second.len() + 1);
+        for points in result.windows(2) {
+            debug_assert!(points[0].at.fuzzy_lt(points[1].at));
+        }
 
         result
     }

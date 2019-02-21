@@ -340,7 +340,7 @@ impl Shortcut {
     pub fn merge(&mut self, linked_ids: (EdgeId, EdgeId), shortcut_graph: &ShortcutGraph) {
         if !self.required { return }
 
-        IPP_COUNT.fetch_sub(self.cache.as_ref().map(|ipps| ipps.num_points()).unwrap_or(0), Relaxed);
+        IPP_COUNT.fetch_sub(self.cache.as_ref().map(TTFCache::num_points).unwrap_or(0), Relaxed);
         PATH_SOURCES_COUNT.fetch_sub(self.sources.len(), Relaxed);
         if self.cache.is_some() { ACTIVE_SHORTCUTS.fetch_sub(1, Relaxed); }
 
@@ -420,7 +420,7 @@ impl Shortcut {
             self.sources = Shortcut::combine(sources, intersection_data, other_data);
         }) ();
 
-        IPP_COUNT.fetch_add(self.cache.as_ref().map(|ipps| ipps.num_points()).unwrap_or(0), Relaxed);
+        IPP_COUNT.fetch_add(self.cache.as_ref().map(TTFCache::num_points).unwrap_or(0), Relaxed);
         PATH_SOURCES_COUNT.fetch_add(self.sources.len(), Relaxed);
         if self.cache.is_some() { ACTIVE_SHORTCUTS.fetch_add(1, Relaxed); }
     }
@@ -482,7 +482,7 @@ impl Shortcut {
     }
 
     pub fn clear_plf(&mut self) {
-        IPP_COUNT.fetch_sub(self.cache.as_ref().map(|ipps| ipps.num_points()).unwrap_or(0), Relaxed);
+        IPP_COUNT.fetch_sub(self.cache.as_ref().map(TTFCache::num_points).unwrap_or(0), Relaxed);
         if self.cache.is_some() { ACTIVE_SHORTCUTS.fetch_sub(1, Relaxed); }
         self.cache = None;
     }
@@ -549,12 +549,19 @@ impl Shortcut {
         debug_assert!(new_sources.len() >= 2, "old: {:?}\nintersections: {:?}\nnew: {:?}", sources, debug_intersections, new_sources);
         debug_assert!(new_sources.first().unwrap().0 == Timestamp::zero());
         for sources in new_sources.windows(2) {
-            debug_assert!(sources[0].0 < sources[1].0);
+            debug_assert!(sources[0].0.fuzzy_lt(sources[1].0), "old: {:?}\nintersections: {:?}\nnew: {:?}", sources, debug_intersections, new_sources);
+            debug_assert!(sources[0].0.fuzzy_lt(period()), "old: {:?}\nintersections: {:?}\nnew: {:?}", sources, debug_intersections, new_sources);
         }
         Sources::Multi(new_sources.into_boxed_slice())
     }
 
     pub(super) fn exact_ttf_for(&self, start: Timestamp, end: Timestamp, shortcut_graph: &ShortcutGraph) -> Vec<TTFPoint> {
+        debug_assert!(start.fuzzy_lt(end), "{:?} - {:?}", start, end);
+
+        if self.constant {
+            return vec![TTFPoint { at: start, val: self.lower_bound }, TTFPoint { at: end, val: self.lower_bound }]
+        }
+
         match &self.sources {
             Sources::None => unreachable!("There are no TTFs for empty shortcuts"),
             Sources::One(source) => ShortcutSource::from(*source).exact_ttf_for(start, end, shortcut_graph),
@@ -565,12 +572,20 @@ impl Shortcut {
                 loop {
                     let prev_last = result.pop();
                     let mut ttf = ShortcutSource::from(c.cur().1).exact_ttf_for(max(start, c.cur().0), min(end, c.next().0), shortcut_graph);
-                    debug_assert!(prev_last.map(|p: TTFPoint| p.at.fuzzy_eq(ttf.first().unwrap().at) && p.val.fuzzy_eq(ttf.first().unwrap().val)).unwrap_or(true));
+                    if !(prev_last.as_ref().map(|p: &TTFPoint| p.at.fuzzy_eq(ttf.first().unwrap().at) && p.val.fuzzy_eq(ttf.first().unwrap().val)).unwrap_or(true)) {
+                        eprintln!("######################## Broken Intersection #################################");
+                        dbg!(prev_last);
+                        dbg!(ttf.first());
+                    }
                     result.append(&mut ttf);
                     c.advance();
                     if !c.cur().0.fuzzy_lt(end) {
                         break
                     }
+                }
+
+                for points in result.windows(2) {
+                    debug_assert!(points[0].at.fuzzy_lt(points[1].at));
                 }
 
                 result

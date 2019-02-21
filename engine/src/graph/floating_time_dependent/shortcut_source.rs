@@ -45,6 +45,8 @@ impl ShortcutSource {
     }
 
     pub(super) fn exact_ttf_for(&self, start: Timestamp, end: Timestamp, shortcut_graph: &ShortcutGraph) -> Vec<TTFPoint> {
+        debug_assert!(start.fuzzy_lt(end), "{:?} - {:?}", start, end);
+
         match *self {
             ShortcutSource::Shortcut(down, up) => {
                 let first = shortcut_graph.get_incoming(down).exact_ttf_for(start, end, shortcut_graph);
