@@ -627,15 +627,14 @@ impl<'a> Cursor<'a> {
         });
 
 
-        match pos {
-            Ok(i) => Cursor { ipps, current_index: i, offset },
-            Err(i) => {
-                if i == ipps.len() - 1 {
-                    Cursor { ipps, current_index: 0, offset: (period() + offset).into() }
-                } else {
-                    Cursor { ipps, current_index: i, offset }
-                }
-            }
+        let i = match pos {
+            Ok(i) => i,
+            Err(i) => i,
+        };
+        if i == ipps.len() - 1 {
+            Cursor { ipps, current_index: 0, offset: (period() + offset).into() }
+        } else {
+            Cursor { ipps, current_index: i, offset }
         }
     }
 }
