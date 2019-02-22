@@ -82,11 +82,10 @@ impl<'a> TTF<'a> {
         let (self_lower, self_upper) = self.bound_plfs();
         let (other_lower, other_upper) = other.bound_plfs();
 
-        let mut self_buffer = Vec::with_capacity(max(self_lower.len(), self_upper.len()));
-        let mut other_buffer = Vec::with_capacity(max(other_lower.len(), other_upper.len()));
-
-        let mut result_lower = Vec::with_capacity(2 * self_lower.len() + 2 * other_lower.len() + 2);
-        let mut result_upper = Vec::with_capacity(2 * self_upper.len() + 2 * other_upper.len() + 2);
+        let mut self_buffer = if cfg!(feature = "tdcch-optimized-bound-merging)") { Vec::with_capacity(max(self_lower.len(), self_upper.len())) } else { Vec::new() };
+        let mut other_buffer = if cfg!(feature = "tdcch-optimized-bound-merging)") { Vec::with_capacity(max(other_lower.len(), other_upper.len())) } else { Vec::new() };
+        let mut result_lower = if cfg!(feature = "tdcch-optimized-bound-merging)") { Vec::with_capacity(2 * self_lower.len() + 2 * other_lower.len() + 2) } else { Vec::new() };
+        let mut result_upper = if cfg!(feature = "tdcch-optimized-bound-merging)") { Vec::with_capacity(2 * self_upper.len() + 2 * other_upper.len() + 2) } else { Vec::new() };
 
         let (_, self_dominating_intersections) = self_upper.merge(&other_lower);
         let (_, other_dominating_intersections) = other_upper.merge(&self_lower);
@@ -122,10 +121,12 @@ impl<'a> TTF<'a> {
                     debug_assert!(result.last().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections, &self_lower, &self_upper, &other_lower, &other_upper));
                     dominating = false;
 
-                    result_lower.pop();
-                    self_lower.copy_range(start_of_segment, next_t_self, &mut result_lower);
-                    result_upper.pop();
-                    self_upper.copy_range(start_of_segment, next_t_self, &mut result_upper);
+                    if cfg!(feature = "tdcch-optimized-bound-merging)") {
+                        result_lower.pop();
+                        self_lower.copy_range(start_of_segment, next_t_self, &mut result_lower);
+                        result_upper.pop();
+                        self_upper.copy_range(start_of_segment, next_t_self, &mut result_upper);
+                    }
 
                     start_of_segment = next_t_self;
                     self_dominating_iter.next();
@@ -134,10 +135,12 @@ impl<'a> TTF<'a> {
                     debug_assert!(!result.last().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections, &self_lower, &self_upper, &other_lower, &other_upper));
                     dominating = false;
 
-                    result_lower.pop();
-                    other_lower.copy_range(start_of_segment, next_t_other, &mut result_lower);
-                    result_upper.pop();
-                    other_upper.copy_range(start_of_segment, next_t_other, &mut result_upper);
+                    if cfg!(feature = "tdcch-optimized-bound-merging)") {
+                        result_lower.pop();
+                        other_lower.copy_range(start_of_segment, next_t_other, &mut result_lower);
+                        result_upper.pop();
+                        other_upper.copy_range(start_of_segment, next_t_other, &mut result_upper);
+                    }
 
                     start_of_segment = next_t_other;
                     other_dominating_iter.next();
@@ -145,14 +148,16 @@ impl<'a> TTF<'a> {
                     debug_assert_ne!(self_dominating_iter.peek().unwrap().1, other_dominating_iter.peek().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections, &self_lower, &self_upper, &other_lower, &other_upper));
                     result.push((next_t_self, self_dominating_iter.peek().unwrap().1));
 
-                    result_lower.pop();
-                    result_upper.pop();
-                    if self_dominating_iter.peek().unwrap().1 {
-                        other_lower.copy_range(start_of_segment, next_t_self, &mut result_lower);
-                        other_upper.copy_range(start_of_segment, next_t_self, &mut result_upper);
-                    } else {
-                        self_lower.copy_range(start_of_segment, next_t_self, &mut result_lower);
-                        self_upper.copy_range(start_of_segment, next_t_self, &mut result_upper);
+                    if cfg!(feature = "tdcch-optimized-bound-merging)") {
+                        result_lower.pop();
+                        result_upper.pop();
+                        if self_dominating_iter.peek().unwrap().1 {
+                            other_lower.copy_range(start_of_segment, next_t_self, &mut result_lower);
+                            other_upper.copy_range(start_of_segment, next_t_self, &mut result_upper);
+                        } else {
+                            self_lower.copy_range(start_of_segment, next_t_self, &mut result_lower);
+                            self_upper.copy_range(start_of_segment, next_t_self, &mut result_upper);
+                        }
                     }
 
                     start_of_segment = next_t_self;
@@ -180,21 +185,23 @@ impl<'a> TTF<'a> {
                         }
                     }
 
-                    self_buffer.clear();
-                    self_lower.copy_range(start_of_segment, next_t_self, &mut self_buffer);
-                    other_buffer.clear();
-                    other_lower.copy_range(start_of_segment, next_t_self, &mut other_buffer);
-                    let (partial_lower, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_self);
-                    result_lower.pop();
-                    result_lower.append(&mut partial_lower.into_vec());
+                    if cfg!(feature = "tdcch-optimized-bound-merging)") {
+                        self_buffer.clear();
+                        self_lower.copy_range(start_of_segment, next_t_self, &mut self_buffer);
+                        other_buffer.clear();
+                        other_lower.copy_range(start_of_segment, next_t_self, &mut other_buffer);
+                        let (partial_lower, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_self);
+                        result_lower.pop();
+                        result_lower.append(&mut partial_lower.into_vec());
 
-                    self_buffer.clear();
-                    self_upper.copy_range(start_of_segment, next_t_self, &mut self_buffer);
-                    other_buffer.clear();
-                    other_upper.copy_range(start_of_segment, next_t_self, &mut other_buffer);
-                    let (partial_upper, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_self);
-                    result_upper.pop();
-                    result_upper.append(&mut partial_upper.into_vec());
+                        self_buffer.clear();
+                        self_upper.copy_range(start_of_segment, next_t_self, &mut self_buffer);
+                        other_buffer.clear();
+                        other_upper.copy_range(start_of_segment, next_t_self, &mut other_buffer);
+                        let (partial_upper, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_self);
+                        result_upper.pop();
+                        result_upper.append(&mut partial_upper.into_vec());
+                    }
 
                     start_of_segment = next_t_self;
                     dominating = true;
@@ -219,21 +226,23 @@ impl<'a> TTF<'a> {
                         }
                     }
 
-                    self_buffer.clear();
-                    self_lower.copy_range(start_of_segment, next_t_other, &mut self_buffer);
-                    other_buffer.clear();
-                    other_lower.copy_range(start_of_segment, next_t_other, &mut other_buffer);
-                    let (partial_lower, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_other);
-                    result_lower.pop();
-                    result_lower.append(&mut partial_lower.into_vec());
+                    if cfg!(feature = "tdcch-optimized-bound-merging)") {
+                        self_buffer.clear();
+                        self_lower.copy_range(start_of_segment, next_t_other, &mut self_buffer);
+                        other_buffer.clear();
+                        other_lower.copy_range(start_of_segment, next_t_other, &mut other_buffer);
+                        let (partial_lower, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_other);
+                        result_lower.pop();
+                        result_lower.append(&mut partial_lower.into_vec());
 
-                    self_buffer.clear();
-                    self_upper.copy_range(start_of_segment, next_t_other, &mut self_buffer);
-                    other_buffer.clear();
-                    other_upper.copy_range(start_of_segment, next_t_other, &mut other_buffer);
-                    let (partial_upper, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_other);
-                    result_upper.pop();
-                    result_upper.append(&mut partial_upper.into_vec());
+                        self_buffer.clear();
+                        self_upper.copy_range(start_of_segment, next_t_other, &mut self_buffer);
+                        other_buffer.clear();
+                        other_upper.copy_range(start_of_segment, next_t_other, &mut other_buffer);
+                        let (partial_upper, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_other);
+                        result_upper.pop();
+                        result_upper.append(&mut partial_upper.into_vec());
+                    }
 
                     start_of_segment = next_t_other;
                     dominating = true;
@@ -254,30 +263,34 @@ impl<'a> TTF<'a> {
             }
             result.extend(iter);
 
-            self_buffer.clear();
-            self_lower.copy_range(start_of_segment, period(), &mut self_buffer);
-            other_buffer.clear();
-            other_lower.copy_range(start_of_segment, period(), &mut other_buffer);
-            let (partial_lower, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, period());
-            result_lower.pop();
-            result_lower.append(&mut partial_lower.into_vec());
+            if cfg!(feature = "tdcch-optimized-bound-merging)") {
+                self_buffer.clear();
+                self_lower.copy_range(start_of_segment, period(), &mut self_buffer);
+                other_buffer.clear();
+                other_lower.copy_range(start_of_segment, period(), &mut other_buffer);
+                let (partial_lower, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, period());
+                result_lower.pop();
+                result_lower.append(&mut partial_lower.into_vec());
 
-            self_buffer.clear();
-            self_upper.copy_range(start_of_segment, period(), &mut self_buffer);
-            other_buffer.clear();
-            other_upper.copy_range(start_of_segment, period(), &mut other_buffer);
-            let (partial_upper, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, period());
-            result_upper.pop();
-            result_upper.append(&mut partial_upper.into_vec());
+                self_buffer.clear();
+                self_upper.copy_range(start_of_segment, period(), &mut self_buffer);
+                other_buffer.clear();
+                other_upper.copy_range(start_of_segment, period(), &mut other_buffer);
+                let (partial_upper, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, period());
+                result_upper.pop();
+                result_upper.append(&mut partial_upper.into_vec());
+            }
         } else {
-            result_lower.pop();
-            result_upper.pop();
-            if result.last().unwrap().1 {
-                self_lower.copy_range(start_of_segment, period(), &mut result_lower);
-                self_upper.copy_range(start_of_segment, period(), &mut result_upper);
-            } else {
-                other_lower.copy_range(start_of_segment, period(), &mut result_lower);
-                other_upper.copy_range(start_of_segment, period(), &mut result_upper);
+            if cfg!(feature = "tdcch-optimized-bound-merging)") {
+                result_lower.pop();
+                result_upper.pop();
+                if result.last().unwrap().1 {
+                    self_lower.copy_range(start_of_segment, period(), &mut result_lower);
+                    self_upper.copy_range(start_of_segment, period(), &mut result_upper);
+                } else {
+                    other_lower.copy_range(start_of_segment, period(), &mut result_lower);
+                    other_upper.copy_range(start_of_segment, period(), &mut result_upper);
+                }
             }
         }
 
@@ -287,7 +300,14 @@ impl<'a> TTF<'a> {
             debug_assert_ne!(better[0].1, better[1].1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections));
         }
 
-        (TTFCache::Approx(result_lower.into_boxed_slice(), result_upper.into_boxed_slice()), result)
+
+        if cfg!(feature = "tdcch-optimized-bound-merging)") {
+            (TTFCache::Approx(result_lower.into_boxed_slice(), result_upper.into_boxed_slice()), result)
+        } else {
+            let (result_lower, _) = self_lower.merge(&other_lower);
+            let (result_upper, _) = self_upper.merge(&other_upper);
+            (TTFCache::Approx(result_lower, result_upper), result)
+        }
     }
 
     fn approximate(&self) -> TTFCache {

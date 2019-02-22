@@ -9,6 +9,7 @@ build = "build.rs"
 default = []
 tdcch-query-detailed-timing = []
 tdcch-stall-on-demand = []
+tdcch-optimized-bound-merging = []
 tdcch-approx = []
 tdcch-approx-imai-iri = ["tdcch-approx"]
 report-to-stderr = []
