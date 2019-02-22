@@ -216,41 +216,40 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
         let mut result = Vec::with_capacity(first.len() + second.len() + 1);
 
-        let mut i = 0;
-        let mut j = 0;
+        let mut f = PartialPlfCursor::new(&first);
+        let mut g = PartialPlfCursor::new(&second);
 
         loop {
             let x;
             let y;
 
-            if second[j].at.fuzzy_eq(first[i].at + first[i].val) {
-                x = first[i].at;
-                y = second[j].val + first[i].val;
+            if g.cur().at.fuzzy_eq(f.cur().at + f.cur().val) {
+                x = f.cur().at;
+                y = g.cur().val + f.cur().val;
 
-                j += 1;
-                i += 1;
-            } else if second[j].at < first[i].at + first[i].val {
-                debug_assert!(second[j].at.fuzzy_lt(first[i].at + first[i].val));
+                g.advance();
+                f.advance();
+            } else if g.cur().at < f.cur().at + f.cur().val {
+                debug_assert!(g.cur().at.fuzzy_lt(f.cur().at + f.cur().val));
 
-                let m_arr_f_inverse = (first[i].at - first[i-1].at) / (first[i].at + first[i].val - first[i-1].at - first[i-1].val);
-                x = m_arr_f_inverse * (second[j].at - first[i-1].at - first[i-1].val) + first[i-1].at;
-                y = second[j].at + second[j].val - x;
+                let m_arr_f_inverse = (f.cur().at - f.prev().at) / (f.cur().at + f.cur().val - f.prev().at - f.prev().val);
+                x = m_arr_f_inverse * (g.cur().at - f.prev().at - f.prev().val) + f.prev().at;
+                y = g.cur().at + g.cur().val - x;
 
-                j += 1;
+                g.advance();
             } else {
-                debug_assert!((first[i].at + first[i].val).fuzzy_lt(second[j].at));
+                debug_assert!((f.cur().at + f.cur().val).fuzzy_lt(g.cur().at));
 
-                x = first[i].at;
-                let m_g = (second[j].val - second[j-1].val) / (second[j].at - second[j-1].at);
-                y = second[j-1].val + m_g * (first[i].at + first[i].val - second[j-1].at) + first[i].val;
+                x = f.cur().at;
+                let m_g = (g.cur().val - g.prev().val) / (g.cur().at - g.prev().at);
+                y = g.prev().val + m_g * (f.cur().at + f.cur().val - g.prev().at) + f.cur().val;
 
-                i += 1
+                f.advance();
             }
 
             Self::append_point(&mut result, TTFPoint { at: x, val: y });
 
-            if i == first.len() {
-                debug_assert_eq!(j, second.len(), "{:?}\n{:?}", first, second);
+            if f.done() && g.done() {
                 break;
             }
         }
@@ -759,6 +758,12 @@ impl<'a> MergeCursor<'a> for PartialPlfCursor<'a> {
 
     fn ipps(&self) -> &'a [TTFPoint] {
         self.ipps
+    }
+}
+
+impl<'a> PartialPlfCursor<'a> {
+    fn done(&self) -> bool {
+        self.current_index >= self.ipps.len()
     }
 }
 
