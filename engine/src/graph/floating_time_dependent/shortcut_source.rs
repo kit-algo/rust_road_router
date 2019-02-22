@@ -53,7 +53,7 @@ impl ShortcutSource {
                 let second_start = first.first().unwrap().at + first.first().unwrap().val;
                 let second_end = first.last().unwrap().at + first.last().unwrap().val;
                 let second = shortcut_graph.get_outgoing(up).exact_ttf_for(second_start, second_end, shortcut_graph);
-                PiecewiseLinearFunction::link_partials(first, second)
+                PiecewiseLinearFunction::link_partials(first, second, start, end)
             }
             ShortcutSource::OriginalEdge(edge) => {
                 let ttf = shortcut_graph.original_graph().travel_time_function(edge);

@@ -210,7 +210,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         result.into_boxed_slice()
     }
 
-    pub(super) fn link_partials(first: Vec<TTFPoint>, second: Vec<TTFPoint>) -> Vec<TTFPoint> {
+    pub(super) fn link_partials(first: Vec<TTFPoint>, second: Vec<TTFPoint>, start: Timestamp, end: Timestamp) -> Vec<TTFPoint> {
         debug_assert!((first[0].at + first[0].val).fuzzy_eq(second[0].at), "first: {:?}\n second: {:?}", first, second);
         debug_assert!((first.last().unwrap().at + first.last().unwrap().val).fuzzy_eq(second.last().unwrap().at));
 
@@ -247,9 +247,13 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 f.advance();
             }
 
+            if x.fuzzy_lt(start) && !result.is_empty() {
+                result.pop();
+            }
+
             Self::append_point(&mut result, TTFPoint { at: x, val: y });
 
-            if f.done() && g.done() {
+            if (f.done() && g.done()) || !x.fuzzy_lt(end) {
                 break;
             }
         }
