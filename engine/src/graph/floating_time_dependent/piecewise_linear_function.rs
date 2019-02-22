@@ -99,6 +99,39 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
+    pub(super) fn append_partials(first: &mut Vec<TTFPoint>, second: &mut Vec<TTFPoint>, switchover: Timestamp) {
+        debug_assert!(second.len() > 1);
+        if let Some(&TTFPoint { at, .. }) = first.last() { debug_assert!(!at.fuzzy_lt(switchover)); }
+        if let Some(&TTFPoint { at, .. }) = first.split_last().map(|(_, rest)| rest.last()).unwrap_or(None) { debug_assert!(at.fuzzy_lt(switchover)); }
+        if let Some(&TTFPoint { at, .. }) = second.first() { debug_assert!(!switchover.fuzzy_lt(at)); }
+        if let Some(&TTFPoint { at, .. }) = second.split_first().map(|(_, rest)| rest.first()).unwrap_or(None) { debug_assert!(switchover.fuzzy_lt(at)); }
+
+        if first.is_empty() {
+            std::mem::swap(first, second);
+            return
+        }
+
+        let first_last = first.pop().unwrap();
+        let switchover_val = if first_last.at.fuzzy_eq(switchover) {
+            first_last.val
+        } else {
+            interpolate_linear(first.last().unwrap(), &first_last, switchover)
+        };
+
+        if second[0].at.fuzzy_eq(switchover) {
+            debug_assert!(switchover_val.fuzzy_eq(second[0].val));
+        } else {
+            debug_assert!(switchover_val.fuzzy_eq(interpolate_linear(&second[0], &second[1], switchover)));
+        }
+
+        first.push(TTFPoint { at: switchover, val: switchover_val });
+        first.extend(second.drain(1..));
+
+        for points in first.windows(2) {
+            debug_assert!(points[0].at.fuzzy_lt(points[1].at));
+        }
+    }
+
     pub fn link(&self, other: &Self) -> Box<[TTFPoint]> {
         if let [TTFPoint { val, .. }] = &self.ipps {
             if let [TTFPoint { val: other, .. }] = &other.ipps {

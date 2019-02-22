@@ -590,14 +590,9 @@ impl Shortcut {
                 let mut c = SourceCursor::valid_at(sources, start);
 
                 loop {
-                    let prev_last = result.pop();
                     let mut ttf = ShortcutSource::from(c.cur().1).exact_ttf_for(max(start, c.cur().0), min(end, c.next().0), shortcut_graph);
-                    if !(prev_last.as_ref().map(|p: &TTFPoint| p.at.fuzzy_eq(ttf.first().unwrap().at) && p.val.fuzzy_eq(ttf.first().unwrap().val)).unwrap_or(true)) {
-                        eprintln!("######################## Broken Intersection #################################");
-                        dbg!(prev_last);
-                        dbg!(ttf.first());
-                    }
-                    result.append(&mut ttf);
+                    PiecewiseLinearFunction::append_partials(&mut result, &mut ttf, max(start, c.cur().0));
+
                     c.advance();
                     if !c.cur().0.fuzzy_lt(end) {
                         break
