@@ -300,7 +300,6 @@ impl<'a> TTF<'a> {
             debug_assert_ne!(better[0].1, better[1].1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections));
         }
 
-
         if cfg!(feature = "tdcch-optimized-bound-merging)") {
             (TTFCache::Approx(result_lower.into_boxed_slice(), result_upper.into_boxed_slice()), result)
         } else {
@@ -589,14 +588,11 @@ impl Shortcut {
                 let mut result = Vec::new();
                 let mut c = SourceCursor::valid_at(sources, start);
 
-                loop {
+                while c.cur().0.fuzzy_lt(end) {
                     let mut ttf = ShortcutSource::from(c.cur().1).exact_ttf_for(max(start, c.cur().0), min(end, c.next().0), shortcut_graph);
                     PiecewiseLinearFunction::append_partials(&mut result, &mut ttf, max(start, c.cur().0));
 
                     c.advance();
-                    if !c.cur().0.fuzzy_lt(end) {
-                        break
-                    }
                 }
 
                 for points in result.windows(2) {

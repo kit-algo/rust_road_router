@@ -247,7 +247,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 f.advance();
             }
 
-            if x.fuzzy_lt(start) && !result.is_empty() {
+            if !start.fuzzy_lt(x) && !result.is_empty() {
                 result.pop();
             }
 
@@ -307,7 +307,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
 
         let mut needs_merging = false;
-        while f.cur().at <= end || g.cur().at <= end {
+        while !end.fuzzy_lt(f.prev().at) || !end.fuzzy_lt(g.prev().at) {
             if f.cur().at.fuzzy_eq(g.cur().at) {
                 if !f.cur().val.fuzzy_eq(g.cur().val) && (f.cur().val < g.cur().val) != better.last().unwrap().1 {
                     needs_merging = true;
