@@ -310,8 +310,17 @@ impl<'a> PiecewiseLinearFunction<'a> {
             interpolate_linear(&g.cur(), &g.next(), start)
         };
 
+        let mut needs_merging = false;
         if self_start_val.fuzzy_eq(other_start_val) {
             better.push((start, !clockwise(&f.cur(), &f.next(), &g.next())));
+
+            if intersect(&f.cur(), &f.next(), &g.cur(), &g.next()) {
+                let intersection = intersection_point(&f.cur(), &f.next(), &g.cur(), &g.next());
+                if start.fuzzy_lt(intersection.at) && intersection.at.fuzzy_lt(end) {
+                    better[0].1 = !better[0].1;
+                    needs_merging = true;
+                }
+            }
         } else {
             better.push((start, self_start_val < other_start_val));
         }
@@ -319,8 +328,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         f.advance();
         g.advance();
 
-        let mut needs_merging = false;
-        while !end.fuzzy_lt(f.prev().at) || !end.fuzzy_lt(g.prev().at) {
+        while !needs_merging && (!end.fuzzy_lt(f.prev().at) || !end.fuzzy_lt(g.prev().at)) {
             if f.cur().at.fuzzy_eq(g.cur().at) {
                 if !f.cur().val.fuzzy_eq(g.cur().val) && (f.cur().val < g.cur().val) != better.last().unwrap().1 {
                     needs_merging = true;
@@ -367,7 +375,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
             if intersect(&f.prev(), &f.cur(), &g.prev(), &g.cur()) {
                 let intersection = intersection_point(&f.prev(), &f.cur(), &g.prev(), &g.cur());
                 if start.fuzzy_lt(intersection.at) && intersection.at.fuzzy_lt(end) {
-                    debug_assert_ne!(better.last().unwrap().1, counter_clockwise(&g.prev(), &f.cur(), &g.cur()), "{:?}", debug_merge(&f, &g, &result, &better));
+                    debug_assert_ne!(better.last().unwrap().1, counter_clockwise(&g.prev(), &f.cur(), &g.cur()), "{:?} {:?}", debug_merge(&f, &g, &result, &better), dbg_each!(start, end, intersection));
                     better.push((intersection.at, counter_clockwise(&g.prev(), &f.cur(), &g.cur())));
                     Self::append_point(&mut result, intersection);
                 }
