@@ -75,10 +75,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         let mut f = Cursor::starting_at_or_after(&self.ipps, start);
 
         if start.fuzzy_lt(f.cur().at) {
-            target.push(TTFPoint { at: start, val: interpolate_linear(&f.prev(), &f.cur(), start) });
-        } else {
-            target.push(TTFPoint { at: start, val: f.cur().val });
-            f.advance();
+            target.push(f.prev());
         }
 
         while f.cur().at.fuzzy_lt(end) {
@@ -86,23 +83,24 @@ impl<'a> PiecewiseLinearFunction<'a> {
             f.advance();
         }
 
-        if f.cur().at.fuzzy_eq(end) {
-            target.push(TTFPoint { at: end, val: f.cur().val });
-        } else {
-            target.push(TTFPoint { at: end, val: interpolate_linear(&f.prev(), &f.cur(), end) });
-        }
+        target.push(f.cur());
 
         debug_assert!(target.len() > 1);
 
         for points in target.windows(2) {
             debug_assert!(points[0].at.fuzzy_lt(points[1].at), "{:?}", dbg_each!(&points[0], &target, start, end));
         }
+
+        debug_assert!(!start.fuzzy_lt(target[0].at));
+        debug_assert!(start.fuzzy_lt(target[1].at));
+        debug_assert!(target[target.len() - 2].at.fuzzy_lt(end));
+        debug_assert!(!target[target.len() - 1].at.fuzzy_lt(end));
     }
 
     pub(super) fn append_partials(first: &mut Vec<TTFPoint>, second: &mut Vec<TTFPoint>, switchover: Timestamp) {
         debug_assert!(second.len() > 1);
-        if let Some(&TTFPoint { at, .. }) = first.last() { debug_assert!(!at.fuzzy_lt(switchover)); }
         if let Some(&TTFPoint { at, .. }) = first.split_last().map(|(_, rest)| rest.last()).unwrap_or(None) { debug_assert!(at.fuzzy_lt(switchover)); }
+        if let Some(&TTFPoint { at, .. }) = first.last() { debug_assert!(!at.fuzzy_lt(switchover)); }
         if let Some(&TTFPoint { at, .. }) = second.first() { debug_assert!(!switchover.fuzzy_lt(at)); }
         if let Some(&TTFPoint { at, .. }) = second.split_first().map(|(_, rest)| rest.first()).unwrap_or(None) { debug_assert!(switchover.fuzzy_lt(at)); }
 
@@ -121,7 +119,8 @@ impl<'a> PiecewiseLinearFunction<'a> {
         if second[0].at.fuzzy_eq(switchover) {
             debug_assert!(switchover_val.fuzzy_eq(second[0].val));
         } else {
-            debug_assert!(switchover_val.fuzzy_eq(interpolate_linear(&second[0], &second[1], switchover)));
+            let second_switchover_val = interpolate_linear(&second[0], &second[1], switchover);
+            debug_assert!(switchover_val.fuzzy_eq(second_switchover_val), "{:?}", dbg_each!(first.last(), first_last, second_switchover_val, &second[..=1], switchover));
         }
 
         first.push(TTFPoint { at: switchover, val: switchover_val });
@@ -211,9 +210,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     pub(super) fn link_partials(first: Vec<TTFPoint>, second: Vec<TTFPoint>, start: Timestamp, end: Timestamp) -> Vec<TTFPoint> {
-        debug_assert!((first[0].at + first[0].val).fuzzy_eq(second[0].at), "first: {:?}\n second: {:?}", first, second);
-        debug_assert!((first.last().unwrap().at + first.last().unwrap().val).fuzzy_eq(second.last().unwrap().at));
-
         let mut result = Vec::with_capacity(first.len() + second.len() + 1);
 
         let mut f = PartialPlfCursor::new(&first);
@@ -267,6 +263,10 @@ impl<'a> PiecewiseLinearFunction<'a> {
         for points in result.windows(2) {
             debug_assert!(points[0].at.fuzzy_lt(points[1].at));
         }
+        debug_assert!(!start.fuzzy_lt(result[0].at));
+        debug_assert!(start.fuzzy_lt(result[1].at));
+        debug_assert!(result[result.len() - 2].at.fuzzy_lt(end));
+        debug_assert!(!result[result.len() - 1].at.fuzzy_lt(end));
 
         result
     }
@@ -274,10 +274,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
     pub fn merge_partials(first: &[TTFPoint], second: &[TTFPoint], start: Timestamp, end: Timestamp) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
         debug_assert!(start >= Timestamp::zero());
         debug_assert!(end <= period());
-        debug_assert!(first.first().unwrap().at.fuzzy_eq(start));
-        debug_assert!(second.first().unwrap().at.fuzzy_eq(start));
-        debug_assert!(first.last().unwrap().at.fuzzy_eq(end));
-        debug_assert!(second.last().unwrap().at.fuzzy_eq(end));
 
         PiecewiseLinearFunction { ipps: first }.merge_in_bounds::<PartialPlfCursor>(&PiecewiseLinearFunction { ipps: second }, start, end)
     }
@@ -300,11 +296,28 @@ impl<'a> PiecewiseLinearFunction<'a> {
         let mut f = C::new(&self.ipps);
         let mut g = C::new(&other.ipps);
 
-        if f.cur().val.fuzzy_eq(g.cur().val) {
+        let self_start_val = if f.cur().at.fuzzy_eq(start) {
+            f.cur().val
+        } else {
+            debug_assert!(f.cur().at.fuzzy_lt(start));
+            interpolate_linear(&f.cur(), &f.next(), start)
+        };
+
+        let other_start_val = if g.cur().at.fuzzy_eq(start) {
+            g.cur().val
+        } else {
+            debug_assert!(g.cur().at.fuzzy_lt(start));
+            interpolate_linear(&g.cur(), &g.next(), start)
+        };
+
+        if self_start_val.fuzzy_eq(other_start_val) {
             better.push((start, !clockwise(&f.cur(), &f.next(), &g.next())));
         } else {
-            better.push((start, f.cur().val < g.cur().val));
+            better.push((start, self_start_val < other_start_val));
         }
+
+        f.advance();
+        g.advance();
 
         let mut needs_merging = false;
         while !end.fuzzy_lt(f.prev().at) || !end.fuzzy_lt(g.prev().at) {
@@ -345,11 +358,15 @@ impl<'a> PiecewiseLinearFunction<'a> {
         let mut f = C::new(&self.ipps);
         let mut g = C::new(&other.ipps);
 
+        Self::append_point(&mut result, if better.last().unwrap().1 { f.cur() } else { g.cur() }.clone());
+        f.advance();
+        g.advance();
+
         while f.cur().at < end || g.cur().at < end {
 
             if intersect(&f.prev(), &f.cur(), &g.prev(), &g.cur()) {
                 let intersection = intersection_point(&f.prev(), &f.cur(), &g.prev(), &g.cur());
-                if intersection.at >= start {
+                if start.fuzzy_lt(intersection.at) && intersection.at.fuzzy_lt(end) {
                     debug_assert_ne!(better.last().unwrap().1, counter_clockwise(&g.prev(), &f.cur(), &g.cur()), "{:?}", debug_merge(&f, &g, &result, &better));
                     better.push((intersection.at, counter_clockwise(&g.prev(), &f.cur(), &g.cur())));
                     Self::append_point(&mut result, intersection);
@@ -405,7 +422,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
             } else if f.cur().at < g.cur().at {
 
-                debug_assert!(!result.is_empty());
                 debug_assert!(f.cur().at.fuzzy_lt(g.cur().at), "f {:?} g {:?}", f.cur().at, g.cur().at);
 
                 if counter_clockwise(&g.prev(), &f.cur(), &g.cur()) {
@@ -437,7 +453,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
             } else {
 
-                debug_assert!(!result.is_empty());
                 debug_assert!(g.cur().at < f.cur().at);
 
                 if counter_clockwise(&f.prev(), &g.cur(), &f.cur()) {
@@ -469,12 +484,12 @@ impl<'a> PiecewiseLinearFunction<'a> {
             }
         };
 
-        debug_assert_eq!(f.cur().at, end, "{:?}", debug_merge(&f, &g, &result, &better));
-        debug_assert_eq!(g.cur().at, end, "{:?}", debug_merge(&f, &g, &result, &better));
+        debug_assert!(!f.cur().at.fuzzy_lt(end), "{:?}", debug_merge(&f, &g, &result, &better));
+        debug_assert!(!g.cur().at.fuzzy_lt(end), "{:?}", debug_merge(&f, &g, &result, &better));
 
         if intersect(&f.prev(), &f.cur(), &g.prev(), &g.cur()) {
             let intersection = intersection_point(&f.prev(), &f.cur(), &g.prev(), &g.cur());
-            if intersection.at < end {
+            if start.fuzzy_lt(intersection.at) && intersection.at.fuzzy_lt(end) {
                 debug_assert_ne!(better.last().unwrap().1, counter_clockwise(&g.prev(), &f.cur(), &g.cur()), "{:?}", debug_merge(&f, &g, &result, &better));
                 better.push((intersection.at, counter_clockwise(&g.prev(), &f.cur(), &g.cur())));
                 Self::append_point(&mut result, intersection);
@@ -486,12 +501,8 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 let p = TTFPoint { at: end, val: result[0].val };
                 Self::append_point(&mut result, p);
             }
-        } else {
-            if better.last().unwrap().1 {
-                Self::append_point(&mut result, f.cur().clone());
-            } else {
-                Self::append_point(&mut result, g.cur().clone());
-            }
+        } else if result.last().unwrap().at.fuzzy_lt(end) {
+            Self::append_point(&mut result, if better.last().unwrap().1 { f.cur() } else { g.cur() }.clone());
         }
 
         debug_assert!(result.len() <= 2 * self.ipps.len() + 2 * other.ipps.len() + 2);
@@ -499,9 +510,17 @@ impl<'a> PiecewiseLinearFunction<'a> {
             debug_assert!(better_fns[0].0 < better_fns[1].0, "{:?}", debug_merge(&f, &g, &result, &better));
             debug_assert_ne!(better_fns[0].1, better_fns[1].1, "{:?}", debug_merge(&f, &g, &result, &better));
         }
+        for &(at, _) in &better {
+            debug_assert!(!at.fuzzy_lt(start));
+            debug_assert!(!end.fuzzy_lt(at));
+        }
         if !f.cur().val.fuzzy_eq(g.cur().val) && start == Timestamp::zero() && end == period() {
             debug_assert_eq!(better.first().map(|(_, better_fn)| better_fn), better.last().map(|(_, better_fn)| better_fn), "{:?}", debug_merge(&f, &g, &result, &better));
         }
+        debug_assert!(!start.fuzzy_lt(result[0].at));
+        debug_assert!(start.fuzzy_lt(result[1].at));
+        debug_assert!(!result[result.len() - 1].at.fuzzy_lt(end));
+        debug_assert!(result[result.len() - 2].at.fuzzy_lt(end));
 
         (result.into_boxed_slice(), better)
     }
@@ -850,7 +869,7 @@ mod tests {
             PiecewiseLinearFunction::new(&ipps).copy_range(Timestamp::new(40.0), Timestamp::new(50.0), &mut result);
             assert_eq!(
                 result,
-                vec![TTFPoint { at: Timestamp::new(40.0), val: FlWeight::new(10.0) }, TTFPoint { at: Timestamp::new(50.0), val: FlWeight::new(10.0) }]);
+                vec![TTFPoint { at: Timestamp::zero(), val: FlWeight::new(10.0) }, TTFPoint { at: Timestamp::new(100.0), val: FlWeight::new(10.0) }]);
         });
     }
 }

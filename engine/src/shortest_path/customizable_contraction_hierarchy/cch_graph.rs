@@ -517,7 +517,7 @@ impl CCHGraph {
                     }
                 }
 
-                triangles.par_iter_mut().for_each(|(lower, _, _, shortcut)| {
+                triangles.par_iter_mut().for_each(|(lower, _edge_id, _up, shortcut)| {
                     shortcut.merge(*lower, &shortcut_graph);
                 });
 
