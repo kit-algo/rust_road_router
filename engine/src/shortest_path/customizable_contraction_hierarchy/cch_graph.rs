@@ -485,14 +485,16 @@ impl CCHGraph {
                     report!("at_s", now / 1000);
                     report!("current_rank", current_node);
                     report!("current_node_degree", self.degree(current_node));
-                    report!("num_ipps_stored", IPP_COUNT.load(Ordering::Relaxed));
-                    report!("num_shortcuts_active", ACTIVE_SHORTCUTS.load(Ordering::Relaxed));
-                    report!("num_ipps_reduced_by_approx", SAVED_BY_APPROX.load(Ordering::Relaxed));
-                    report!("num_ipps_considered_for_approx", CONSIDERED_FOR_APPROX.load(Ordering::Relaxed));
-                    report!("num_shortcut_merge_points", PATH_SOURCES_COUNT.load(Ordering::Relaxed));
-                    report!("num_performed_merges", ACTUALLY_MERGED.load(Ordering::Relaxed));
-                    report!("num_performed_links", ACTUALLY_LINKED.load(Ordering::Relaxed));
-                    report!("num_performed_unnecessary_links", UNNECESSARY_LINKED.load(Ordering::Relaxed));
+                    if cfg!(feature = "detailed-stats") {
+                        report!("num_ipps_stored", IPP_COUNT.load(Ordering::Relaxed));
+                        report!("num_shortcuts_active", ACTIVE_SHORTCUTS.load(Ordering::Relaxed));
+                        report!("num_ipps_reduced_by_approx", SAVED_BY_APPROX.load(Ordering::Relaxed));
+                        report!("num_ipps_considered_for_approx", CONSIDERED_FOR_APPROX.load(Ordering::Relaxed));
+                        report!("num_shortcut_merge_points", PATH_SOURCES_COUNT.load(Ordering::Relaxed));
+                        report!("num_performed_merges", ACTUALLY_MERGED.load(Ordering::Relaxed));
+                        report!("num_performed_links", ACTUALLY_LINKED.load(Ordering::Relaxed));
+                        report!("num_performed_unnecessary_links", UNNECESSARY_LINKED.load(Ordering::Relaxed));
+                    }
                     report!("num_processed_triangles", merge_count);
                 }
 
@@ -541,14 +543,16 @@ impl CCHGraph {
         });
         drop(subctxt);
 
-        report!("num_ipps_stored", IPP_COUNT.load(Ordering::Relaxed));
-        report!("num_shortcuts_active", ACTIVE_SHORTCUTS.load(Ordering::Relaxed));
-        report!("num_ipps_reduced_by_approx", SAVED_BY_APPROX.load(Ordering::Relaxed));
-        report!("num_ipps_considered_for_approx", CONSIDERED_FOR_APPROX.load(Ordering::Relaxed));
-        report!("num_shortcut_merge_points", PATH_SOURCES_COUNT.load(Ordering::Relaxed));
-        report!("num_performed_merges", ACTUALLY_MERGED.load(Ordering::Relaxed));
-        report!("num_performed_links", ACTUALLY_LINKED.load(Ordering::Relaxed));
-        report!("num_performed_unnecessary_links", UNNECESSARY_LINKED.load(Ordering::Relaxed));
+        if cfg!(feature = "detailed-stats") {
+            report!("num_ipps_stored", IPP_COUNT.load(Ordering::Relaxed));
+            report!("num_shortcuts_active", ACTIVE_SHORTCUTS.load(Ordering::Relaxed));
+            report!("num_ipps_reduced_by_approx", SAVED_BY_APPROX.load(Ordering::Relaxed));
+            report!("num_ipps_considered_for_approx", CONSIDERED_FOR_APPROX.load(Ordering::Relaxed));
+            report!("num_shortcut_merge_points", PATH_SOURCES_COUNT.load(Ordering::Relaxed));
+            report!("num_performed_merges", ACTUALLY_MERGED.load(Ordering::Relaxed));
+            report!("num_performed_links", ACTUALLY_LINKED.load(Ordering::Relaxed));
+            report!("num_performed_unnecessary_links", UNNECESSARY_LINKED.load(Ordering::Relaxed));
+        }
         report!("num_processed_triangles", merge_count);
 
         shortcut_graph

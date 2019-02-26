@@ -98,8 +98,8 @@ impl<'a> Server<'a> {
                 if self.forward.node_data(self.forward.peek_next().unwrap()).lower_bound > self.tentative_distance.1 || (cfg!(tdcch_stall_on_demand) && stall()) {
                     self.forward.skip_next();
                 } else if let QueryProgress::Progress(node) = self.forward.next_step() {
-                    nodes_in_elimination_tree_search_space += 1;
-                    relaxed_elimination_tree_arcs += self.customized_graph.outgoing.degree(node);
+                    if cfg!(feature = "detailed-stats") { nodes_in_elimination_tree_search_space += 1; }
+                    if cfg!(feature = "detailed-stats") { relaxed_elimination_tree_arcs += self.customized_graph.outgoing.degree(node); }
 
                     self.forward_tree_mask.unset_all_around(node as usize);
                     self.forward_tree_path.push(node);
@@ -122,8 +122,8 @@ impl<'a> Server<'a> {
                 if self.backward.node_data(self.backward.peek_next().unwrap()).lower_bound > self.tentative_distance.1 {
                     self.backward.skip_next();
                 } else if let QueryProgress::Progress(node) = self.backward.next_step() {
-                    nodes_in_elimination_tree_search_space += 1;
-                    relaxed_elimination_tree_arcs += self.customized_graph.incoming.degree(node);
+                    if cfg!(feature = "detailed-stats") { nodes_in_elimination_tree_search_space += 1; }
+                    if cfg!(feature = "detailed-stats") { relaxed_elimination_tree_arcs += self.customized_graph.incoming.degree(node); }
 
                     self.backward_tree_mask.unset_all_around(node as usize);
                     self.backward_tree_path.push(node);
@@ -141,9 +141,11 @@ impl<'a> Server<'a> {
             }
         }
 
-        report!("num_nodes_in_elimination_tree_search_space", nodes_in_elimination_tree_search_space);
-        report!("num_relaxed_elimination_tree_arcs", relaxed_elimination_tree_arcs);
-        report!("num_meeting_nodes", self.meeting_nodes.len());
+        if cfg!(feature = "detailed-stats") {
+            report!("num_nodes_in_elimination_tree_search_space", nodes_in_elimination_tree_search_space);
+            report!("num_relaxed_elimination_tree_arcs", relaxed_elimination_tree_arcs);
+            report!("num_meeting_nodes", self.meeting_nodes.len());
+        }
 
         #[cfg(feature = "tdcch-query-detailed-timing")]
         let elimination_tree_time = timer.get_passed();
@@ -182,7 +184,7 @@ impl<'a> Server<'a> {
             debug_assert!(customized_graph.outgoing.bounds()[shortcut_id as usize].0 < FlWeight::INFINITY);
             debug_assert!(customized_graph.outgoing.bounds()[shortcut_id as usize].1 < FlWeight::INFINITY);
             if !pruning_bound.fuzzy_lt(t_cur + customized_graph.outgoing.bounds()[shortcut_id as usize].0) {
-                relaxed_shortcut_arcs += 1;
+                if cfg!(feature = "detailed-stats") { relaxed_shortcut_arcs += 1; }
 
                 let mut parent = tail;
                 let mut parent_shortcut_id = shortcut_id;
@@ -203,7 +205,7 @@ impl<'a> Server<'a> {
                             if distances[head as usize].fuzzy_lt(t + customized_graph.outgoing.bounds()[shortcut_id as usize].0) {
                                 false
                             } else {
-                                relaxed_shortcut_arcs += 1;
+                                if cfg!(feature = "detailed-stats") { relaxed_shortcut_arcs += 1; }
                                 true
                             }
                         } else {
@@ -227,7 +229,7 @@ impl<'a> Server<'a> {
                             if distances[tail as usize].fuzzy_lt(t + customized_graph.incoming.bounds()[shortcut_id as usize].0) {
                                 false
                             } else {
-                                relaxed_shortcut_arcs += 1;
+                                if cfg!(feature = "detailed-stats") { relaxed_shortcut_arcs += 1; }
                                 true
                             }
                         } else {
@@ -261,7 +263,7 @@ impl<'a> Server<'a> {
                     let t_cur = distances[tail as usize];
                     let pruning_bound = min(tentative_latest_arrival, distances[head as usize]);
                     if !pruning_bound.fuzzy_lt(t_cur + customized_graph.incoming.bounds()[label.shortcut_id as usize].0) {
-                        relaxed_shortcut_arcs += 1;
+                        if cfg!(feature = "detailed-stats") { relaxed_shortcut_arcs += 1; }
 
                         let mut parent = tail;
                         let mut parent_shortcut_id = label.shortcut_id;
@@ -282,7 +284,7 @@ impl<'a> Server<'a> {
                                     if distances[head as usize].fuzzy_lt(t + customized_graph.outgoing.bounds()[shortcut_id as usize].0) {
                                         false
                                     } else {
-                                        relaxed_shortcut_arcs += 1;
+                                        if cfg!(feature = "detailed-stats") { relaxed_shortcut_arcs += 1; }
                                         true
                                     }
                                 } else {
@@ -306,7 +308,7 @@ impl<'a> Server<'a> {
                                     if distances[tail as usize].fuzzy_lt(t + customized_graph.incoming.bounds()[shortcut_id as usize].0) {
                                         false
                                     } else {
-                                        relaxed_shortcut_arcs += 1;
+                                        if cfg!(feature = "detailed-stats") { relaxed_shortcut_arcs += 1; }
                                         true
                                     }
                                 } else {
@@ -327,7 +329,7 @@ impl<'a> Server<'a> {
             }
         }
 
-        report!("num_relaxed_shortcut_arcs", relaxed_shortcut_arcs);
+        if cfg!(feature = "detailed-stats") { report!("num_relaxed_shortcut_arcs", relaxed_shortcut_arcs); }
 
         #[cfg(feature = "tdcch-query-detailed-timing")]
         let backward_relax_time = timer.get_passed();

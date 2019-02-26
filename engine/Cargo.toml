@@ -13,6 +13,7 @@ tdcch-optimized-bound-merging = []
 tdcch-approx = []
 tdcch-approx-imai-iri = ["tdcch-approx"]
 report-to-stderr = []
+detailed-stats = []
 
 [dependencies]
 time = "^0.1.40"

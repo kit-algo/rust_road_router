@@ -435,7 +435,7 @@ impl Shortcut {
     pub fn new(source: Option<EdgeId>, original_graph: &TDGraph) -> Self {
         match source {
             Some(edge_id) => {
-                PATH_SOURCES_COUNT.fetch_add(1, Relaxed);
+                if cfg!(feature = "detailed-stats") { PATH_SOURCES_COUNT.fetch_add(1, Relaxed); }
                 Shortcut {
                     sources: Sources::One(ShortcutSource::OriginalEdge(edge_id).into()),
                     cache: None,
@@ -452,9 +452,11 @@ impl Shortcut {
     pub fn merge(&mut self, linked_ids: (EdgeId, EdgeId), shortcut_graph: &ShortcutGraph) {
         if !self.required { return }
 
-        IPP_COUNT.fetch_sub(self.cache.as_ref().map(TTFCache::num_points).unwrap_or(0), Relaxed);
-        PATH_SOURCES_COUNT.fetch_sub(self.sources.len(), Relaxed);
-        if self.cache.is_some() { ACTIVE_SHORTCUTS.fetch_sub(1, Relaxed); }
+        if cfg!(feature = "detailed-stats") {
+            IPP_COUNT.fetch_sub(self.cache.as_ref().map(TTFCache::num_points).unwrap_or(0), Relaxed);
+            PATH_SOURCES_COUNT.fetch_sub(self.sources.len(), Relaxed);
+            if self.cache.is_some() { ACTIVE_SHORTCUTS.fetch_sub(1, Relaxed); }
+        }
 
         #[allow(clippy::redundant_closure_call)]
         (|| {
@@ -475,7 +477,7 @@ impl Shortcut {
             let second_plf = second.plf(shortcut_graph);
 
             if !self.is_valid_path() {
-                ACTUALLY_LINKED.fetch_add(1, Relaxed);
+                if cfg!(feature = "detailed-stats") { ACTUALLY_LINKED.fetch_add(1, Relaxed); }
                 let linked = first_plf.link(&second_plf);
 
                 self.upper_bound = min(self.upper_bound, TTF::from(&linked).static_upper_bound());
@@ -488,7 +490,7 @@ impl Shortcut {
             let self_plf = self.plf(shortcut_graph);
 
             let mut linked_ipps = first_plf.link(&second_plf);
-            ACTUALLY_LINKED.fetch_add(1, Relaxed);
+            if cfg!(feature = "detailed-stats") { ACTUALLY_LINKED.fetch_add(1, Relaxed); }
 
             let linked = TTF::from(&linked_ipps);
             let other_lower_bound = linked.static_lower_bound();
@@ -499,19 +501,19 @@ impl Shortcut {
                 debug_assert!(!self.upper_bound.fuzzy_lt(self.lower_bound), "lower {:?} upper {:?}", self.lower_bound, self.upper_bound);
                 if cfg!(feature = "tdcch-approx") && linked_ipps.num_points() > 250 {
                     let old = linked_ipps.num_points();
-                    CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed);
+                    if cfg!(feature = "detailed-stats") { CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed); }
                     linked_ipps = linked.approximate();
-                    SAVED_BY_APPROX.fetch_add(old as isize - linked_ipps.num_points() as isize, Relaxed);
+                    if cfg!(feature = "detailed-stats") { SAVED_BY_APPROX.fetch_add(old as isize - linked_ipps.num_points() as isize, Relaxed); }
                 }
                 self.cache = Some(linked_ipps);
                 self.sources = Sources::One(other_data);
-                UNNECESSARY_LINKED.fetch_add(1, Relaxed);
+                if cfg!(feature = "detailed-stats") { UNNECESSARY_LINKED.fetch_add(1, Relaxed); }
                 return;
             } else if self.upper_bound.fuzzy_lt(other_lower_bound) {
                 return;
             }
 
-            ACTUALLY_MERGED.fetch_add(1, Relaxed);
+            if cfg!(feature = "detailed-stats") { ACTUALLY_MERGED.fetch_add(1, Relaxed); }
             let merged = self_plf.merge(&linked, |start, end| {
                 let self_ipps = self.exact_ttf_for(start, end, shortcut_graph);
                 let other_ipps = ShortcutSource::from(other_data).exact_ttf_for(start, end, shortcut_graph);
@@ -524,9 +526,9 @@ impl Shortcut {
                     debug_assert!(!self.upper_bound.fuzzy_lt(self.lower_bound), "lower {:?} upper {:?}", self.lower_bound, self.upper_bound);
                     if cfg!(feature = "tdcch-approx") && linked_ipps.num_points() > 250 {
                         let old = linked_ipps.num_points();
-                        CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed);
+                        if cfg!(feature = "detailed-stats") { CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed); }
                         linked_ipps = linked.approximate();
-                        SAVED_BY_APPROX.fetch_add(old as isize - linked_ipps.num_points() as isize, Relaxed);
+                        if cfg!(feature = "detailed-stats") { SAVED_BY_APPROX.fetch_add(old as isize - linked_ipps.num_points() as isize, Relaxed); }
                     }
                     self.cache = Some(linked_ipps);
                     self.sources = Sources::One(other_data);
@@ -535,9 +537,9 @@ impl Shortcut {
                 MergeResult::Merged((mut merged, intersection_data)) => {
                     if cfg!(feature = "tdcch-approx") && merged.num_points() > 250 {
                         let old = merged.num_points();
-                        CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed);
+                        if cfg!(feature = "detailed-stats") { CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed); }
                         merged = TTF::from(&merged).approximate();
-                        SAVED_BY_APPROX.fetch_add(old as isize - merged.num_points() as isize, Relaxed);
+                        if cfg!(feature = "detailed-stats") { SAVED_BY_APPROX.fetch_add(old as isize - merged.num_points() as isize, Relaxed); }
                     }
 
                     self.upper_bound = min(self.upper_bound, TTF::from(&merged).static_upper_bound());
@@ -551,9 +553,11 @@ impl Shortcut {
 
         }) ();
 
-        IPP_COUNT.fetch_add(self.cache.as_ref().map(TTFCache::num_points).unwrap_or(0), Relaxed);
-        PATH_SOURCES_COUNT.fetch_add(self.sources.len(), Relaxed);
-        if self.cache.is_some() { ACTIVE_SHORTCUTS.fetch_add(1, Relaxed); }
+        if cfg!(feature = "detailed-stats") {
+            IPP_COUNT.fetch_add(self.cache.as_ref().map(TTFCache::num_points).unwrap_or(0), Relaxed);
+            PATH_SOURCES_COUNT.fetch_add(self.sources.len(), Relaxed);
+            if self.cache.is_some() { ACTIVE_SHORTCUTS.fetch_add(1, Relaxed); }
+        }
     }
 
     fn plf<'s>(&'s self, shortcut_graph: &'s ShortcutGraph) -> TTF<'s> {
@@ -613,8 +617,10 @@ impl Shortcut {
     }
 
     pub fn clear_plf(&mut self) {
-        IPP_COUNT.fetch_sub(self.cache.as_ref().map(TTFCache::num_points).unwrap_or(0), Relaxed);
-        if self.cache.is_some() { ACTIVE_SHORTCUTS.fetch_sub(1, Relaxed); }
+        if cfg!(feature = "detailed-stats") {
+            IPP_COUNT.fetch_sub(self.cache.as_ref().map(TTFCache::num_points).unwrap_or(0), Relaxed);
+            if self.cache.is_some() { ACTIVE_SHORTCUTS.fetch_sub(1, Relaxed); }
+        }
         self.cache = None;
     }
 
