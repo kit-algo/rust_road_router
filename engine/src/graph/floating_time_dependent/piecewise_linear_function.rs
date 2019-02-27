@@ -97,6 +97,51 @@ impl<'a> PiecewiseLinearFunction<'a> {
         debug_assert!(!target[target.len() - 1].at.fuzzy_lt(end));
     }
 
+    pub(super) fn copy_append_to_partial(&self, start: Timestamp, end: Timestamp, target: &mut Vec<TTFPoint>) {
+        debug_assert!(start.fuzzy_lt(end), "{:?} - {:?}", start, end);
+
+        let mut f = Cursor::starting_at_or_after(&self.ipps, start);
+
+        if target.is_empty() {
+            debug_assert_eq!(start, Timestamp::zero());
+            debug_assert_eq!(f.cur().at, Timestamp::zero());
+
+            if start.fuzzy_lt(f.cur().at) {
+                target.push(f.prev());
+            }
+        } else {
+            let target_last = target.pop().unwrap();
+
+            let switchover_val = if target_last.at.fuzzy_eq(start) {
+                target_last.val
+            } else {
+                interpolate_linear(&target[target.len() - 1], &target_last, start)
+            };
+
+            if f.cur().at.fuzzy_eq(start) {
+                debug_assert!(switchover_val.fuzzy_eq(f.cur().val), "{:?}", dbg_each!(switchover_val, f.cur()));
+            } else {
+                let second_switchover_val = interpolate_linear(&f.prev(), &f.cur(), start);
+                debug_assert!(switchover_val.fuzzy_eq(second_switchover_val), "{:?}", dbg_each!(switchover_val, second_switchover_val, start));
+
+                target.push(TTFPoint { at: start, val: switchover_val });
+                f.advance();
+            }
+        }
+
+
+        while f.cur().at.fuzzy_lt(end) {
+            target.push(f.cur());
+            f.advance();
+        }
+
+        target.push(f.cur());
+
+        for points in target.windows(2) {
+            debug_assert!(points[0].at.fuzzy_lt(points[1].at));
+        }
+    }
+
     pub(super) fn append_partials(first: &mut Vec<TTFPoint>, second: &mut Vec<TTFPoint>, switchover: Timestamp) {
         debug_assert!(second.len() > 1);
         if let Some(&TTFPoint { at, .. }) = first.split_last().map(|(_, rest)| rest.last()).unwrap_or(None) { debug_assert!(at.fuzzy_lt(switchover)); }

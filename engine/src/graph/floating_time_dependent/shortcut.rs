@@ -122,10 +122,8 @@ impl<'a> TTF<'a> {
                     dominating = false;
 
                     if cfg!(feature = "tdcch-optimized-bound-merging)") {
-                        result_lower.pop();
-                        self_lower.copy_range(start_of_segment, next_t_self, &mut result_lower);
-                        result_upper.pop();
-                        self_upper.copy_range(start_of_segment, next_t_self, &mut result_upper);
+                        self_lower.copy_append_to_partial(start_of_segment, next_t_self, &mut result_lower);
+                        self_upper.copy_append_to_partial(start_of_segment, next_t_self, &mut result_upper);
                     }
 
                     start_of_segment = next_t_self;
@@ -136,10 +134,8 @@ impl<'a> TTF<'a> {
                     dominating = false;
 
                     if cfg!(feature = "tdcch-optimized-bound-merging)") {
-                        result_lower.pop();
-                        other_lower.copy_range(start_of_segment, next_t_other, &mut result_lower);
-                        result_upper.pop();
-                        other_upper.copy_range(start_of_segment, next_t_other, &mut result_upper);
+                        other_lower.copy_append_to_partial(start_of_segment, next_t_other, &mut result_lower);
+                        other_upper.copy_append_to_partial(start_of_segment, next_t_other, &mut result_upper);
                     }
 
                     start_of_segment = next_t_other;
@@ -149,14 +145,12 @@ impl<'a> TTF<'a> {
                     result.push((next_t_self, self_dominating_iter.peek().unwrap().1));
 
                     if cfg!(feature = "tdcch-optimized-bound-merging)") {
-                        result_lower.pop();
-                        result_upper.pop();
                         if self_dominating_iter.peek().unwrap().1 {
-                            other_lower.copy_range(start_of_segment, next_t_self, &mut result_lower);
-                            other_upper.copy_range(start_of_segment, next_t_self, &mut result_upper);
+                            other_lower.copy_append_to_partial(start_of_segment, next_t_self, &mut result_lower);
+                            other_upper.copy_append_to_partial(start_of_segment, next_t_self, &mut result_upper);
                         } else {
-                            self_lower.copy_range(start_of_segment, next_t_self, &mut result_lower);
-                            self_upper.copy_range(start_of_segment, next_t_self, &mut result_upper);
+                            self_lower.copy_append_to_partial(start_of_segment, next_t_self, &mut result_lower);
+                            self_upper.copy_append_to_partial(start_of_segment, next_t_self, &mut result_upper);
                         }
                     }
 
@@ -191,16 +185,14 @@ impl<'a> TTF<'a> {
                         other_buffer.clear();
                         other_lower.copy_range(start_of_segment, next_t_self, &mut other_buffer);
                         let (partial_lower, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_self);
-                        result_lower.pop();
-                        result_lower.append(&mut partial_lower.into_vec());
+                        PiecewiseLinearFunction::append_partials(&mut result_lower, &mut partial_lower.into_vec(), start_of_segment);
 
                         self_buffer.clear();
                         self_upper.copy_range(start_of_segment, next_t_self, &mut self_buffer);
                         other_buffer.clear();
                         other_upper.copy_range(start_of_segment, next_t_self, &mut other_buffer);
                         let (partial_upper, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_self);
-                        result_upper.pop();
-                        result_upper.append(&mut partial_upper.into_vec());
+                        PiecewiseLinearFunction::append_partials(&mut result_upper, &mut partial_upper.into_vec(), start_of_segment);
                     }
 
                     start_of_segment = next_t_self;
@@ -232,16 +224,14 @@ impl<'a> TTF<'a> {
                         other_buffer.clear();
                         other_lower.copy_range(start_of_segment, next_t_other, &mut other_buffer);
                         let (partial_lower, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_other);
-                        result_lower.pop();
-                        result_lower.append(&mut partial_lower.into_vec());
+                        PiecewiseLinearFunction::append_partials(&mut result_lower, &mut partial_lower.into_vec(), start_of_segment);
 
                         self_buffer.clear();
                         self_upper.copy_range(start_of_segment, next_t_other, &mut self_buffer);
                         other_buffer.clear();
                         other_upper.copy_range(start_of_segment, next_t_other, &mut other_buffer);
                         let (partial_upper, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_other);
-                        result_upper.pop();
-                        result_upper.append(&mut partial_upper.into_vec());
+                        PiecewiseLinearFunction::append_partials(&mut result_upper, &mut partial_upper.into_vec(), start_of_segment);
                     }
 
                     start_of_segment = next_t_other;
@@ -269,27 +259,23 @@ impl<'a> TTF<'a> {
                 other_buffer.clear();
                 other_lower.copy_range(start_of_segment, period(), &mut other_buffer);
                 let (partial_lower, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, period());
-                result_lower.pop();
-                result_lower.append(&mut partial_lower.into_vec());
+                PiecewiseLinearFunction::append_partials(&mut result_lower, &mut partial_lower.into_vec(), start_of_segment);
 
                 self_buffer.clear();
                 self_upper.copy_range(start_of_segment, period(), &mut self_buffer);
                 other_buffer.clear();
                 other_upper.copy_range(start_of_segment, period(), &mut other_buffer);
                 let (partial_upper, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, period());
-                result_upper.pop();
-                result_upper.append(&mut partial_upper.into_vec());
+                PiecewiseLinearFunction::append_partials(&mut result_upper, &mut partial_upper.into_vec(), start_of_segment);
             }
         } else {
             if cfg!(feature = "tdcch-optimized-bound-merging)") {
-                result_lower.pop();
-                result_upper.pop();
                 if result.last().unwrap().1 {
-                    self_lower.copy_range(start_of_segment, period(), &mut result_lower);
-                    self_upper.copy_range(start_of_segment, period(), &mut result_upper);
+                    self_lower.copy_append_to_partial(start_of_segment, period(), &mut result_lower);
+                    self_upper.copy_append_to_partial(start_of_segment, period(), &mut result_upper);
                 } else {
-                    other_lower.copy_range(start_of_segment, period(), &mut result_lower);
-                    other_upper.copy_range(start_of_segment, period(), &mut result_upper);
+                    other_lower.copy_append_to_partial(start_of_segment, period(), &mut result_lower);
+                    other_upper.copy_append_to_partial(start_of_segment, period(), &mut result_upper);
                 }
             }
         }
