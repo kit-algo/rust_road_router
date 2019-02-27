@@ -117,7 +117,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         };
 
         if second[0].at.fuzzy_eq(switchover) {
-            debug_assert!(switchover_val.fuzzy_eq(second[0].val));
+            debug_assert!(switchover_val.fuzzy_eq(second[0].val), "{:?}", dbg_each!(switchover_val, second[0].val));
         } else {
             let second_switchover_val = interpolate_linear(&second[0], &second[1], switchover);
             debug_assert!(switchover_val.fuzzy_eq(second_switchover_val), "{:?}", dbg_each!(first.last(), first_last, second_switchover_val, &second[..=1], switchover));

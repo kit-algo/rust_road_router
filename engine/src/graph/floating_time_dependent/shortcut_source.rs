@@ -50,8 +50,8 @@ impl ShortcutSource {
         match *self {
             ShortcutSource::Shortcut(down, up) => {
                 let first = shortcut_graph.get_incoming(down).exact_ttf_for(start, end, shortcut_graph);
-                let second_start = first.first().unwrap().at + first.first().unwrap().val;
-                let second_end = first.last().unwrap().at + first.last().unwrap().val;
+                let second_start = start + interpolate_linear(&first[0], &first[1], start);
+                let second_end = end + interpolate_linear(&first[first.len() - 2], &first[first.len() - 1], end);
                 let second = shortcut_graph.get_outgoing(up).exact_ttf_for(second_start, second_end, shortcut_graph);
                 PiecewiseLinearFunction::link_partials(first, second, start, end)
             }
