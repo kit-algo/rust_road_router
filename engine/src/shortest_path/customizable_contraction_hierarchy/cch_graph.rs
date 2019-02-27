@@ -477,25 +477,27 @@ impl CCHGraph {
                 #[cfg(debug_assertions)]
                 let mut crash_rank_logger = RankLogger { rank: Some(current_node) };
 
-                let now = timer.get_passed_ms();
-                if current_node > 0 && now - prev_event > 1000 {
-                    prev_event = now;
-                    let _event = events_ctxt.push_collection_item();
+                if self.degree(current_node) > 100 || current_node % 1000 == 0 {
+                    let now = timer.get_passed_ms();
+                    if current_node > 0 && now - prev_event > 1000 {
+                        prev_event = now;
+                        let _event = events_ctxt.push_collection_item();
 
-                    report!("at_s", now / 1000);
-                    report!("current_rank", current_node);
-                    report!("current_node_degree", self.degree(current_node));
-                    if cfg!(feature = "detailed-stats") {
-                        report!("num_ipps_stored", IPP_COUNT.load(Ordering::Relaxed));
-                        report!("num_shortcuts_active", ACTIVE_SHORTCUTS.load(Ordering::Relaxed));
-                        report!("num_ipps_reduced_by_approx", SAVED_BY_APPROX.load(Ordering::Relaxed));
-                        report!("num_ipps_considered_for_approx", CONSIDERED_FOR_APPROX.load(Ordering::Relaxed));
-                        report!("num_shortcut_merge_points", PATH_SOURCES_COUNT.load(Ordering::Relaxed));
-                        report!("num_performed_merges", ACTUALLY_MERGED.load(Ordering::Relaxed));
-                        report!("num_performed_links", ACTUALLY_LINKED.load(Ordering::Relaxed));
-                        report!("num_performed_unnecessary_links", UNNECESSARY_LINKED.load(Ordering::Relaxed));
+                        report!("at_s", now / 1000);
+                        report!("current_rank", current_node);
+                        report!("current_node_degree", self.degree(current_node));
+                        if cfg!(feature = "detailed-stats") {
+                            report!("num_ipps_stored", IPP_COUNT.load(Ordering::Relaxed));
+                            report!("num_shortcuts_active", ACTIVE_SHORTCUTS.load(Ordering::Relaxed));
+                            report!("num_ipps_reduced_by_approx", SAVED_BY_APPROX.load(Ordering::Relaxed));
+                            report!("num_ipps_considered_for_approx", CONSIDERED_FOR_APPROX.load(Ordering::Relaxed));
+                            report!("num_shortcut_merge_points", PATH_SOURCES_COUNT.load(Ordering::Relaxed));
+                            report!("num_performed_merges", ACTUALLY_MERGED.load(Ordering::Relaxed));
+                            report!("num_performed_links", ACTUALLY_LINKED.load(Ordering::Relaxed));
+                            report!("num_performed_unnecessary_links", UNNECESSARY_LINKED.load(Ordering::Relaxed));
+                        }
+                        report!("num_processed_triangles", merge_count);
                     }
-                    report!("num_processed_triangles", merge_count);
                 }
 
                 for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
