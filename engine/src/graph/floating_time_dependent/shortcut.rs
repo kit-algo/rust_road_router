@@ -34,9 +34,6 @@ impl<'a> From<&'a TTFCache> for TTF<'a> {
     }
 }
 
-static ALWAYS_FIRST_INTERSECTIONS: [(Timestamp, bool); 1] = [(Timestamp::zero(), true)];
-static ALWAYS_SECOND_INTERSECTIONS: [(Timestamp, bool); 1] = [(Timestamp::zero(), false)];
-
 impl<'a> TTF<'a> {
     fn static_lower_bound(&self) -> FlWeight {
         use TTF::*;
@@ -74,11 +71,12 @@ impl<'a> TTF<'a> {
 
     #[allow(clippy::collapsible_if)]
     #[allow(clippy::cyclomatic_complexity)]
-    fn merge(&self, other: &TTF, merge_exact: impl Fn(Timestamp, Timestamp) -> MergeResult<OnlyIntersectionMergeData>) -> MergeResult<(TTFCache, Vec<(Timestamp, bool)>)> {
+    fn merge(&self, other: &TTF, merge_exact: impl Fn(Timestamp, Timestamp) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>)) -> (TTFCache, Vec<(Timestamp, bool)>) {
         use TTF::*;
 
         if let (Exact(self_plf), Exact(other)) = (self, other) {
-            return self_plf.merge(other, init_all_merged_data).map(AllMergedData::into_owned).map(|(plf, intersections)| (TTFCache::Exact(plf), intersections));
+            let (plf, intersections) = self_plf.merge(other);
+            return (TTFCache::Exact(plf), intersections);
         }
 
         let (self_lower, self_upper) = self.bound_plfs();
@@ -89,18 +87,8 @@ impl<'a> TTF<'a> {
         let mut result_lower = if cfg!(feature = "tdcch-optimized-bound-merging)") { Vec::with_capacity(2 * self_lower.len() + 2 * other_lower.len() + 2) } else { Vec::new() };
         let mut result_upper = if cfg!(feature = "tdcch-optimized-bound-merging)") { Vec::with_capacity(2 * self_upper.len() + 2 * other_upper.len() + 2) } else { Vec::new() };
 
-        let self_dominating_intersections = self_upper.merge(&other_lower, init_intersection_merged_data);
-        let self_dominating_intersections = match &self_dominating_intersections {
-            MergeResult::AlwaysFirst => &ALWAYS_FIRST_INTERSECTIONS,
-            MergeResult::AlwaysSecond => &ALWAYS_SECOND_INTERSECTIONS,
-            MergeResult::Merged(data) => data.better().unwrap(),
-        };
-        let other_dominating_intersections = other_upper.merge(&self_lower, init_intersection_merged_data);
-        let other_dominating_intersections = match &other_dominating_intersections {
-            MergeResult::AlwaysFirst => &ALWAYS_FIRST_INTERSECTIONS,
-            MergeResult::AlwaysSecond => &ALWAYS_SECOND_INTERSECTIONS,
-            MergeResult::Merged(data) => data.better().unwrap(),
-        };
+        let (_, self_dominating_intersections) = self_upper.merge(&other_lower);
+        let (_, other_dominating_intersections) = other_upper.merge(&self_lower);
 
         let mut dominating = false;
         let mut start_of_segment = Timestamp::zero();
@@ -179,26 +167,13 @@ impl<'a> TTF<'a> {
             } else {
                 if next_t_self.fuzzy_lt(next_t_other) {
 
-                    match merge_exact(start_of_segment, next_t_self) {
-                        MergeResult::AlwaysFirst => {
-                            if result.last().map(|(_, self_better)| !*self_better).unwrap_or(true) {
-                                result.push((start_of_segment, true));
-                            }
-                        },
-                        MergeResult::AlwaysSecond => {
-                            if result.last().map(|(_, self_better)| *self_better).unwrap_or(true) {
-                                result.push((start_of_segment, false));
-                            }
-                        },
-                        MergeResult::Merged(data) => {
-                            let mut iter = data.better().unwrap().iter().cloned();
-                            let first_intersection = iter.next().unwrap();
-                            if result.last().map(|(_, self_better)| *self_better != first_intersection.1).unwrap_or(true) {
-                                result.push(first_intersection);
-                            }
-                            result.extend(iter);
-                        },
-                    };
+                    let (_, intersections) = merge_exact(start_of_segment, next_t_self);
+                    let mut iter = intersections.into_iter();
+                    let first_intersection = iter.next().unwrap();
+                    if result.last().map(|(_, self_better)| *self_better != first_intersection.1).unwrap_or(true) {
+                        result.push(first_intersection);
+                    }
+                    result.extend(iter);
 
                     if self_dominating_iter.peek().unwrap().1 {
                         if !result.last().unwrap().1 {
@@ -215,23 +190,17 @@ impl<'a> TTF<'a> {
                         self_lower.copy_range(start_of_segment, next_t_self, &mut self_buffer);
                         other_buffer.clear();
                         other_lower.copy_range(start_of_segment, next_t_self, &mut other_buffer);
+                        let (partial_lower, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_self);
                         result_lower.pop();
-                        match PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_self, |_| AppendMergedIpps { last_better: false, ipps: &mut result_lower }) {
-                            MergeResult::AlwaysFirst => result_lower.append(&mut self_buffer),
-                            MergeResult::AlwaysSecond => result_lower.append(&mut other_buffer),
-                            _ => {},
-                        };
+                        result_lower.append(&mut partial_lower.into_vec());
 
                         self_buffer.clear();
                         self_upper.copy_range(start_of_segment, next_t_self, &mut self_buffer);
                         other_buffer.clear();
                         other_upper.copy_range(start_of_segment, next_t_self, &mut other_buffer);
+                        let (partial_upper, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_self);
                         result_upper.pop();
-                        match PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_self, |_| AppendMergedIpps { last_better: false, ipps: &mut result_upper }) {
-                            MergeResult::AlwaysFirst => result_upper.append(&mut self_buffer),
-                            MergeResult::AlwaysSecond => result_upper.append(&mut other_buffer),
-                            _ => {},
-                        };
+                        result_upper.append(&mut partial_upper.into_vec());
                     }
 
                     start_of_segment = next_t_self;
@@ -239,26 +208,13 @@ impl<'a> TTF<'a> {
                     self_dominating_iter.next();
                 } else if next_t_other.fuzzy_lt(next_t_self) {
 
-                    match merge_exact(start_of_segment, next_t_other) {
-                        MergeResult::AlwaysFirst => {
-                            if result.last().map(|(_, self_better)| !*self_better).unwrap_or(true) {
-                                result.push((start_of_segment, true));
-                            }
-                        },
-                        MergeResult::AlwaysSecond => {
-                            if result.last().map(|(_, self_better)| *self_better).unwrap_or(true) {
-                                result.push((start_of_segment, false));
-                            }
-                        },
-                        MergeResult::Merged(data) => {
-                            let mut iter = data.better().unwrap().iter().cloned();
-                            let first_intersection = iter.next().unwrap();
-                            if result.last().map(|(_, self_better)| *self_better != first_intersection.1).unwrap_or(true) {
-                                result.push(first_intersection);
-                            }
-                            result.extend(iter);
-                        },
-                    };
+                    let (_, intersections) = merge_exact(start_of_segment, next_t_other);
+                    let mut iter = intersections.into_iter();
+                    let first_intersection = iter.next().unwrap();
+                    if result.last().map(|(_, self_better)| *self_better != first_intersection.1).unwrap_or(true) {
+                        result.push(first_intersection);
+                    }
+                    result.extend(iter);
 
                     if other_dominating_iter.peek().unwrap().1 {
                         if result.last().unwrap().1 {
@@ -275,23 +231,17 @@ impl<'a> TTF<'a> {
                         self_lower.copy_range(start_of_segment, next_t_other, &mut self_buffer);
                         other_buffer.clear();
                         other_lower.copy_range(start_of_segment, next_t_other, &mut other_buffer);
+                        let (partial_lower, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_other);
                         result_lower.pop();
-                        match PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_other, |_| AppendMergedIpps { last_better: false, ipps: &mut result_lower }) {
-                            MergeResult::AlwaysFirst => result_lower.append(&mut self_buffer),
-                            MergeResult::AlwaysSecond => result_lower.append(&mut other_buffer),
-                            _ => {},
-                        };
+                        result_lower.append(&mut partial_lower.into_vec());
 
                         self_buffer.clear();
                         self_upper.copy_range(start_of_segment, next_t_other, &mut self_buffer);
                         other_buffer.clear();
                         other_upper.copy_range(start_of_segment, next_t_other, &mut other_buffer);
+                        let (partial_upper, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_other);
                         result_upper.pop();
-                        match PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_other, |_| AppendMergedIpps { last_better: false, ipps: &mut result_upper }) {
-                            MergeResult::AlwaysFirst => result_upper.append(&mut self_buffer),
-                            MergeResult::AlwaysSecond => result_upper.append(&mut other_buffer),
-                            _ => {},
-                        };
+                        result_upper.append(&mut partial_upper.into_vec());
                     }
 
                     start_of_segment = next_t_other;
@@ -305,59 +255,32 @@ impl<'a> TTF<'a> {
         }
 
         if !dominating {
-            match merge_exact(start_of_segment, period()) {
-                MergeResult::AlwaysFirst => {
-                    if result.last().map(|(_, self_better)| !*self_better).unwrap_or(true) {
-                        result.push((start_of_segment, true));
-                    }
-                },
-                MergeResult::AlwaysSecond => {
-                    if result.last().map(|(_, self_better)| *self_better).unwrap_or(true) {
-                        result.push((start_of_segment, false));
-                    }
-                },
-                MergeResult::Merged(data) => {
-                    let mut iter = data.better().unwrap().iter().cloned();
-                    let first_intersection = iter.next().unwrap();
-                    if result.last().map(|(_, self_better)| *self_better != first_intersection.1).unwrap_or(true) {
-                        result.push(first_intersection);
-                    }
-                    result.extend(iter);
-                },
-            };
+            let (_, intersections) = merge_exact(start_of_segment, period());
+            let mut iter = intersections.into_iter();
+            let first_intersection = iter.next().unwrap();
+            if result.last().map(|(_, self_better)| *self_better != first_intersection.1).unwrap_or(true) {
+                result.push(first_intersection);
+            }
+            result.extend(iter);
 
             if cfg!(feature = "tdcch-optimized-bound-merging)") {
                 self_buffer.clear();
                 self_lower.copy_range(start_of_segment, period(), &mut self_buffer);
                 other_buffer.clear();
                 other_lower.copy_range(start_of_segment, period(), &mut other_buffer);
+                let (partial_lower, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, period());
                 result_lower.pop();
-                match PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, period(), |_| AppendMergedIpps { last_better: false, ipps: &mut result_lower }) {
-                    MergeResult::AlwaysFirst => result_lower.append(&mut self_buffer),
-                    MergeResult::AlwaysSecond => result_lower.append(&mut other_buffer),
-                    _ => {},
-                };
+                result_lower.append(&mut partial_lower.into_vec());
 
                 self_buffer.clear();
                 self_upper.copy_range(start_of_segment, period(), &mut self_buffer);
                 other_buffer.clear();
                 other_upper.copy_range(start_of_segment, period(), &mut other_buffer);
+                let (partial_upper, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, period());
                 result_upper.pop();
-                match PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, period(), |_| AppendMergedIpps { last_better: false, ipps: &mut result_upper }) {
-                    MergeResult::AlwaysFirst => result_upper.append(&mut self_buffer),
-                    MergeResult::AlwaysSecond => result_upper.append(&mut other_buffer),
-                    _ => {},
-                };
+                result_upper.append(&mut partial_upper.into_vec());
             }
         } else {
-            if start_of_segment == Timestamp::zero() {
-                return if result.last().unwrap().1 {
-                    MergeResult::AlwaysFirst
-                } else {
-                    MergeResult::AlwaysSecond
-                }
-            }
-
             if cfg!(feature = "tdcch-optimized-bound-merging)") {
                 result_lower.pop();
                 result_upper.pop();
@@ -371,34 +294,18 @@ impl<'a> TTF<'a> {
             }
         }
 
-        match &result[..] {
-            [(_, true)] => return MergeResult::AlwaysFirst,
-            [(_, false)] => return MergeResult::AlwaysSecond,
-            _ => ()
-        }
-
         debug_assert!(result.first().unwrap().0 == Timestamp::zero());
         for better in result.windows(2) {
-            debug_assert!(better[0].0.fuzzy_lt(better[1].0), "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections));
+            debug_assert!(better[0].0 < better[1].0, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections));
             debug_assert_ne!(better[0].1, better[1].1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections));
         }
 
         if cfg!(feature = "tdcch-optimized-bound-merging)") {
-            MergeResult::Merged((TTFCache::Approx(result_lower.into_boxed_slice(), result_upper.into_boxed_slice()), result))
+            (TTFCache::Approx(result_lower.into_boxed_slice(), result_upper.into_boxed_slice()), result)
         } else {
-            let result_lower = match self_lower.merge(&other_lower, init_all_merged_data) {
-                MergeResult::AlwaysFirst => self_lower.ipps().to_vec().into_boxed_slice(),
-                MergeResult::AlwaysSecond => other_lower.ipps().to_vec().into_boxed_slice(),
-                MergeResult::Merged(d) => d.into_owned().0
-            };
-
-            let result_upper = match self_upper.merge(&other_upper, init_all_merged_data) {
-                MergeResult::AlwaysFirst => self_upper.ipps().to_vec().into_boxed_slice(),
-                MergeResult::AlwaysSecond => other_upper.ipps().to_vec().into_boxed_slice(),
-                MergeResult::Merged(d) => d.into_owned().0
-            };
-
-            MergeResult::Merged((TTFCache::Approx(result_lower, result_upper), result))
+            let (result_lower, _) = self_lower.merge(&other_lower);
+            let (result_upper, _) = self_upper.merge(&other_upper);
+            (TTFCache::Approx(result_lower, result_upper), result)
         }
     }
 
@@ -514,43 +421,24 @@ impl Shortcut {
             }
 
             if cfg!(feature = "detailed-stats") { ACTUALLY_MERGED.fetch_add(1, Relaxed); }
-            let merged = self_plf.merge(&linked, |start, end| {
+            let (mut merged, intersection_data) = self_plf.merge(&linked, |start, end| {
                 let self_ipps = self.exact_ttf_for(start, end, shortcut_graph);
                 let other_ipps = ShortcutSource::from(other_data).exact_ttf_for(start, end, shortcut_graph);
-                PiecewiseLinearFunction::merge_partials(&self_ipps, &other_ipps, start, end, init_intersection_merged_data)
+                PiecewiseLinearFunction::merge_partials(&self_ipps, &other_ipps, start, end)
             });
-            match merged {
-                MergeResult::AlwaysFirst => { return; },
-                MergeResult::AlwaysSecond => {
-                    self.upper_bound = min(self.upper_bound, other_upper_bound);
-                    debug_assert!(!self.upper_bound.fuzzy_lt(self.lower_bound), "lower {:?} upper {:?}", self.lower_bound, self.upper_bound);
-                    if cfg!(feature = "tdcch-approx") && linked_ipps.num_points() > 250 {
-                        let old = linked_ipps.num_points();
-                        if cfg!(feature = "detailed-stats") { CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed); }
-                        linked_ipps = linked.approximate();
-                        if cfg!(feature = "detailed-stats") { SAVED_BY_APPROX.fetch_add(old as isize - linked_ipps.num_points() as isize, Relaxed); }
-                    }
-                    self.cache = Some(linked_ipps);
-                    self.sources = Sources::One(other_data);
-                    return;
-                },
-                MergeResult::Merged((mut merged, intersection_data)) => {
-                    if cfg!(feature = "tdcch-approx") && merged.num_points() > 250 {
-                        let old = merged.num_points();
-                        if cfg!(feature = "detailed-stats") { CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed); }
-                        merged = TTF::from(&merged).approximate();
-                        if cfg!(feature = "detailed-stats") { SAVED_BY_APPROX.fetch_add(old as isize - merged.num_points() as isize, Relaxed); }
-                    }
-
-                    self.upper_bound = min(self.upper_bound, TTF::from(&merged).static_upper_bound());
-                    debug_assert!(!self.upper_bound.fuzzy_lt(self.lower_bound), "lower {:?} upper {:?}", self.lower_bound, self.upper_bound);
-                    self.cache = Some(merged);
-                    let mut sources = Sources::None;
-                    std::mem::swap(&mut sources, &mut self.sources);
-                    self.sources = Shortcut::combine(sources, intersection_data, other_data);
-                },
+            if cfg!(feature = "tdcch-approx") && merged.num_points() > 250 {
+                let old = merged.num_points();
+                if cfg!(feature = "detailed-stats") { CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed); }
+                merged = TTF::from(&merged).approximate();
+                if cfg!(feature = "detailed-stats") { SAVED_BY_APPROX.fetch_add(old as isize - merged.num_points() as isize, Relaxed); }
             }
 
+            self.upper_bound = min(self.upper_bound, TTF::from(&merged).static_upper_bound());
+            debug_assert!(!self.upper_bound.fuzzy_lt(self.lower_bound), "lower {:?} upper {:?}", self.lower_bound, self.upper_bound);
+            self.cache = Some(merged);
+            let mut sources = Sources::None;
+            std::mem::swap(&mut sources, &mut self.sources);
+            self.sources = Shortcut::combine(sources, intersection_data, other_data);
         }) ();
 
         if cfg!(feature = "detailed-stats") {
@@ -828,33 +716,5 @@ impl<'a> SourceCursor<'a> {
             self.offset = self.offset + FlWeight::from(period());
             self.current_index = 0;
         }
-    }
-}
-
-#[derive(Debug)]
-pub struct AppendMergedIpps<'a> {
-    ipps: &'a mut Vec<TTFPoint>,
-    last_better: bool,
-}
-
-impl<'a> MergeData for AppendMergedIpps<'a> {
-    fn push_ipp(&mut self, ipp: TTFPoint) {
-        PiecewiseLinearFunction::append_point(&mut self.ipps, ipp);
-    }
-
-    fn push_intersection(&mut self, _at: Timestamp, better: bool) {
-        self.last_better = better
-    }
-
-    fn last_better(&self) -> bool {
-        self.last_better
-    }
-
-    fn better(&self) -> Option<&[(Timestamp, bool)]> {
-        None
-    }
-
-    fn ipps(&self) -> Option<&[TTFPoint]> {
-        Some(&self.ipps)
     }
 }
