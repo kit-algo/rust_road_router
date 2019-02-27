@@ -19,6 +19,13 @@ impl TTFCache {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum BoundMergingState {
+    First,
+    Second,
+    Merge
+}
+
 #[derive(Debug)]
 enum TTF<'a> {
     Exact(PiecewiseLinearFunction<'a>),
@@ -82,11 +89,6 @@ impl<'a> TTF<'a> {
         let (self_lower, self_upper) = self.bound_plfs();
         let (other_lower, other_upper) = other.bound_plfs();
 
-        let mut self_buffer = if cfg!(feature = "tdcch-optimized-bound-merging)") { Vec::with_capacity(max(self_lower.len(), self_upper.len())) } else { Vec::new() };
-        let mut other_buffer = if cfg!(feature = "tdcch-optimized-bound-merging)") { Vec::with_capacity(max(other_lower.len(), other_upper.len())) } else { Vec::new() };
-        let mut result_lower = if cfg!(feature = "tdcch-optimized-bound-merging)") { Vec::with_capacity(2 * self_lower.len() + 2 * other_lower.len() + 2) } else { Vec::new() };
-        let mut result_upper = if cfg!(feature = "tdcch-optimized-bound-merging)") { Vec::with_capacity(2 * self_upper.len() + 2 * other_upper.len() + 2) } else { Vec::new() };
-
         let (_, self_dominating_intersections) = self_upper.merge(&other_lower);
         let (_, other_dominating_intersections) = other_upper.merge(&self_lower);
 
@@ -95,17 +97,23 @@ impl<'a> TTF<'a> {
         let mut self_dominating_iter = self_dominating_intersections.iter().peekable();
         let mut other_dominating_iter = other_dominating_intersections.iter().peekable();
         let mut result = Vec::new();
+        let mut bound_merge_state = Vec::new();
 
         match (self_dominating_iter.peek().unwrap().1, other_dominating_iter.peek().unwrap().1) {
             (true, false) => {
                 dominating = true;
                 result.push((Timestamp::zero(), true));
+                bound_merge_state.push((Timestamp::zero(), BoundMergingState::First));
             },
             (false, true) => {
                 dominating = true;
                 result.push((Timestamp::zero(), false));
+                bound_merge_state.push((Timestamp::zero(), BoundMergingState::Second));
             },
-            _ => {} // in BOTH cases (especially the broken true true case) everything is unclear and we need to do exact merging
+            _ => {
+                // in BOTH cases (especially the broken true true case) everything is unclear and we need to do exact merging
+                bound_merge_state.push((Timestamp::zero(), BoundMergingState::Merge));
+            }
         }
 
         self_dominating_iter.next();
@@ -121,11 +129,6 @@ impl<'a> TTF<'a> {
                     debug_assert!(result.last().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections, &self_lower, &self_upper, &other_lower, &other_upper));
                     dominating = false;
 
-                    if cfg!(feature = "tdcch-optimized-bound-merging)") {
-                        self_lower.copy_append_to_partial(start_of_segment, next_t_self, &mut result_lower);
-                        self_upper.copy_append_to_partial(start_of_segment, next_t_self, &mut result_upper);
-                    }
-
                     start_of_segment = next_t_self;
                     self_dominating_iter.next();
                 } else if next_t_other.fuzzy_lt(next_t_self) {
@@ -133,25 +136,16 @@ impl<'a> TTF<'a> {
                     debug_assert!(!result.last().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections, &self_lower, &self_upper, &other_lower, &other_upper));
                     dominating = false;
 
-                    if cfg!(feature = "tdcch-optimized-bound-merging)") {
-                        other_lower.copy_append_to_partial(start_of_segment, next_t_other, &mut result_lower);
-                        other_upper.copy_append_to_partial(start_of_segment, next_t_other, &mut result_upper);
-                    }
-
                     start_of_segment = next_t_other;
                     other_dominating_iter.next();
                 } else {
                     debug_assert_ne!(self_dominating_iter.peek().unwrap().1, other_dominating_iter.peek().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections, &self_lower, &self_upper, &other_lower, &other_upper));
                     result.push((next_t_self, self_dominating_iter.peek().unwrap().1));
 
-                    if cfg!(feature = "tdcch-optimized-bound-merging)") {
-                        if self_dominating_iter.peek().unwrap().1 {
-                            other_lower.copy_append_to_partial(start_of_segment, next_t_self, &mut result_lower);
-                            other_upper.copy_append_to_partial(start_of_segment, next_t_self, &mut result_upper);
-                        } else {
-                            self_lower.copy_append_to_partial(start_of_segment, next_t_self, &mut result_lower);
-                            self_upper.copy_append_to_partial(start_of_segment, next_t_self, &mut result_upper);
-                        }
+                    if self_dominating_iter.peek().unwrap().1 {
+                        bound_merge_state.push((next_t_self, BoundMergingState::First));
+                    } else {
+                        bound_merge_state.push((next_t_self, BoundMergingState::Second));
                     }
 
                     start_of_segment = next_t_self;
@@ -162,6 +156,12 @@ impl<'a> TTF<'a> {
                 if next_t_self.fuzzy_lt(next_t_other) {
 
                     let (_, intersections) = merge_exact(start_of_segment, next_t_self);
+
+                    if intersections.len() > 1 || result.last().map(|(_, self_better)| *self_better != intersections[0].1).unwrap_or(true) {
+                        bound_merge_state.push((start_of_segment, BoundMergingState::Merge));
+                        bound_merge_state.push((next_t_self, if self_dominating_iter.peek().unwrap().1 { BoundMergingState::First } else { BoundMergingState::Second }));
+                    }
+
                     let mut iter = intersections.into_iter();
                     let first_intersection = iter.next().unwrap();
                     if result.last().map(|(_, self_better)| *self_better != first_intersection.1).unwrap_or(true) {
@@ -179,28 +179,18 @@ impl<'a> TTF<'a> {
                         }
                     }
 
-                    if cfg!(feature = "tdcch-optimized-bound-merging)") {
-                        self_buffer.clear();
-                        self_lower.copy_range(start_of_segment, next_t_self, &mut self_buffer);
-                        other_buffer.clear();
-                        other_lower.copy_range(start_of_segment, next_t_self, &mut other_buffer);
-                        let (partial_lower, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_self);
-                        PiecewiseLinearFunction::append_partials(&mut result_lower, &mut partial_lower.into_vec(), start_of_segment);
-
-                        self_buffer.clear();
-                        self_upper.copy_range(start_of_segment, next_t_self, &mut self_buffer);
-                        other_buffer.clear();
-                        other_upper.copy_range(start_of_segment, next_t_self, &mut other_buffer);
-                        let (partial_upper, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_self);
-                        PiecewiseLinearFunction::append_partials(&mut result_upper, &mut partial_upper.into_vec(), start_of_segment);
-                    }
-
                     start_of_segment = next_t_self;
                     dominating = true;
                     self_dominating_iter.next();
                 } else if next_t_other.fuzzy_lt(next_t_self) {
 
                     let (_, intersections) = merge_exact(start_of_segment, next_t_other);
+
+                    if intersections.len() > 1 || result.last().map(|(_, self_better)| *self_better != intersections[0].1).unwrap_or(true) {
+                        bound_merge_state.push((start_of_segment, BoundMergingState::Merge));
+                        bound_merge_state.push((next_t_other, if other_dominating_iter.peek().unwrap().1 { BoundMergingState::Second } else { BoundMergingState::First }));
+                    }
+
                     let mut iter = intersections.into_iter();
                     let first_intersection = iter.next().unwrap();
                     if result.last().map(|(_, self_better)| *self_better != first_intersection.1).unwrap_or(true) {
@@ -218,22 +208,6 @@ impl<'a> TTF<'a> {
                         }
                     }
 
-                    if cfg!(feature = "tdcch-optimized-bound-merging)") {
-                        self_buffer.clear();
-                        self_lower.copy_range(start_of_segment, next_t_other, &mut self_buffer);
-                        other_buffer.clear();
-                        other_lower.copy_range(start_of_segment, next_t_other, &mut other_buffer);
-                        let (partial_lower, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_other);
-                        PiecewiseLinearFunction::append_partials(&mut result_lower, &mut partial_lower.into_vec(), start_of_segment);
-
-                        self_buffer.clear();
-                        self_upper.copy_range(start_of_segment, next_t_other, &mut self_buffer);
-                        other_buffer.clear();
-                        other_upper.copy_range(start_of_segment, next_t_other, &mut other_buffer);
-                        let (partial_upper, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, next_t_other);
-                        PiecewiseLinearFunction::append_partials(&mut result_upper, &mut partial_upper.into_vec(), start_of_segment);
-                    }
-
                     start_of_segment = next_t_other;
                     dominating = true;
                     other_dominating_iter.next();
@@ -246,38 +220,17 @@ impl<'a> TTF<'a> {
 
         if !dominating {
             let (_, intersections) = merge_exact(start_of_segment, period());
+
+            if intersections.len() > 1 || result.last().map(|(_, self_better)| *self_better != intersections[0].1).unwrap_or(true) {
+                bound_merge_state.push((start_of_segment, BoundMergingState::Merge));
+            }
+
             let mut iter = intersections.into_iter();
             let first_intersection = iter.next().unwrap();
             if result.last().map(|(_, self_better)| *self_better != first_intersection.1).unwrap_or(true) {
                 result.push(first_intersection);
             }
             result.extend(iter);
-
-            if cfg!(feature = "tdcch-optimized-bound-merging)") {
-                self_buffer.clear();
-                self_lower.copy_range(start_of_segment, period(), &mut self_buffer);
-                other_buffer.clear();
-                other_lower.copy_range(start_of_segment, period(), &mut other_buffer);
-                let (partial_lower, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, period());
-                PiecewiseLinearFunction::append_partials(&mut result_lower, &mut partial_lower.into_vec(), start_of_segment);
-
-                self_buffer.clear();
-                self_upper.copy_range(start_of_segment, period(), &mut self_buffer);
-                other_buffer.clear();
-                other_upper.copy_range(start_of_segment, period(), &mut other_buffer);
-                let (partial_upper, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, period());
-                PiecewiseLinearFunction::append_partials(&mut result_upper, &mut partial_upper.into_vec(), start_of_segment);
-            }
-        } else {
-            if cfg!(feature = "tdcch-optimized-bound-merging)") {
-                if result.last().unwrap().1 {
-                    self_lower.copy_append_to_partial(start_of_segment, period(), &mut result_lower);
-                    self_upper.copy_append_to_partial(start_of_segment, period(), &mut result_upper);
-                } else {
-                    other_lower.copy_append_to_partial(start_of_segment, period(), &mut result_lower);
-                    other_upper.copy_append_to_partial(start_of_segment, period(), &mut result_upper);
-                }
-            }
         }
 
         debug_assert!(result.first().unwrap().0 == Timestamp::zero());
@@ -286,13 +239,43 @@ impl<'a> TTF<'a> {
             debug_assert_ne!(better[0].1, better[1].1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections));
         }
 
-        if cfg!(feature = "tdcch-optimized-bound-merging)") {
-            (TTFCache::Approx(result_lower.into_boxed_slice(), result_upper.into_boxed_slice()), result)
-        } else {
-            let (result_lower, _) = self_lower.merge(&other_lower);
-            let (result_upper, _) = self_upper.merge(&other_upper);
-            (TTFCache::Approx(result_lower, result_upper), result)
+        let mut self_buffer = Vec::with_capacity(max(self_lower.len(), self_upper.len()));
+        let mut other_buffer = Vec::with_capacity(max(other_lower.len(), other_upper.len()));
+        let mut result_lower = Vec::with_capacity(2 * self_lower.len() + 2 * other_lower.len() + 2);
+        let mut result_upper = Vec::with_capacity(2 * self_upper.len() + 2 * other_upper.len() + 2);
+
+        let mut end_of_segment_iter = bound_merge_state.iter().map(|(t, _)| *t).chain(std::iter::once(period()));
+        end_of_segment_iter.next();
+
+        for (&(start_of_segment, state), end_of_segment) in bound_merge_state.iter().zip(end_of_segment_iter) {
+            match state {
+                BoundMergingState::First => {
+                    self_lower.copy_append_to_partial(start_of_segment, end_of_segment, &mut result_lower);
+                    self_upper.copy_append_to_partial(start_of_segment, end_of_segment, &mut result_upper);
+                },
+                BoundMergingState::Second => {
+                    other_lower.copy_append_to_partial(start_of_segment, end_of_segment, &mut result_lower);
+                    other_upper.copy_append_to_partial(start_of_segment, end_of_segment, &mut result_upper);
+                },
+                BoundMergingState::Merge => {
+                    self_buffer.clear();
+                    self_lower.copy_range(start_of_segment, end_of_segment, &mut self_buffer);
+                    other_buffer.clear();
+                    other_lower.copy_range(start_of_segment, end_of_segment, &mut other_buffer);
+                    let (partial_lower, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, end_of_segment);
+                    PiecewiseLinearFunction::append_partials(&mut result_lower, &mut partial_lower.into_vec(), start_of_segment);
+
+                    self_buffer.clear();
+                    self_upper.copy_range(start_of_segment, end_of_segment, &mut self_buffer);
+                    other_buffer.clear();
+                    other_upper.copy_range(start_of_segment, end_of_segment, &mut other_buffer);
+                    let (partial_upper, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, end_of_segment);
+                    PiecewiseLinearFunction::append_partials(&mut result_upper, &mut partial_upper.into_vec(), start_of_segment);
+                }
+            }
         }
+
+        (TTFCache::Approx(result_lower.into_boxed_slice(), result_upper.into_boxed_slice()), result)
     }
 
     fn approximate(&self) -> TTFCache {
