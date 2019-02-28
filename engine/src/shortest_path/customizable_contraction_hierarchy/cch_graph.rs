@@ -472,8 +472,6 @@ impl CCHGraph {
             }
         }
 
-        let mut merge_count = 0;
-
         let subctxt = push_context("main".to_string());
         report_time("TD-CCH Customization", || {
             let mut events_ctxt = push_collection_context("events".to_string());
@@ -504,7 +502,6 @@ impl CCHGraph {
                             report!("num_performed_links", ACTUALLY_LINKED.load(Ordering::Relaxed));
                             report!("num_performed_unnecessary_links", UNNECESSARY_LINKED.load(Ordering::Relaxed));
                         }
-                        report!("num_processed_triangles", merge_count);
                     }
                 }
 
@@ -514,7 +511,15 @@ impl CCHGraph {
                 let downward_active = &mut downward_above[0..self.neighbor_edge_indices(current_node).len()];
                 let shortcut_graph = PartialShortcutGraph::new(metric, upward_below, downward_below, 0);
 
-                for ((node, upward_shortcut), downward_shortcut) in self.neighbor_iter(current_node).zip(upward_active.iter_mut()).zip(downward_active.iter_mut()) {
+                let merge_iter = self.head[self.neighbor_edge_indices_usize(current_node)].par_iter()
+                    .zip_eq(upward_active.par_iter_mut())
+                    .zip_eq(downward_active.par_iter_mut());
+
+                // let merge_iter = self.head[self.neighbor_edge_indices_usize(current_node)].iter()
+                //     .zip(upward_active.iter_mut())
+                //     .zip(downward_active.iter_mut());
+
+                merge_iter.for_each(|((&node, upward_shortcut), downward_shortcut)| {
                     let mut current_iter = inverted[current_node as usize].iter().peekable();
                     let mut other_iter = inverted[node as usize].iter().peekable();
 
@@ -529,10 +534,9 @@ impl CCHGraph {
 
                             current_iter.next();
                             other_iter.next();
-                            merge_count += 2;
                         }
                     }
-                }
+                });
 
                 for shortcut in upward_active { shortcut.finalize_bounds(&shortcut_graph); }
                 for shortcut in downward_active { shortcut.finalize_bounds(&shortcut_graph); }
@@ -558,7 +562,6 @@ impl CCHGraph {
             report!("num_performed_links", ACTUALLY_LINKED.load(Ordering::Relaxed));
             report!("num_performed_unnecessary_links", UNNECESSARY_LINKED.load(Ordering::Relaxed));
         }
-        report!("num_processed_triangles", merge_count);
 
         ShortcutGraph::new(metric, &self.first_out, &self.head, upward, downward)
     }
