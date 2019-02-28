@@ -5,6 +5,28 @@ use crate::io::*;
 use std::mem::swap;
 
 #[derive(Debug)]
+pub struct PartialShortcutGraph<'a> {
+    pub original_graph: &'a TDGraph,
+    outgoing: &'a [Shortcut],
+    incoming: &'a [Shortcut],
+    offset: usize
+}
+
+impl<'a> PartialShortcutGraph<'a> {
+    pub fn new(original_graph: &'a TDGraph, outgoing: &'a [Shortcut], incoming: &'a [Shortcut], offset: usize) -> PartialShortcutGraph<'a> {
+        PartialShortcutGraph { original_graph, outgoing, incoming, offset }
+    }
+
+    pub fn get_outgoing(&self, edge_id: EdgeId) -> &Shortcut {
+        &self.outgoing[edge_id as usize - self.offset]
+    }
+
+    pub fn get_incoming(&self, edge_id: EdgeId) -> &Shortcut {
+        &self.incoming[edge_id as usize - self.offset]
+    }
+}
+
+#[derive(Debug)]
 pub struct ShortcutGraph<'a> {
     original_graph: &'a TDGraph,
     first_out: &'a [EdgeId],

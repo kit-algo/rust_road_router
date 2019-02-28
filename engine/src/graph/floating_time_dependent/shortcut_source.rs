@@ -44,7 +44,7 @@ impl ShortcutSource {
         }
     }
 
-    pub(super) fn exact_ttf_for(&self, start: Timestamp, end: Timestamp, shortcut_graph: &ShortcutGraph) -> Vec<TTFPoint> {
+    pub(super) fn exact_ttf_for(&self, start: Timestamp, end: Timestamp, shortcut_graph: &PartialShortcutGraph) -> Vec<TTFPoint> {
         debug_assert!(start.fuzzy_lt(end), "{:?} - {:?}", start, end);
 
         match *self {
@@ -56,7 +56,7 @@ impl ShortcutSource {
                 PiecewiseLinearFunction::link_partials(first, second, start, end)
             }
             ShortcutSource::OriginalEdge(edge) => {
-                let ttf = shortcut_graph.original_graph().travel_time_function(edge);
+                let ttf = shortcut_graph.original_graph.travel_time_function(edge);
                 let mut result = Vec::with_capacity(ttf.len());
                 ttf.copy_range(start, end, &mut result);
                 result

@@ -465,8 +465,6 @@ impl CCHGraph {
         });
         drop(subctxt);
 
-        let mut shortcut_graph = ShortcutGraph::new(metric, &self.first_out, &self.head, upward, downward);
-
         let mut inverted = vec![Vec::new(); n as usize];
         for current_node in 0..n {
             for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
@@ -510,7 +508,13 @@ impl CCHGraph {
                     }
                 }
 
-                for (node, shortcut_edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
+                let (upward_below, upward_above) = upward.split_at_mut(self.first_out[current_node as usize] as usize);
+                let upward_active = &mut upward_above[0..self.neighbor_edge_indices(current_node).len()];
+                let (downward_below, downward_above) = downward.split_at_mut(self.first_out[current_node as usize] as usize);
+                let downward_active = &mut downward_above[0..self.neighbor_edge_indices(current_node).len()];
+                let shortcut_graph = PartialShortcutGraph::new(metric, upward_below, downward_below, 0);
+
+                for ((node, upward_shortcut), downward_shortcut) in self.neighbor_iter(current_node).zip(upward_active.iter_mut()).zip(downward_active.iter_mut()) {
                     let mut current_iter = inverted[current_node as usize].iter().peekable();
                     let mut other_iter = inverted[node as usize].iter().peekable();
 
@@ -520,8 +524,8 @@ impl CCHGraph {
                         } else if lower_from_other < lower_from_current {
                             other_iter.next();
                         } else {
-                            shortcut_graph.borrow_mut_outgoing(shortcut_edge_id, |shortcut, shortcut_graph| shortcut.merge((*edge_from_cur_id, *edge_from_oth_id), shortcut_graph));
-                            shortcut_graph.borrow_mut_incoming(shortcut_edge_id, |shortcut, shortcut_graph| shortcut.merge((*edge_from_oth_id, *edge_from_cur_id), shortcut_graph));
+                            upward_shortcut.merge((*edge_from_cur_id, *edge_from_oth_id), &shortcut_graph);
+                            downward_shortcut.merge((*edge_from_oth_id, *edge_from_cur_id), &shortcut_graph);
 
                             current_iter.next();
                             other_iter.next();
@@ -530,14 +534,12 @@ impl CCHGraph {
                     }
                 }
 
-                for (_, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
-                    shortcut_graph.borrow_mut_outgoing(edge_id, |shortcut, shortcut_graph| shortcut.finalize_bounds(shortcut_graph));
-                    shortcut_graph.borrow_mut_incoming(edge_id, |shortcut, shortcut_graph| shortcut.finalize_bounds(shortcut_graph));
-                }
+                for shortcut in upward_active { shortcut.finalize_bounds(&shortcut_graph); }
+                for shortcut in downward_active { shortcut.finalize_bounds(&shortcut_graph); }
 
                 for &(_, edge_id) in &inverted[current_node as usize] {
-                    shortcut_graph.borrow_mut_outgoing(edge_id, |shortcut, _| shortcut.clear_plf());
-                    shortcut_graph.borrow_mut_incoming(edge_id, |shortcut, _| shortcut.clear_plf());
+                    upward[edge_id as usize].clear_plf();
+                    downward[edge_id as usize].clear_plf();
                 }
 
                 #[cfg(debug_assertions)] { crash_rank_logger.rank = None; }
@@ -558,7 +560,7 @@ impl CCHGraph {
         }
         report!("num_processed_triangles", merge_count);
 
-        shortcut_graph
+        ShortcutGraph::new(metric, &self.first_out, &self.head, upward, downward)
     }
 
     pub fn node_order(&self) -> &NodeOrder {

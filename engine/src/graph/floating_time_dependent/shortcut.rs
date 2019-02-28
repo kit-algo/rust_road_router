@@ -325,7 +325,7 @@ impl Shortcut {
         }
     }
 
-    pub fn merge(&mut self, linked_ids: (EdgeId, EdgeId), shortcut_graph: &ShortcutGraph) {
+    pub fn merge(&mut self, linked_ids: (EdgeId, EdgeId), shortcut_graph: &PartialShortcutGraph) {
         if !self.required { return }
 
         if cfg!(feature = "detailed-stats") {
@@ -417,7 +417,7 @@ impl Shortcut {
         }
     }
 
-    fn plf<'s>(&'s self, shortcut_graph: &'s ShortcutGraph) -> TTF<'s> {
+    fn plf<'s>(&'s self, shortcut_graph: &'s PartialShortcutGraph) -> TTF<'s> {
         if let Some(cache) = &self.cache {
             return cache.into()
         }
@@ -425,7 +425,7 @@ impl Shortcut {
         match self.sources {
             Sources::One(source) => {
                 match source.into() {
-                    ShortcutSource::OriginalEdge(id) => TTF::Exact(shortcut_graph.original_graph().travel_time_function(id)),
+                    ShortcutSource::OriginalEdge(id) => TTF::Exact(shortcut_graph.original_graph.travel_time_function(id)),
                     _ => panic!("invalid state of shortcut: ipps must be cached when shortcut not trivial {:?}", self),
                 }
             },
@@ -440,7 +440,7 @@ impl Shortcut {
         }
     }
 
-    pub fn finalize_bounds(&mut self, shortcut_graph: &ShortcutGraph) {
+    pub fn finalize_bounds(&mut self, shortcut_graph: &PartialShortcutGraph) {
         if !self.required { return }
 
         if let Sources::None = self.sources {
@@ -549,7 +549,7 @@ impl Shortcut {
         Sources::Multi(new_sources.into_boxed_slice())
     }
 
-    pub(super) fn exact_ttf_for(&self, start: Timestamp, end: Timestamp, shortcut_graph: &ShortcutGraph) -> Vec<TTFPoint> {
+    pub(super) fn exact_ttf_for(&self, start: Timestamp, end: Timestamp, shortcut_graph: &PartialShortcutGraph) -> Vec<TTFPoint> {
         debug_assert!(start.fuzzy_lt(end), "{:?} - {:?}", start, end);
 
         if self.constant {

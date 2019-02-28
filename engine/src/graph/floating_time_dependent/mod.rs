@@ -18,6 +18,7 @@ use self::shortcut_source::*;
 
 pub mod shortcut_graph;
 pub use self::shortcut_graph::ShortcutGraph;
+pub use self::shortcut_graph::PartialShortcutGraph;
 pub use self::shortcut_graph::CustomizedGraph;
 pub use self::shortcut_graph::SingleDirBoundsGraph;
 
