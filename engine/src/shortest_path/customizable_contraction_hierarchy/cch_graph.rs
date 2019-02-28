@@ -17,6 +17,7 @@ use rayon::prelude::*;
 pub struct SeparatorTree {
     pub nodes: Vec<NodeId>,
     pub children: Vec<SeparatorTree>,
+    num_nodes: usize,
 }
 
 #[derive(Debug)]
@@ -113,7 +114,8 @@ impl CCHGraph {
 
         SeparatorTree {
             nodes: Vec::new(),
-            children: roots.into_iter().map(|root| Self::aggregate_chain(root, &children)).collect()
+            children: roots.into_iter().map(|root| Self::aggregate_chain(root, &children)).collect(),
+            num_nodes: self.num_nodes(),
         }
     }
 
@@ -127,9 +129,14 @@ impl CCHGraph {
             nodes.push(only_child)
         }
 
+        let mut num_nodes = nodes.len();
+        let children: Vec<_> = children[node as usize].iter().map(|&child| Self::aggregate_chain(child, children)).collect();
+        num_nodes += children.iter().map(|child| child.num_nodes).sum::<usize>();
+
         SeparatorTree {
             nodes,
-            children: children[node as usize].iter().map(|&child| Self::aggregate_chain(child, children)).collect()
+            children,
+            num_nodes,
         }
     }
 
@@ -460,6 +467,13 @@ impl CCHGraph {
 
         let mut shortcut_graph = ShortcutGraph::new(metric, &self.first_out, &self.head, upward, downward);
 
+        let mut inverted = vec![Vec::new(); n as usize];
+        for current_node in 0..n {
+            for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
+                inverted[node as usize].push((current_node, edge_id));
+            }
+        }
+
         let mut merge_count = 0;
 
         let subctxt = push_context("main".to_string());
@@ -468,10 +482,6 @@ impl CCHGraph {
 
             let timer = Timer::new();
             let mut prev_event = 0;
-
-            let mut node_edge_ids = vec![InRangeOption::new(None); n as usize];
-
-            let mut triangles = Vec::new();
 
             for current_node in 0..n {
                 #[cfg(debug_assertions)]
@@ -500,43 +510,34 @@ impl CCHGraph {
                     }
                 }
 
-                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
-                    shortcut_graph.borrow_mut_outgoing(edge_id, |shortcut, shortcut_graph| shortcut.finalize_bounds(shortcut_graph));
-                    shortcut_graph.borrow_mut_incoming(edge_id, |shortcut, shortcut_graph| shortcut.finalize_bounds(shortcut_graph));
-                    node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
-                }
+                for (node, shortcut_edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
+                    let mut current_iter = inverted[current_node as usize].iter().peekable();
+                    let mut other_iter = inverted[node as usize].iter().peekable();
 
-                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
-                    debug_assert_eq!(self.edge_id_to_tail(edge_id), current_node);
-                    let shortcut_edge_ids = self.neighbor_edge_indices(node);
-                    for (target, shortcut_edge_id) in self.neighbor_iter(node).zip(shortcut_edge_ids) {
-                        debug_assert_eq!(self.edge_id_to_tail(shortcut_edge_id), node);
-                        if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
-                            debug_assert!(shortcut_edge_id > edge_id);
-                            debug_assert!(shortcut_edge_id > other_edge_id);
-                            triangles.push(((edge_id, other_edge_id), shortcut_edge_id, true, shortcut_graph.swap_out_outgoing(shortcut_edge_id)));
-                            triangles.push(((other_edge_id, edge_id), shortcut_edge_id, false, shortcut_graph.swap_out_incoming(shortcut_edge_id)));
+                    while let (Some((lower_from_current, edge_from_cur_id)), Some((lower_from_other, edge_from_oth_id))) = (current_iter.peek(), other_iter.peek()) {
+                        if lower_from_current < lower_from_other {
+                            current_iter.next();
+                        } else if lower_from_other < lower_from_current {
+                            other_iter.next();
+                        } else {
+                            shortcut_graph.borrow_mut_outgoing(shortcut_edge_id, |shortcut, shortcut_graph| shortcut.merge((*edge_from_cur_id, *edge_from_oth_id), shortcut_graph));
+                            shortcut_graph.borrow_mut_incoming(shortcut_edge_id, |shortcut, shortcut_graph| shortcut.merge((*edge_from_oth_id, *edge_from_cur_id), shortcut_graph));
+
+                            current_iter.next();
+                            other_iter.next();
                             merge_count += 2;
                         }
                     }
                 }
 
-                triangles.par_iter_mut().for_each(|(lower, _edge_id, _up, shortcut)| {
-                    shortcut.merge(*lower, &shortcut_graph);
-                });
-
-                for (_, shortcut_edge_id, up, shortcut) in triangles.drain(..) {
-                    if up {
-                        shortcut_graph.swap_in_outgoing(shortcut_edge_id, shortcut);
-                    } else {
-                        shortcut_graph.swap_in_incoming(shortcut_edge_id, shortcut);
-                    }
+                for (_, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
+                    shortcut_graph.borrow_mut_outgoing(edge_id, |shortcut, shortcut_graph| shortcut.finalize_bounds(shortcut_graph));
+                    shortcut_graph.borrow_mut_incoming(edge_id, |shortcut, shortcut_graph| shortcut.finalize_bounds(shortcut_graph));
                 }
 
-                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
+                for &(_, edge_id) in &inverted[current_node as usize] {
                     shortcut_graph.borrow_mut_outgoing(edge_id, |shortcut, _| shortcut.clear_plf());
                     shortcut_graph.borrow_mut_incoming(edge_id, |shortcut, _| shortcut.clear_plf());
-                    node_edge_ids[node as usize] = InRangeOption::new(None);
                 }
 
                 #[cfg(debug_assertions)] { crash_rank_logger.rank = None; }
