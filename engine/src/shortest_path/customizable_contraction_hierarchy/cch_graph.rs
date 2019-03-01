@@ -1,6 +1,9 @@
 use super::*;
 use crate::{
-    graph::first_out_graph::degrees_to_first_out,
+    graph::{
+        first_out_graph::degrees_to_first_out,
+        floating_time_dependent::*,
+    },
     shortest_path::node_order::NodeOrder,
     in_range_option::InRangeOption,
     benchmark::*,
@@ -112,11 +115,11 @@ impl CCHGraph {
             }
         }
 
-        SeparatorTree {
-            nodes: Vec::new(),
-            children: roots.into_iter().map(|root| Self::aggregate_chain(root, &children)).collect(),
-            num_nodes: self.num_nodes(),
-        }
+        let children: Vec<_> = roots.into_iter().map(|root| Self::aggregate_chain(root, &children)).collect();
+        let num_nodes = children.iter().map(|child| child.num_nodes).sum::<usize>();
+        debug_assert_eq!(num_nodes, self.num_nodes());
+
+        SeparatorTree { nodes: Vec::new(), children, num_nodes }
     }
 
     fn aggregate_chain(root: NodeId, children: &[Vec<NodeId>]) -> SeparatorTree {
@@ -129,9 +132,8 @@ impl CCHGraph {
             nodes.push(only_child)
         }
 
-        let mut num_nodes = nodes.len();
         let children: Vec<_> = children[node as usize].iter().map(|&child| Self::aggregate_chain(child, children)).collect();
-        num_nodes += children.iter().map(|child| child.num_nodes).sum::<usize>();
+        let num_nodes = nodes.len() + children.iter().map(|child| child.num_nodes).sum::<usize>();
 
         SeparatorTree {
             nodes,
@@ -351,7 +353,6 @@ impl CCHGraph {
     }
 
     pub fn customize_floating_td<'a, 'b: 'a>(&'a self, metric: &'b floating_time_dependent::TDGraph) -> floating_time_dependent::ShortcutGraph<'a> {
-        use crate::graph::floating_time_dependent::*;
         use crate::report::*;
         use std::cmp::min;
 
@@ -472,50 +473,115 @@ impl CCHGraph {
             }
         }
 
+        let sep_tree = self.separators();
+
         let subctxt = push_context("main".to_string());
         report_time("TD-CCH Customization", || {
-            let mut events_ctxt = push_collection_context("events".to_string());
+            let mut _events_ctxt = push_collection_context("events".to_string());
 
-            let timer = Timer::new();
-            let mut prev_event = 0;
+            self.customize_par_by_sep(&sep_tree, 0, &mut upward, &mut downward, metric, &inverted);
+        });
+        drop(subctxt);
 
-            for current_node in 0..n {
-                #[cfg(debug_assertions)]
-                let mut crash_rank_logger = RankLogger { rank: Some(current_node) };
+        if cfg!(feature = "detailed-stats") {
+            report!("num_ipps_stored", IPP_COUNT.load(Ordering::Relaxed));
+            report!("num_shortcuts_active", ACTIVE_SHORTCUTS.load(Ordering::Relaxed));
+            report!("num_ipps_reduced_by_approx", SAVED_BY_APPROX.load(Ordering::Relaxed));
+            report!("num_ipps_considered_for_approx", CONSIDERED_FOR_APPROX.load(Ordering::Relaxed));
+            report!("num_shortcut_merge_points", PATH_SOURCES_COUNT.load(Ordering::Relaxed));
+            report!("num_performed_merges", ACTUALLY_MERGED.load(Ordering::Relaxed));
+            report!("num_performed_links", ACTUALLY_LINKED.load(Ordering::Relaxed));
+            report!("num_performed_unnecessary_links", UNNECESSARY_LINKED.load(Ordering::Relaxed));
+        }
 
-                if self.degree(current_node) > 100 || current_node % 1000 == 0 {
-                    let now = timer.get_passed_ms();
-                    if current_node > 0 && now - prev_event > 1000 {
-                        prev_event = now;
-                        let _event = events_ctxt.push_collection_item();
+        ShortcutGraph::new(metric, &self.first_out, &self.head, upward, downward)
+    }
 
-                        report!("at_s", now / 1000);
-                        report!("current_rank", current_node);
-                        report!("current_node_degree", self.degree(current_node));
-                        if cfg!(feature = "detailed-stats") {
-                            report!("num_ipps_stored", IPP_COUNT.load(Ordering::Relaxed));
-                            report!("num_shortcuts_active", ACTIVE_SHORTCUTS.load(Ordering::Relaxed));
-                            report!("num_ipps_reduced_by_approx", SAVED_BY_APPROX.load(Ordering::Relaxed));
-                            report!("num_ipps_considered_for_approx", CONSIDERED_FOR_APPROX.load(Ordering::Relaxed));
-                            report!("num_shortcut_merge_points", PATH_SOURCES_COUNT.load(Ordering::Relaxed));
-                            report!("num_performed_merges", ACTUALLY_MERGED.load(Ordering::Relaxed));
-                            report!("num_performed_links", ACTUALLY_LINKED.load(Ordering::Relaxed));
-                            report!("num_performed_unnecessary_links", UNNECESSARY_LINKED.load(Ordering::Relaxed));
+    fn customize_par_by_sep(&self, sep_tree: &SeparatorTree, offset: usize, upward: &mut [Shortcut], downward: &mut [Shortcut], metric: &floating_time_dependent::TDGraph, inverted: &[Vec<(NodeId, EdgeId)>]) {
+        let edge_offset = self.first_out[offset] as usize;
+
+        if sep_tree.num_nodes < self.num_nodes() / (32 * rayon::current_num_threads()) {
+            for current_node in offset..offset + sep_tree.num_nodes {
+
+                let (upward_below, upward_above) = upward.split_at_mut(self.first_out[current_node as usize] as usize - edge_offset);
+                let upward_active = &mut upward_above[0..self.neighbor_edge_indices(current_node as NodeId).len()];
+                let (downward_below, downward_above) = downward.split_at_mut(self.first_out[current_node as usize] as usize - edge_offset);
+                let downward_active = &mut downward_above[0..self.neighbor_edge_indices(current_node as NodeId).len()];
+                let shortcut_graph = PartialShortcutGraph::new(metric, upward_below, downward_below, edge_offset);
+
+                debug_assert_eq!(upward_active.len(), self.degree(current_node as NodeId));
+                debug_assert_eq!(downward_active.len(), self.degree(current_node as NodeId));
+
+                let merge_iter = self.head[self.neighbor_edge_indices_usize(current_node as NodeId)].iter()
+                    .zip(upward_active.iter_mut())
+                    .zip(downward_active.iter_mut());
+
+                merge_iter.for_each(|((&node, upward_shortcut), downward_shortcut)| {
+                    let mut current_iter = inverted[current_node as usize].iter().peekable();
+                    let mut other_iter = inverted[node as usize].iter().peekable();
+
+                    while let (Some((lower_from_current, edge_from_cur_id)), Some((lower_from_other, edge_from_oth_id))) = (current_iter.peek(), other_iter.peek()) {
+                        debug_assert_eq!(self.head()[*edge_from_cur_id as usize], current_node as NodeId);
+                        debug_assert_eq!(self.head()[*edge_from_oth_id as usize], node);
+                        debug_assert_eq!(self.edge_id_to_tail(*edge_from_cur_id), *lower_from_current);
+                        debug_assert_eq!(self.edge_id_to_tail(*edge_from_oth_id), *lower_from_other);
+
+                        if lower_from_current < lower_from_other {
+                            current_iter.next();
+                        } else if lower_from_other < lower_from_current {
+                            other_iter.next();
+                        } else {
+                            debug_assert!(*lower_from_current >= offset as NodeId, "{} {}", offset, lower_from_current);
+                            debug_assert!(*lower_from_other >= offset as NodeId, "{} {}", offset, lower_from_other);
+                            upward_shortcut.merge((*edge_from_cur_id, *edge_from_oth_id), &shortcut_graph);
+                            downward_shortcut.merge((*edge_from_oth_id, *edge_from_cur_id), &shortcut_graph);
+
+                            current_iter.next();
+                            other_iter.next();
                         }
                     }
+                });
+
+                for shortcut in upward_active { shortcut.finalize_bounds(&shortcut_graph); }
+                for shortcut in downward_active { shortcut.finalize_bounds(&shortcut_graph); }
+
+                for &(_, edge_id) in &inverted[current_node as usize] {
+                    upward[edge_id as usize - edge_offset].clear_plf();
+                    downward[edge_id as usize - edge_offset].clear_plf();
                 }
+            }
+        } else {
+            let mut sub_offset = offset;
+            let mut sub_edge_offset = edge_offset;
+            let mut sub_upward = &mut upward[..];
+            let mut sub_downward = &mut downward[..];
 
-                let (upward_below, upward_above) = upward.split_at_mut(self.first_out[current_node as usize] as usize);
-                let upward_active = &mut upward_above[0..self.neighbor_edge_indices(current_node).len()];
-                let (downward_below, downward_above) = downward.split_at_mut(self.first_out[current_node as usize] as usize);
-                let downward_active = &mut downward_above[0..self.neighbor_edge_indices(current_node).len()];
-                let shortcut_graph = PartialShortcutGraph::new(metric, upward_below, downward_below, 0);
+            rayon::scope(|s| {
+                for sub in &sep_tree.children {
+                    let (this_sub_up, rest_up) = (move || { sub_upward })().split_at_mut(self.first_out[sub_offset + sub.num_nodes] as usize - sub_edge_offset);
+                    let (this_sub_down, rest_down) = (move || { sub_downward })().split_at_mut(self.first_out[sub_offset + sub.num_nodes] as usize - sub_edge_offset);
+                    debug_assert_eq!(inverted[sub_offset].len(), 0, "{:?}", dbg!(sub));
+                    sub_edge_offset += this_sub_up.len();
+                    s.spawn(move |_| self.customize_par_by_sep(sub, sub_offset, this_sub_up, this_sub_down, metric, inverted));
+                    sub_offset += sub.num_nodes;
+                    sub_upward = rest_up;
+                    sub_downward = rest_down;
+                }
+            });
 
-                let merge_iter = self.head[self.neighbor_edge_indices_usize(current_node)].par_iter()
+            for current_node in sub_offset..offset + sep_tree.num_nodes {
+
+                let (upward_below, upward_above) = upward.split_at_mut(self.first_out[current_node as usize] as usize - edge_offset);
+                let upward_active = &mut upward_above[0..self.neighbor_edge_indices(current_node as NodeId).len()];
+                let (downward_below, downward_above) = downward.split_at_mut(self.first_out[current_node as usize] as usize - edge_offset);
+                let downward_active = &mut downward_above[0..self.neighbor_edge_indices(current_node as NodeId).len()];
+                let shortcut_graph = PartialShortcutGraph::new(metric, upward_below, downward_below, edge_offset);
+
+                let merge_iter = self.head[self.neighbor_edge_indices_usize(current_node as NodeId)].par_iter()
                     .zip_eq(upward_active.par_iter_mut())
                     .zip_eq(downward_active.par_iter_mut());
 
-                // let merge_iter = self.head[self.neighbor_edge_indices_usize(current_node)].iter()
+                // let merge_iter = self.head[self.neighbor_edge_indices_usize(current_node as NodeId)].iter()
                 //     .zip(upward_active.iter_mut())
                 //     .zip(downward_active.iter_mut());
 
@@ -542,28 +608,11 @@ impl CCHGraph {
                 for shortcut in downward_active { shortcut.finalize_bounds(&shortcut_graph); }
 
                 for &(_, edge_id) in &inverted[current_node as usize] {
-                    upward[edge_id as usize].clear_plf();
-                    downward[edge_id as usize].clear_plf();
+                    upward[edge_id as usize - edge_offset].clear_plf();
+                    downward[edge_id as usize - edge_offset].clear_plf();
                 }
-
-                #[cfg(debug_assertions)] { crash_rank_logger.rank = None; }
             }
-
-        });
-        drop(subctxt);
-
-        if cfg!(feature = "detailed-stats") {
-            report!("num_ipps_stored", IPP_COUNT.load(Ordering::Relaxed));
-            report!("num_shortcuts_active", ACTIVE_SHORTCUTS.load(Ordering::Relaxed));
-            report!("num_ipps_reduced_by_approx", SAVED_BY_APPROX.load(Ordering::Relaxed));
-            report!("num_ipps_considered_for_approx", CONSIDERED_FOR_APPROX.load(Ordering::Relaxed));
-            report!("num_shortcut_merge_points", PATH_SOURCES_COUNT.load(Ordering::Relaxed));
-            report!("num_performed_merges", ACTUALLY_MERGED.load(Ordering::Relaxed));
-            report!("num_performed_links", ACTUALLY_LINKED.load(Ordering::Relaxed));
-            report!("num_performed_unnecessary_links", UNNECESSARY_LINKED.load(Ordering::Relaxed));
         }
-
-        ShortcutGraph::new(metric, &self.first_out, &self.head, upward, downward)
     }
 
     pub fn node_order(&self) -> &NodeOrder {

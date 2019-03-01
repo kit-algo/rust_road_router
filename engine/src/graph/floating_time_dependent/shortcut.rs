@@ -334,7 +334,6 @@ impl Shortcut {
             if self.cache.is_some() { ACTIVE_SHORTCUTS.fetch_sub(1, Relaxed); }
         }
 
-        #[allow(clippy::redundant_closure_call)]
         (|| {
             let other_data = ShortcutSource::Shortcut(linked_ids.0, linked_ids.1).into();
 

@@ -5,9 +5,10 @@
 #![feature(nll)]
 #![feature(stmt_expr_attributes)]
 
+#![allow(clippy::redundant_closure_call)]
+
 macro_rules! dbg_each {
     ($($val:expr),+) => {
-        #[allow(clippy::redundant_closure_call)]
         (|| {
             $(
                 dbg!($val);

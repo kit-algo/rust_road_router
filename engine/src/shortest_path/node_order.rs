@@ -3,7 +3,7 @@ use crate::io::*;
 
 pub type Rank = NodeId;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NodeOrder {
     // NodeIds ordered by their ranks - that is ascending in importance
     node_order: Vec<NodeId>,

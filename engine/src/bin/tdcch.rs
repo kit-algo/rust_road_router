@@ -118,19 +118,26 @@ fn main() {
     let cch = if !cch_folder.exists() {
         let cch_order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm"));
         let cch_build_ctxt = algo_runs_ctxt.push_collection_item();
-        let cch = customizable_contraction_hierarchy::contract(&graph, cch_order);
+        let cch = customizable_contraction_hierarchy::contract(&graph, cch_order.clone());
         drop(cch_build_ctxt);
 
         let latitude = Vec::<f32>::load_from(path.join("latitude").to_str().unwrap()).expect("could not read latitude");
         let longitude = Vec::<f32>::load_from(path.join("longitude").to_str().unwrap()).expect("could not read longitude");
-        let cch_order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm"));
 
-        let cch_order = CCHReordering { node_order: cch_order, latitude, longitude }.reorder(cch.separators());
+        let cch_order = CCHReordering { node_order: cch_order, latitude: &latitude, longitude: &longitude }.reorder(cch.separators());
+
+        let cch_build_ctxt = algo_runs_ctxt.push_collection_item();
+        let cch = customizable_contraction_hierarchy::contract(&graph, cch_order.clone());
+        drop(cch_build_ctxt);
+
+        let cch_order = CCHReordering { node_order: cch_order, latitude: &latitude, longitude: &longitude }.reorder_for_seperator_based_customization(cch.separators());
         std::fs::create_dir(&cch_folder).expect("could not create cch folder");
         cch_order.deconstruct_to(cch_folder.to_str().unwrap()).expect("could not save cch order");
 
-        let _cch_build_ctxt = algo_runs_ctxt.push_collection_item();
-        let cch = customizable_contraction_hierarchy::contract(&graph, cch_order);
+        let cch_build_ctxt = algo_runs_ctxt.push_collection_item();
+        let cch = customizable_contraction_hierarchy::contract(&graph, cch_order.clone());
+        drop(cch_build_ctxt);
+
         cch.deconstruct_to(cch_folder.to_str().unwrap()).expect("could not save cch");
 
         cch
@@ -275,13 +282,13 @@ fn main() {
 }
 
 #[derive(Debug)]
-struct CCHReordering {
+struct CCHReordering<'a> {
     node_order: NodeOrder,
-    latitude: Vec<f32>,
-    longitude: Vec<f32>,
+    latitude: &'a [f32],
+    longitude: &'a [f32],
 }
 
-impl CCHReordering {
+impl<'a> CCHReordering<'a> {
     fn distance (&self, n1: NodeId, n2: NodeId) -> NonNan {
         use nav_types::WGS84;
         NonNan::new(WGS84::new(self.latitude[self.node_order.node(n1) as usize], self.longitude[self.node_order.node(n1) as usize], 0.0)
@@ -325,6 +332,18 @@ impl CCHReordering {
 
     pub fn reorder(self, mut separators: SeparatorTree) -> NodeOrder {
         self.reorder_tree(&mut separators, 0);
+        let mut order = Vec::new();
+        self.to_ordering(separators, &mut order);
+
+        for rank in &mut order {
+            *rank = self.node_order.node(*rank);
+        }
+        order.reverse();
+
+        NodeOrder::from_node_order(order)
+    }
+
+    pub fn reorder_for_seperator_based_customization(self, separators: SeparatorTree) -> NodeOrder {
         let mut order = Vec::new();
         self.to_ordering(separators, &mut order);
 
