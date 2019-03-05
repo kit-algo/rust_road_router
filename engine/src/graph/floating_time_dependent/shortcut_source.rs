@@ -44,22 +44,25 @@ impl ShortcutSource {
         }
     }
 
-    pub(super) fn exact_ttf_for(&self, start: Timestamp, end: Timestamp, shortcut_graph: &PartialShortcutGraph) -> Vec<TTFPoint> {
+    pub(super) fn exact_ttf_for(&self, start: Timestamp, end: Timestamp, shortcut_graph: &PartialShortcutGraph, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
         debug_assert!(start.fuzzy_lt(end), "{:?} - {:?}", start, end);
 
         match *self {
             ShortcutSource::Shortcut(down, up) => {
-                let first = shortcut_graph.get_incoming(down).exact_ttf_for(start, end, shortcut_graph);
-                let second_start = start + interpolate_linear(&first[0], &first[1], start);
-                let second_end = end + interpolate_linear(&first[first.len() - 2], &first[first.len() - 1], end);
-                let second = shortcut_graph.get_outgoing(up).exact_ttf_for(second_start, second_end, shortcut_graph);
-                PiecewiseLinearFunction::link_partials(first, second, start, end)
+                let mut first_target = tmp.push_plf();
+                shortcut_graph.get_incoming(down).exact_ttf_for(start, end, shortcut_graph, &mut first_target, target.storage_mut());
+                let second_start = start + interpolate_linear(&first_target[0], &first_target[1], start);
+                let second_end = end + interpolate_linear(&first_target[first_target.len() - 2], &first_target[first_target.len() - 1], end);
+
+                let mut second_target = first_target.storage_mut().push_plf();
+                shortcut_graph.get_outgoing(up).exact_ttf_for(second_start, second_end, shortcut_graph, &mut second_target, target.storage_mut());
+
+                let (first, second) = second_target.storage().top_plfs();
+                PiecewiseLinearFunction::link_partials(first, second, start, end, target);
             }
             ShortcutSource::OriginalEdge(edge) => {
                 let ttf = shortcut_graph.original_graph.travel_time_function(edge);
-                let mut result = Vec::with_capacity(ttf.len());
-                ttf.copy_range(start, end, &mut result);
-                result
+                ttf.copy_range(start, end, target);
             }
         }
     }

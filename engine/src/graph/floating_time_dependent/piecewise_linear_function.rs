@@ -69,7 +69,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
-    pub(super) fn copy_range(&self, start: Timestamp, end: Timestamp, target: &mut Vec<TTFPoint>) {
+    pub(super) fn copy_range(&self, start: Timestamp, end: Timestamp, target: &mut impl PLFTarget) {
         debug_assert!(start.fuzzy_lt(end), "{:?} - {:?}", start, end);
 
         let mut f = Cursor::starting_at_or_after(&self.ipps, start);
@@ -88,7 +88,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         debug_assert!(target.len() > 1);
 
         for points in target.windows(2) {
-            debug_assert!(points[0].at.fuzzy_lt(points[1].at), "{:?}", dbg_each!(&points[0], &target, start, end));
+            debug_assert!(points[0].at.fuzzy_lt(points[1].at), "{:?}", dbg_each!(&points[0], &target[..], start, end));
         }
 
         debug_assert!(!start.fuzzy_lt(target[0].at));
@@ -142,7 +142,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
-    pub(super) fn append_partials(first: &mut Vec<TTFPoint>, second: &mut Vec<TTFPoint>, switchover: Timestamp) {
+    pub(super) fn append_partials(first: &mut impl PLFTarget, second: &[TTFPoint], switchover: Timestamp) {
         debug_assert!(second.len() > 1);
         if let Some(&TTFPoint { at, .. }) = first.split_last().map(|(_, rest)| rest.last()).unwrap_or(None) { debug_assert!(at.fuzzy_lt(switchover)); }
         if let Some(&TTFPoint { at, .. }) = first.last() { debug_assert!(!at.fuzzy_lt(switchover)); }
@@ -150,7 +150,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         if let Some(&TTFPoint { at, .. }) = second.split_first().map(|(_, rest)| rest.first()).unwrap_or(None) { debug_assert!(switchover.fuzzy_lt(at)); }
 
         if first.is_empty() {
-            std::mem::swap(first, second);
+            first.extend(second.iter().cloned());
             return
         }
 
@@ -169,7 +169,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
 
         first.push(TTFPoint { at: switchover, val: switchover_val });
-        first.extend(second.drain(1..));
+        first.extend(second[1..].iter().cloned());
 
         for points in first.windows(2) {
             debug_assert!(points[0].at.fuzzy_lt(points[1].at));
@@ -254,9 +254,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         result.into_boxed_slice()
     }
 
-    pub(super) fn link_partials(first: Vec<TTFPoint>, second: Vec<TTFPoint>, start: Timestamp, end: Timestamp) -> Vec<TTFPoint> {
-        let mut result = Vec::with_capacity(first.len() + second.len() + 1);
-
+    pub(super) fn link_partials(first: &[TTFPoint], second: &[TTFPoint], start: Timestamp, end: Timestamp, target: &mut MutTopPLF) {
         let mut f = PartialPlfCursor::new(&first);
         let mut g = PartialPlfCursor::new(&second);
 
@@ -288,32 +286,37 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 f.advance();
             }
 
-            if !start.fuzzy_lt(x) && !result.is_empty() {
-                result.pop();
+            if !start.fuzzy_lt(x) && !target.is_empty() {
+                target.pop();
             }
 
-            Self::append_point(&mut result, TTFPoint { at: x, val: y });
+            let point = TTFPoint { at: x, val: y };
+            debug_assert!(point.val >= FlWeight::new(0.0), "{:?}", point);
+            if let Some(p) = target.last() {
+                if p.at.fuzzy_eq(point.at) && p.val.fuzzy_eq(point.val) { return }
+            }
+            debug_assert!(target.last().map(|p| p.at.fuzzy_lt(point.at)).unwrap_or(true), "last: {:?}, append: {:?}", target.last(), point);
+
+            target.push(point);
 
             if (f.done() && g.done()) || !x.fuzzy_lt(end) {
                 break;
             }
         }
 
-        if let [TTFPoint { val, .. }] = &result[..] {
-            result.push(TTFPoint { at: first.last().unwrap().at, val: *val });
+        if let [TTFPoint { val, .. }] = &target[..] {
+            target.push(TTFPoint { at: first.last().unwrap().at, val: *val });
         }
 
-        debug_assert!(result.len() > 1);
-        debug_assert!(result.len() <= first.len() + second.len() + 1);
-        for points in result.windows(2) {
+        debug_assert!(target.len() > 1);
+        debug_assert!(target.len() <= first.len() + second.len() + 1);
+        for points in target.windows(2) {
             debug_assert!(points[0].at.fuzzy_lt(points[1].at));
         }
-        debug_assert!(!start.fuzzy_lt(result[0].at));
-        debug_assert!(start.fuzzy_lt(result[1].at));
-        debug_assert!(result[result.len() - 2].at.fuzzy_lt(end));
-        debug_assert!(!result[result.len() - 1].at.fuzzy_lt(end));
-
-        result
+        debug_assert!(!start.fuzzy_lt(target[0].at));
+        debug_assert!(start.fuzzy_lt(target[1].at));
+        debug_assert!(target[target.len() - 2].at.fuzzy_lt(end));
+        debug_assert!(!target[target.len() - 1].at.fuzzy_lt(end));
     }
 
     pub fn merge_partials(first: &[TTFPoint], second: &[TTFPoint], start: Timestamp, end: Timestamp) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {

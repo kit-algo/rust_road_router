@@ -291,3 +291,94 @@ pub static ACTIVE_SHORTCUTS: AtomicUsize = AtomicUsize::new(0);
 pub static UNNECESSARY_LINKED: AtomicUsize = AtomicUsize::new(0);
 pub static CONSIDERED_FOR_APPROX: AtomicUsize = AtomicUsize::new(0);
 pub static SAVED_BY_APPROX: AtomicIsize = AtomicIsize::new(0);
+
+#[derive(Debug)]
+struct ReusablePLFStorage {
+    data: Vec<TTFPoint>,
+    first_points: Vec<u32>
+}
+
+impl ReusablePLFStorage {
+    fn new() -> Self {
+        ReusablePLFStorage { data: Vec::new(), first_points: Vec::new() }
+    }
+
+    fn push_plf(&mut self) -> MutTopPLF {
+        self.first_points.push(self.data.len() as u32);
+        MutTopPLF { storage: self }
+    }
+
+    fn top_plfs(&self) -> (&[TTFPoint], &[TTFPoint]) {
+        let num_plfs = self.first_points.len();
+        (&self.data[self.first_points[num_plfs - 2] as usize .. self.first_points[num_plfs - 1] as usize], &self.data[self.first_points[num_plfs - 1] as usize ..])
+    }
+
+    fn top_plf(&self) -> &[TTFPoint] {
+        &self.data[self.first_points[self.first_points.len() - 1] as usize ..]
+    }
+}
+
+#[derive(Debug)]
+struct MutTopPLF<'a> {
+    storage: &'a mut ReusablePLFStorage
+}
+
+impl<'a> MutTopPLF<'a> {
+    fn storage(&self) -> &ReusablePLFStorage {
+        &self.storage
+    }
+
+    fn storage_mut(&mut self) -> &mut ReusablePLFStorage {
+        &mut self.storage
+    }
+}
+
+impl<'a> PLFTarget for MutTopPLF<'a> {
+    fn push(&mut self, val: TTFPoint) {
+        self.storage.data.push(val);
+    }
+
+    fn pop(&mut self) -> Option<TTFPoint> {
+        if self.is_empty() {
+            None
+        } else {
+            self.storage.data.pop()
+        }
+    }
+}
+
+impl<'a> Extend<TTFPoint> for MutTopPLF<'a> {
+    fn extend<T: IntoIterator<Item = TTFPoint>>(&mut self, iter: T) {
+        self.storage.data.extend(iter);
+    }
+}
+
+impl<'a> std::ops::Deref for MutTopPLF<'a> {
+    type Target = [TTFPoint];
+
+    fn deref(&self) -> &Self::Target {
+        self.storage.top_plf()
+    }
+}
+
+impl<'a> Drop for MutTopPLF<'a> {
+    fn drop(&mut self) {
+        self.storage.data.truncate(*self.storage.first_points.last().unwrap() as usize);
+        self.storage.first_points.pop();
+    }
+}
+
+trait PLFTarget: Extend<TTFPoint> + std::ops::Deref<Target = [TTFPoint]> {
+    fn push(&mut self, val: TTFPoint);
+    fn pop(&mut self) -> Option<TTFPoint>;
+}
+
+impl PLFTarget for Vec<TTFPoint> {
+    fn push(&mut self, val: TTFPoint) {
+        self.push(val);
+    }
+
+    fn pop(&mut self) -> Option<TTFPoint> {
+        self.pop()
+    }
+}

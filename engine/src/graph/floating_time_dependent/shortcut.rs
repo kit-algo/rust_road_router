@@ -263,19 +263,22 @@ impl<'a> TTF<'a> {
                     other_buffer.clear();
                     other_lower.copy_range(start_of_segment, end_of_segment, &mut other_buffer);
                     let (partial_lower, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, end_of_segment);
-                    PiecewiseLinearFunction::append_partials(&mut result_lower, &mut partial_lower.into_vec(), start_of_segment);
+                    PiecewiseLinearFunction::append_partials(&mut result_lower, &partial_lower, start_of_segment);
 
                     self_buffer.clear();
                     self_upper.copy_range(start_of_segment, end_of_segment, &mut self_buffer);
                     other_buffer.clear();
                     other_upper.copy_range(start_of_segment, end_of_segment, &mut other_buffer);
                     let (partial_upper, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, end_of_segment);
-                    PiecewiseLinearFunction::append_partials(&mut result_upper, &mut partial_upper.into_vec(), start_of_segment);
+                    PiecewiseLinearFunction::append_partials(&mut result_upper, &partial_upper, start_of_segment);
                 }
             }
         }
 
         (TTFCache::Approx(result_lower.into_boxed_slice(), result_upper.into_boxed_slice()), result)
+        // let (result_lower, _) = self_lower.merge(&other_lower);
+        // let (result_upper, _) = self_upper.merge(&other_upper);
+        // (TTFCache::Approx(result_lower, result_upper), result)
     }
 
     fn approximate(&self) -> TTFCache {
@@ -390,9 +393,17 @@ impl Shortcut {
 
             if cfg!(feature = "detailed-stats") { ACTUALLY_MERGED.fetch_add(1, Relaxed); }
             let (mut merged, intersection_data) = self_plf.merge(&linked, |start, end| {
-                let self_ipps = self.exact_ttf_for(start, end, shortcut_graph);
-                let other_ipps = ShortcutSource::from(other_data).exact_ttf_for(start, end, shortcut_graph);
-                PiecewiseLinearFunction::merge_partials(&self_ipps, &other_ipps, start, end)
+                let mut target = ReusablePLFStorage::new();
+                let mut tmp = ReusablePLFStorage::new();
+
+                let mut self_target = target.push_plf();
+                self.exact_ttf_for(start, end, shortcut_graph, &mut self_target, &mut tmp);
+
+                let mut other_target = self_target.storage_mut().push_plf();
+                ShortcutSource::from(other_data).exact_ttf_for(start, end, shortcut_graph, &mut other_target, &mut tmp);
+
+                let (self_ipps, other_ipps) = other_target.storage().top_plfs();
+                PiecewiseLinearFunction::merge_partials(self_ipps, other_ipps, start, end)
             });
             if cfg!(feature = "tdcch-approx") && merged.num_points() > 250 {
                 let old = merged.num_points();
@@ -548,32 +559,32 @@ impl Shortcut {
         Sources::Multi(new_sources.into_boxed_slice())
     }
 
-    pub(super) fn exact_ttf_for(&self, start: Timestamp, end: Timestamp, shortcut_graph: &PartialShortcutGraph) -> Vec<TTFPoint> {
+    pub(super) fn exact_ttf_for(&self, start: Timestamp, end: Timestamp, shortcut_graph: &PartialShortcutGraph, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
         debug_assert!(start.fuzzy_lt(end), "{:?} - {:?}", start, end);
 
         if self.constant {
-            return vec![TTFPoint { at: start, val: self.lower_bound }, TTFPoint { at: end, val: self.lower_bound }]
+            target.push(TTFPoint { at: start, val: self.lower_bound });
+            target.push(TTFPoint { at: end, val: self.lower_bound });
+            return
         }
 
         match &self.sources {
             Sources::None => unreachable!("There are no TTFs for empty shortcuts"),
-            Sources::One(source) => ShortcutSource::from(*source).exact_ttf_for(start, end, shortcut_graph),
+            Sources::One(source) => ShortcutSource::from(*source).exact_ttf_for(start, end, shortcut_graph, target, tmp),
             Sources::Multi(sources) => {
-                let mut result = Vec::new();
                 let mut c = SourceCursor::valid_at(sources, start);
 
                 while c.cur().0.fuzzy_lt(end) {
-                    let mut ttf = ShortcutSource::from(c.cur().1).exact_ttf_for(max(start, c.cur().0), min(end, c.next().0), shortcut_graph);
-                    PiecewiseLinearFunction::append_partials(&mut result, &mut ttf, max(start, c.cur().0));
+                    let mut inner_target = tmp.push_plf();
+                    ShortcutSource::from(c.cur().1).exact_ttf_for(max(start, c.cur().0), min(end, c.next().0), shortcut_graph, &mut inner_target, target.storage_mut());
+                    PiecewiseLinearFunction::append_partials(target, &inner_target, max(start, c.cur().0));
 
                     c.advance();
                 }
 
-                for points in result.windows(2) {
+                for points in target.windows(2) {
                     debug_assert!(points[0].at.fuzzy_lt(points[1].at));
                 }
-
-                result
             },
         }
     }
