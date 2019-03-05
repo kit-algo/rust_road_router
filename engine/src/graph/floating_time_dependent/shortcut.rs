@@ -78,24 +78,24 @@ impl<'a> TTF<'a> {
 
     #[allow(clippy::collapsible_if)]
     #[allow(clippy::cyclomatic_complexity)]
-    fn merge(&self, other: &TTF, merge_exact: impl Fn(Timestamp, Timestamp) -> Vec<(Timestamp, bool)>) -> (TTFCache, Vec<(Timestamp, bool)>) {
+    fn merge(&self, other: &TTF, merge_exact: impl Fn(Timestamp, Timestamp) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>)) -> (TTFCache, Vec<(Timestamp, bool)>) {
         use TTF::*;
 
         if let (Exact(self_plf), Exact(other)) = (self, other) {
-            let (plf, intersections) = self_plf.merge(other, init_all_merged_data).into_owned();
+            let (plf, intersections) = self_plf.merge(other);
             return (TTFCache::Exact(plf), intersections);
         }
 
         let (self_lower, self_upper) = self.bound_plfs();
         let (other_lower, other_upper) = other.bound_plfs();
 
-        let self_dominating_intersections = self_upper.merge(&other_lower, init_intersection_merged_data);
-        let other_dominating_intersections = other_upper.merge(&self_lower, init_intersection_merged_data);
+        let (_, self_dominating_intersections) = self_upper.merge(&other_lower);
+        let (_, other_dominating_intersections) = other_upper.merge(&self_lower);
 
         let mut dominating = false;
         let mut start_of_segment = Timestamp::zero();
-        let mut self_dominating_iter = self_dominating_intersections.better().unwrap().iter().peekable();
-        let mut other_dominating_iter = other_dominating_intersections.better().unwrap().iter().peekable();
+        let mut self_dominating_iter = self_dominating_intersections.iter().peekable();
+        let mut other_dominating_iter = other_dominating_intersections.iter().peekable();
         let mut result = Vec::new();
         let mut bound_merge_state = Vec::new();
 
@@ -155,7 +155,7 @@ impl<'a> TTF<'a> {
             } else {
                 if next_t_self.fuzzy_lt(next_t_other) {
 
-                    let intersections = merge_exact(start_of_segment, next_t_self);
+                    let (_, intersections) = merge_exact(start_of_segment, next_t_self);
 
                     if intersections.len() > 1 || result.last().map(|(_, self_better)| *self_better != intersections[0].1).unwrap_or(true) {
                         bound_merge_state.push((start_of_segment, BoundMergingState::Merge));
@@ -184,7 +184,7 @@ impl<'a> TTF<'a> {
                     self_dominating_iter.next();
                 } else if next_t_other.fuzzy_lt(next_t_self) {
 
-                    let intersections = merge_exact(start_of_segment, next_t_other);
+                    let (_, intersections) = merge_exact(start_of_segment, next_t_other);
 
                     if intersections.len() > 1 || result.last().map(|(_, self_better)| *self_better != intersections[0].1).unwrap_or(true) {
                         bound_merge_state.push((start_of_segment, BoundMergingState::Merge));
@@ -219,7 +219,7 @@ impl<'a> TTF<'a> {
         }
 
         if !dominating {
-            let intersections = merge_exact(start_of_segment, period());
+            let (_, intersections) = merge_exact(start_of_segment, period());
 
             if intersections.len() > 1 || result.last().map(|(_, self_better)| *self_better != intersections[0].1).unwrap_or(true) {
                 bound_merge_state.push((start_of_segment, BoundMergingState::Merge));
@@ -262,23 +262,20 @@ impl<'a> TTF<'a> {
                     self_lower.copy_range(start_of_segment, end_of_segment, &mut self_buffer);
                     other_buffer.clear();
                     other_lower.copy_range(start_of_segment, end_of_segment, &mut other_buffer);
-                    let (partial_lower, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, end_of_segment, init_all_merged_data).into_owned();
+                    let (partial_lower, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, end_of_segment);
                     PiecewiseLinearFunction::append_partials(&mut result_lower, &mut partial_lower.into_vec(), start_of_segment);
 
                     self_buffer.clear();
                     self_upper.copy_range(start_of_segment, end_of_segment, &mut self_buffer);
                     other_buffer.clear();
                     other_upper.copy_range(start_of_segment, end_of_segment, &mut other_buffer);
-                    let (partial_upper, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, end_of_segment, init_all_merged_data).into_owned();
+                    let (partial_upper, _) = PiecewiseLinearFunction::merge_partials(&self_buffer, &other_buffer, start_of_segment, end_of_segment);
                     PiecewiseLinearFunction::append_partials(&mut result_upper, &mut partial_upper.into_vec(), start_of_segment);
                 }
             }
         }
 
         (TTFCache::Approx(result_lower.into_boxed_slice(), result_upper.into_boxed_slice()), result)
-        // let (result_lower, _) = self_lower.merge(&other_lower, init_all_merged_data).into_owned();
-        // let (result_upper, _) = self_upper.merge(&other_upper, init_all_merged_data).into_owned();
-        // (TTFCache::Approx(result_lower, result_upper), result)
     }
 
     fn approximate(&self) -> TTFCache {
@@ -395,7 +392,7 @@ impl Shortcut {
             let (mut merged, intersection_data) = self_plf.merge(&linked, |start, end| {
                 let self_ipps = self.exact_ttf_for(start, end, shortcut_graph);
                 let other_ipps = ShortcutSource::from(other_data).exact_ttf_for(start, end, shortcut_graph);
-                PiecewiseLinearFunction::merge_partials(&self_ipps, &other_ipps, start, end, init_intersection_merged_data).into_owned()
+                PiecewiseLinearFunction::merge_partials(&self_ipps, &other_ipps, start, end)
             });
             if cfg!(feature = "tdcch-approx") && merged.num_points() > 250 {
                 let old = merged.num_points();
