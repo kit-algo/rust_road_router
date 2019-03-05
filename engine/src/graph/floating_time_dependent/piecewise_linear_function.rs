@@ -411,7 +411,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         let mut f = C::new(&self.ipps);
         let mut g = C::new(&other.ipps);
 
-        Self::append_point(&mut result, if better.last().unwrap().1 { f.cur() } else { g.cur() }.clone());
+        Self::append_point(&mut result, if better.last().unwrap().1 { f.cur() } else { g.cur() });
         f.advance();
         g.advance();
 
@@ -429,9 +429,9 @@ impl<'a> PiecewiseLinearFunction<'a> {
             if f.cur().at.fuzzy_eq(g.cur().at) {
                 if f.cur().val.fuzzy_eq(g.cur().val) {
                     if better.last().unwrap().1 {
-                        Self::append_point(&mut result, f.cur().clone());
+                        Self::append_point(&mut result, f.cur());
                     } else {
-                        Self::append_point(&mut result, g.cur().clone());
+                        Self::append_point(&mut result, g.cur());
                     }
 
                     if !better.last().unwrap().1 && counter_clockwise(&f.cur(), &f.next(), &g.next()) {
@@ -446,7 +446,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
                 } else if f.cur().val < g.cur().val {
 
-                    Self::append_point(&mut result, f.cur().clone());
+                    Self::append_point(&mut result, f.cur());
                     debug_assert!(f.cur().val.fuzzy_lt(g.cur().val), "{:?}", debug_merge(&f, &g, &result, &better));
                     debug_assert!(better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
 
@@ -458,7 +458,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
                 } else {
 
-                    Self::append_point(&mut result, g.cur().clone());
+                    Self::append_point(&mut result, g.cur());
                     debug_assert!(g.cur().val < f.cur().val, "{:?}", debug_merge(&f, &g, &result, &better));
                     debug_assert!(!better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
 
@@ -478,7 +478,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 debug_assert!(f.cur().at.fuzzy_lt(g.cur().at), "f {:?} g {:?}", f.cur().at, g.cur().at);
 
                 if counter_clockwise(&g.prev(), &f.cur(), &g.cur()) {
-                    Self::append_point(&mut result, f.cur().clone());
+                    Self::append_point(&mut result, f.cur());
                     debug_assert!(better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
 
                     if !better.last().unwrap().1 {
@@ -493,7 +493,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     }
 
                     if counter_clockwise(&g.prev(), &f.prev(), &f.cur()) || counter_clockwise(&f.cur(), &f.next(), &g.cur()) {
-                        Self::append_point(&mut result, f.cur().clone());
+                        Self::append_point(&mut result, f.cur());
                         debug_assert!(better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
                     }
 
@@ -509,7 +509,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 debug_assert!(g.cur().at < f.cur().at);
 
                 if counter_clockwise(&f.prev(), &g.cur(), &f.cur()) {
-                    Self::append_point(&mut result, g.cur().clone());
+                    Self::append_point(&mut result, g.cur());
                     debug_assert!(!better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
 
                     if better.last().unwrap().1 {
@@ -524,7 +524,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     }
 
                     if counter_clockwise(&g.prev(), &g.cur(), &f.prev()) || counter_clockwise(&g.cur(), &g.next(), &f.cur()) {
-                        Self::append_point(&mut result, g.cur().clone());
+                        Self::append_point(&mut result, g.cur());
                         debug_assert!(!better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
                     }
 
@@ -555,7 +555,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 Self::append_point(&mut result, p);
             }
         } else if result.last().unwrap().at.fuzzy_lt(end) {
-            Self::append_point(&mut result, if better.last().unwrap().1 { f.cur() } else { g.cur() }.clone());
+            Self::append_point(&mut result, if better.last().unwrap().1 { f.cur() } else { g.cur() });
         }
 
         debug_assert!(result.len() <= 2 * self.ipps.len() + 2 * other.ipps.len() + 2);
