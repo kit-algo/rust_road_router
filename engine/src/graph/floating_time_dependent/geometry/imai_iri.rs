@@ -196,7 +196,8 @@ impl Imai {
 
     fn update_lines_lower(&mut self) {
         self.r_lower = self.i;
-        while angle_lower_lt(&self.tunnel[self.i].lower_coord,
+        while self.tunnel[self.l_upper].succ_upper != INVALID_INDEX &&
+              angle_lower_lt(&self.tunnel[self.i].lower_coord,
                              &self.tunnel[self.l_upper].upper_coord,
                              &self.tunnel[self.tunnel[self.l_upper].succ_upper].upper_coord) {
             self.l_upper = self.tunnel[self.l_upper].succ_upper;
@@ -205,7 +206,8 @@ impl Imai {
 
     fn update_lines_upper(&mut self) {
         self.r_upper = self.i;
-        while angle_upper_lt(&self.tunnel[self.i].upper_coord,
+        while self.tunnel[self.l_lower].succ_lower != INVALID_INDEX &&
+              angle_upper_lt(&self.tunnel[self.i].upper_coord,
                              &self.tunnel[self.l_lower].lower_coord,
                              &self.tunnel[self.tunnel[self.l_lower].succ_lower].lower_coord) {
             self.l_lower = self.tunnel[self.l_lower].succ_lower;
