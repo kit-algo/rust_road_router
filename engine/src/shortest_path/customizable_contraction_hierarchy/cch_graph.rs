@@ -479,7 +479,39 @@ impl CCHGraph {
         report_time("TD-CCH Customization", || {
             let mut _events_ctxt = push_collection_context("events".to_string());
 
+            use std::thread;
+            use std::sync::mpsc::channel;
+
+            let (tx, rx) = channel();
+
+            thread::spawn(move || {
+                let timer = Timer::new();
+
+                loop {
+                    // let _event = events_ctxt.push_collection_item();
+
+                    report!("at_s", timer.get_passed_ms() / 1000);
+                    report!("nodes_customized", NODES_CUSTOMIZED.load(Ordering::Relaxed));
+                    if cfg!(feature = "detailed-stats") {
+                        report!("num_ipps_stored", IPP_COUNT.load(Ordering::Relaxed));
+                        report!("num_shortcuts_active", ACTIVE_SHORTCUTS.load(Ordering::Relaxed));
+                        report!("num_ipps_reduced_by_approx", SAVED_BY_APPROX.load(Ordering::Relaxed));
+                        report!("num_ipps_considered_for_approx", CONSIDERED_FOR_APPROX.load(Ordering::Relaxed));
+                        report!("num_shortcut_merge_points", PATH_SOURCES_COUNT.load(Ordering::Relaxed));
+                        report!("num_performed_merges", ACTUALLY_MERGED.load(Ordering::Relaxed));
+                        report!("num_performed_links", ACTUALLY_LINKED.load(Ordering::Relaxed));
+                        report!("num_performed_unnecessary_links", UNNECESSARY_LINKED.load(Ordering::Relaxed));
+                    }
+
+                    if let Ok(()) = rx.recv_timeout(std::time::Duration::from_secs(1)) {
+                        break;
+                    }
+                }
+            });
+
             self.customize_par_by_sep(&sep_tree, 0, &mut upward, &mut downward, metric, &inverted);
+
+            tx.send(()).unwrap();
         });
         drop(subctxt);
 
@@ -549,6 +581,8 @@ impl CCHGraph {
                     upward[edge_id as usize - edge_offset].clear_plf();
                     downward[edge_id as usize - edge_offset].clear_plf();
                 }
+
+                NODES_CUSTOMIZED.fetch_add(1, Ordering::Relaxed);
             }
         } else {
             let mut sub_offset = offset;
@@ -611,6 +645,8 @@ impl CCHGraph {
                     upward[edge_id as usize - edge_offset].clear_plf();
                     downward[edge_id as usize - edge_offset].clear_plf();
                 }
+
+                NODES_CUSTOMIZED.fetch_add(1, Ordering::Relaxed);
             }
         }
     }

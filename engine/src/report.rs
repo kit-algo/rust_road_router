@@ -149,7 +149,7 @@ pub struct ContextGuard(());
 
 impl Drop for ContextGuard {
     fn drop(&mut self) {
-        REPORTER.with(|reporter| reporter.borrow_mut().as_mut().map(|r| r.pop_context()));
+        REPORTER.with(|reporter| reporter.borrow_mut().as_mut().map(Reporter::pop_context));
     }
 }
 
@@ -163,7 +163,7 @@ pub struct CollectionContextGuard(());
 
 impl Drop for CollectionContextGuard {
     fn drop(&mut self) {
-        REPORTER.with(|reporter| reporter.borrow_mut().as_mut().map(|r| r.pop_context()));
+        REPORTER.with(|reporter| reporter.borrow_mut().as_mut().map(Reporter::pop_context));
     }
 }
 
@@ -174,7 +174,7 @@ pub fn push_collection_context(key: String) -> CollectionContextGuard {
 
 impl CollectionContextGuard {
     pub fn push_collection_item(&mut self) -> CollectionItemContextGuard {
-        REPORTER.with(|reporter| reporter.borrow_mut().as_mut().map(|r| r.create_collection_item()));
+        REPORTER.with(|reporter| reporter.borrow_mut().as_mut().map(Reporter::create_collection_item));
         CollectionItemContextGuard(self)
     }
 }
@@ -184,7 +184,7 @@ pub struct CollectionItemContextGuard<'a>(&'a CollectionContextGuard);
 
 impl<'a> Drop for CollectionItemContextGuard<'a> {
     fn drop(&mut self) {
-        REPORTER.with(|reporter| reporter.borrow_mut().as_mut().map(|r| r.pop_context()));
+        REPORTER.with(|reporter| reporter.borrow_mut().as_mut().map(Reporter::pop_context));
     }
 }
 

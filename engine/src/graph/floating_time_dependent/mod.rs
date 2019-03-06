@@ -283,6 +283,7 @@ pub fn period() -> Timestamp {
 
 use std::sync::atomic::{AtomicUsize, AtomicIsize};
 
+pub static NODES_CUSTOMIZED: AtomicUsize = AtomicUsize::new(0);
 pub static IPP_COUNT: AtomicUsize = AtomicUsize::new(0);
 pub static PATH_SOURCES_COUNT: AtomicUsize = AtomicUsize::new(0);
 pub static ACTUALLY_MERGED: AtomicUsize = AtomicUsize::new(0);
