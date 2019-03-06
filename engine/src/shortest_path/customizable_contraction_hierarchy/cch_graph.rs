@@ -525,6 +525,8 @@ impl CCHGraph {
             report!("num_performed_links", ACTUALLY_LINKED.load(Ordering::Relaxed));
             report!("num_performed_unnecessary_links", UNNECESSARY_LINKED.load(Ordering::Relaxed));
         }
+        report!("approx", f64::from(APPROX));
+        report!("approx_threshold", APPROX_THRESHOLD);
 
         ShortcutGraph::new(metric, &self.first_out, &self.head, upward, downward)
     }

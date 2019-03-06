@@ -2,6 +2,8 @@ use super::*;
 use std::sync::atomic::Ordering::Relaxed;
 use std::cmp::{min, max, Ordering};
 
+pub const APPROX_THRESHOLD: usize = 1000;
+
 #[derive(Debug)]
 enum TTFCache {
     Exact(Box<[TTFPoint]>),
@@ -377,7 +379,7 @@ impl Shortcut {
             if !self_plf.static_lower_bound().fuzzy_lt(other_upper_bound) {
                 self.upper_bound = min(self.upper_bound, other_upper_bound);
                 debug_assert!(!self.upper_bound.fuzzy_lt(self.lower_bound), "lower {:?} upper {:?}", self.lower_bound, self.upper_bound);
-                if cfg!(feature = "tdcch-approx") && linked_ipps.num_points() > 250 {
+                if cfg!(feature = "tdcch-approx") && linked_ipps.num_points() > APPROX_THRESHOLD {
                     let old = linked_ipps.num_points();
                     if cfg!(feature = "detailed-stats") { CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed); }
                     linked_ipps = linked.approximate();
@@ -405,7 +407,7 @@ impl Shortcut {
                 let (self_ipps, other_ipps) = other_target.storage().top_plfs();
                 PiecewiseLinearFunction::merge_partials(self_ipps, other_ipps, start, end)
             });
-            if cfg!(feature = "tdcch-approx") && merged.num_points() > 250 {
+            if cfg!(feature = "tdcch-approx") && merged.num_points() > APPROX_THRESHOLD {
                 let old = merged.num_points();
                 if cfg!(feature = "detailed-stats") { CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed); }
                 merged = TTF::from(&merged).approximate();
