@@ -173,7 +173,8 @@ impl Imai {
     fn update_ch_lower(&mut self) {
         let mut k = self.i - 1;
 
-        while !self.tunnel[k].lower_coord.at.fuzzy_eq(self.tunnel[self.p_lower].lower_coord.at) &&
+        while self.tunnel[k].pred_lower != INVALID_INDEX &&
+              !self.tunnel[k].lower_coord.at.fuzzy_eq(self.tunnel[self.p_lower].lower_coord.at) &&
               angle_lower_gt(&self.tunnel[self.i].lower_coord, &self.tunnel[k].lower_coord, &self.tunnel[self.tunnel[k].pred_lower].lower_coord) {
             k = self.tunnel[k].pred_lower;
         }
@@ -185,7 +186,8 @@ impl Imai {
     fn update_ch_upper(&mut self) {
         let mut k = self.i - 1;
 
-        while !self.tunnel[k].upper_coord.at.fuzzy_eq(self.tunnel[self.p_upper].upper_coord.at) &&
+        while self.tunnel[k].pred_upper != INVALID_INDEX &&
+              !self.tunnel[k].upper_coord.at.fuzzy_eq(self.tunnel[self.p_upper].upper_coord.at) &&
               angle_upper_gt(&self.tunnel[self.i].upper_coord, &self.tunnel[k].upper_coord, &self.tunnel[self.tunnel[k].pred_upper].upper_coord) {
             k = self.tunnel[k].pred_upper;
         }
@@ -249,7 +251,8 @@ impl Imai {
         self.r_upper = self.i;
         self.l_lower = self.p_lower;
         self.l_upper = self.p_upper;
-        while angle_upper_lt(&self.tunnel[self.l_upper].upper_coord,
+        while self.tunnel[self.l_upper].succ_upper != INVALID_INDEX &&
+              angle_upper_lt(&self.tunnel[self.l_upper].upper_coord,
                              &self.tunnel[self.r_lower].lower_coord,
                              &self.tunnel[self.tunnel[self.l_upper].succ_upper].upper_coord) {
             self.l_upper = self.tunnel[self.l_upper].succ_upper;
@@ -294,7 +297,8 @@ impl Imai {
         self.l_upper = self.p_upper;
         self.l_lower = self.p_lower;
 
-        while angle_lower_lt(&self.tunnel[self.l_lower].lower_coord,
+        while self.tunnel[self.l_lower].succ_lower != INVALID_INDEX &&
+              angle_lower_lt(&self.tunnel[self.l_lower].lower_coord,
                              &self.tunnel[self.r_upper].upper_coord,
                              &self.tunnel[self.tunnel[self.l_lower].succ_lower].lower_coord) {
             self.l_lower = self.tunnel[self.l_lower].succ_lower;

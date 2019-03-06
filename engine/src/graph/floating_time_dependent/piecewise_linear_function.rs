@@ -720,6 +720,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
             }
         }
 
+        // TODO this may break FIFO again
         let wrap = min(lower.first().unwrap().val, lower.last().unwrap().val);
         lower.first_mut().unwrap().val = wrap;
         lower.last_mut().unwrap().val = wrap;
@@ -737,6 +738,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
             }
         }
 
+        // TODO this may break FIFO again
         let wrap = max(upper.first().unwrap().val, upper.last().unwrap().val);
         upper.first_mut().unwrap().val = wrap;
         upper.last_mut().unwrap().val = wrap;
