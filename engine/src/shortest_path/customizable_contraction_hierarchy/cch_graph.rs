@@ -534,7 +534,7 @@ impl CCHGraph {
     fn customize_par_by_sep(&self, sep_tree: &SeparatorTree, offset: usize, upward: &mut [Shortcut], downward: &mut [Shortcut], metric: &floating_time_dependent::TDGraph, inverted: &[Vec<(NodeId, EdgeId)>]) {
         let edge_offset = self.first_out[offset] as usize;
 
-        if sep_tree.num_nodes < self.num_nodes() / (32 * rayon::current_num_threads()) {
+        if cfg!(feature = "tdcch-disable-par") || sep_tree.num_nodes < self.num_nodes() / (32 * rayon::current_num_threads()) {
             for current_node in offset..offset + sep_tree.num_nodes {
 
                 let (upward_below, upward_above) = upward.split_at_mut(self.first_out[current_node as usize] as usize - edge_offset);
