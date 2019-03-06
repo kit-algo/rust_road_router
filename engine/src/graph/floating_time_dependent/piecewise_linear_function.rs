@@ -596,6 +596,16 @@ impl<'a> PiecewiseLinearFunction<'a> {
         unimplemented!()
     }
 
+    #[cfg(not(feature = "tdcch-approx"))]
+    pub fn lower_bound_ttf(&self) -> Box<[TTFPoint]> {
+        unimplemented!()
+    }
+
+    #[cfg(not(feature = "tdcch-approx"))]
+    pub fn upper_bound_ttf(&self) -> Box<[TTFPoint]> {
+        unimplemented!()
+    }
+
     #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
     pub fn approximate(&self) -> Box<[TTFPoint]> {
         let mut result = Vec::with_capacity(self.ipps.len());
@@ -603,17 +613,14 @@ impl<'a> PiecewiseLinearFunction<'a> {
         result.into_boxed_slice()
     }
 
-    #[cfg(feature = "tdcch-approx-imai-iri")]
-    pub fn approximate(&self) -> Box<[TTFPoint]> {
-        Imai::new(self.ipps, APPROX.into(), APPROX.into(), true, true).compute().into_boxed_slice()
-    }
-
+    #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
     pub fn lower_bound_ttf(&self) -> Box<[TTFPoint]> {
         let mut result = Vec::with_capacity(self.ipps.len());
         self.douglas_peuker_lower(&mut result);
         result.into_boxed_slice()
     }
 
+    #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
     pub fn upper_bound_ttf(&self) -> Box<[TTFPoint]> {
         let mut result = Vec::with_capacity(self.ipps.len());
         self.douglas_peuker_upper(&mut result);
@@ -646,6 +653,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
+    #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
     fn douglas_peuker_lower(&self, result: &mut Vec<TTFPoint>) {
         if self.ipps.len() <= 2 {
             result.extend_from_slice(self.ipps);
@@ -671,6 +679,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
+    #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
     fn douglas_peuker_upper(&self, result: &mut Vec<TTFPoint>) {
         if self.ipps.len() <= 2 {
             result.extend_from_slice(self.ipps);
@@ -694,6 +703,45 @@ impl<'a> PiecewiseLinearFunction<'a> {
             result.push(first.clone());
             result.push(last.clone());
         }
+    }
+
+    #[cfg(feature = "tdcch-approx-imai-iri")]
+    pub fn approximate(&self) -> Box<[TTFPoint]> {
+        Imai::new(self.ipps, APPROX.into(), APPROX.into(), true, true).compute().into_boxed_slice()
+    }
+
+    #[cfg(feature = "tdcch-approx-imai-iri")]
+    pub fn lower_bound_ttf(&self) -> Box<[TTFPoint]> {
+        let mut lower = Imai::new(self.ipps, 0.0, APPROX.into(), true, true).compute();
+
+        for i in (1..lower.len()).rev() {
+            if lower[i-1].val - lower[i].val > lower[i].at - lower[i-1].at {
+                lower[i-1].val = lower[i].val + (lower[i].at - lower[i-1].at)
+            }
+        }
+
+        let wrap = min(lower.first().unwrap().val, lower.last().unwrap().val);
+        lower.first_mut().unwrap().val = wrap;
+        lower.last_mut().unwrap().val = wrap;
+
+        lower.into_boxed_slice()
+    }
+
+    #[cfg(feature = "tdcch-approx-imai-iri")]
+    pub fn upper_bound_ttf(&self) -> Box<[TTFPoint]> {
+        let mut upper = Imai::new(self.ipps, APPROX.into(), 0.0, true, true).compute();
+
+        for i in 1..upper.len() {
+            if upper[i-1].val - upper[i].val > upper[i].at - upper[i-1].at {
+                upper[i].val = upper[i-1].val - (upper[i].at - upper[i-1].at)
+            }
+        }
+
+        let wrap = max(upper.first().unwrap().val, upper.last().unwrap().val);
+        upper.first_mut().unwrap().val = wrap;
+        upper.last_mut().unwrap().val = wrap;
+
+        upper.into_boxed_slice()
     }
 }
 
