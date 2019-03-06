@@ -462,7 +462,7 @@ impl Shortcut {
             return
         }
 
-        let new_lower_bound = self.plf(shortcut_graph).static_lower_bound();
+        let new_lower_bound = max(self.lower_bound, self.plf(shortcut_graph).static_lower_bound());
 
         if self.upper_bound.fuzzy_lt(new_lower_bound) {
             self.required = false;
