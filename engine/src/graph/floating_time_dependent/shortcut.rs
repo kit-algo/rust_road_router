@@ -287,7 +287,10 @@ impl<'a> TTF<'a> {
         use TTF::*;
 
         match self {
-            Exact(plf) => TTFCache::Approx(plf.lower_bound_ttf(), plf.upper_bound_ttf()),
+            Exact(plf) => {
+                let (lower, upper) = plf.bound_ttfs();
+                TTFCache::Approx(lower, upper)
+            },
             Approx(lower_plf, upper_plf) => TTFCache::Approx(lower_plf.lower_bound_ttf(), upper_plf.upper_bound_ttf()),
         }
     }

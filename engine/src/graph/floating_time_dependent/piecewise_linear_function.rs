@@ -606,6 +606,11 @@ impl<'a> PiecewiseLinearFunction<'a> {
         unimplemented!()
     }
 
+    #[cfg(not(feature = "tdcch-approx"))]
+    pub fn bound_ttfs(&self) -> (Box<[TTFPoint]>, Box<[TTFPoint]>) {
+        unimplemented!()
+    }
+
     #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
     pub fn approximate(&self) -> Box<[TTFPoint]> {
         let mut result = Vec::with_capacity(self.ipps.len());
@@ -617,6 +622,12 @@ impl<'a> PiecewiseLinearFunction<'a> {
     pub fn lower_bound_ttf(&self) -> Box<[TTFPoint]> {
         let mut result = Vec::with_capacity(self.ipps.len());
         self.douglas_peuker_lower(&mut result);
+
+        let wrap_min = min(result.first().unwrap().val, result.last().unwrap().val);
+
+        result.first_mut().unwrap().val = wrap_min;
+        result.last_mut().unwrap().val = wrap_min;
+
         result.into_boxed_slice()
     }
 
@@ -624,7 +635,30 @@ impl<'a> PiecewiseLinearFunction<'a> {
     pub fn upper_bound_ttf(&self) -> Box<[TTFPoint]> {
         let mut result = Vec::with_capacity(self.ipps.len());
         self.douglas_peuker_upper(&mut result);
+
+        let wrap_max = max(result.first().unwrap().val, result.last().unwrap().val);
+
+        result.first_mut().unwrap().val = wrap_max;
+        result.last_mut().unwrap().val = wrap_max;
+
         result.into_boxed_slice()
+    }
+
+    #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
+    pub fn bound_ttfs(&self) -> (Box<[TTFPoint]>, Box<[TTFPoint]>) {
+        let mut result_lower = Vec::with_capacity(self.ipps.len());
+        let mut result_upper = Vec::with_capacity(self.ipps.len());
+        self.douglas_peuker_combined(&mut result_lower, &mut result_upper);
+
+        let wrap_min = min(result_lower.first().unwrap().val, result_lower.last().unwrap().val);
+        let wrap_max = max(result_upper.first().unwrap().val, result_upper.last().unwrap().val);
+
+        result_lower.first_mut().unwrap().val = wrap_min;
+        result_lower.last_mut().unwrap().val = wrap_min;
+        result_upper.first_mut().unwrap().val = wrap_max;
+        result_upper.last_mut().unwrap().val = wrap_max;
+
+        (result_lower.into_boxed_slice(), result_upper.into_boxed_slice())
     }
 
     #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
@@ -654,54 +688,112 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
-    fn douglas_peuker_lower(&self, result: &mut Vec<TTFPoint>) {
+    fn douglas_peuker_combined(&self, result_lower: &mut Vec<TTFPoint>, result_upper: &mut Vec<TTFPoint>) {
         if self.ipps.len() <= 2 {
-            result.extend_from_slice(self.ipps);
+            result_lower.extend_from_slice(self.ipps);
+            result_upper.extend_from_slice(self.ipps);
             return
         }
 
         let first = self.ipps.first().unwrap();
         let last = self.ipps.last().unwrap();
 
-        let (i, delta) = self.ipps[1..self.ipps.len()-1].iter()
+        let deltas = self.ipps[1..self.ipps.len()-1].iter()
             .enumerate()
-            .map(|(i, p)| (i+1, (p.val - interpolate_linear(first, last, p.at) - APPROX).abs()))
-            .max_by_key(|&(_, delta)| delta)
-            .unwrap();
+            .map(|(i, p)| (i+1, (p.val - interpolate_linear(first, last, p.at))));
+
+        let (i_min, min_delta) = deltas.clone().min_by_key(|&(_, delta)| delta).unwrap();
+        let (i_max, max_delta) = deltas.max_by_key(|&(_, delta)| delta).unwrap();
+
+        let (i, delta) = if min_delta.abs() > max_delta.abs() {
+            (i_min, min_delta.abs())
+        } else {
+            (i_max, max_delta.abs())
+        };
 
         if delta > APPROX {
-            PiecewiseLinearFunction { ipps: &self.ipps[0..=i] }.douglas_peuker_lower(result);
-            result.pop();
-            PiecewiseLinearFunction { ipps: &self.ipps[i..self.ipps.len()] }.douglas_peuker_lower(result);
+            PiecewiseLinearFunction { ipps: &self.ipps[0..=i] }.douglas_peuker_combined(result_lower, result_upper);
+            let prev_min = result_lower.pop().map(|p| p.val).unwrap_or_else(FlWeight::zero);
+            let prev_max = result_upper.pop().map(|p| p.val).unwrap_or_else(FlWeight::zero);
+            let prev_len = result_lower.len();
+            PiecewiseLinearFunction { ipps: &self.ipps[i..self.ipps.len()] }.douglas_peuker_combined(result_lower, result_upper);
+            result_lower[prev_len].val = min(result_lower[prev_len].val, prev_min);
+            result_upper[prev_len].val = max(result_upper[prev_len].val, prev_max);
         } else {
-            result.push(first.clone());
-            result.push(last.clone());
+            result_lower.push(TTFPoint { at: first.at, val: first.val + min(FlWeight::zero(), min_delta) });
+            result_upper.push(TTFPoint { at: first.at, val: first.val + max(FlWeight::zero(), max_delta) });
+            result_lower.push(TTFPoint { at: last.at, val: last.val + min(FlWeight::zero(), min_delta) });
+            result_upper.push(TTFPoint { at: last.at, val: last.val + max(FlWeight::zero(), max_delta) });
         }
     }
 
     #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
-    fn douglas_peuker_upper(&self, result: &mut Vec<TTFPoint>) {
+    fn douglas_peuker_lower(&self, result_lower: &mut Vec<TTFPoint>) {
         if self.ipps.len() <= 2 {
-            result.extend_from_slice(self.ipps);
+            result_lower.extend_from_slice(self.ipps);
             return
         }
 
         let first = self.ipps.first().unwrap();
         let last = self.ipps.last().unwrap();
 
-        let (i, delta) = self.ipps[1..self.ipps.len()-1].iter()
+        let deltas = self.ipps[1..self.ipps.len()-1].iter()
             .enumerate()
-            .map(|(i, p)| (i+1, (p.val - interpolate_linear(first, last, p.at) + APPROX).abs()))
-            .max_by_key(|&(_, delta)| delta)
-            .unwrap();
+            .map(|(i, p)| (i+1, (p.val - interpolate_linear(first, last, p.at))));
+
+        let (i_min, min_delta) = deltas.clone().min_by_key(|&(_, delta)| delta).unwrap();
+        let (i_max, max_delta) = deltas.max_by_key(|&(_, delta)| delta).unwrap();
+
+        let (i, delta) = if min_delta.abs() > max_delta.abs() {
+            (i_min, min_delta.abs())
+        } else {
+            (i_max, max_delta.abs())
+        };
 
         if delta > APPROX {
-            PiecewiseLinearFunction { ipps: &self.ipps[0..=i] }.douglas_peuker_upper(result);
-            result.pop();
-            PiecewiseLinearFunction { ipps: &self.ipps[i..self.ipps.len()] }.douglas_peuker_upper(result);
+            PiecewiseLinearFunction { ipps: &self.ipps[0..=i] }.douglas_peuker_lower(result_lower);
+            let prev_min = result_lower.pop().map(|p| p.val).unwrap_or_else(FlWeight::zero);
+            let prev_len = result_lower.len();
+            PiecewiseLinearFunction { ipps: &self.ipps[i..self.ipps.len()] }.douglas_peuker_lower(result_lower);
+            result_lower[prev_len].val = min(result_lower[prev_len].val, prev_min);
         } else {
-            result.push(first.clone());
-            result.push(last.clone());
+            result_lower.push(TTFPoint { at: first.at, val: first.val + min(FlWeight::zero(), min_delta) });
+            result_lower.push(TTFPoint { at: last.at, val: last.val + min(FlWeight::zero(), min_delta) });
+        }
+    }
+
+    #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
+    fn douglas_peuker_upper(&self, result_upper: &mut Vec<TTFPoint>) {
+        if self.ipps.len() <= 2 {
+            result_upper.extend_from_slice(self.ipps);
+            return
+        }
+
+        let first = self.ipps.first().unwrap();
+        let last = self.ipps.last().unwrap();
+
+        let deltas = self.ipps[1..self.ipps.len()-1].iter()
+            .enumerate()
+            .map(|(i, p)| (i+1, (p.val - interpolate_linear(first, last, p.at))));
+
+        let (i_min, min_delta) = deltas.clone().min_by_key(|&(_, delta)| delta).unwrap();
+        let (i_max, max_delta) = deltas.max_by_key(|&(_, delta)| delta).unwrap();
+
+        let (i, delta) = if min_delta.abs() > max_delta.abs() {
+            (i_min, min_delta.abs())
+        } else {
+            (i_max, max_delta.abs())
+        };
+
+        if delta > APPROX {
+            PiecewiseLinearFunction { ipps: &self.ipps[0..=i] }.douglas_peuker_upper(result_upper);
+            let prev_max = result_upper.pop().map(|p| p.val).unwrap_or_else(FlWeight::zero);
+            let prev_len = result_upper.len();
+            PiecewiseLinearFunction { ipps: &self.ipps[i..self.ipps.len()] }.douglas_peuker_upper(result_upper);
+            result_upper[prev_len].val = max(result_upper[prev_len].val, prev_max);
+        } else {
+            result_upper.push(TTFPoint { at: first.at, val: first.val + max(FlWeight::zero(), max_delta) });
+            result_upper.push(TTFPoint { at: last.at, val: last.val + max(FlWeight::zero(), max_delta) });
         }
     }
 
