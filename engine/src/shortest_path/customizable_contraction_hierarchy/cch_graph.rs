@@ -551,6 +551,8 @@ impl CCHGraph {
                     .zip(downward_active.iter_mut());
 
                 merge_iter.for_each(|((&node, upward_shortcut), downward_shortcut)| {
+                    let mut triangles = Vec::new();
+
                     let mut current_iter = inverted[current_node as usize].iter().peekable();
                     let mut other_iter = inverted[node as usize].iter().peekable();
 
@@ -567,12 +569,21 @@ impl CCHGraph {
                         } else {
                             debug_assert!(*lower_from_current >= offset as NodeId, "{} {}", offset, lower_from_current);
                             debug_assert!(*lower_from_other >= offset as NodeId, "{} {}", offset, lower_from_other);
-                            upward_shortcut.merge((*edge_from_cur_id, *edge_from_oth_id), &shortcut_graph);
-                            downward_shortcut.merge((*edge_from_oth_id, *edge_from_cur_id), &shortcut_graph);
+
+                            triangles.push((*edge_from_cur_id, *edge_from_oth_id));
 
                             current_iter.next();
                             other_iter.next();
                         }
+                    }
+                    triangles.sort_by_key(|&(down, up)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
+                    for &edges in &triangles {
+                        upward_shortcut.merge(edges, &shortcut_graph);
+                    }
+
+                    triangles.sort_by_key(|&(up, down)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
+                    for &(up, down) in &triangles {
+                        downward_shortcut.merge((down, up), &shortcut_graph);
                     }
                 });
 
@@ -622,6 +633,8 @@ impl CCHGraph {
                 //     .zip(downward_active.iter_mut());
 
                 merge_iter.for_each(|((&node, upward_shortcut), downward_shortcut)| {
+                    let mut triangles = Vec::new();
+
                     let mut current_iter = inverted[current_node as usize].iter().peekable();
                     let mut other_iter = inverted[node as usize].iter().peekable();
 
@@ -631,12 +644,21 @@ impl CCHGraph {
                         } else if lower_from_other < lower_from_current {
                             other_iter.next();
                         } else {
-                            upward_shortcut.merge((*edge_from_cur_id, *edge_from_oth_id), &shortcut_graph);
-                            downward_shortcut.merge((*edge_from_oth_id, *edge_from_cur_id), &shortcut_graph);
+                            triangles.push((*edge_from_cur_id, *edge_from_oth_id));
 
                             current_iter.next();
                             other_iter.next();
                         }
+                    }
+
+                    triangles.sort_by_key(|&(down, up)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
+                    for &edges in &triangles {
+                        upward_shortcut.merge(edges, &shortcut_graph);
+                    }
+
+                    triangles.sort_by_key(|&(up, down)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
+                    for &(up, down) in &triangles {
+                        downward_shortcut.merge((down, up), &shortcut_graph);
                     }
                 });
 
