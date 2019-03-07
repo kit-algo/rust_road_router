@@ -503,7 +503,7 @@ impl CCHGraph {
                         report!("num_performed_unnecessary_links", UNNECESSARY_LINKED.load(Ordering::Relaxed));
                     }
 
-                    if let Ok(()) = rx.recv_timeout(std::time::Duration::from_secs(1)) {
+                    if let Ok(()) = rx.recv_timeout(std::time::Duration::from_secs(3)) {
                         break;
                     }
                 }
