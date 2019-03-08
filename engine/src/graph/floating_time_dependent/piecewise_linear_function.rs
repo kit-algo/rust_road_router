@@ -255,35 +255,73 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     pub(super) fn link_partials(first: &[TTFPoint], second: &[TTFPoint], start: Timestamp, end: Timestamp, target: &mut MutTopPLF) {
-        let mut f = PartialPlfCursor::new(&first);
-        let mut g = PartialPlfCursor::new(&second);
+        let mut f_iter = first.iter();
+        let mut g_iter = second.iter();
+
+        let mut f_done = false;
+        let mut g_done = false;
+
+        let mut f_cur = f_iter.next().cloned().unwrap();
+        let mut g_cur = g_iter.next().cloned().unwrap();
+
+        let mut f_prev = TTFPoint { at: f_cur.at - FlWeight::new(1.0), val: f_cur.val };
+        let mut g_prev = TTFPoint { at: g_cur.at - FlWeight::new(1.0), val: g_cur.val };
 
         loop {
             let x;
             let y;
 
-            if g.cur().at.fuzzy_eq(f.cur().at + f.cur().val) {
-                x = f.cur().at;
-                y = g.cur().val + f.cur().val;
+            if g_cur.at.fuzzy_eq(f_cur.at + f_cur.val) {
+                x = f_cur.at;
+                y = g_cur.val + f_cur.val;
 
-                g.advance();
-                f.advance();
-            } else if g.cur().at < f.cur().at + f.cur().val {
-                debug_assert!(g.cur().at.fuzzy_lt(f.cur().at + f.cur().val));
+                if let Some(next_f) = f_iter.next() {
+                    f_prev = f_cur;
+                    f_cur = next_f.clone();
+                } else {
+                    f_prev.at = f_prev.at + FlWeight::new(1.0);
+                    f_cur.at = f_cur.at + FlWeight::new(1.0);
+                    f_done = true;
+                }
 
-                let m_arr_f_inverse = (f.cur().at - f.prev().at) / (f.cur().at + f.cur().val - f.prev().at - f.prev().val);
-                x = m_arr_f_inverse * (g.cur().at - f.prev().at - f.prev().val) + f.prev().at;
-                y = g.cur().at + g.cur().val - x;
+                if let Some(next_g) = g_iter.next() {
+                    g_prev = g_cur;
+                    g_cur = next_g.clone();
+                } else {
+                    g_prev.at = g_prev.at + FlWeight::new(1.0);
+                    g_cur.at = g_cur.at + FlWeight::new(1.0);
+                    g_done = true;
+                }
+            } else if g_cur.at < f_cur.at + f_cur.val {
+                debug_assert!(g_cur.at.fuzzy_lt(f_cur.at + f_cur.val));
 
-                g.advance();
+                let m_arr_f_inverse = (f_cur.at - f_prev.at) / (f_cur.at + f_cur.val - f_prev.at - f_prev.val);
+                x = m_arr_f_inverse * (g_cur.at - f_prev.at - f_prev.val) + f_prev.at;
+                y = g_cur.at + g_cur.val - x;
+
+                if let Some(next_g) = g_iter.next() {
+                    g_prev = g_cur;
+                    g_cur = next_g.clone();
+                } else {
+                    g_prev.at = g_prev.at + FlWeight::new(1.0);
+                    g_cur.at = g_cur.at + FlWeight::new(1.0);
+                    g_done = true;
+                }
             } else {
-                debug_assert!((f.cur().at + f.cur().val).fuzzy_lt(g.cur().at));
+                debug_assert!((f_cur.at + f_cur.val).fuzzy_lt(g_cur.at));
 
-                x = f.cur().at;
-                let m_g = (g.cur().val - g.prev().val) / (g.cur().at - g.prev().at);
-                y = g.prev().val + m_g * (f.cur().at + f.cur().val - g.prev().at) + f.cur().val;
+                x = f_cur.at;
+                let m_g = (g_cur.val - g_prev.val) / (g_cur.at - g_prev.at);
+                y = g_prev.val + m_g * (f_cur.at + f_cur.val - g_prev.at) + f_cur.val;
 
-                f.advance();
+                if let Some(next_f) = f_iter.next() {
+                    f_prev = f_cur;
+                    f_cur = next_f.clone();
+                } else {
+                    f_prev.at = f_prev.at + FlWeight::new(1.0);
+                    f_cur.at = f_cur.at + FlWeight::new(1.0);
+                    f_done = true;
+                }
             }
 
             if !start.fuzzy_lt(x) && !target.is_empty() {
@@ -299,7 +337,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
             target.push(point);
 
-            if (f.done() && g.done()) || !x.fuzzy_lt(end) {
+            if (f_done && g_done) || !x.fuzzy_lt(end) {
                 break;
             }
         }
