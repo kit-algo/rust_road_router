@@ -62,6 +62,7 @@ pub struct RdfLink {
 #[derive(Debug, Default, Clone)]
 pub struct RdfNavLink {
     link_id: i64,
+    functional_class: u8,
     travel_direction: RdfLinkDirection,
     speed_category: i32,
     from_ref_speed_limit: Option<i32>,
@@ -129,6 +130,16 @@ impl RdfLinkGeometry {
     }
 }
 
+#[derive(Debug)]
+pub struct HereData {
+    pub graph: OwnedGraph,
+    pub functional_road_classes: Vec<u8>,
+    pub lat: Vec<f32>,
+    pub lng: Vec<f32>,
+    pub link_id_mapping: RankSelectMap,
+    pub here_rank_to_link_id: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,
+}
+
 pub trait RdfDataSource {
     fn links(&self) -> Vec<RdfLink>;
     fn nav_links(&self) -> Vec<RdfNavLink>;
@@ -136,7 +147,7 @@ pub trait RdfDataSource {
     fn link_geometries(&self) -> Vec<RdfLinkGeometry>;
 }
 
-pub fn read_graph(source: &RdfDataSource, (min_lat, min_lon): (i64, i64), (max_lat, max_lon): (i64, i64)) -> (OwnedGraph, Vec<f32>, Vec<f32>, RankSelectMap, Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>) {
+pub fn read_graph(source: &RdfDataSource, (min_lat, min_lon): (i64, i64), (max_lat, max_lon): (i64, i64)) -> HereData {
 
     let included = |node: &RdfNode| {
         node.lat >= min_lat && node.lat <= max_lat && node.lon >= min_lon && node.lon <= max_lon
@@ -242,6 +253,7 @@ pub fn read_graph(source: &RdfDataSource, (min_lat, min_lon): (i64, i64), (max_l
     // init other graph arrays
     let mut head: Vec<NodeId> = vec![0; m as usize];
     let mut weights: Vec<Weight> = vec![0; m as usize];
+    let mut functional_road_classes: Vec<u8> = vec![0; m as usize];
     let mut here_rank_to_link_id: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)> = vec![(InRangeOption::new(None), InRangeOption::new(None)); links.len()];
 
     println!("calculate weights");
@@ -267,23 +279,27 @@ pub fn read_graph(source: &RdfDataSource, (min_lat, min_lon): (i64, i64), (max_l
                 RdfLinkDirection::FromRef => {
                     head[first_out[from_node] as usize] = to_node as NodeId;
                     weights[first_out[from_node] as usize] = from_weight;
+                    functional_road_classes[first_out[from_node] as usize] = nav_link.functional_class;
                     here_rank_to_link_id[link_index].0 = InRangeOption::new(Some(first_out[from_node]));
                     first_out[from_node] += 1;
                 },
                 RdfLinkDirection::ToRef => {
                     head[first_out[to_node] as usize] = from_node as NodeId;
                     weights[first_out[to_node] as usize] = to_weight;
+                    functional_road_classes[first_out[to_node] as usize] = nav_link.functional_class;
                     here_rank_to_link_id[link_index].1 = InRangeOption::new(Some(first_out[to_node]));
                     first_out[to_node] += 1;
                 },
                 RdfLinkDirection::Both => {
                     head[first_out[from_node] as usize] = to_node as NodeId;
                     weights[first_out[from_node] as usize] = from_weight;
+                    functional_road_classes[first_out[from_node] as usize] = nav_link.functional_class;
                     here_rank_to_link_id[link_index].0 = InRangeOption::new(Some(first_out[from_node]));
                     first_out[from_node] += 1;
 
                     head[first_out[to_node] as usize] = from_node as NodeId;
                     weights[first_out[to_node] as usize] = to_weight;
+                    functional_road_classes[first_out[to_node] as usize] = nav_link.functional_class;
                     here_rank_to_link_id[link_index].1 = InRangeOption::new(Some(first_out[to_node]));
                     first_out[to_node] += 1;
                 }
@@ -300,7 +316,7 @@ pub fn read_graph(source: &RdfDataSource, (min_lat, min_lon): (i64, i64), (max_l
     let graph = OwnedGraph::new(first_out, head, weights);
     let lat = nodes.iter().map(|node| ((node.lat as f64) / 100_000.) as f32).collect();
     let lng = nodes.iter().map(|node| ((node.lon as f64) / 100_000.) as f32).collect();
-    (graph, lat, lng, link_id_mapping, here_rank_to_link_id)
+    HereData { graph, functional_road_classes, lat, lng, link_id_mapping, here_rank_to_link_id }
 }
 
 fn calculate_length_in_m(geometries: &[RdfLinkGeometry]) -> f64 {
