@@ -176,10 +176,10 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
-    pub fn link(&self, other: &Self) -> Box<[TTFPoint]> {
+    pub fn link(&self, other: &Self) -> Vec<TTFPoint> {
         if let [TTFPoint { val, .. }] = &self.ipps {
             if let [TTFPoint { val: other, .. }] = &other.ipps {
-                return vec![TTFPoint { at: Timestamp::zero(), val: val + other }].into_boxed_slice()
+                return vec![TTFPoint { at: Timestamp::zero(), val: val + other }]
             } else {
                 let zero_val = other.evaluate(val.into());
                 let (_, val_offset) = Timestamp::from(val).split_of_period();
@@ -196,7 +196,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
                 result.last_mut().unwrap().at = period();
 
-                return result.into_boxed_slice()
+                return result
             }
         }
         if let [TTFPoint { val, .. }] = &other.ipps {
@@ -251,7 +251,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
         debug_assert!(result.len() <= self.ipps.len() + other.ipps.len() + 1);
 
-        result.into_boxed_slice()
+        result
     }
 
     #[allow(clippy::cognitive_complexity)]
@@ -358,26 +358,26 @@ impl<'a> PiecewiseLinearFunction<'a> {
         debug_assert!(!target[target.len() - 1].at.fuzzy_lt(end));
     }
 
-    pub fn merge_partials(first: &[TTFPoint], second: &[TTFPoint], start: Timestamp, end: Timestamp) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
+    pub fn merge_partials(first: &[TTFPoint], second: &[TTFPoint], start: Timestamp, end: Timestamp, buffer: &mut Vec<TTFPoint>) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
         debug_assert!(start >= Timestamp::zero());
         debug_assert!(end <= period());
 
-        PiecewiseLinearFunction { ipps: first }.merge_in_bounds::<PartialPlfCursor>(&PiecewiseLinearFunction { ipps: second }, start, end)
+        PiecewiseLinearFunction { ipps: first }.merge_in_bounds::<PartialPlfCursor>(&PiecewiseLinearFunction { ipps: second }, start, end, buffer)
     }
 
-    pub fn merge(&self, other: &Self) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
-        self.merge_in_bounds::<Cursor>(other, Timestamp::zero(), period())
+    pub fn merge(&self, other: &Self, buffer: &mut Vec<TTFPoint>) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
+        self.merge_in_bounds::<Cursor>(other, Timestamp::zero(), period(), buffer)
     }
 
     #[allow(clippy::cognitive_complexity)]
-    fn merge_in_bounds<C: MergeCursor<'a>>(&self, other: &Self, start: Timestamp, end: Timestamp) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
+    fn merge_in_bounds<C: MergeCursor<'a>>(&self, other: &Self, start: Timestamp, end: Timestamp, result: &mut Vec<TTFPoint>) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
         if self.upper_bound() < other.lower_bound() {
             return (self.ipps.to_vec().into_boxed_slice(), vec![(start, true)])
         } else if other.upper_bound() < self.lower_bound() {
             return (other.ipps.to_vec().into_boxed_slice(), vec![(start, false)])
         }
 
-        let mut result = Vec::with_capacity(2 * self.ipps.len() + 2 * other.ipps.len() + 2);
+        result.reserve(2 * self.ipps.len() + 2 * other.ipps.len() + 2);
         let mut better = Vec::new();
 
         let mut f = C::new(&self.ipps);
@@ -453,7 +453,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         let mut f = C::new(&self.ipps);
         let mut g = C::new(&other.ipps);
 
-        Self::append_point(&mut result, if better.last().unwrap().1 { f.cur() } else { g.cur() });
+        Self::append_point(result, if better.last().unwrap().1 { f.cur() } else { g.cur() });
         f.advance();
         g.advance();
 
@@ -464,16 +464,16 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 if start.fuzzy_lt(intersection.at) && intersection.at.fuzzy_lt(end) {
                     debug_assert_ne!(better.last().unwrap().1, counter_clockwise(&g.prev(), &f.cur(), &g.cur()), "{:?} {:?}", debug_merge(&f, &g, &result, &better), dbg_each!(start, end, intersection));
                     better.push((intersection.at, counter_clockwise(&g.prev(), &f.cur(), &g.cur())));
-                    Self::append_point(&mut result, intersection);
+                    Self::append_point(result, intersection);
                 }
             }
 
             if f.cur().at.fuzzy_eq(g.cur().at) {
                 if f.cur().val.fuzzy_eq(g.cur().val) {
                     if better.last().unwrap().1 {
-                        Self::append_point(&mut result, f.cur());
+                        Self::append_point(result, f.cur());
                     } else {
-                        Self::append_point(&mut result, g.cur());
+                        Self::append_point(result, g.cur());
                     }
 
                     if !better.last().unwrap().1 && counter_clockwise(&f.cur(), &f.next(), &g.next()) {
@@ -488,7 +488,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
                 } else if f.cur().val < g.cur().val {
 
-                    Self::append_point(&mut result, f.cur());
+                    Self::append_point(result, f.cur());
                     debug_assert!(f.cur().val.fuzzy_lt(g.cur().val), "{:?}", debug_merge(&f, &g, &result, &better));
                     debug_assert!(better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
 
@@ -500,7 +500,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
                 } else {
 
-                    Self::append_point(&mut result, g.cur());
+                    Self::append_point(result, g.cur());
                     debug_assert!(g.cur().val < f.cur().val, "{:?}", debug_merge(&f, &g, &result, &better));
                     debug_assert!(!better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
 
@@ -520,7 +520,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 debug_assert!(f.cur().at.fuzzy_lt(g.cur().at), "f {:?} g {:?}", f.cur().at, g.cur().at);
 
                 if counter_clockwise(&g.prev(), &f.cur(), &g.cur()) {
-                    Self::append_point(&mut result, f.cur());
+                    Self::append_point(result, f.cur());
                     debug_assert!(better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
 
                     if !better.last().unwrap().1 {
@@ -535,7 +535,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     }
 
                     if counter_clockwise(&g.prev(), &f.prev(), &f.cur()) || counter_clockwise(&f.cur(), &f.next(), &g.cur()) {
-                        Self::append_point(&mut result, f.cur());
+                        Self::append_point(result, f.cur());
                         debug_assert!(better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
                     }
 
@@ -551,7 +551,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 debug_assert!(g.cur().at < f.cur().at);
 
                 if counter_clockwise(&f.prev(), &g.cur(), &f.cur()) {
-                    Self::append_point(&mut result, g.cur());
+                    Self::append_point(result, g.cur());
                     debug_assert!(!better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
 
                     if better.last().unwrap().1 {
@@ -566,7 +566,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     }
 
                     if counter_clockwise(&g.prev(), &g.cur(), &f.prev()) || counter_clockwise(&g.cur(), &g.next(), &f.cur()) {
-                        Self::append_point(&mut result, g.cur());
+                        Self::append_point(result, g.cur());
                         debug_assert!(!better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
                     }
 
@@ -587,17 +587,17 @@ impl<'a> PiecewiseLinearFunction<'a> {
             if start.fuzzy_lt(intersection.at) && intersection.at.fuzzy_lt(end) {
                 debug_assert_ne!(better.last().unwrap().1, counter_clockwise(&g.prev(), &f.cur(), &g.cur()), "{:?}", debug_merge(&f, &g, &result, &better));
                 better.push((intersection.at, counter_clockwise(&g.prev(), &f.cur(), &g.cur())));
-                Self::append_point(&mut result, intersection);
+                Self::append_point(result, intersection);
             }
         }
 
         if start == Timestamp::zero() && end == period() {
             if result.len() > 1 {
                 let p = TTFPoint { at: end, val: result[0].val };
-                Self::append_point(&mut result, p);
+                Self::append_point(result, p);
             }
         } else if result.last().unwrap().at.fuzzy_lt(end) {
-            Self::append_point(&mut result, if better.last().unwrap().1 { f.cur() } else { g.cur() });
+            Self::append_point(result, if better.last().unwrap().1 { f.cur() } else { g.cur() });
         }
 
         debug_assert!(result.len() <= 2 * self.ipps.len() + 2 * other.ipps.len() + 2);
@@ -617,7 +617,9 @@ impl<'a> PiecewiseLinearFunction<'a> {
         debug_assert!(!result[result.len() - 1].at.fuzzy_lt(end));
         debug_assert!(result[result.len() - 2].at.fuzzy_lt(end));
 
-        (result.into_boxed_slice(), better)
+        let ret = (result[..].to_vec().into_boxed_slice(), better);
+        result.clear();
+        ret
     }
 
     fn append_point(points: &mut Vec<TTFPoint>, point: TTFPoint) {

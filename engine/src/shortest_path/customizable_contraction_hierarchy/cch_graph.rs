@@ -12,6 +12,7 @@ use crate::{
 
 use std;
 use std::ops::Range;
+use std::cell::RefCell;
 use std::sync::atomic::Ordering;
 
 use rayon::prelude::*;
@@ -535,68 +536,72 @@ impl CCHGraph {
         let edge_offset = self.first_out[offset] as usize;
 
         if cfg!(feature = "tdcch-disable-par") || sep_tree.num_nodes < self.num_nodes() / (32 * rayon::current_num_threads()) {
-            for current_node in offset..offset + sep_tree.num_nodes {
+            MERGE_BUFFERS.with(|buffers| {
+                let mut buffers = buffers.borrow_mut();
 
-                let (upward_below, upward_above) = upward.split_at_mut(self.first_out[current_node as usize] as usize - edge_offset);
-                let upward_active = &mut upward_above[0..self.neighbor_edge_indices(current_node as NodeId).len()];
-                let (downward_below, downward_above) = downward.split_at_mut(self.first_out[current_node as usize] as usize - edge_offset);
-                let downward_active = &mut downward_above[0..self.neighbor_edge_indices(current_node as NodeId).len()];
-                let shortcut_graph = PartialShortcutGraph::new(metric, upward_below, downward_below, edge_offset);
+                for current_node in offset..offset + sep_tree.num_nodes {
 
-                debug_assert_eq!(upward_active.len(), self.degree(current_node as NodeId));
-                debug_assert_eq!(downward_active.len(), self.degree(current_node as NodeId));
+                    let (upward_below, upward_above) = upward.split_at_mut(self.first_out[current_node as usize] as usize - edge_offset);
+                    let upward_active = &mut upward_above[0..self.neighbor_edge_indices(current_node as NodeId).len()];
+                    let (downward_below, downward_above) = downward.split_at_mut(self.first_out[current_node as usize] as usize - edge_offset);
+                    let downward_active = &mut downward_above[0..self.neighbor_edge_indices(current_node as NodeId).len()];
+                    let shortcut_graph = PartialShortcutGraph::new(metric, upward_below, downward_below, edge_offset);
 
-                let merge_iter = self.head[self.neighbor_edge_indices_usize(current_node as NodeId)].iter()
-                    .zip(upward_active.iter_mut())
-                    .zip(downward_active.iter_mut());
+                    debug_assert_eq!(upward_active.len(), self.degree(current_node as NodeId));
+                    debug_assert_eq!(downward_active.len(), self.degree(current_node as NodeId));
 
-                merge_iter.for_each(|((&node, upward_shortcut), downward_shortcut)| {
-                    let mut triangles = Vec::new();
+                    let merge_iter = self.head[self.neighbor_edge_indices_usize(current_node as NodeId)].iter()
+                        .zip(upward_active.iter_mut())
+                        .zip(downward_active.iter_mut());
 
-                    let mut current_iter = inverted[current_node as usize].iter().peekable();
-                    let mut other_iter = inverted[node as usize].iter().peekable();
+                    merge_iter.for_each(|((&node, upward_shortcut), downward_shortcut)| {
+                        let mut triangles = Vec::new();
 
-                    while let (Some((lower_from_current, edge_from_cur_id)), Some((lower_from_other, edge_from_oth_id))) = (current_iter.peek(), other_iter.peek()) {
-                        debug_assert_eq!(self.head()[*edge_from_cur_id as usize], current_node as NodeId);
-                        debug_assert_eq!(self.head()[*edge_from_oth_id as usize], node);
-                        debug_assert_eq!(self.edge_id_to_tail(*edge_from_cur_id), *lower_from_current);
-                        debug_assert_eq!(self.edge_id_to_tail(*edge_from_oth_id), *lower_from_other);
+                        let mut current_iter = inverted[current_node as usize].iter().peekable();
+                        let mut other_iter = inverted[node as usize].iter().peekable();
 
-                        if lower_from_current < lower_from_other {
-                            current_iter.next();
-                        } else if lower_from_other < lower_from_current {
-                            other_iter.next();
-                        } else {
-                            debug_assert!(*lower_from_current >= offset as NodeId, "{} {}", offset, lower_from_current);
-                            debug_assert!(*lower_from_other >= offset as NodeId, "{} {}", offset, lower_from_other);
+                        while let (Some((lower_from_current, edge_from_cur_id)), Some((lower_from_other, edge_from_oth_id))) = (current_iter.peek(), other_iter.peek()) {
+                            debug_assert_eq!(self.head()[*edge_from_cur_id as usize], current_node as NodeId);
+                            debug_assert_eq!(self.head()[*edge_from_oth_id as usize], node);
+                            debug_assert_eq!(self.edge_id_to_tail(*edge_from_cur_id), *lower_from_current);
+                            debug_assert_eq!(self.edge_id_to_tail(*edge_from_oth_id), *lower_from_other);
 
-                            triangles.push((*edge_from_cur_id, *edge_from_oth_id));
+                            if lower_from_current < lower_from_other {
+                                current_iter.next();
+                            } else if lower_from_other < lower_from_current {
+                                other_iter.next();
+                            } else {
+                                debug_assert!(*lower_from_current >= offset as NodeId, "{} {}", offset, lower_from_current);
+                                debug_assert!(*lower_from_other >= offset as NodeId, "{} {}", offset, lower_from_other);
 
-                            current_iter.next();
-                            other_iter.next();
+                                triangles.push((*edge_from_cur_id, *edge_from_oth_id));
+
+                                current_iter.next();
+                                other_iter.next();
+                            }
                         }
-                    }
-                    triangles.sort_by_key(|&(down, up)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
-                    for &edges in &triangles {
-                        upward_shortcut.merge(edges, &shortcut_graph);
+                        triangles.sort_by_key(|&(down, up)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
+                        for &edges in &triangles {
+                            upward_shortcut.merge(edges, &shortcut_graph, &mut buffers);
+                        }
+
+                        triangles.sort_by_key(|&(up, down)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
+                        for &(up, down) in &triangles {
+                            downward_shortcut.merge((down, up), &shortcut_graph, &mut buffers);
+                        }
+                    });
+
+                    for shortcut in upward_active { shortcut.finalize_bounds(&shortcut_graph); }
+                    for shortcut in downward_active { shortcut.finalize_bounds(&shortcut_graph); }
+
+                    for &(_, edge_id) in &inverted[current_node as usize] {
+                        upward[edge_id as usize - edge_offset].clear_plf();
+                        downward[edge_id as usize - edge_offset].clear_plf();
                     }
 
-                    triangles.sort_by_key(|&(up, down)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
-                    for &(up, down) in &triangles {
-                        downward_shortcut.merge((down, up), &shortcut_graph);
-                    }
-                });
-
-                for shortcut in upward_active { shortcut.finalize_bounds(&shortcut_graph); }
-                for shortcut in downward_active { shortcut.finalize_bounds(&shortcut_graph); }
-
-                for &(_, edge_id) in &inverted[current_node as usize] {
-                    upward[edge_id as usize - edge_offset].clear_plf();
-                    downward[edge_id as usize - edge_offset].clear_plf();
+                    NODES_CUSTOMIZED.fetch_add(1, Ordering::Relaxed);
                 }
-
-                NODES_CUSTOMIZED.fetch_add(1, Ordering::Relaxed);
-            }
+            });
         } else {
             let mut sub_offset = offset;
             let mut sub_edge_offset = edge_offset;
@@ -633,33 +638,36 @@ impl CCHGraph {
                 //     .zip(downward_active.iter_mut());
 
                 merge_iter.for_each(|((&node, upward_shortcut), downward_shortcut)| {
-                    let mut triangles = Vec::new();
+                    MERGE_BUFFERS.with(|buffers| {
+                        let mut buffers = buffers.borrow_mut();
+                        let mut triangles = Vec::new();
 
-                    let mut current_iter = inverted[current_node as usize].iter().peekable();
-                    let mut other_iter = inverted[node as usize].iter().peekable();
+                        let mut current_iter = inverted[current_node as usize].iter().peekable();
+                        let mut other_iter = inverted[node as usize].iter().peekable();
 
-                    while let (Some((lower_from_current, edge_from_cur_id)), Some((lower_from_other, edge_from_oth_id))) = (current_iter.peek(), other_iter.peek()) {
-                        if lower_from_current < lower_from_other {
-                            current_iter.next();
-                        } else if lower_from_other < lower_from_current {
-                            other_iter.next();
-                        } else {
-                            triangles.push((*edge_from_cur_id, *edge_from_oth_id));
+                        while let (Some((lower_from_current, edge_from_cur_id)), Some((lower_from_other, edge_from_oth_id))) = (current_iter.peek(), other_iter.peek()) {
+                            if lower_from_current < lower_from_other {
+                                current_iter.next();
+                            } else if lower_from_other < lower_from_current {
+                                other_iter.next();
+                            } else {
+                                triangles.push((*edge_from_cur_id, *edge_from_oth_id));
 
-                            current_iter.next();
-                            other_iter.next();
+                                current_iter.next();
+                                other_iter.next();
+                            }
                         }
-                    }
 
-                    triangles.sort_by_key(|&(down, up)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
-                    for &edges in &triangles {
-                        upward_shortcut.merge(edges, &shortcut_graph);
-                    }
+                        triangles.sort_by_key(|&(down, up)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
+                        for &edges in &triangles {
+                            upward_shortcut.merge(edges, &shortcut_graph, &mut buffers);
+                        }
 
-                    triangles.sort_by_key(|&(up, down)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
-                    for &(up, down) in &triangles {
-                        downward_shortcut.merge((down, up), &shortcut_graph);
-                    }
+                        triangles.sort_by_key(|&(up, down)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
+                        for &(up, down) in &triangles {
+                            downward_shortcut.merge((down, up), &shortcut_graph, &mut buffers);
+                        }
+                    });
                 });
 
                 for shortcut in upward_active { shortcut.finalize_bounds(&shortcut_graph); }
@@ -737,3 +745,5 @@ impl Drop for RankLogger {
         }
     }
 }
+
+thread_local! { static MERGE_BUFFERS: RefCell<MergeBuffers> = RefCell::new(MergeBuffers::new()); }

@@ -294,7 +294,7 @@ pub static CONSIDERED_FOR_APPROX: AtomicUsize = AtomicUsize::new(0);
 pub static SAVED_BY_APPROX: AtomicIsize = AtomicIsize::new(0);
 
 #[derive(Debug)]
-struct ReusablePLFStorage {
+pub struct ReusablePLFStorage {
     data: Vec<TTFPoint>,
     first_points: Vec<u32>
 }
