@@ -79,7 +79,7 @@ impl<'a> TTF<'a> {
     }
 
     #[allow(clippy::collapsible_if)]
-    #[allow(clippy::cyclomatic_complexity)]
+    #[allow(clippy::cognitive_complexity)]
     fn merge(&self, other: &TTF, merge_exact: impl Fn(Timestamp, Timestamp) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>)) -> (TTFCache, Vec<(Timestamp, bool)>) {
         use TTF::*;
 

@@ -254,6 +254,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         result.into_boxed_slice()
     }
 
+    #[allow(clippy::cognitive_complexity)]
     pub(super) fn link_partials(first: &[TTFPoint], second: &[TTFPoint], start: Timestamp, end: Timestamp, target: &mut MutTopPLF) {
         let mut f_iter = first.iter();
         let mut g_iter = second.iter();
@@ -368,7 +369,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         self.merge_in_bounds::<Cursor>(other, Timestamp::zero(), period())
     }
 
-    #[allow(clippy::cyclomatic_complexity)]
+    #[allow(clippy::cognitive_complexity)]
     fn merge_in_bounds<C: MergeCursor<'a>>(&self, other: &Self, start: Timestamp, end: Timestamp) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
         if self.upper_bound() < other.lower_bound() {
             return (self.ipps.to_vec().into_boxed_slice(), vec![(start, true)])
