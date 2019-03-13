@@ -319,7 +319,7 @@ impl<'a> TTF<'a> {
         // (TTFCache::Approx(result_lower, result_upper), result)
     }
 
-    fn approximate(&self) -> TTFCache<Box<[TTFPoint]>> {
+    fn approximate(&self, buffers: &mut MergeBuffers) -> TTFCache<Box<[TTFPoint]>> {
         use TTF::*;
 
         match self {
@@ -327,7 +327,7 @@ impl<'a> TTF<'a> {
                 let (lower, upper) = plf.bound_ttfs();
                 TTFCache::Approx(lower, upper)
             },
-            Approx(lower_plf, upper_plf) => TTFCache::Approx(lower_plf.lower_bound_ttf(), upper_plf.upper_bound_ttf()),
+            Approx(lower_plf, upper_plf) => TTFCache::Approx(lower_plf.lower_bound_ttf(&mut buffers.buffer), upper_plf.upper_bound_ttf(&mut buffers.buffer)),
         }
     }
 
@@ -421,7 +421,7 @@ impl Shortcut {
                 if cfg!(feature = "tdcch-approx") && linked_ipps.num_points() > APPROX_THRESHOLD {
                     let old = linked_ipps.num_points();
                     if cfg!(feature = "detailed-stats") { CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed); }
-                    let linked_ipps = linked.approximate();
+                    let linked_ipps = linked.approximate(buffers);
                     if cfg!(feature = "detailed-stats") { SAVED_BY_APPROX.fetch_add(old as isize - linked_ipps.num_points() as isize, Relaxed); }
                     self.cache = Some(linked_ipps);
                 } else {
@@ -448,7 +448,7 @@ impl Shortcut {
             if cfg!(feature = "tdcch-approx") && merged.num_points() > APPROX_THRESHOLD {
                 let old = merged.num_points();
                 if cfg!(feature = "detailed-stats") { CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed); }
-                merged = TTF::from(&merged).approximate();
+                merged = TTF::from(&merged).approximate(buffers);
                 if cfg!(feature = "detailed-stats") { SAVED_BY_APPROX.fetch_add(old as isize - merged.num_points() as isize, Relaxed); }
             }
 

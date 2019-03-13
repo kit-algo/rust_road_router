@@ -633,17 +633,17 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     #[cfg(not(feature = "tdcch-approx"))]
-    pub fn approximate(&self) -> Box<[TTFPoint]> {
+    pub fn approximate(&self, _buffer:  &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
         unimplemented!()
     }
 
     #[cfg(not(feature = "tdcch-approx"))]
-    pub fn lower_bound_ttf(&self) -> Box<[TTFPoint]> {
+    pub fn lower_bound_ttf(&self, _buffer:  &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
         unimplemented!()
     }
 
     #[cfg(not(feature = "tdcch-approx"))]
-    pub fn upper_bound_ttf(&self) -> Box<[TTFPoint]> {
+    pub fn upper_bound_ttf(&self, _buffer:  &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
         unimplemented!()
     }
 
@@ -653,36 +653,42 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
-    pub fn approximate(&self) -> Box<[TTFPoint]> {
-        let mut result = Vec::with_capacity(self.ipps.len());
-        self.douglas_peuker(&mut result);
-        result.into_boxed_slice()
+    pub fn approximate(&self, buffer:  &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
+        buffer.reserve(self.ipps.len());
+        self.douglas_peuker(buffer);
+        let result = buffer[..].to_vec().into_boxed_slice();
+        buffer.clear();
+        result
     }
 
     #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
-    pub fn lower_bound_ttf(&self) -> Box<[TTFPoint]> {
-        let mut result = Vec::with_capacity(self.ipps.len());
-        self.douglas_peuker_lower(&mut result);
+    pub fn lower_bound_ttf(&self, buffer:  &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
+        buffer.reserve(self.ipps.len());
+        self.douglas_peuker_lower(buffer);
 
-        let wrap_min = min(result.first().unwrap().val, result.last().unwrap().val);
+        let wrap_min = min(buffer.first().unwrap().val, buffer.last().unwrap().val);
 
-        result.first_mut().unwrap().val = wrap_min;
-        result.last_mut().unwrap().val = wrap_min;
+        buffer.first_mut().unwrap().val = wrap_min;
+        buffer.last_mut().unwrap().val = wrap_min;
 
-        result.into_boxed_slice()
+        let result = buffer[..].to_vec().into_boxed_slice();
+        buffer.clear();
+        result
     }
 
     #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
-    pub fn upper_bound_ttf(&self) -> Box<[TTFPoint]> {
-        let mut result = Vec::with_capacity(self.ipps.len());
-        self.douglas_peuker_upper(&mut result);
+    pub fn upper_bound_ttf(&self, buffer:  &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
+        buffer.reserve(self.ipps.len());
+        self.douglas_peuker_upper(buffer);
 
-        let wrap_max = max(result.first().unwrap().val, result.last().unwrap().val);
+        let wrap_max = max(buffer.first().unwrap().val, buffer.last().unwrap().val);
 
-        result.first_mut().unwrap().val = wrap_max;
-        result.last_mut().unwrap().val = wrap_max;
+        buffer.first_mut().unwrap().val = wrap_max;
+        buffer.last_mut().unwrap().val = wrap_max;
 
-        result.into_boxed_slice()
+        let result = buffer[..].to_vec().into_boxed_slice();
+        buffer.clear();
+        result
     }
 
     #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
@@ -1020,12 +1026,6 @@ impl<'a> MergeCursor<'a> for PartialPlfCursor<'a> {
 
     fn ipps(&self) -> &'a [TTFPoint] {
         self.ipps
-    }
-}
-
-impl<'a> PartialPlfCursor<'a> {
-    fn done(&self) -> bool {
-        self.current_index >= self.ipps.len()
     }
 }
 
