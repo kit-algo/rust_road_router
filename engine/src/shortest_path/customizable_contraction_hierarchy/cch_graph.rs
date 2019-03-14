@@ -481,7 +481,7 @@ impl CCHGraph {
             let mut _events_ctxt = push_collection_context("events".to_string());
 
             use std::thread;
-            use std::sync::mpsc::channel;
+            use std::sync::mpsc::{channel, RecvTimeoutError};
 
             let (tx, rx) = channel();
 
@@ -504,7 +504,7 @@ impl CCHGraph {
                         report!("num_performed_unnecessary_links", UNNECESSARY_LINKED.load(Ordering::Relaxed));
                     }
 
-                    if let Ok(()) = rx.recv_timeout(std::time::Duration::from_secs(3)) {
+                    if let Ok(()) | Err(RecvTimeoutError::Disconnected) = rx.recv_timeout(std::time::Duration::from_secs(3)) {
                         break;
                     }
                 }
