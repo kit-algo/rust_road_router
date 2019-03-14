@@ -2,6 +2,9 @@ use super::*;
 use std::cmp::{min, max, Ordering};
 use self::debug::debug_merge;
 
+mod cursor;
+use cursor::*;
+
 #[derive(Debug, Clone, Copy)]
 pub struct PiecewiseLinearFunction<'a> {
     ipps: &'a [TTFPoint],
@@ -205,7 +208,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
         let mut result = Vec::with_capacity(self.ipps.len() + other.ipps.len() + 1);
 
-        let mut f = Cursor::new(&self.ipps);
+        let mut f = PartialPlfLinkCursor::new(&self.ipps);
         let mut g = Cursor::starting_at_or_after(&other.ipps, Timestamp::zero() + self.ipps[0].val);
 
         loop {
@@ -237,7 +240,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
             }
 
             if !x.fuzzy_lt(period()) { break }
-            debug_assert!(!x.fuzzy_lt(Timestamp::zero()), "{:?} {:?} {:?}", x, y, debug_merge(&f, &g, &result, &[]));
+            debug_assert!(!x.fuzzy_lt(Timestamp::zero()), "{:?} {:?}", x, y);
 
             x = min(x, period());
             x = max(x, Timestamp::zero());
@@ -256,73 +259,35 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
     #[allow(clippy::cognitive_complexity)]
     pub(super) fn link_partials(first: &[TTFPoint], second: &[TTFPoint], start: Timestamp, end: Timestamp, target: &mut MutTopPLF) {
-        let mut f_iter = first.iter();
-        let mut g_iter = second.iter();
-
-        let mut f_done = false;
-        let mut g_done = false;
-
-        let mut f_cur = f_iter.next().cloned().unwrap();
-        let mut g_cur = g_iter.next().cloned().unwrap();
-
-        let mut f_prev = TTFPoint { at: f_cur.at - FlWeight::new(1.0), val: f_cur.val };
-        let mut g_prev = TTFPoint { at: g_cur.at - FlWeight::new(1.0), val: g_cur.val };
+        let mut f = PartialPlfLinkCursor::new(first);
+        let mut g = PartialPlfLinkCursor::new(second);
 
         loop {
             let x;
             let y;
 
-            if g_cur.at.fuzzy_eq(f_cur.at + f_cur.val) {
-                x = f_cur.at;
-                y = g_cur.val + f_cur.val;
+            if g.cur().at.fuzzy_eq(f.cur().at + f.cur().val) {
+                x = f.cur().at;
+                y = g.cur().val + f.cur().val;
 
-                if let Some(next_f) = f_iter.next() {
-                    f_prev = f_cur;
-                    f_cur = next_f.clone();
-                } else {
-                    f_prev.at = f_prev.at + FlWeight::new(1.0);
-                    f_cur.at = f_cur.at + FlWeight::new(1.0);
-                    f_done = true;
-                }
+                f.advance();
+                g.advance();
+            } else if g.cur().at < f.cur().at + f.cur().val {
+                debug_assert!(g.cur().at.fuzzy_lt(f.cur().at + f.cur().val));
 
-                if let Some(next_g) = g_iter.next() {
-                    g_prev = g_cur;
-                    g_cur = next_g.clone();
-                } else {
-                    g_prev.at = g_prev.at + FlWeight::new(1.0);
-                    g_cur.at = g_cur.at + FlWeight::new(1.0);
-                    g_done = true;
-                }
-            } else if g_cur.at < f_cur.at + f_cur.val {
-                debug_assert!(g_cur.at.fuzzy_lt(f_cur.at + f_cur.val));
+                let m_arr_f_inverse = (f.cur().at - f.prev().at) / (f.cur().at + f.cur().val - f.prev().at - f.prev().val);
+                x = m_arr_f_inverse * (g.cur().at - f.prev().at - f.prev().val) + f.prev().at;
+                y = g.cur().at + g.cur().val - x;
 
-                let m_arr_f_inverse = (f_cur.at - f_prev.at) / (f_cur.at + f_cur.val - f_prev.at - f_prev.val);
-                x = m_arr_f_inverse * (g_cur.at - f_prev.at - f_prev.val) + f_prev.at;
-                y = g_cur.at + g_cur.val - x;
-
-                if let Some(next_g) = g_iter.next() {
-                    g_prev = g_cur;
-                    g_cur = next_g.clone();
-                } else {
-                    g_prev.at = g_prev.at + FlWeight::new(1.0);
-                    g_cur.at = g_cur.at + FlWeight::new(1.0);
-                    g_done = true;
-                }
+                g.advance();
             } else {
-                debug_assert!((f_cur.at + f_cur.val).fuzzy_lt(g_cur.at));
+                debug_assert!((f.cur().at + f.cur().val).fuzzy_lt(g.cur().at));
 
-                x = f_cur.at;
-                let m_g = (g_cur.val - g_prev.val) / (g_cur.at - g_prev.at);
-                y = g_prev.val + m_g * (f_cur.at + f_cur.val - g_prev.at) + f_cur.val;
+                x = f.cur().at;
+                let m_g = (g.cur().val - g.prev().val) / (g.cur().at - g.prev().at);
+                y = g.prev().val + m_g * (f.cur().at + f.cur().val - g.prev().at) + f.cur().val;
 
-                if let Some(next_f) = f_iter.next() {
-                    f_prev = f_cur;
-                    f_cur = next_f.clone();
-                } else {
-                    f_prev.at = f_prev.at + FlWeight::new(1.0);
-                    f_cur.at = f_cur.at + FlWeight::new(1.0);
-                    f_done = true;
-                }
+                f.advance();
             }
 
             if !start.fuzzy_lt(x) && !target.is_empty() {
@@ -338,7 +303,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
             target.push(point);
 
-            if (f_done && g_done) || !x.fuzzy_lt(end) {
+            if (f.done() && g.done()) || !x.fuzzy_lt(end) {
                 break;
             }
         }
@@ -883,149 +848,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
         upper.last_mut().unwrap().val = wrap;
 
         upper.into_boxed_slice()
-    }
-}
-
-trait MergeCursor<'a> {
-    fn new(ipps: &'a [TTFPoint]) -> Self;
-    fn cur(&self) -> TTFPoint;
-    fn next(&self) -> TTFPoint;
-    fn prev(&self) -> TTFPoint;
-    fn advance(&mut self);
-
-    fn ipps(&self) -> &'a [TTFPoint];
-}
-
-#[derive(Debug)]
-pub struct Cursor<'a> {
-    ipps: &'a [TTFPoint],
-    current_index: usize,
-    offset: FlWeight,
-}
-
-impl<'a> Cursor<'a> {
-    fn starting_at_or_after(ipps: &'a [TTFPoint], t: Timestamp) -> Self {
-        let (times_period, t) = t.split_of_period();
-        let offset = times_period * FlWeight::from(period());
-
-        if ipps.len() == 1 {
-            return if t > Timestamp::zero() {
-                Cursor { ipps, current_index: 0, offset: (period() + offset).into() }
-            } else {
-                Cursor { ipps, current_index: 0, offset }
-            }
-        }
-
-        let pos = ipps.binary_search_by(|p| {
-            if p.at.fuzzy_eq(t) {
-                Ordering::Equal
-            } else if p.at < t {
-                Ordering::Less
-            } else {
-                Ordering::Greater
-            }
-        });
-
-
-        let i = match pos {
-            Ok(i) => i,
-            Err(i) => i,
-        };
-        if i == ipps.len() - 1 {
-            Cursor { ipps, current_index: 0, offset: (period() + offset).into() }
-        } else {
-            Cursor { ipps, current_index: i, offset }
-        }
-    }
-}
-
-impl<'a> MergeCursor<'a> for Cursor<'a> {
-    fn new(ipps: &'a [TTFPoint]) -> Cursor<'a> {
-        Cursor { ipps, current_index: 0, offset: FlWeight::new(0.0) }
-    }
-
-    fn cur(&self) -> TTFPoint {
-        self.ipps[self.current_index].shifted(self.offset)
-    }
-
-    fn next(&self) -> TTFPoint {
-        if self.ipps.len() == 1 {
-            self.ipps.first().unwrap().shifted(self.offset + FlWeight::from(period()))
-        } else {
-            self.ipps[self.current_index + 1].shifted(self.offset)
-        }
-    }
-
-    fn prev(&self) -> TTFPoint {
-        if self.ipps.len() == 1 {
-            self.ipps.first().unwrap().shifted(self.offset - FlWeight::from(period()))
-        } else if self.current_index == 0 {
-            let offset = self.offset - FlWeight::from(period());
-            self.ipps[self.ipps.len() - 2].shifted(offset)
-        } else {
-            self.ipps[self.current_index - 1].shifted(self.offset)
-        }
-    }
-
-    fn advance(&mut self) {
-        self.current_index += 1;
-        if self.current_index % self.ipps.len() == self.ipps.len() - 1 || self.ipps.len() == 1 {
-            self.offset = self.offset + FlWeight::from(period());
-            self.current_index = 0;
-        }
-    }
-
-    fn ipps(&self) -> &'a [TTFPoint] {
-        self.ipps
-    }
-}
-
-#[derive(Debug)]
-pub struct PartialPlfCursor<'a> {
-    ipps: &'a [TTFPoint],
-    current_index: usize,
-}
-
-impl<'a> MergeCursor<'a> for PartialPlfCursor<'a> {
-    fn new(ipps: &'a [TTFPoint]) -> Self {
-        PartialPlfCursor { ipps, current_index: 0 }
-    }
-
-    fn cur(&self) -> TTFPoint {
-        if self.current_index < self.ipps.len() {
-            self.ipps[self.current_index].clone()
-        } else {
-            let offset = FlWeight::new((self.current_index - self.ipps.len() + 1) as f64);
-            self.ipps.last().unwrap().shifted(offset)
-        }
-    }
-
-    fn next(&self) -> TTFPoint {
-        if self.current_index + 1 < self.ipps.len() {
-            self.ipps[self.current_index + 1].clone()
-        } else {
-            let offset = FlWeight::new((self.current_index + 2 - self.ipps.len()) as f64);
-            self.ipps.last().unwrap().shifted(offset)
-        }
-    }
-
-    fn prev(&self) -> TTFPoint {
-        if self.current_index == 0 {
-            self.ipps[0].shifted(FlWeight::from(period()) * FlWeight::new(-1.0))
-        } else if self.current_index - 1 < self.ipps.len() {
-            self.ipps[self.current_index - 1].clone()
-        } else {
-            let offset = FlWeight::new((self.current_index - self.ipps.len()) as f64);
-            self.ipps.last().unwrap().shifted(offset)
-        }
-    }
-
-    fn advance(&mut self) {
-        self.current_index += 1;
-    }
-
-    fn ipps(&self) -> &'a [TTFPoint] {
-        self.ipps
     }
 }
 
