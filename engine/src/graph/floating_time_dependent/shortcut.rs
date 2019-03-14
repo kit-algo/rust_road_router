@@ -314,8 +314,8 @@ impl<'a> TTF<'a> {
         buffers.exact_result_upper.clear();
 
         ret
-        // let (result_lower, _) = self_lower.merge(&other_lower);
-        // let (result_upper, _) = self_upper.merge(&other_upper);
+        // let (result_lower, _) = self_lower.merge(&other_lower, &mut buffers.buffer);
+        // let (result_upper, _) = self_upper.merge(&other_upper, &mut buffers.buffer);
         // (TTFCache::Approx(result_lower, result_upper), result)
     }
 
