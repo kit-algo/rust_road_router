@@ -327,15 +327,15 @@ impl<'a> PiecewiseLinearFunction<'a> {
         debug_assert!(start >= Timestamp::zero());
         debug_assert!(end <= period());
 
-        PiecewiseLinearFunction { ipps: first }.merge_in_bounds::<PartialPlfCursor>(&PiecewiseLinearFunction { ipps: second }, start, end, buffer)
+        PiecewiseLinearFunction { ipps: first }.merge_in_bounds::<PartialPlfMergeCursor, False>(&PiecewiseLinearFunction { ipps: second }, start, end, buffer)
     }
 
     pub fn merge(&self, other: &Self, buffer: &mut Vec<TTFPoint>) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
-        self.merge_in_bounds::<Cursor>(other, Timestamp::zero(), period(), buffer)
+        self.merge_in_bounds::<Cursor, True>(other, Timestamp::zero(), period(), buffer)
     }
 
     #[allow(clippy::cognitive_complexity)]
-    fn merge_in_bounds<C: MergeCursor<'a>>(&self, other: &Self, start: Timestamp, end: Timestamp, result: &mut Vec<TTFPoint>) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
+    fn merge_in_bounds<C: MergeCursor<'a>, FullRange: Bool>(&self, other: &Self, start: Timestamp, end: Timestamp, result: &mut Vec<TTFPoint>) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
         if self.upper_bound() < other.lower_bound() {
             return (self.ipps.to_vec().into_boxed_slice(), vec![(start, true)])
         } else if other.upper_bound() < self.lower_bound() {
@@ -348,14 +348,14 @@ impl<'a> PiecewiseLinearFunction<'a> {
         let mut f = C::new(&self.ipps);
         let mut g = C::new(&other.ipps);
 
-        let self_start_val = if f.cur().at.fuzzy_eq(start) {
+        let self_start_val = if FullRange::VALUE || f.cur().at.fuzzy_eq(start) {
             f.cur().val
         } else {
             debug_assert!(f.cur().at.fuzzy_lt(start));
             interpolate_linear(&f.cur(), &f.next(), start)
         };
 
-        let other_start_val = if g.cur().at.fuzzy_eq(start) {
+        let other_start_val = if FullRange::VALUE || g.cur().at.fuzzy_eq(start) {
             g.cur().val
         } else {
             debug_assert!(g.cur().at.fuzzy_lt(start));
@@ -556,7 +556,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
             }
         }
 
-        if start == Timestamp::zero() && end == period() {
+        if FullRange::VALUE {
             if result.len() > 1 {
                 let p = TTFPoint { at: end, val: result[0].val };
                 Self::append_point(result, p);
@@ -849,6 +849,22 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
         upper.into_boxed_slice()
     }
+}
+
+trait Bool {
+    const VALUE: bool;
+}
+
+struct True;
+
+impl Bool for True {
+    const VALUE: bool = true;
+}
+
+struct False;
+
+impl Bool for False {
+    const VALUE: bool = false;
 }
 
 #[cfg(test)]
