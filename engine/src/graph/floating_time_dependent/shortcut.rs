@@ -41,7 +41,7 @@ impl From<TTFCache<Vec<TTFPoint>>> for TTFCache<Box<[TTFPoint]>> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum BoundMergingState {
     First,
     Second,
@@ -143,7 +143,6 @@ impl<'a> TTF<'a> {
             },
             _ => {
                 // in BOTH cases (especially the broken true true case) everything is unclear and we need to do exact merging
-                bound_merge_state.push((Timestamp::zero(), BoundMergingState::Merge));
             }
         }
 
@@ -173,9 +172,12 @@ impl<'a> TTF<'a> {
                     debug_assert_ne!(self_dominating_iter.peek().unwrap().1, other_dominating_iter.peek().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections, &self_lower, &self_upper, &other_lower, &other_upper));
                     result.push((next_t_self, self_dominating_iter.peek().unwrap().1));
 
+                    debug_assert!(bound_merge_state.last().map(|&(prev_start, _)| prev_start.fuzzy_lt(next_t_self)).unwrap_or(true), "{:?}", dbg_each!(bound_merge_state));
                     if self_dominating_iter.peek().unwrap().1 {
+                        debug_assert!(bound_merge_state.last().map(|&(_, prev_state)| prev_state != BoundMergingState::First).unwrap_or(true), "{:?}", dbg_each!(bound_merge_state));
                         bound_merge_state.push((next_t_self, BoundMergingState::First));
                     } else {
+                        debug_assert!(bound_merge_state.last().map(|&(_, prev_state)| prev_state != BoundMergingState::Second).unwrap_or(true), "{:?}", dbg_each!(next_t_self, next_t_other, bound_merge_state, self_dominating_intersections, other_dominating_intersections, result));
                         bound_merge_state.push((next_t_self, BoundMergingState::Second));
                     }
 
@@ -188,8 +190,10 @@ impl<'a> TTF<'a> {
 
                     let (_, intersections) = merge_exact(start_of_segment, next_t_self, buffers);
 
-                    if intersections.len() > 1 || result.last().map(|(_, self_better)| *self_better != intersections[0].1).unwrap_or(true) {
+                    if intersections.len() > 1 || result.last().map(|(_, self_better)| *self_better != self_dominating_iter.peek().unwrap().1).unwrap_or(true) {
+                        debug_assert!(bound_merge_state.last().map(|&(prev_start, prev_state)| prev_start.fuzzy_lt(start_of_segment) && prev_state != BoundMergingState::Merge).unwrap_or(true), "{:?}", dbg_each!(bound_merge_state));
                         bound_merge_state.push((start_of_segment, BoundMergingState::Merge));
+                        debug_assert!(start_of_segment.fuzzy_lt(next_t_self), "{:?}", dbg_each!(start_of_segment, next_t_self));
                         bound_merge_state.push((next_t_self, if self_dominating_iter.peek().unwrap().1 { BoundMergingState::First } else { BoundMergingState::Second }));
                     }
 
@@ -217,8 +221,10 @@ impl<'a> TTF<'a> {
 
                     let (_, intersections) = merge_exact(start_of_segment, next_t_other, buffers);
 
-                    if intersections.len() > 1 || result.last().map(|(_, self_better)| *self_better != intersections[0].1).unwrap_or(true) {
+                    if intersections.len() > 1 || result.last().map(|(_, self_better)| !*self_better != other_dominating_iter.peek().unwrap().1).unwrap_or(true) {
+                        debug_assert!(bound_merge_state.last().map(|&(prev_start, prev_state)| prev_start.fuzzy_lt(start_of_segment) && prev_state != BoundMergingState::Merge).unwrap_or(true), "{:?}", dbg_each!(bound_merge_state));
                         bound_merge_state.push((start_of_segment, BoundMergingState::Merge));
+                        debug_assert!(start_of_segment.fuzzy_lt(next_t_other), "{:?}", dbg_each!(start_of_segment, next_t_other));
                         bound_merge_state.push((next_t_other, if other_dominating_iter.peek().unwrap().1 { BoundMergingState::Second } else { BoundMergingState::First }));
                     }
 
@@ -253,6 +259,7 @@ impl<'a> TTF<'a> {
             let (_, intersections) = merge_exact(start_of_segment, period(), buffers);
 
             if intersections.len() > 1 || result.last().map(|(_, self_better)| *self_better != intersections[0].1).unwrap_or(true) {
+                debug_assert!(bound_merge_state.last().map(|&(prev_start, prev_state)| prev_start.fuzzy_lt(start_of_segment) && prev_state != BoundMergingState::Merge).unwrap_or(true), "{:?}", dbg_each!(bound_merge_state));
                 bound_merge_state.push((start_of_segment, BoundMergingState::Merge));
             }
 
@@ -274,6 +281,8 @@ impl<'a> TTF<'a> {
         buffers.exact_other_buffer.reserve(max(other_lower.len(), other_upper.len()));
         buffers.exact_result_lower.reserve(2 * self_lower.len() + 2 * other_lower.len() + 2);
         buffers.exact_result_upper.reserve(2 * self_upper.len() + 2 * other_upper.len() + 2);
+
+        debug_assert_eq!(bound_merge_state[0].0, Timestamp::zero());
 
         let mut end_of_segment_iter = bound_merge_state.iter().map(|(t, _)| *t).chain(std::iter::once(period()));
         end_of_segment_iter.next();
