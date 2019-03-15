@@ -258,7 +258,10 @@ impl<'a> TTF<'a> {
         if !dominating {
             let (_, intersections) = merge_exact(start_of_segment, period(), buffers);
 
-            if intersections.len() > 1 || result.last().map(|(_, self_better)| *self_better != intersections[0].1).unwrap_or(true) {
+            if intersections.len() > 1 ||
+                result.last().map(|(_, self_better)| *self_better != intersections[0].1).unwrap_or(true) ||
+                bound_merge_state.first().map(|&(_, initial_state)| initial_state == BoundMergingState::Merge).unwrap_or(true)
+            {
                 debug_assert!(bound_merge_state.last().map(|&(prev_start, prev_state)| prev_start.fuzzy_lt(start_of_segment) && prev_state != BoundMergingState::Merge).unwrap_or(true), "{:?}", dbg_each!(bound_merge_state));
                 bound_merge_state.push((start_of_segment, BoundMergingState::Merge));
             }
