@@ -128,7 +128,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 debug_assert!(switchover_val.fuzzy_eq(second_switchover_val), "{:?}", dbg_each!(switchover_val, second_switchover_val, start));
 
                 target.push(TTFPoint { at: start, val: switchover_val });
-                f.advance();
             }
         }
 
