@@ -118,7 +118,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
             let switchover_val = if target_last.at.fuzzy_eq(start) {
                 target_last.val
             } else {
-                interpolate_linear(&target[target.len() - 1], &target_last, start)
+                interpolate_linear(target.last().unwrap(), &target_last, start)
             };
 
             if f.cur().at.fuzzy_eq(start) {
@@ -127,7 +127,9 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 let second_switchover_val = interpolate_linear(&f.prev(), &f.cur(), start);
                 debug_assert!(switchover_val.fuzzy_eq(second_switchover_val), "{:?}", dbg_each!(switchover_val, second_switchover_val, start));
 
-                target.push(TTFPoint { at: start, val: switchover_val });
+                if target.last() != Some(&f.prev()) {
+                    target.push(TTFPoint { at: start, val: switchover_val });
+                }
             }
         }
 
@@ -157,6 +159,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
 
         let first_last = first.pop().unwrap();
+
         let switchover_val = if first_last.at.fuzzy_eq(switchover) {
             first_last.val
         } else {
@@ -170,7 +173,9 @@ impl<'a> PiecewiseLinearFunction<'a> {
             debug_assert!(switchover_val.fuzzy_eq(second_switchover_val), "{:?}", dbg_each!(first.last(), first_last, second_switchover_val, &second[..=1], switchover));
         }
 
-        first.push(TTFPoint { at: switchover, val: switchover_val });
+        if first.last() != Some(&second[0]) {
+            first.push(TTFPoint { at: switchover, val: switchover_val });
+        }
         first.extend(second[1..].iter().cloned());
 
         for points in first.windows(2) {
