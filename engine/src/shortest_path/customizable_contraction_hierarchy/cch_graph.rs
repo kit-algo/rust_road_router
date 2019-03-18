@@ -584,15 +584,14 @@ impl CCHGraph {
                         for &edges in &triangles {
                             upward_shortcut.merge(edges, &shortcut_graph, &mut buffers);
                         }
+                        upward_shortcut.finalize_bounds(&shortcut_graph);
 
                         triangles.sort_by_key(|&(up, down)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
                         for &(up, down) in &triangles {
                             downward_shortcut.merge((down, up), &shortcut_graph, &mut buffers);
                         }
+                        downward_shortcut.finalize_bounds(&shortcut_graph);
                     });
-
-                    for shortcut in upward_active { shortcut.finalize_bounds(&shortcut_graph); }
-                    for shortcut in downward_active { shortcut.finalize_bounds(&shortcut_graph); }
 
                     for &(_, edge_id) in &inverted[current_node as usize] {
                         upward[edge_id as usize - edge_offset].clear_plf();
@@ -662,16 +661,15 @@ impl CCHGraph {
                         for &edges in &triangles {
                             upward_shortcut.merge(edges, &shortcut_graph, &mut buffers);
                         }
+                        upward_shortcut.finalize_bounds(&shortcut_graph);
 
                         triangles.sort_by_key(|&(up, down)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
                         for &(up, down) in &triangles {
                             downward_shortcut.merge((down, up), &shortcut_graph, &mut buffers);
                         }
+                        downward_shortcut.finalize_bounds(&shortcut_graph);
                     });
                 });
-
-                for shortcut in upward_active { shortcut.finalize_bounds(&shortcut_graph); }
-                for shortcut in downward_active { shortcut.finalize_bounds(&shortcut_graph); }
 
                 for &(_, edge_id) in &inverted[current_node as usize] {
                     upward[edge_id as usize - edge_offset].clear_plf();
