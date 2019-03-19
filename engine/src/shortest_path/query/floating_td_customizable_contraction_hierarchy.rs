@@ -203,8 +203,7 @@ impl<'a> Server<'a> {
             if node == self.to { break }
 
             for ((target, shortcut_id), (shortcut_lower_bound, _shortcut_upper_bound)) in self.customized_graph.upward_bounds_graph().neighbor_iter(node) {
-                let lower_bound_next = distance + shortcut_lower_bound;
-                if relevant_upward.get(shortcut_id as usize) && !tentative_latest_arrival.fuzzy_lt(lower_bound_next) && !self.distances[target as usize].fuzzy_lt(lower_bound_next) {
+                if relevant_upward.get(shortcut_id as usize) && !min(tentative_latest_arrival, self.distances[target as usize]).fuzzy_lt(distance + shortcut_lower_bound) {
                     if cfg!(feature = "detailed-stats") { relaxed_shortcut_arcs += 1; }
 
                     let (time, next_on_path, evaled_edge_id) = self.customized_graph.outgoing.evaluate_next_segment_at::<True, _>(shortcut_id, distance, self.customized_graph, &mut |edge_id| relevant_upward.set(edge_id as usize)).unwrap();
@@ -227,8 +226,7 @@ impl<'a> Server<'a> {
                 let upper_bound = self.backward.node_data(node).upper_bound;
 
                 for label in self.backward.node_data(node).labels.iter().filter(|label| label.lower_bound <= upper_bound) {
-                    let lower_bound_next = distance + self.customized_graph.incoming.bounds()[label.shortcut_id as usize].0;
-                    if !tentative_latest_arrival.fuzzy_lt(lower_bound_next) && !self.distances[label.parent as usize].fuzzy_lt(lower_bound_next) {
+                    if !min(tentative_latest_arrival, self.distances[label.parent as usize]).fuzzy_lt(distance + self.customized_graph.incoming.bounds()[label.shortcut_id as usize].0) {
                         if cfg!(feature = "detailed-stats") { relaxed_shortcut_arcs += 1; }
 
                         let (time, next_on_path, evaled_edge_id) = self.customized_graph.incoming.evaluate_next_segment_at::<False, _>(label.shortcut_id, distance, self.customized_graph, &mut |edge_id| relevant_upward.set(edge_id as usize)).unwrap();

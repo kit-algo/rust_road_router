@@ -525,10 +525,11 @@ impl Shortcut {
         debug_assert!(!new_lower_bound.fuzzy_lt(self.lower_bound), "{:?}, {:?}", new_lower_bound, self);
         debug_assert!(!self.upper_bound.fuzzy_lt(new_lower_bound), "{:?}, {:?}", new_lower_bound, self);
         self.lower_bound = new_lower_bound;
-        // let new_upper_bound = self.plf(shortcut_graph).upper_bound();
-        // debug_assert!(!new_upper_bound.fuzzy_lt(self.upper_bound), "{:?}, {:?}", new_upper_bound, self);
-        // debug_assert!(!new_upper_bound.fuzzy_lt(self.lower_bound), "{:?}, {:?}", new_upper_bound, self);
-        // self.upper_bound = new_upper_bound;
+
+        let new_upper_bound = min(self.upper_bound, self.plf(shortcut_graph).static_upper_bound());
+        debug_assert!(!new_upper_bound.fuzzy_lt(self.upper_bound), "{:?}, {:?}", new_upper_bound, self);
+        debug_assert!(!new_upper_bound.fuzzy_lt(self.lower_bound), "{:?}, {:?}", new_upper_bound, self);
+        self.upper_bound = new_upper_bound;
     }
 
     pub fn update_is_constant(&mut self) {
