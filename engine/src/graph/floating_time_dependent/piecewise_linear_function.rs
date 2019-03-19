@@ -1,6 +1,7 @@
 use super::*;
 use std::cmp::{min, max, Ordering};
 use self::debug::debug_merge;
+use crate::util::*;
 
 mod cursor;
 use cursor::*;
@@ -853,22 +854,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
         upper.into_boxed_slice()
     }
-}
-
-trait Bool {
-    const VALUE: bool;
-}
-
-struct True;
-
-impl Bool for True {
-    const VALUE: bool = true;
-}
-
-struct False;
-
-impl Bool for False {
-    const VALUE: bool = false;
 }
 
 #[cfg(test)]

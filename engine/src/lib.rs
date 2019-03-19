@@ -33,6 +33,7 @@ mod as_slice;
 mod as_mut_slice;
 mod math;
 mod sorted_search_slice_ext;
+mod util;
 
 // Use of a mod or pub mod is not actually necessary.
 pub mod built_info {

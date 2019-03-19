@@ -1,5 +1,6 @@
 use std::cmp::*;
 use crate::report::*;
+use crate::util::*;
 
 use super::*;
 use super::floating_td_stepped_elimination_tree::{*, QueryProgress};
@@ -10,6 +11,19 @@ use crate::shortest_path::timestamped_vector::TimestampedVector;
 use crate::rank_select_map::BitVec;
 #[cfg(feature = "tdcch-query-detailed-timing")]
 use crate::benchmark::Timer;
+use crate::index_heap::{IndexdMinHeap, Indexing};
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Ord, PartialOrd)]
+pub struct State {
+    pub distance: Timestamp,
+    pub node: NodeId,
+}
+
+impl Indexing for State {
+    fn as_index(&self) -> usize {
+        self.node as usize
+    }
+}
 
 #[derive(Debug)]
 pub struct Server<'a> {
@@ -21,11 +35,11 @@ pub struct Server<'a> {
     meeting_nodes: Vec<(NodeId, FlWeight)>,
     forward_tree_path: Vec<NodeId>,
     backward_tree_path: Vec<NodeId>,
-    shortcut_queue: Vec<(EdgeId, NodeId, NodeId)>,
     distances: TimestampedVector<Timestamp>,
     parents: Vec<(NodeId, EdgeId)>,
     backward_tree_mask: BitVec,
     forward_tree_mask: BitVec,
+    closest_node_priority_queue: IndexdMinHeap<State>,
     from: NodeId,
     to: NodeId,
 }
@@ -42,18 +56,18 @@ impl<'a> Server<'a> {
             customized_graph,
             forward_tree_path: Vec::new(),
             backward_tree_path: Vec::new(),
-            shortcut_queue: Vec::new(),
             distances: TimestampedVector::new(n, Timestamp::NEVER),
             parents: vec![(std::u32::MAX, std::u32::MAX); n],
             forward_tree_mask: BitVec::new(n),
             backward_tree_mask: BitVec::new(n),
+            closest_node_priority_queue: IndexdMinHeap::new(n),
             from: 0,
             to: 0
         }
     }
 
     #[allow(clippy::collapsible_if)]
-    #[allow(clippy::cyclomatic_complexity)]
+    #[allow(clippy::cognitive_complexity)]
     pub fn distance(&mut self, from_node: NodeId, to_node: NodeId, departure_time: Timestamp) -> Option<FlWeight> {
         report!("algo", "Floating TDCCH Query");
 
@@ -72,10 +86,11 @@ impl<'a> Server<'a> {
         self.meeting_nodes.clear();
         self.forward.initialize_query(self.from);
         self.backward.initialize_query(self.to);
+        self.closest_node_priority_queue.clear();
+        self.closest_node_priority_queue.push(State { distance: departure_time, node: self.from });
 
         self.forward_tree_path.clear();
         self.backward_tree_path.clear();
-        self.shortcut_queue.clear();
 
         #[cfg(feature = "tdcch-query-detailed-timing")]
         let init_time = timer.get_passed();
@@ -158,13 +173,25 @@ impl<'a> Server<'a> {
             self.backward_tree_mask.set(node as usize);
         }
 
+        let mut relevant_upward = BitVec::new(self.cch_graph.num_arcs());
+
         while let Some(node) = self.forward_tree_path.pop() {
             if self.forward_tree_mask.get(node as usize) {
                 let upper_bound = self.forward.node_data(node).upper_bound;
 
                 for label in self.forward.node_data(node).labels.iter().filter(|label| label.lower_bound <= upper_bound) {
                     self.forward_tree_mask.set(label.parent as usize);
-                    self.shortcut_queue.push((label.shortcut_id, label.parent, node));
+                    relevant_upward.set(label.shortcut_id as usize);
+                }
+            }
+        }
+
+        while let Some(node) = self.backward_tree_path.pop() {
+            if self.backward_tree_mask.get(node as usize) {
+                let upper_bound = self.backward.node_data(node).upper_bound;
+
+                for label in self.backward.node_data(node).labels.iter().filter(|label| label.lower_bound <= upper_bound) {
+                    self.backward_tree_mask.set(label.parent as usize);
                 }
             }
         }
@@ -172,157 +199,50 @@ impl<'a> Server<'a> {
         #[cfg(feature = "tdcch-query-detailed-timing")]
         let forward_select_time = timer.get_passed();
 
-        // TODO kill double refs
-        let customized_graph = &self.customized_graph;
-        let shortcut_queue = &mut self.shortcut_queue;
-        let distances = &mut self.distances;
-        let parents = &mut self.parents;
+        while let Some(State { distance, node }) = self.closest_node_priority_queue.pop() {
+            if node == self.to { break }
 
-        for &(shortcut_id, tail, head) in shortcut_queue.iter().rev() {
-            let t_cur = distances[tail as usize];
-            let pruning_bound = min(tentative_latest_arrival, distances[head as usize]);
-            debug_assert!(customized_graph.outgoing.bounds()[shortcut_id as usize].0 < FlWeight::INFINITY);
-            debug_assert!(customized_graph.outgoing.bounds()[shortcut_id as usize].1 < FlWeight::INFINITY);
-            if !pruning_bound.fuzzy_lt(t_cur + customized_graph.outgoing.bounds()[shortcut_id as usize].0) {
-                if cfg!(feature = "detailed-stats") { relaxed_shortcut_arcs += 1; }
+            for ((target, shortcut_id), (shortcut_lower_bound, _shortcut_upper_bound)) in self.customized_graph.upward_bounds_graph().neighbor_iter(node) {
+                let lower_bound_next = distance + shortcut_lower_bound;
+                if relevant_upward.get(shortcut_id as usize) && !tentative_latest_arrival.fuzzy_lt(lower_bound_next) && !self.distances[target as usize].fuzzy_lt(lower_bound_next) {
+                    if cfg!(feature = "detailed-stats") { relaxed_shortcut_arcs += 1; }
 
-                let mut parent = tail;
-                let mut parent_shortcut_id = shortcut_id;
-                let t_next = t_cur + customized_graph.outgoing.evaluate(shortcut_id, t_cur, customized_graph, &mut |up, shortcut_id, t| {
+                    let (time, next_on_path, evaled_edge_id) = self.customized_graph.outgoing.evaluate_next_segment_at::<True, _>(shortcut_id, distance, self.customized_graph, &mut |edge_id| relevant_upward.set(edge_id as usize)).unwrap();
 
-                    if up {
-                        debug_assert!(customized_graph.outgoing.bounds()[shortcut_id as usize].0 < FlWeight::INFINITY);
-                        debug_assert!(customized_graph.outgoing.bounds()[shortcut_id as usize].1 < FlWeight::INFINITY);
-                        let tail = customized_graph.outgoing.tail()[shortcut_id as usize];
-                        let res = if t <= distances[tail as usize] {
-                            distances[tail as usize] = t;
-                            debug_assert!(distances[parent as usize] < Timestamp::NEVER);
-                            if tail != parent {
-                                parents[tail as usize] = (parent, parent_shortcut_id);
-                            }
+                    let next = State { distance: distance + time, node: next_on_path };
 
-                            let head = customized_graph.outgoing.head()[shortcut_id as usize];
-                            if distances[head as usize].fuzzy_lt(t + customized_graph.outgoing.bounds()[shortcut_id as usize].0) {
-                                false
-                            } else {
-                                if cfg!(feature = "detailed-stats") { relaxed_shortcut_arcs += 1; }
-                                true
-                            }
+                    if next.distance < self.distances[next.node as usize] {
+                        self.distances.set(next.node as usize, next.distance);
+                        self.parents[next.node as usize] = (node, evaled_edge_id);
+                        if self.closest_node_priority_queue.contains_index(next.as_index()) {
+                            self.closest_node_priority_queue.decrease_key(next);
                         } else {
-                            false
-                        };
-                        parent = tail;
-                        parent_shortcut_id = shortcut_id;
-                        res
-                    } else {
-                        debug_assert!(customized_graph.incoming.bounds()[shortcut_id as usize].0 < FlWeight::INFINITY);
-                        debug_assert!(customized_graph.incoming.bounds()[shortcut_id as usize].1 < FlWeight::INFINITY);
-                        let head = customized_graph.incoming.head()[shortcut_id as usize];
-                        let res = if t <= distances[head as usize] {
-                            distances[head as usize] = t;
-                            debug_assert!(distances[parent as usize] < Timestamp::NEVER);
-                            if head != parent {
-                                parents[head as usize] = (parent, parent_shortcut_id);
-                            }
-
-                            let tail = customized_graph.incoming.tail()[shortcut_id as usize];
-                            if distances[tail as usize].fuzzy_lt(t + customized_graph.incoming.bounds()[shortcut_id as usize].0) {
-                                false
-                            } else {
-                                if cfg!(feature = "detailed-stats") { relaxed_shortcut_arcs += 1; }
-                                true
-                            }
-                        } else {
-                            false
-                        };
-                        parent = head;
-                        parent_shortcut_id = shortcut_id;
-                        res
+                            self.closest_node_priority_queue.push(next);
+                        }
                     }
-                });
-                if t_next < distances[head as usize] {
-                    distances[head as usize] = t_next;
-                    parents[head as usize] = (parent, parent_shortcut_id);
-                    debug_assert!(distances[parent as usize] < Timestamp::NEVER);
                 }
             }
-        }
 
-        #[cfg(feature = "tdcch-query-detailed-timing")]
-        let forward_relax_time = timer.get_passed();
-
-        while let Some(node) = self.backward_tree_path.pop() {
             if self.backward_tree_mask.get(node as usize) {
                 let upper_bound = self.backward.node_data(node).upper_bound;
+
                 for label in self.backward.node_data(node).labels.iter().filter(|label| label.lower_bound <= upper_bound) {
-                    self.backward_tree_mask.set(label.parent as usize);
-                    debug_assert!(customized_graph.incoming.bounds()[label.shortcut_id as usize].0 < FlWeight::INFINITY);
-                    debug_assert!(customized_graph.incoming.bounds()[label.shortcut_id as usize].1 < FlWeight::INFINITY);
-                    let tail = node;
-                    let head = label.parent;
-                    let t_cur = distances[tail as usize];
-                    let pruning_bound = min(tentative_latest_arrival, distances[head as usize]);
-                    if !pruning_bound.fuzzy_lt(t_cur + customized_graph.incoming.bounds()[label.shortcut_id as usize].0) {
+                    let lower_bound_next = distance + self.customized_graph.incoming.bounds()[label.shortcut_id as usize].0;
+                    if !tentative_latest_arrival.fuzzy_lt(lower_bound_next) && !self.distances[label.parent as usize].fuzzy_lt(lower_bound_next) {
                         if cfg!(feature = "detailed-stats") { relaxed_shortcut_arcs += 1; }
 
-                        let mut parent = tail;
-                        let mut parent_shortcut_id = label.shortcut_id;
-                        let t_next = t_cur + customized_graph.incoming.evaluate(label.shortcut_id, t_cur, customized_graph, &mut |up, shortcut_id, t| {
+                        let (time, next_on_path, evaled_edge_id) = self.customized_graph.incoming.evaluate_next_segment_at::<False, _>(label.shortcut_id, distance, self.customized_graph, &mut |edge_id| relevant_upward.set(edge_id as usize)).unwrap();
 
-                            if up {
-                                debug_assert!(customized_graph.outgoing.bounds()[shortcut_id as usize].0 < FlWeight::INFINITY);
-                                debug_assert!(customized_graph.outgoing.bounds()[shortcut_id as usize].1 < FlWeight::INFINITY);
-                                let tail = customized_graph.outgoing.tail()[shortcut_id as usize];
-                                let res = if t <= distances[tail as usize] {
-                                    distances[tail as usize] = t;
-                                    debug_assert!(distances[parent as usize] < Timestamp::NEVER);
-                                    if tail != parent {
-                                        parents[tail as usize] = (parent, parent_shortcut_id);
-                                    }
+                        let next = State { distance: distance + time, node: next_on_path };
 
-                                    let head = customized_graph.outgoing.head()[shortcut_id as usize];
-                                    if distances[head as usize].fuzzy_lt(t + customized_graph.outgoing.bounds()[shortcut_id as usize].0) {
-                                        false
-                                    } else {
-                                        if cfg!(feature = "detailed-stats") { relaxed_shortcut_arcs += 1; }
-                                        true
-                                    }
-                                } else {
-                                    false
-                                };
-                                parent = tail;
-                                parent_shortcut_id = shortcut_id;
-                                res
+                        if next.distance < self.distances[next.node as usize] {
+                            self.distances.set(next.node as usize, next.distance);
+                            self.parents[next.node as usize] = (node, evaled_edge_id);
+                            if self.closest_node_priority_queue.contains_index(next.as_index()) {
+                                self.closest_node_priority_queue.decrease_key(next);
                             } else {
-                                debug_assert!(customized_graph.incoming.bounds()[shortcut_id as usize].0 < FlWeight::INFINITY);
-                                debug_assert!(customized_graph.incoming.bounds()[shortcut_id as usize].1 < FlWeight::INFINITY);
-                                let head = customized_graph.incoming.head()[shortcut_id as usize];
-                                let res = if t <= distances[head as usize] {
-                                    distances[head as usize] = t;
-                                    debug_assert!(distances[parent as usize] < Timestamp::NEVER);
-                                    if head != parent {
-                                        parents[head as usize] = (parent, parent_shortcut_id);
-                                    }
-
-                                    let tail = customized_graph.incoming.tail()[shortcut_id as usize];
-                                    if distances[tail as usize].fuzzy_lt(t + customized_graph.incoming.bounds()[shortcut_id as usize].0) {
-                                        false
-                                    } else {
-                                        if cfg!(feature = "detailed-stats") { relaxed_shortcut_arcs += 1; }
-                                        true
-                                    }
-                                } else {
-                                    false
-                                };
-                                parent = head;
-                                parent_shortcut_id = shortcut_id;
-                                res
+                                self.closest_node_priority_queue.push(next);
                             }
-                        });
-                        if t_next < distances[head as usize] {
-                            distances[head as usize] = t_next;
-                            parents[head as usize] = (parent, parent_shortcut_id);
-                            debug_assert!(distances[parent as usize] < Timestamp::NEVER);
                         }
                     }
                 }
@@ -332,14 +252,13 @@ impl<'a> Server<'a> {
         if cfg!(feature = "detailed-stats") { report!("num_relaxed_shortcut_arcs", relaxed_shortcut_arcs); }
 
         #[cfg(feature = "tdcch-query-detailed-timing")]
-        let backward_relax_time = timer.get_passed();
+        let relax_time = timer.get_passed();
 
         #[cfg(feature = "tdcch-query-detailed-timing")]
         {
-            eprintln!("elimination tree: {} {:?}%", elimination_tree_time - init_time, 100 * ((elimination_tree_time - init_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
-            eprintln!("fw select: {} {:?}%", forward_select_time - elimination_tree_time, 100 * ((forward_select_time - elimination_tree_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
-            eprintln!("fw relax: {} {:?}%", forward_relax_time - forward_select_time, 100 * ((forward_relax_time - forward_select_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
-            eprintln!("bw relax: {} {:?}%", backward_relax_time - forward_relax_time, 100 * ((backward_relax_time - forward_relax_time).num_nanoseconds().unwrap()) / backward_relax_time.num_nanoseconds().unwrap());
+            eprintln!("elimination tree: {} {:?}%", elimination_tree_time - init_time, 100 * ((elimination_tree_time - init_time).num_nanoseconds().unwrap()) / relax_time.num_nanoseconds().unwrap());
+            eprintln!("fw select: {} {:?}%", forward_select_time - elimination_tree_time, 100 * ((forward_select_time - elimination_tree_time).num_nanoseconds().unwrap()) / relax_time.num_nanoseconds().unwrap());
+            eprintln!("relax: {} {:?}%", relax_time - forward_select_time, 100 * ((relax_time - forward_select_time).num_nanoseconds().unwrap()) / relax_time.num_nanoseconds().unwrap());
         }
 
         if self.distances[self.to as usize] < Timestamp::NEVER {
