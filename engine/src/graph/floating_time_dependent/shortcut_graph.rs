@@ -185,9 +185,10 @@ impl<'a> From<ShortcutGraph<'a>> for CustomizedGraph<'a> {
                 constant: outgoing_constant,
                 first_source: degrees_to_first_out(outgoing_iter().map(|shortcut| shortcut.num_sources() as u32)).collect(),
                 sources: outgoing_iter().flat_map(|shortcut| shortcut.sources_iter().map(|(t, &s)| {
-                    let s = match ShortcutSource::from(s) {
-                        ShortcutSource::Shortcut(down, up) => ShortcutSource::Shortcut(mapping_incoming.get(down as usize).unwrap() as EdgeId, mapping_outgoing.get(up as usize).unwrap() as EdgeId),
-                        ShortcutSource::OriginalEdge(id) => ShortcutSource::OriginalEdge(id),
+                    let s = if let ShortcutSource::Shortcut(down, up) = ShortcutSource::from(s) {
+                        ShortcutSource::Shortcut(mapping_incoming.get(down as usize).unwrap() as EdgeId, mapping_outgoing.get(up as usize).unwrap() as EdgeId)
+                    } else {
+                        ShortcutSource::from(s)
                     };
                     (t, ShortcutSourceData::from(s))
                 })).collect(),
@@ -202,9 +203,10 @@ impl<'a> From<ShortcutGraph<'a>> for CustomizedGraph<'a> {
                 constant: incoming_constant,
                 first_source: degrees_to_first_out(incoming_iter().map(|shortcut| shortcut.num_sources() as u32)).collect(),
                 sources: incoming_iter().flat_map(|shortcut| shortcut.sources_iter().map(|(t, &s)| {
-                    let s = match ShortcutSource::from(s) {
-                        ShortcutSource::Shortcut(down, up) => ShortcutSource::Shortcut(mapping_incoming.get(down as usize).unwrap() as EdgeId, mapping_outgoing.get(up as usize).unwrap() as EdgeId),
-                        ShortcutSource::OriginalEdge(id) => ShortcutSource::OriginalEdge(id),
+                    let s = if let ShortcutSource::Shortcut(down, up) = ShortcutSource::from(s) {
+                        ShortcutSource::Shortcut(mapping_incoming.get(down as usize).unwrap() as EdgeId, mapping_outgoing.get(up as usize).unwrap() as EdgeId)
+                    } else {
+                        ShortcutSource::from(s)
                     };
                     (t, ShortcutSourceData::from(s))
                 })).collect(),
@@ -365,6 +367,7 @@ impl CustomizedSingleDirGraph {
                 ShortcutSource::OriginalEdge(edge) => {
                     (customized_graph.original_graph.travel_time_function(edge).evaluate(t), if Dir::VALUE { self.head[edge_idx] } else { self.tail[edge_idx] }, edge_id)
                 },
+                ShortcutSource::None => (FlWeight::INFINITY, if Dir::VALUE { self.head[edge_idx] } else { self.tail[edge_idx] }, edge_id)
             }
         })
     }

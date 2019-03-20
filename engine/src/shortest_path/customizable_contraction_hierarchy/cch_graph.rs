@@ -529,6 +529,85 @@ impl CCHGraph {
         report!("approx", f64::from(APPROX));
         report!("approx_threshold", APPROX_THRESHOLD);
 
+        let subctxt = push_context("postcustomization".to_string());
+        report_time("TD-CCH Post-Customization", || {
+            let mut removed_by_perfection = 0;
+            let mut node_edge_ids = vec![InRangeOption::new(None); n as usize];
+
+            let upward_preliminary_bounds: Vec<_> = upward.iter().map(|s| s.lower_bound).collect();
+            let downward_preliminary_bounds: Vec<_> = downward.iter().map(|s| s.lower_bound).collect();
+
+            for current_node in (0..n).rev() {
+                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
+                    node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
+                }
+
+                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
+                    let shortcut_edge_ids = self.neighbor_edge_indices(node);
+                    for (target, shortcut_edge_id) in self.neighbor_iter(node).zip(shortcut_edge_ids) {
+                        if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
+                            upward[other_edge_id as usize].upper_bound = min(upward[other_edge_id as usize].upper_bound, upward[edge_id as usize].upper_bound + upward[shortcut_edge_id as usize].upper_bound);
+                            upward[other_edge_id as usize].lower_bound = min(upward[other_edge_id as usize].lower_bound, upward[edge_id as usize].lower_bound + upward[shortcut_edge_id as usize].lower_bound);
+
+                            upward[edge_id as usize].upper_bound = min(upward[edge_id as usize].upper_bound, upward[other_edge_id as usize].upper_bound + downward[shortcut_edge_id as usize].upper_bound);
+                            upward[edge_id as usize].lower_bound = min(upward[edge_id as usize].lower_bound, upward[other_edge_id as usize].lower_bound + downward[shortcut_edge_id as usize].lower_bound);
+
+                            downward[other_edge_id as usize].upper_bound = min(downward[other_edge_id as usize].upper_bound, downward[edge_id as usize].upper_bound + downward[shortcut_edge_id as usize].upper_bound);
+                            downward[other_edge_id as usize].lower_bound = min(downward[other_edge_id as usize].lower_bound, downward[edge_id as usize].lower_bound + downward[shortcut_edge_id as usize].lower_bound);
+
+                            downward[edge_id as usize].upper_bound = min(downward[edge_id as usize].upper_bound, downward[other_edge_id as usize].upper_bound + upward[shortcut_edge_id as usize].upper_bound);
+                            downward[edge_id as usize].lower_bound = min(downward[edge_id as usize].lower_bound, downward[other_edge_id as usize].lower_bound + upward[shortcut_edge_id as usize].lower_bound);
+                        }
+                    }
+                }
+
+                for node in self.neighbor_iter(current_node) {
+                    node_edge_ids[node as usize] = InRangeOption::new(None);
+                }
+            }
+
+            for (shortcut, lower_bound) in upward.iter_mut().zip(upward_preliminary_bounds.into_iter()) {
+                if shortcut.upper_bound.fuzzy_lt(lower_bound) {
+                    if shortcut.required { removed_by_perfection += 1; }
+                    shortcut.required = false;
+                    shortcut.lower_bound = FlWeight::INFINITY;
+                    shortcut.upper_bound = FlWeight::INFINITY;
+                } else {
+                    shortcut.lower_bound = lower_bound;
+                }
+            }
+
+            for (shortcut, lower_bound) in downward.iter_mut().zip(downward_preliminary_bounds.into_iter()) {
+                if shortcut.upper_bound.fuzzy_lt(lower_bound) {
+                    if shortcut.required { removed_by_perfection += 1; }
+                    shortcut.required = false;
+                    shortcut.lower_bound = FlWeight::INFINITY;
+                    shortcut.upper_bound = FlWeight::INFINITY;
+                } else {
+                    shortcut.lower_bound = lower_bound;
+                }
+            }
+
+            for current_node in 0..n {
+                let (upward_below, upward_above) = upward.split_at_mut(self.first_out[current_node as usize] as usize);
+                let upward_active = &mut upward_above[0..self.neighbor_edge_indices(current_node as NodeId).len()];
+                let (downward_below, downward_above) = downward.split_at_mut(self.first_out[current_node as usize] as usize);
+                let downward_active = &mut downward_above[0..self.neighbor_edge_indices(current_node as NodeId).len()];
+                let shortcut_graph = PartialShortcutGraph::new(metric, upward_below, downward_below, 0);
+
+                for shortcut in &mut upward_active[..] {
+                    shortcut.invalidate_unneccesary_sources(&shortcut_graph);
+                }
+
+                for shortcut in &mut downward_active[..] {
+                    shortcut.invalidate_unneccesary_sources(&shortcut_graph);
+                }
+            }
+
+            report!("removed_by_perfection", removed_by_perfection);
+        });
+        drop(subctxt);
+
         ShortcutGraph::new(metric, &self.first_out, &self.head, upward, downward)
     }
 

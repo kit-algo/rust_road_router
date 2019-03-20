@@ -532,6 +532,26 @@ impl Shortcut {
         self.upper_bound = new_upper_bound;
     }
 
+    pub fn invalidate_unneccesary_sources(&mut self, shortcut_graph: &PartialShortcutGraph) {
+        match &mut self.sources {
+            Sources::None => {},
+            Sources::One(source) => {
+                if !ShortcutSource::from(*source).required(shortcut_graph) {
+                    *source = ShortcutSource::None.into();
+                    self.upper_bound = FlWeight::INFINITY;
+                }
+            },
+            Sources::Multi(sources) => {
+                for (_, source) in &mut sources[..] {
+                    if !ShortcutSource::from(*source).required(shortcut_graph) {
+                        *source = ShortcutSource::None.into();
+                        self.upper_bound = FlWeight::INFINITY;
+                    }
+                }
+            }
+        }
+    }
+
     pub fn update_is_constant(&mut self) {
         self.constant = self.upper_bound == self.lower_bound;
     }
@@ -559,7 +579,7 @@ impl Shortcut {
         let debug_intersections = intersection_data.clone();
         let mut intersection_iter = intersection_data.into_iter().peekable();
 
-        let dummy = ShortcutSource::OriginalEdge(std::u32::MAX).into();
+        let dummy = ShortcutSource::None.into();
         let mut prev_source = &dummy;
         let mut new_sources = Vec::new();
 

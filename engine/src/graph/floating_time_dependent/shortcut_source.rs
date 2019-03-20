@@ -5,6 +5,7 @@ use crate::in_range_option::InRangeOption;
 pub enum ShortcutSource {
     Shortcut(EdgeId, EdgeId),
     OriginalEdge(EdgeId),
+    None,
 }
 
 impl ShortcutSource {
@@ -27,6 +28,9 @@ impl ShortcutSource {
                 debug_assert!(res >= FlWeight::zero());
                 res
             },
+            ShortcutSource::None => {
+                FlWeight::INFINITY
+            }
         }
     }
 
@@ -41,6 +45,9 @@ impl ShortcutSource {
                 let arr = t + customized_graph.original_graph.travel_time_function(edge).evaluate(t);
                 result.push((edge, arr))
             },
+            ShortcutSource::None => {
+                panic!("can't unpack None source");
+            }
         }
     }
 
@@ -63,7 +70,20 @@ impl ShortcutSource {
             ShortcutSource::OriginalEdge(edge) => {
                 let ttf = shortcut_graph.original_graph.travel_time_function(edge);
                 ttf.copy_range(start, end, target);
+            },
+            ShortcutSource::None => {
+                panic!("can't fetch ttf for None source");
             }
+        }
+    }
+
+    pub(super) fn required(&self, shortcut_graph: &PartialShortcutGraph) -> bool {
+        match *self {
+            ShortcutSource::Shortcut(down, up) => {
+                shortcut_graph.get_incoming(down).required && shortcut_graph.get_outgoing(up).required
+            }
+            ShortcutSource::OriginalEdge(_) => true,
+            ShortcutSource::None => false
         }
     }
 }
@@ -71,14 +91,15 @@ impl ShortcutSource {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ShortcutSourceData {
     down_arc: InRangeOption<EdgeId>,
-    up_arc: EdgeId
+    up_arc: InRangeOption<EdgeId>,
 }
 
 impl From<ShortcutSource> for ShortcutSourceData {
     fn from(source: ShortcutSource) -> Self {
         match source {
-            ShortcutSource::Shortcut(down, up) => ShortcutSourceData { down_arc: InRangeOption::new(Some(down)), up_arc: up },
-            ShortcutSource::OriginalEdge(edge) => ShortcutSourceData { down_arc: InRangeOption::new(None), up_arc: edge },
+            ShortcutSource::Shortcut(down, up) => ShortcutSourceData { down_arc: InRangeOption::new(Some(down)), up_arc: InRangeOption::new(Some(up)) },
+            ShortcutSource::OriginalEdge(edge) => ShortcutSourceData { down_arc: InRangeOption::new(None), up_arc: InRangeOption::new(Some(edge)) },
+            ShortcutSource::None => ShortcutSourceData { down_arc: InRangeOption::new(None), up_arc: InRangeOption::new(None) },
         }
     }
 }
@@ -87,21 +108,23 @@ impl From<ShortcutSourceData> for ShortcutSource {
     fn from(data: ShortcutSourceData) -> Self {
         match data.down_arc.value() {
             Some(down_shortcut_id) => {
-                ShortcutSource::Shortcut(down_shortcut_id, data.up_arc)
+                ShortcutSource::Shortcut(down_shortcut_id, data.up_arc.value().unwrap())
             },
             None => {
-                ShortcutSource::OriginalEdge(data.up_arc)
+                match data.up_arc.value() {
+                    Some(up_arc) => ShortcutSource::OriginalEdge(up_arc),
+                    None => ShortcutSource::None,
+                }
             },
         }
     }
 }
 
-// TODO Default should be valid
 impl Default for ShortcutSourceData {
     fn default() -> Self {
         Self {
             down_arc: InRangeOption::new(None),
-            up_arc: std::u32::MAX,
+            up_arc: InRangeOption::new(None),
         }
     }
 }
