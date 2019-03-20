@@ -31,7 +31,6 @@ pub struct Server<'a> {
     backward: FloatingTDSteppedEliminationTree<'a, 'a>,
     cch_graph: &'a CCHGraph,
     customized_graph: &'a CustomizedGraph<'a>,
-    tentative_distance: (FlWeight, FlWeight),
     meeting_nodes: Vec<(NodeId, FlWeight)>,
     forward_tree_path: Vec<NodeId>,
     backward_tree_path: Vec<NodeId>,
@@ -52,7 +51,6 @@ impl<'a> Server<'a> {
             backward: FloatingTDSteppedEliminationTree::new(customized_graph.downward_bounds_graph(), cch_graph.elimination_tree()),
             cch_graph,
             meeting_nodes: Vec::new(),
-            tentative_distance: (FlWeight::INFINITY, FlWeight::INFINITY),
             customized_graph,
             forward_tree_path: Vec::new(),
             backward_tree_path: Vec::new(),
@@ -80,7 +78,7 @@ impl<'a> Server<'a> {
         let n = self.customized_graph.original_graph.num_nodes();
 
         // initialize
-        self.tentative_distance = (FlWeight::INFINITY, FlWeight::INFINITY);
+        let mut tentative_distance = (FlWeight::INFINITY, FlWeight::INFINITY);
         self.distances.reset();
         self.distances.set(self.from as usize, departure_time);
         self.meeting_nodes.clear();
@@ -110,7 +108,7 @@ impl<'a> Server<'a> {
                     false
                 };
 
-                if self.forward.node_data(self.forward.peek_next().unwrap()).lower_bound > self.tentative_distance.1 || (cfg!(tdcch_stall_on_demand) && stall()) {
+                if self.forward.node_data(self.forward.peek_next().unwrap()).lower_bound > tentative_distance.1 || (cfg!(tdcch_stall_on_demand) && stall()) {
                     self.forward.skip_next();
                 } else if let QueryProgress::Progress(node) = self.forward.next_step() {
                     if cfg!(feature = "detailed-stats") { nodes_in_elimination_tree_search_space += 1; }
@@ -124,17 +122,17 @@ impl<'a> Server<'a> {
 
                     self.distances[node as usize] = min(self.distances[node as usize], departure_time + upper_bound + FlWeight::new(EPSILON));
 
-                    if lower_bound < self.tentative_distance.1 {
-                        self.tentative_distance.0 = min(self.tentative_distance.0, lower_bound);
-                        self.tentative_distance.1 = min(self.tentative_distance.1, upper_bound);
-                        debug_assert!(self.tentative_distance.0 <= self.tentative_distance.1);
+                    if lower_bound < tentative_distance.1 {
+                        tentative_distance.0 = min(tentative_distance.0, lower_bound);
+                        tentative_distance.1 = min(tentative_distance.1, upper_bound);
+                        debug_assert!(tentative_distance.0 <= tentative_distance.1);
                         self.meeting_nodes.push((node, lower_bound));
                     }
                 } else {
                     unreachable!("inconsistent elimination tree state");
                 }
             } else {
-                if self.backward.node_data(self.backward.peek_next().unwrap()).lower_bound > self.tentative_distance.1 {
+                if self.backward.node_data(self.backward.peek_next().unwrap()).lower_bound > tentative_distance.1 {
                     self.backward.skip_next();
                 } else if let QueryProgress::Progress(node) = self.backward.next_step() {
                     if cfg!(feature = "detailed-stats") { nodes_in_elimination_tree_search_space += 1; }
@@ -144,10 +142,10 @@ impl<'a> Server<'a> {
                     self.backward_tree_path.push(node);
 
                     let lower_bound = self.forward.node_data(node).lower_bound + self.backward.node_data(node).lower_bound;
-                    if lower_bound < self.tentative_distance.1 {
-                        self.tentative_distance.0 = min(self.tentative_distance.0, lower_bound);
-                        self.tentative_distance.1 = min(self.tentative_distance.1, self.forward.node_data(node).upper_bound + self.backward.node_data(node).upper_bound);
-                        debug_assert!(self.tentative_distance.0 <= self.tentative_distance.1);
+                    if lower_bound < tentative_distance.1 {
+                        tentative_distance.0 = min(tentative_distance.0, lower_bound);
+                        tentative_distance.1 = min(tentative_distance.1, self.forward.node_data(node).upper_bound + self.backward.node_data(node).upper_bound);
+                        debug_assert!(tentative_distance.0 <= tentative_distance.1);
                         self.meeting_nodes.push((node, lower_bound));
                     }
                 } else {
@@ -165,7 +163,7 @@ impl<'a> Server<'a> {
         #[cfg(feature = "tdcch-query-detailed-timing")]
         let elimination_tree_time = timer.get_passed();
 
-        let tentative_upper_bound = self.tentative_distance.1;
+        let tentative_upper_bound = tentative_distance.1;
         let tentative_latest_arrival = departure_time + tentative_upper_bound;
 
         for &(node, _) in self.meeting_nodes.iter().filter(|(_, lower_bound)| *lower_bound <= tentative_upper_bound) {
