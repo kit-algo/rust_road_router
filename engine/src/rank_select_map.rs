@@ -107,6 +107,44 @@ impl Load for BitVec {
     }
 }
 
+#[derive(Debug)]
+pub struct FastClearBitVec {
+    data: Vec<u64>,
+    to_clear: Vec<usize>,
+}
+
+impl FastClearBitVec {
+    pub fn new(size: usize) -> FastClearBitVec {
+        // ceiling to the right number of u64s
+        let num_ints = (size + STORAGE_BITS - 1) / STORAGE_BITS;
+        let data = vec![0; num_ints];
+        FastClearBitVec {
+            data,
+            to_clear: Vec::new(),
+        }
+    }
+
+    pub fn get(&self, index: usize) -> bool {
+        // shifting a 1 bit to the right place and masking
+        self.data[index / STORAGE_BITS] & (1 << (index % STORAGE_BITS)) != 0
+    }
+
+    pub fn set(&mut self, index: usize) {
+        if self.data[index / STORAGE_BITS] == 0 {
+            self.to_clear.push(index / STORAGE_BITS);
+        }
+        // shifting a 1 bit to the right place and then eighter set through | or negate and unset with &
+        self.data[index / STORAGE_BITS] |= 1 << (index % STORAGE_BITS);
+    }
+
+    pub fn clear(&mut self) {
+        for &idx in &self.to_clear {
+            self.data[idx] = 0;
+        }
+        self.to_clear.clear();
+    }
+}
+
 // the actual map data structure.
 // made up of the bitvec with one bit for each global id
 // and an vec containing prefix sums of the number of elements

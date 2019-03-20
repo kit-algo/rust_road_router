@@ -8,7 +8,7 @@ use super::floating_td_stepped_elimination_tree::{*, QueryProgress};
 use crate::graph::floating_time_dependent::*;
 use crate::shortest_path::customizable_contraction_hierarchy::cch_graph::CCHGraph;
 use crate::shortest_path::timestamped_vector::TimestampedVector;
-use crate::rank_select_map::BitVec;
+use crate::rank_select_map::{BitVec, FastClearBitVec};
 #[cfg(feature = "tdcch-query-detailed-timing")]
 use crate::benchmark::Timer;
 use crate::index_heap::{IndexdMinHeap, Indexing};
@@ -39,6 +39,7 @@ pub struct Server<'a> {
     backward_tree_mask: BitVec,
     forward_tree_mask: BitVec,
     closest_node_priority_queue: IndexdMinHeap<State>,
+    relevant_upward: FastClearBitVec,
     from: NodeId,
     to: NodeId,
 }
@@ -46,6 +47,7 @@ pub struct Server<'a> {
 impl<'a> Server<'a> {
     pub fn new(cch_graph: &'a CCHGraph, customized_graph: &'a CustomizedGraph<'a>) -> Self {
         let n = customized_graph.original_graph.num_nodes();
+        let m = cch_graph.num_arcs();
         Self {
             forward: FloatingTDSteppedEliminationTree::new(customized_graph.upward_bounds_graph(), cch_graph.elimination_tree()),
             backward: FloatingTDSteppedEliminationTree::new(customized_graph.downward_bounds_graph(), cch_graph.elimination_tree()),
@@ -59,6 +61,7 @@ impl<'a> Server<'a> {
             forward_tree_mask: BitVec::new(n),
             backward_tree_mask: BitVec::new(n),
             closest_node_priority_queue: IndexdMinHeap::new(n),
+            relevant_upward: FastClearBitVec::new(m),
             from: 0,
             to: 0
         }
@@ -86,6 +89,7 @@ impl<'a> Server<'a> {
         self.backward.initialize_query(self.to);
         self.closest_node_priority_queue.clear();
         self.closest_node_priority_queue.push(State { distance: departure_time, node: self.from });
+        self.relevant_upward.clear();
 
         self.forward_tree_path.clear();
         self.backward_tree_path.clear();
@@ -171,15 +175,13 @@ impl<'a> Server<'a> {
             self.backward_tree_mask.set(node as usize);
         }
 
-        let mut relevant_upward = BitVec::new(self.cch_graph.num_arcs());
-
         while let Some(node) = self.forward_tree_path.pop() {
             if self.forward_tree_mask.get(node as usize) {
                 let upper_bound = self.forward.node_data(node).upper_bound;
 
                 for label in self.forward.node_data(node).labels.iter().filter(|label| label.lower_bound <= upper_bound) {
                     self.forward_tree_mask.set(label.parent as usize);
-                    relevant_upward.set(label.shortcut_id as usize);
+                    self.relevant_upward.set(label.shortcut_id as usize);
                 }
             }
         }
@@ -196,6 +198,8 @@ impl<'a> Server<'a> {
 
         #[cfg(feature = "tdcch-query-detailed-timing")]
         let forward_select_time = timer.get_passed();
+
+        let relevant_upward = &mut self.relevant_upward;
 
         while let Some(State { distance, node }) = self.closest_node_priority_queue.pop() {
             if node == self.to { break }
