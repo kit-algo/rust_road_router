@@ -351,8 +351,8 @@ impl CustomizedSingleDirGraph {
         self.edge_source_at(edge_idx, t).map(|&source| ShortcutSource::from(source).evaluate(t, customized_graph, f)).unwrap_or(FlWeight::INFINITY)
     }
 
-    pub fn evaluate_next_segment_at<Dir: Bool, F>(&self, edge_id: EdgeId, t: Timestamp, customized_graph: &CustomizedGraph, mark_upward: &mut F) -> Option<(FlWeight, NodeId, EdgeId)>
-        where F: FnMut(EdgeId)
+    pub fn evaluate_next_segment_at<Dir: Bool, F, G>(&self, edge_id: EdgeId, t: Timestamp, lower_bound_target: FlWeight, customized_graph: &CustomizedGraph, mark_upward: &mut F, update_lower: &mut G) -> Option<(FlWeight, NodeId, EdgeId)>
+        where F: FnMut(EdgeId), G: FnMut(NodeId, FlWeight)
     {
         let edge_idx = edge_id as usize;
         if self.constant.get(edge_idx) {
@@ -362,7 +362,10 @@ impl CustomizedSingleDirGraph {
             match source.into() {
                 ShortcutSource::Shortcut(down, up) => {
                     mark_upward(up);
-                    customized_graph.incoming.evaluate_next_segment_at::<False, _>(down, t, customized_graph, mark_upward).unwrap()
+                    let lower_bound_to_middle = customized_graph.outgoing.bounds()[up as usize].0 + lower_bound_target;
+                    // update_lower(customized_graph.incoming.tail[down as usize], lower_bound_to_middle);
+                    update_lower(customized_graph.incoming.tail[down as usize], FlWeight::zero());
+                    customized_graph.incoming.evaluate_next_segment_at::<False, _, _>(down, t, lower_bound_to_middle, customized_graph, mark_upward, update_lower).unwrap()
                 },
                 ShortcutSource::OriginalEdge(edge) => {
                     (customized_graph.original_graph.travel_time_function(edge).evaluate(t), if Dir::VALUE { self.head[edge_idx] } else { self.tail[edge_idx] }, edge_id)
