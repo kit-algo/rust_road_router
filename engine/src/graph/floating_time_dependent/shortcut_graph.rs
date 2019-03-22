@@ -1,8 +1,11 @@
+use crate::shortest_path::customizable_contraction_hierarchy::cch_graph::CCHGraph;
 use super::*;
 use crate::graph::first_out_graph::degrees_to_first_out;
+use crate::shortest_path::timestamped_vector::TimestampedVector;
 use crate::rank_select_map::*;
 use crate::io::*;
 use crate::util::*;
+use std::cmp::min;
 use std::mem::swap;
 
 #[derive(Debug)]
@@ -351,10 +354,24 @@ impl CustomizedSingleDirGraph {
         self.edge_source_at(edge_idx, t).map(|&source| ShortcutSource::from(source).evaluate(t, customized_graph, f)).unwrap_or(FlWeight::INFINITY)
     }
 
-    pub fn evaluate_next_segment_at<Dir: Bool, F, G>(&self, edge_id: EdgeId, t: Timestamp, lower_bound_target: FlWeight, customized_graph: &CustomizedGraph, mark_upward: &mut F, update_lower: &mut G) -> Option<(FlWeight, NodeId, EdgeId)>
-        where F: FnMut(EdgeId), G: FnMut(NodeId, FlWeight)
+    pub fn evaluate_next_segment_at<Dir: Bool, F>(&self, edge_id: EdgeId, t: Timestamp, lower_bound_target: FlWeight, customized_graph: &CustomizedGraph, lower_bounds_to_target: &mut TimestampedVector<FlWeight>, lat: &[f32], lng: &[f32], cch_graph: &CCHGraph, mark_upward: &mut F) -> Option<(FlWeight, NodeId, EdgeId)>
+        where F: FnMut(EdgeId)
     {
         let edge_idx = edge_id as usize;
+
+//         let head = cch_graph.node_order().node(if Dir::VALUE { self.head[edge_idx] } else { self.tail[edge_idx] }) as usize;
+//         let tail = cch_graph.node_order().node(if Dir::VALUE { self.tail[edge_idx] } else { self.head[edge_idx] }) as usize;
+//         let color = if Dir::VALUE { "green" } else { "yellow" };
+//         println!("{{
+//   do: (state) => {{
+//     state.edge = L.polyline([[{}, {}], [{}, {}]], {{ color: '{}' }}).addTo(map);
+//     state.edge.bindPopup(\"id: {}<br>bounds: {:?}<br>sources: {:?}<br>target_lower: {:?}\");
+//   }},
+//   undo: (state) => {{
+//     state.edge.remove();
+//   }}
+// }},", lat[tail], lng[tail], lat[head], lng[head], color, edge_id, self.bounds[edge_idx], self.edge_sources(edge_idx), lower_bound_target);
+
         if self.constant.get(edge_idx) {
             return Some((self.bounds[edge_idx].0, if Dir::VALUE { self.head[edge_idx] } else { self.tail[edge_idx] }, edge_id))
         }
@@ -363,9 +380,9 @@ impl CustomizedSingleDirGraph {
                 ShortcutSource::Shortcut(down, up) => {
                     mark_upward(up);
                     let lower_bound_to_middle = customized_graph.outgoing.bounds()[up as usize].0 + lower_bound_target;
-                    // update_lower(customized_graph.incoming.tail[down as usize], lower_bound_to_middle);
-                    update_lower(customized_graph.incoming.tail[down as usize], FlWeight::zero());
-                    customized_graph.incoming.evaluate_next_segment_at::<False, _, _>(down, t, lower_bound_to_middle, customized_graph, mark_upward, update_lower).unwrap()
+                    // lower_bounds_to_target[customized_graph.incoming.tail[down as usize] as usize] = min(lower_bounds_to_target[customized_graph.incoming.tail[down as usize] as usize], FlWeight::zero());
+                    lower_bounds_to_target[customized_graph.incoming.tail[down as usize] as usize] = min(lower_bounds_to_target[customized_graph.incoming.tail[down as usize] as usize], lower_bound_to_middle);
+                    customized_graph.incoming.evaluate_next_segment_at::<False, _>(down, t, lower_bound_to_middle, customized_graph, lower_bounds_to_target, lat, lng, cch_graph, mark_upward).unwrap()
                 },
                 ShortcutSource::OriginalEdge(edge) => {
                     (customized_graph.original_graph.travel_time_function(edge).evaluate(t), if Dir::VALUE { self.head[edge_idx] } else { self.tail[edge_idx] }, edge_id)
@@ -403,7 +420,7 @@ impl CustomizedSingleDirGraph {
         }.map(|(_, s)| s)
     }
 
-    fn edge_sources(&self, edge_idx: usize) -> &[(Timestamp, ShortcutSourceData)] {
+    pub fn edge_sources(&self, edge_idx: usize) -> &[(Timestamp, ShortcutSourceData)] {
         &self.sources[(self.first_source[edge_idx] as usize)..(self.first_source[edge_idx + 1] as usize)]
     }
 }

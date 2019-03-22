@@ -38,6 +38,10 @@ impl<T: Ord + Indexing> IndexdMinHeap<T> {
         self.positions[id] != INVALID_POSITION
     }
 
+    pub fn get(&self, id: usize) -> Option<&T> {
+        self.data.get(self.positions[id])
+    }
+
     pub fn clear(&mut self) {
         for element in &self.data {
             self.positions[element.as_index()] = INVALID_POSITION;

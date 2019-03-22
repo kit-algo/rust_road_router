@@ -26,7 +26,7 @@ use time::Duration;
 use rand::prelude::*;
 
 fn main() {
-    let _reporter = enable_reporting();
+    // let _reporter = enable_reporting();
 
     report!("program", "tdcch");
     report!("start_time", format!("{}", time::now_utc().rfc822()));
@@ -46,6 +46,8 @@ fn main() {
     let first_ipp_of_arc = Vec::load_from(path.join("first_ipp_of_arc").to_str().unwrap()).expect("could not read first_ipp_of_arc");
     let ipp_departure_time = Vec::<u32>::load_from(path.join("ipp_departure_time").to_str().unwrap()).expect("could not read ipp_departure_time");
     let ipp_travel_time = Vec::<u32>::load_from(path.join("ipp_travel_time").to_str().unwrap()).expect("could not read ipp_travel_time");
+    let latitude = Vec::load_from(path.join("latitude").to_str().unwrap()).expect("could not read latitude");
+    let longitude = Vec::load_from(path.join("longitude").to_str().unwrap()).expect("could not read longitude");
 
     report!("unprocessed_graph", { "num_nodes": first_out.len() - 1, "num_arcs": head.len(), "num_ipps": ipp_departure_time.len() });
 
@@ -70,12 +72,27 @@ fn main() {
 
     let mut rank_times = vec![Vec::new(); 64];
 
+    // println!("var events = [");
+
+    // let from = 26272;
+    // let to = 28558;
+    // let at = Timestamp::new(13_538.545_616_967_414);
+
+    // dbg!(td_dijk_server.distance(from, to, at));
+    // // dbg!(td_dijk_server.path());
+    // dbg!(server.distance(from, to, at, &latitude, &longitude));
+    // // dbg!(server.path());
+
+    // println!("];");
+
+    // panic!("foo");
+
     for _ in 0..50 {
         let from: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
         let at = Timestamp::new(rng.gen_range(0.0, f64::from(period())));
         td_dijk_server.ranks(from, at, |to, ea_ground_truth, rank| {
             let _tdcch_query_ctxt = algo_runs_ctxt.push_collection_item();
-            let (ea, duration) = measure(|| server.distance(from, to, at).map(|dist| dist + at));
+            let (ea, duration) = measure(|| server.distance(from, to, at, &latitude, &longitude).map(|dist| dist + at));
 
             report!("from", from);
             report!("to", to);
@@ -89,6 +106,9 @@ fn main() {
 
             if !ea.unwrap_or(Timestamp::NEVER).fuzzy_eq(ea_ground_truth) {
                 eprintln!("TDCCH ❌ Rel Err for rank {}: {}", rank, f64::from((ea.unwrap_or(Timestamp::NEVER) - at) / (ea_ground_truth - at)) - 1.0);
+                dbg!(from);
+                dbg!(to);
+                dbg!(at);
             }
             if cfg!(feature = "tdcch-approx") {
                 assert!(!ea.unwrap_or(Timestamp::NEVER).fuzzy_lt(ea_ground_truth), "{} {} {:?}", from, to, at);
@@ -156,7 +176,7 @@ fn main() {
 
             let _tdcch_query_ctxt = algo_runs_ctxt.push_collection_item();
             let (ea, time) = measure(|| {
-                server.distance(from, to, at).map(|dist| dist + at)
+                server.distance(from, to, at, &latitude, &longitude).map(|dist| dist + at)
             });
             tdcch_time = tdcch_time + time;
 

@@ -1,6 +1,6 @@
 use crate::graph::*;
 
-mod timestamped_vector;
+pub mod timestamped_vector;
 mod stepped_dijkstra;
 mod td_stepped_dijkstra;
 mod floating_td_stepped_dijkstra;
