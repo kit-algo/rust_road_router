@@ -71,7 +71,7 @@ impl<'a> Server<'a> {
 
     #[allow(clippy::collapsible_if)]
     #[allow(clippy::cognitive_complexity)]
-    pub fn distance(&mut self, from_node: NodeId, to_node: NodeId, departure_time: Timestamp, lat: &[f32], lng: &[f32]) -> Option<FlWeight> {
+    pub fn distance(&mut self, from_node: NodeId, to_node: NodeId, departure_time: Timestamp) -> Option<FlWeight> {
         report!("algo", "Floating TDCCH Query");
 
         #[cfg(feature = "tdcch-query-detailed-timing")]
@@ -79,20 +79,6 @@ impl<'a> Server<'a> {
 
         self.from = self.cch_graph.node_order().rank(from_node);
         self.to = self.cch_graph.node_order().rank(to_node);
-
-        println!("{{
-  do: (state) => {{
-    state.start_marker = L.marker([{}, {}], {{ title: \"FROM\", icon: greyIcon }}).addTo(map);
-    state.start_marker.bindPopup(\"FROM<br>id: {}<br>rank: {}<br>at: {:?}\");
-    state.to_marker = L.marker([{}, {}], {{ title: \"TO\", icon: blackIcon }}).addTo(map);
-    state.to_marker.bindPopup(\"TO<br>id: {}<br>rank: {}\");
-  }},
-  undo: (state) => {{
-    state.start_marker.remove();
-    state.to_marker.remove();
-  }}
-}},", lat[from_node as usize], lng[from_node as usize], from_node, self.from, departure_time,
-      lat[to_node as usize], lng[to_node as usize], to_node, self.to);
 
         let n = self.customized_graph.original_graph.num_nodes();
 
@@ -227,26 +213,9 @@ impl<'a> Server<'a> {
 
         self.closest_node_priority_queue.push(State { distance: departure_time + tentative_distance.0, node: self.from });
 
-        while let Some(State { node, distance: potential }) = self.closest_node_priority_queue.pop() {
+        while let Some(State { node, .. }) = self.closest_node_priority_queue.pop() {
 
             let distance = self.distances[node as usize];
-
-//             let color = match (self.forward_tree_mask.get(node as usize), self.backward_tree_mask.get(node as usize)) {
-//                 (true, true) => "red",
-//                 (true, false) => "green",
-//                 (false, true) => "yellow",
-//                 (false, false) => "blue",
-//             };
-
-//             println!("{{
-//   do: (state) => {{
-//     state.marker = L.marker([{}, {}], {{ title: \"{}\", icon: {}Icon }}).addTo(map);
-//     state.marker.bindPopup(\"id: {}<br>rank: {}<br>at: {:?}<br>lower bound to target: {:?}<br>potential: {:?}\");
-//   }},
-//   undo: (state) => {{
-//     state.marker.remove();
-//   }}
-// }},", lat[self.cch_graph.node_order().node(node) as usize], lng[self.cch_graph.node_order().node(node) as usize], node, color, self.cch_graph.node_order().node(node), node, distance, lower_bounds_to_target[node as usize], potential);
 
             if node == self.to { break }
 
@@ -255,7 +224,7 @@ impl<'a> Server<'a> {
                     if cfg!(feature = "detailed-stats") { relaxed_shortcut_arcs += 1; }
 
                     let lower_bound_target = lower_bounds_to_target[target as usize];
-                    let (time, next_on_path, evaled_edge_id) = self.customized_graph.outgoing.evaluate_next_segment_at::<True, _>(shortcut_id, distance, lower_bound_target, self.customized_graph, lower_bounds_to_target, lat, lng, self.cch_graph,
+                    let (time, next_on_path, evaled_edge_id) = self.customized_graph.outgoing.evaluate_next_segment_at::<True, _>(shortcut_id, distance, lower_bound_target, self.customized_graph, lower_bounds_to_target,
                         &mut |edge_id| relevant_upward.set(edge_id as usize)).unwrap();
                     let lower = lower_bounds_to_target[next_on_path as usize];
 
@@ -286,7 +255,7 @@ impl<'a> Server<'a> {
                         if cfg!(feature = "detailed-stats") { relaxed_shortcut_arcs += 1; }
 
                         let lower_bound_target = lower_bounds_to_target[label.parent as usize];
-                        let (time, next_on_path, evaled_edge_id) = self.customized_graph.incoming.evaluate_next_segment_at::<False, _>(label.shortcut_id, distance, lower_bound_target, self.customized_graph, lower_bounds_to_target, lat, lng, self.cch_graph,
+                        let (time, next_on_path, evaled_edge_id) = self.customized_graph.incoming.evaluate_next_segment_at::<False, _>(label.shortcut_id, distance, lower_bound_target, self.customized_graph, lower_bounds_to_target,
                             &mut |edge_id| relevant_upward.set(edge_id as usize)).unwrap();
                         let lower = lower_bounds_to_target[next_on_path as usize];
 
