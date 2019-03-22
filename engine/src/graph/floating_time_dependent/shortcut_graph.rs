@@ -1,4 +1,3 @@
-use crate::shortest_path::customizable_contraction_hierarchy::cch_graph::CCHGraph;
 use super::*;
 use crate::graph::first_out_graph::degrees_to_first_out;
 use crate::shortest_path::timestamped_vector::TimestampedVector;
