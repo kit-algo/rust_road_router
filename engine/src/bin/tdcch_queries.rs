@@ -89,9 +89,6 @@ fn main() {
 
             if !ea.unwrap_or(Timestamp::NEVER).fuzzy_eq(ea_ground_truth) {
                 eprintln!("TDCCH ❌ Rel Err for rank {}: {}", rank, f64::from((ea.unwrap_or(Timestamp::NEVER) - at) / (ea_ground_truth - at)) - 1.0);
-                dbg!(from);
-                dbg!(to);
-                dbg!(at);
             }
             if cfg!(feature = "tdcch-approx") {
                 assert!(!ea.unwrap_or(Timestamp::NEVER).fuzzy_lt(ea_ground_truth), "{} {} {:?}", from, to, at);
