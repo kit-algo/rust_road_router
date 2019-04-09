@@ -314,7 +314,8 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
 
         if let [TTFPoint { val, .. }] = &target[..] {
-            target.push(TTFPoint { at: first.last().unwrap().at, val: *val });
+            let val = *val;
+            target.push(TTFPoint { at: first.last().unwrap().at, val });
         }
 
         debug_assert!(target.len() > 1);
