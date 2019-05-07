@@ -476,45 +476,86 @@ impl CCHGraph {
 
         let sep_tree = self.separators();
 
-        let subctxt = push_context("main".to_string());
-        report_time("TD-CCH Customization", || {
-            let mut _events_ctxt = push_collection_context("events".to_string());
+        {
+            let subctxt = push_context("main".to_string());
 
             use std::thread;
             use std::sync::mpsc::{channel, RecvTimeoutError};
 
             let (tx, rx) = channel();
+            let (events_tx, events_rx) = channel();
 
-            thread::spawn(move || {
-                let timer = Timer::new();
+            report_time("TD-CCH Customization", || {
+                thread::spawn(move || {
+                    let timer = Timer::new();
 
-                loop {
-                    // let _event = events_ctxt.push_collection_item();
+                    let mut events = Vec::new();
 
-                    report!("at_s", timer.get_passed_ms() / 1000);
-                    report!("nodes_customized", NODES_CUSTOMIZED.load(Ordering::Relaxed));
-                    if cfg!(feature = "detailed-stats") {
-                        report!("num_ipps_stored", IPP_COUNT.load(Ordering::Relaxed));
-                        report!("num_shortcuts_active", ACTIVE_SHORTCUTS.load(Ordering::Relaxed));
-                        report!("num_ipps_reduced_by_approx", SAVED_BY_APPROX.load(Ordering::Relaxed));
-                        report!("num_ipps_considered_for_approx", CONSIDERED_FOR_APPROX.load(Ordering::Relaxed));
-                        report!("num_shortcut_merge_points", PATH_SOURCES_COUNT.load(Ordering::Relaxed));
-                        report!("num_performed_merges", ACTUALLY_MERGED.load(Ordering::Relaxed));
-                        report!("num_performed_links", ACTUALLY_LINKED.load(Ordering::Relaxed));
-                        report!("num_performed_unnecessary_links", UNNECESSARY_LINKED.load(Ordering::Relaxed));
+                    loop {
+                        report!("at_s", timer.get_passed_ms() / 1000);
+                        report!("nodes_customized", NODES_CUSTOMIZED.load(Ordering::Relaxed));
+                        if cfg!(feature = "detailed-stats") {
+                            report!("num_ipps_stored", IPP_COUNT.load(Ordering::Relaxed));
+                            report!("num_shortcuts_active", ACTIVE_SHORTCUTS.load(Ordering::Relaxed));
+                            report!("num_ipps_reduced_by_approx", SAVED_BY_APPROX.load(Ordering::Relaxed));
+                            report!("num_ipps_considered_for_approx", CONSIDERED_FOR_APPROX.load(Ordering::Relaxed));
+                            report!("num_shortcut_merge_points", PATH_SOURCES_COUNT.load(Ordering::Relaxed));
+                            report!("num_performed_merges", ACTUALLY_MERGED.load(Ordering::Relaxed));
+                            report!("num_performed_links", ACTUALLY_LINKED.load(Ordering::Relaxed));
+                            report!("num_performed_unnecessary_links", UNNECESSARY_LINKED.load(Ordering::Relaxed));
+                        }
+
+                        if cfg!(feature = "detailed-stats") {
+                            events.push((timer.get_passed_ms() / 1000,
+                                         NODES_CUSTOMIZED.load(Ordering::Relaxed),
+                                         IPP_COUNT.load(Ordering::Relaxed),
+                                         ACTIVE_SHORTCUTS.load(Ordering::Relaxed),
+                                         SAVED_BY_APPROX.load(Ordering::Relaxed),
+                                         CONSIDERED_FOR_APPROX.load(Ordering::Relaxed),
+                                         PATH_SOURCES_COUNT.load(Ordering::Relaxed),
+                                         ACTUALLY_MERGED.load(Ordering::Relaxed),
+                                         ACTUALLY_LINKED.load(Ordering::Relaxed),
+                                         UNNECESSARY_LINKED.load(Ordering::Relaxed)));
+                        } else {
+                            events.push((timer.get_passed_ms() / 1000, NODES_CUSTOMIZED.load(Ordering::Relaxed), 0, 0, 0, 0, 0, 0, 0, 0));
+                        }
+
+
+                        if let Ok(()) | Err(RecvTimeoutError::Disconnected) = rx.recv_timeout(std::time::Duration::from_secs(3)) {
+                            events_tx.send(events).unwrap();
+                            break;
+                        }
                     }
+                });
 
-                    if let Ok(()) | Err(RecvTimeoutError::Disconnected) = rx.recv_timeout(std::time::Duration::from_secs(3)) {
-                        break;
-                    }
-                }
+                self.customize_par_by_sep(&sep_tree, 0, &mut upward, &mut downward, metric, &inverted);
             });
 
-            self.customize_par_by_sep(&sep_tree, 0, &mut upward, &mut downward, metric, &inverted);
-
             tx.send(()).unwrap();
-        });
-        drop(subctxt);
+
+            for events in events_rx {
+                let mut events_ctxt = push_collection_context("events".to_string());
+
+                for event in events {
+                    let _event = events_ctxt.push_collection_item();
+
+                    report_silent!("at_s", event.0);
+                    report_silent!("nodes_customized", event.1);
+                    if cfg!(feature = "detailed-stats") {
+                        report_silent!("num_ipps_stored", event.2);
+                        report_silent!("num_shortcuts_active", event.3);
+                        report_silent!("num_ipps_reduced_by_approx", event.4);
+                        report_silent!("num_ipps_considered_for_approx", event.5);
+                        report_silent!("num_shortcut_merge_points", event.6);
+                        report_silent!("num_performed_merges", event.7);
+                        report_silent!("num_performed_links", event.8);
+                        report_silent!("num_performed_unnecessary_links", event.9);
+                    }
+                }
+            }
+
+            drop(subctxt);
+        }
 
         if cfg!(feature = "detailed-stats") {
             report!("num_ipps_stored", IPP_COUNT.load(Ordering::Relaxed));

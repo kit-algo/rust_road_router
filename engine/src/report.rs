@@ -192,6 +192,10 @@ pub fn report(key: String, val: Value) {
     if cfg!(feature = "report-to-stderr") {
         eprintln!("{}: {}", key, val.to_string());
     }
+    report_silent(key, val)
+}
+
+pub fn report_silent(key: String, val: Value) {
     REPORTER.with(|reporter| reporter.borrow_mut().as_mut().map(|r| r.report(key, val)));
 }
 
@@ -218,6 +222,11 @@ impl Drop for ReportingGuard {
 #[macro_export]
 macro_rules! report {
     ($k:expr, $($json:tt)+) => { report($k.to_string(), json!($($json)+)) };
+}
+
+#[macro_export]
+macro_rules! report_silent {
+    ($k:expr, $($json:tt)+) => { report_silent($k.to_string(), json!($($json)+)) };
 }
 
 pub fn enable_reporting() -> ReportingGuard {
