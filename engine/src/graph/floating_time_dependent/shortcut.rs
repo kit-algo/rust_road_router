@@ -2,7 +2,10 @@ use super::*;
 use std::sync::atomic::Ordering::Relaxed;
 use std::cmp::{min, max, Ordering};
 
+#[cfg(not(override_tdcch_approx_threshold))]
 pub const APPROX_THRESHOLD: usize = 1000;
+#[cfg(override_tdcch_approx_threshold)]
+pub const APPROX_THRESHOLD: usize = include!(concat!(env!("OUT_DIR"), "/TDCCH_APPROX_THRESHOLD"));
 
 #[derive(Debug)]
 enum TTFCache<D> {

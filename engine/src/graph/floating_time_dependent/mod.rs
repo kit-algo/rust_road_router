@@ -48,7 +48,10 @@ mod time {
     #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
     pub struct FlWeight(f64);
 
+    #[cfg(not(override_tdcch_approx))]
     pub const APPROX: FlWeight = FlWeight(1.0);
+    #[cfg(override_tdcch_approx)]
+    pub const APPROX: FlWeight = FlWeight(include!(concat!(env!("OUT_DIR"), "/TDCCH_APPROX")));
 
     impl FlWeight {
         pub const INFINITY: Self = FlWeight(2_147_483_647.0);
