@@ -603,27 +603,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         points.push(point)
     }
 
-    #[cfg(not(feature = "tdcch-approx"))]
-    pub fn approximate(&self, _buffer:  &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
-        unimplemented!()
-    }
-
-    #[cfg(not(feature = "tdcch-approx"))]
-    pub fn lower_bound_ttf(&self, _buffer:  &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
-        unimplemented!()
-    }
-
-    #[cfg(not(feature = "tdcch-approx"))]
-    pub fn upper_bound_ttf(&self, _buffer:  &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
-        unimplemented!()
-    }
-
-    #[cfg(not(feature = "tdcch-approx"))]
-    pub fn bound_ttfs(&self) -> (Box<[TTFPoint]>, Box<[TTFPoint]>) {
-        unimplemented!()
-    }
-
-    #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
+    #[cfg(not(feature = "tdcch-approx-imai-iri"))]
     pub fn approximate(&self, buffer:  &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
         buffer.reserve(self.ipps.len());
         self.douglas_peuker(buffer);
@@ -632,7 +612,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         result
     }
 
-    #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
+    #[cfg(not(feature = "tdcch-approx-imai-iri"))]
     pub fn lower_bound_ttf(&self, buffer:  &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
         buffer.reserve(self.ipps.len());
         self.douglas_peuker_lower(buffer);
@@ -647,7 +627,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         result
     }
 
-    #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
+    #[cfg(not(feature = "tdcch-approx-imai-iri"))]
     pub fn upper_bound_ttf(&self, buffer:  &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
         buffer.reserve(self.ipps.len());
         self.douglas_peuker_upper(buffer);
@@ -662,7 +642,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         result
     }
 
-    #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
+    #[cfg(not(feature = "tdcch-approx-imai-iri"))]
     pub fn bound_ttfs(&self) -> (Box<[TTFPoint]>, Box<[TTFPoint]>) {
         let mut result_lower = Vec::with_capacity(self.ipps.len());
         let mut result_upper = Vec::with_capacity(self.ipps.len());
@@ -679,7 +659,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         (result_lower.into_boxed_slice(), result_upper.into_boxed_slice())
     }
 
-    #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
+    #[cfg(not(feature = "tdcch-approx-imai-iri"))]
     fn douglas_peuker(&self, result: &mut Vec<TTFPoint>) {
         if self.ipps.len() <= 2 {
             result.extend_from_slice(self.ipps);
@@ -705,7 +685,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
-    #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
+    #[cfg(not(feature = "tdcch-approx-imai-iri"))]
     fn douglas_peuker_combined(&self, result_lower: &mut Vec<TTFPoint>, result_upper: &mut Vec<TTFPoint>) {
         if self.ipps.len() <= 2 {
             result_lower.extend_from_slice(self.ipps);
@@ -745,7 +725,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
-    #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
+    #[cfg(not(feature = "tdcch-approx-imai-iri"))]
     fn douglas_peuker_lower(&self, result_lower: &mut Vec<TTFPoint>) {
         if self.ipps.len() <= 2 {
             result_lower.extend_from_slice(self.ipps);
@@ -780,7 +760,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
-    #[cfg(all(feature = "tdcch-approx", not(feature = "tdcch-approx-imai-iri")))]
+    #[cfg(not(feature = "tdcch-approx-imai-iri"))]
     fn douglas_peuker_upper(&self, result_upper: &mut Vec<TTFPoint>) {
         if self.ipps.len() <= 2 {
             result_upper.extend_from_slice(self.ipps);

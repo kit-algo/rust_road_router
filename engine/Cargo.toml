@@ -6,12 +6,12 @@ edition = "2018"
 build = "build.rs"
 
 [features]
-default = []
+default = ["tdcch-approx"]
 tdcch-disable-par = []
 tdcch-query-detailed-timing = []
 tdcch-stall-on-demand = []
 tdcch-approx = []
-tdcch-approx-imai-iri = ["tdcch-approx"]
+tdcch-approx-imai-iri = []
 report-to-stderr = []
 detailed-stats = []
 
