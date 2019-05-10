@@ -849,19 +849,4 @@ impl CCHGraph {
     }
 }
 
-#[cfg(debug_assertions)]
-#[derive(Debug)]
-struct RankLogger {
-    rank: Option<NodeId>
-}
-
-#[cfg(debug_assertions)]
-impl Drop for RankLogger {
-    fn drop(&mut self) {
-        if let Some(rank) = self.rank {
-            dbg!(rank);
-        }
-    }
-}
-
 thread_local! { static MERGE_BUFFERS: RefCell<MergeBuffers> = RefCell::new(MergeBuffers::new()); }
