@@ -90,7 +90,8 @@ fn main() {
                 report!("earliest_arrival", f64::from(ea));
             }
             if ea.is_some() {
-                let (_, unpacking_duration) = measure(|| server.path());
+                let (path, unpacking_duration) = measure(|| server.path());
+                report!("num_nodes_on_shortest_path", path.len());
                 report!("unpacking_running_time_ms", unpacking_duration.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
             }
         }

@@ -102,6 +102,7 @@ impl<'a> Server<'a> {
         let mut nodes_in_elimination_tree_search_space = 0;
         let mut relaxed_elimination_tree_arcs = 0;
         let mut relaxed_shortcut_arcs = 0;
+        let mut num_settled_nodes = 0;
 
         while self.forward.peek_next().is_some() || self.backward.peek_next().is_some() {
             if self.forward.peek_next().unwrap_or(n as NodeId) <= self.backward.peek_next().unwrap_or(n as NodeId) {
@@ -214,6 +215,7 @@ impl<'a> Server<'a> {
         self.closest_node_priority_queue.push(State { distance: departure_time + tentative_distance.0, node: self.from });
 
         while let Some(State { node, .. }) = self.closest_node_priority_queue.pop() {
+            if cfg!(feature = "detailed-stats") { num_settled_nodes += 1; }
 
             let distance = self.distances[node as usize];
 
@@ -280,7 +282,10 @@ impl<'a> Server<'a> {
             }
         }
 
-        if cfg!(feature = "detailed-stats") { report!("num_relaxed_shortcut_arcs", relaxed_shortcut_arcs); }
+        if cfg!(feature = "detailed-stats") {
+            report!("num_relaxed_shortcut_arcs", relaxed_shortcut_arcs);
+            report!("num_settled_nodes", num_settled_nodes);
+        }
 
         #[cfg(feature = "tdcch-query-detailed-timing")]
         let relax_time = timer.get_passed();
