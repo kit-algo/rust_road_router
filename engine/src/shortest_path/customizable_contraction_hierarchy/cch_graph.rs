@@ -381,91 +381,92 @@ impl CCHGraph {
         });
         drop(subctxt);
 
-        let subctxt = push_context("precustomization".to_string());
-        report_time("TD-CCH Pre-Customization", || {
-            let mut node_edge_ids = vec![InRangeOption::new(None); n as usize];
+        if cfg!(feature = "tdcch-precustomization") {
+            let _subctxt = push_context("precustomization".to_string());
+            report_time("TD-CCH Pre-Customization", || {
+                let mut node_edge_ids = vec![InRangeOption::new(None); n as usize];
 
-            for current_node in 0..n {
-                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
-                    upward[edge_id as usize].update_is_constant();
-                    downward[edge_id as usize].update_is_constant();
-                    node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
-                }
+                for current_node in 0..n {
+                    for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
+                        upward[edge_id as usize].update_is_constant();
+                        downward[edge_id as usize].update_is_constant();
+                        node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
+                    }
 
-                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
-                    debug_assert_eq!(self.edge_id_to_tail(edge_id), current_node);
-                    let shortcut_edge_ids = self.neighbor_edge_indices(node);
-                    for (target, shortcut_edge_id) in self.neighbor_iter(node).zip(shortcut_edge_ids) {
-                        debug_assert_eq!(self.edge_id_to_tail(shortcut_edge_id), node);
-                        if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
-                            debug_assert!(shortcut_edge_id > edge_id);
-                            debug_assert!(shortcut_edge_id > other_edge_id);
-                            upward[shortcut_edge_id as usize].upper_bound = min(upward[shortcut_edge_id as usize].upper_bound, downward[edge_id as usize].upper_bound + upward[other_edge_id as usize].upper_bound);
-                            upward[shortcut_edge_id as usize].lower_bound = min(upward[shortcut_edge_id as usize].lower_bound, downward[edge_id as usize].lower_bound + upward[other_edge_id as usize].lower_bound);
-                            downward[shortcut_edge_id as usize].upper_bound = min(downward[shortcut_edge_id as usize].upper_bound, downward[other_edge_id as usize].upper_bound + upward[edge_id as usize].upper_bound);
-                            downward[shortcut_edge_id as usize].lower_bound = min(downward[shortcut_edge_id as usize].lower_bound, downward[other_edge_id as usize].lower_bound + upward[edge_id as usize].lower_bound);
+                    for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
+                        debug_assert_eq!(self.edge_id_to_tail(edge_id), current_node);
+                        let shortcut_edge_ids = self.neighbor_edge_indices(node);
+                        for (target, shortcut_edge_id) in self.neighbor_iter(node).zip(shortcut_edge_ids) {
+                            debug_assert_eq!(self.edge_id_to_tail(shortcut_edge_id), node);
+                            if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
+                                debug_assert!(shortcut_edge_id > edge_id);
+                                debug_assert!(shortcut_edge_id > other_edge_id);
+                                upward[shortcut_edge_id as usize].upper_bound = min(upward[shortcut_edge_id as usize].upper_bound, downward[edge_id as usize].upper_bound + upward[other_edge_id as usize].upper_bound);
+                                upward[shortcut_edge_id as usize].lower_bound = min(upward[shortcut_edge_id as usize].lower_bound, downward[edge_id as usize].lower_bound + upward[other_edge_id as usize].lower_bound);
+                                downward[shortcut_edge_id as usize].upper_bound = min(downward[shortcut_edge_id as usize].upper_bound, downward[other_edge_id as usize].upper_bound + upward[edge_id as usize].upper_bound);
+                                downward[shortcut_edge_id as usize].lower_bound = min(downward[shortcut_edge_id as usize].lower_bound, downward[other_edge_id as usize].lower_bound + upward[edge_id as usize].lower_bound);
+                            }
                         }
+                    }
+
+                    for node in self.neighbor_iter(current_node) {
+                        node_edge_ids[node as usize] = InRangeOption::new(None);
                     }
                 }
 
-                for node in self.neighbor_iter(current_node) {
-                    node_edge_ids[node as usize] = InRangeOption::new(None);
-                }
-            }
+                let upward_preliminary_bounds: Vec<_> = upward.iter().map(|s| s.lower_bound).collect();
+                let downward_preliminary_bounds: Vec<_> = downward.iter().map(|s| s.lower_bound).collect();
 
-            let upward_preliminary_bounds: Vec<_> = upward.iter().map(|s| s.lower_bound).collect();
-            let downward_preliminary_bounds: Vec<_> = downward.iter().map(|s| s.lower_bound).collect();
+                for current_node in (0..n).rev() {
+                    for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
+                        node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
+                    }
 
-            for current_node in (0..n).rev() {
-                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
-                    node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
-                }
+                    for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
+                        let shortcut_edge_ids = self.neighbor_edge_indices(node);
+                        for (target, shortcut_edge_id) in self.neighbor_iter(node).zip(shortcut_edge_ids) {
+                            if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
+                                upward[other_edge_id as usize].upper_bound = min(upward[other_edge_id as usize].upper_bound, upward[edge_id as usize].upper_bound + upward[shortcut_edge_id as usize].upper_bound);
+                                upward[other_edge_id as usize].lower_bound = min(upward[other_edge_id as usize].lower_bound, upward[edge_id as usize].lower_bound + upward[shortcut_edge_id as usize].lower_bound);
 
-                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
-                    let shortcut_edge_ids = self.neighbor_edge_indices(node);
-                    for (target, shortcut_edge_id) in self.neighbor_iter(node).zip(shortcut_edge_ids) {
-                        if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
-                            upward[other_edge_id as usize].upper_bound = min(upward[other_edge_id as usize].upper_bound, upward[edge_id as usize].upper_bound + upward[shortcut_edge_id as usize].upper_bound);
-                            upward[other_edge_id as usize].lower_bound = min(upward[other_edge_id as usize].lower_bound, upward[edge_id as usize].lower_bound + upward[shortcut_edge_id as usize].lower_bound);
+                                upward[edge_id as usize].upper_bound = min(upward[edge_id as usize].upper_bound, upward[other_edge_id as usize].upper_bound + downward[shortcut_edge_id as usize].upper_bound);
+                                upward[edge_id as usize].lower_bound = min(upward[edge_id as usize].lower_bound, upward[other_edge_id as usize].lower_bound + downward[shortcut_edge_id as usize].lower_bound);
 
-                            upward[edge_id as usize].upper_bound = min(upward[edge_id as usize].upper_bound, upward[other_edge_id as usize].upper_bound + downward[shortcut_edge_id as usize].upper_bound);
-                            upward[edge_id as usize].lower_bound = min(upward[edge_id as usize].lower_bound, upward[other_edge_id as usize].lower_bound + downward[shortcut_edge_id as usize].lower_bound);
+                                downward[other_edge_id as usize].upper_bound = min(downward[other_edge_id as usize].upper_bound, downward[edge_id as usize].upper_bound + downward[shortcut_edge_id as usize].upper_bound);
+                                downward[other_edge_id as usize].lower_bound = min(downward[other_edge_id as usize].lower_bound, downward[edge_id as usize].lower_bound + downward[shortcut_edge_id as usize].lower_bound);
 
-                            downward[other_edge_id as usize].upper_bound = min(downward[other_edge_id as usize].upper_bound, downward[edge_id as usize].upper_bound + downward[shortcut_edge_id as usize].upper_bound);
-                            downward[other_edge_id as usize].lower_bound = min(downward[other_edge_id as usize].lower_bound, downward[edge_id as usize].lower_bound + downward[shortcut_edge_id as usize].lower_bound);
-
-                            downward[edge_id as usize].upper_bound = min(downward[edge_id as usize].upper_bound, downward[other_edge_id as usize].upper_bound + upward[shortcut_edge_id as usize].upper_bound);
-                            downward[edge_id as usize].lower_bound = min(downward[edge_id as usize].lower_bound, downward[other_edge_id as usize].lower_bound + upward[shortcut_edge_id as usize].lower_bound);
+                                downward[edge_id as usize].upper_bound = min(downward[edge_id as usize].upper_bound, downward[other_edge_id as usize].upper_bound + upward[shortcut_edge_id as usize].upper_bound);
+                                downward[edge_id as usize].lower_bound = min(downward[edge_id as usize].lower_bound, downward[other_edge_id as usize].lower_bound + upward[shortcut_edge_id as usize].lower_bound);
+                            }
                         }
+                    }
+
+                    for node in self.neighbor_iter(current_node) {
+                        node_edge_ids[node as usize] = InRangeOption::new(None);
                     }
                 }
 
-                for node in self.neighbor_iter(current_node) {
-                    node_edge_ids[node as usize] = InRangeOption::new(None);
+                for (shortcut, lower_bound) in upward.iter_mut().zip(upward_preliminary_bounds.into_iter()) {
+                    if shortcut.upper_bound.fuzzy_lt(lower_bound) {
+                        shortcut.required = false;
+                        shortcut.lower_bound = FlWeight::INFINITY;
+                        shortcut.upper_bound = FlWeight::INFINITY;
+                    } else {
+                        shortcut.lower_bound = lower_bound;
+                    }
                 }
-            }
 
-            for (shortcut, lower_bound) in upward.iter_mut().zip(upward_preliminary_bounds.into_iter()) {
-                if shortcut.upper_bound.fuzzy_lt(lower_bound) {
-                    shortcut.required = false;
-                    shortcut.lower_bound = FlWeight::INFINITY;
-                    shortcut.upper_bound = FlWeight::INFINITY;
-                } else {
-                    shortcut.lower_bound = lower_bound;
+                for (shortcut, lower_bound) in downward.iter_mut().zip(downward_preliminary_bounds.into_iter()) {
+                    if shortcut.upper_bound.fuzzy_lt(lower_bound) {
+                        shortcut.required = false;
+                        shortcut.lower_bound = FlWeight::INFINITY;
+                        shortcut.upper_bound = FlWeight::INFINITY;
+                    } else {
+                        shortcut.lower_bound = lower_bound;
+                    }
                 }
-            }
-
-            for (shortcut, lower_bound) in downward.iter_mut().zip(downward_preliminary_bounds.into_iter()) {
-                if shortcut.upper_bound.fuzzy_lt(lower_bound) {
-                    shortcut.required = false;
-                    shortcut.lower_bound = FlWeight::INFINITY;
-                    shortcut.upper_bound = FlWeight::INFINITY;
-                } else {
-                    shortcut.lower_bound = lower_bound;
-                }
-            }
-        });
-        drop(subctxt);
+            });
+        }
 
         let mut inverted = vec![Vec::new(); n as usize];
         for current_node in 0..n {
@@ -570,84 +571,85 @@ impl CCHGraph {
         report!("approx", f64::from(APPROX));
         report!("approx_threshold", APPROX_THRESHOLD);
 
-        let subctxt = push_context("postcustomization".to_string());
-        report_time("TD-CCH Post-Customization", || {
-            let mut removed_by_perfection = 0;
-            let mut node_edge_ids = vec![InRangeOption::new(None); n as usize];
+        if cfg!(feature = "tdcch-postcustomization") {
+            let _subctxt = push_context("postcustomization".to_string());
+            report_time("TD-CCH Post-Customization", || {
+                let mut removed_by_perfection = 0;
+                let mut node_edge_ids = vec![InRangeOption::new(None); n as usize];
 
-            let upward_preliminary_bounds: Vec<_> = upward.iter().map(|s| s.lower_bound).collect();
-            let downward_preliminary_bounds: Vec<_> = downward.iter().map(|s| s.lower_bound).collect();
+                let upward_preliminary_bounds: Vec<_> = upward.iter().map(|s| s.lower_bound).collect();
+                let downward_preliminary_bounds: Vec<_> = downward.iter().map(|s| s.lower_bound).collect();
 
-            for current_node in (0..n).rev() {
-                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
-                    node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
-                }
+                for current_node in (0..n).rev() {
+                    for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
+                        node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
+                    }
 
-                for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
-                    let shortcut_edge_ids = self.neighbor_edge_indices(node);
-                    for (target, shortcut_edge_id) in self.neighbor_iter(node).zip(shortcut_edge_ids) {
-                        if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
-                            upward[other_edge_id as usize].upper_bound = min(upward[other_edge_id as usize].upper_bound, upward[edge_id as usize].upper_bound + upward[shortcut_edge_id as usize].upper_bound);
-                            upward[other_edge_id as usize].lower_bound = min(upward[other_edge_id as usize].lower_bound, upward[edge_id as usize].lower_bound + upward[shortcut_edge_id as usize].lower_bound);
+                    for (node, edge_id) in self.neighbor_iter(current_node).zip(self.neighbor_edge_indices(current_node)) {
+                        let shortcut_edge_ids = self.neighbor_edge_indices(node);
+                        for (target, shortcut_edge_id) in self.neighbor_iter(node).zip(shortcut_edge_ids) {
+                            if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
+                                upward[other_edge_id as usize].upper_bound = min(upward[other_edge_id as usize].upper_bound, upward[edge_id as usize].upper_bound + upward[shortcut_edge_id as usize].upper_bound);
+                                upward[other_edge_id as usize].lower_bound = min(upward[other_edge_id as usize].lower_bound, upward[edge_id as usize].lower_bound + upward[shortcut_edge_id as usize].lower_bound);
 
-                            upward[edge_id as usize].upper_bound = min(upward[edge_id as usize].upper_bound, upward[other_edge_id as usize].upper_bound + downward[shortcut_edge_id as usize].upper_bound);
-                            upward[edge_id as usize].lower_bound = min(upward[edge_id as usize].lower_bound, upward[other_edge_id as usize].lower_bound + downward[shortcut_edge_id as usize].lower_bound);
+                                upward[edge_id as usize].upper_bound = min(upward[edge_id as usize].upper_bound, upward[other_edge_id as usize].upper_bound + downward[shortcut_edge_id as usize].upper_bound);
+                                upward[edge_id as usize].lower_bound = min(upward[edge_id as usize].lower_bound, upward[other_edge_id as usize].lower_bound + downward[shortcut_edge_id as usize].lower_bound);
 
-                            downward[other_edge_id as usize].upper_bound = min(downward[other_edge_id as usize].upper_bound, downward[edge_id as usize].upper_bound + downward[shortcut_edge_id as usize].upper_bound);
-                            downward[other_edge_id as usize].lower_bound = min(downward[other_edge_id as usize].lower_bound, downward[edge_id as usize].lower_bound + downward[shortcut_edge_id as usize].lower_bound);
+                                downward[other_edge_id as usize].upper_bound = min(downward[other_edge_id as usize].upper_bound, downward[edge_id as usize].upper_bound + downward[shortcut_edge_id as usize].upper_bound);
+                                downward[other_edge_id as usize].lower_bound = min(downward[other_edge_id as usize].lower_bound, downward[edge_id as usize].lower_bound + downward[shortcut_edge_id as usize].lower_bound);
 
-                            downward[edge_id as usize].upper_bound = min(downward[edge_id as usize].upper_bound, downward[other_edge_id as usize].upper_bound + upward[shortcut_edge_id as usize].upper_bound);
-                            downward[edge_id as usize].lower_bound = min(downward[edge_id as usize].lower_bound, downward[other_edge_id as usize].lower_bound + upward[shortcut_edge_id as usize].lower_bound);
+                                downward[edge_id as usize].upper_bound = min(downward[edge_id as usize].upper_bound, downward[other_edge_id as usize].upper_bound + upward[shortcut_edge_id as usize].upper_bound);
+                                downward[edge_id as usize].lower_bound = min(downward[edge_id as usize].lower_bound, downward[other_edge_id as usize].lower_bound + upward[shortcut_edge_id as usize].lower_bound);
+                            }
                         }
+                    }
+
+                    for node in self.neighbor_iter(current_node) {
+                        node_edge_ids[node as usize] = InRangeOption::new(None);
                     }
                 }
 
-                for node in self.neighbor_iter(current_node) {
-                    node_edge_ids[node as usize] = InRangeOption::new(None);
-                }
-            }
-
-            for (shortcut, lower_bound) in upward.iter_mut().zip(upward_preliminary_bounds.into_iter()) {
-                if shortcut.upper_bound.fuzzy_lt(lower_bound) {
-                    if shortcut.required { removed_by_perfection += 1; }
-                    shortcut.required = false;
-                    shortcut.lower_bound = FlWeight::INFINITY;
-                    shortcut.upper_bound = FlWeight::INFINITY;
-                } else {
-                    shortcut.lower_bound = lower_bound;
-                }
-            }
-
-            for (shortcut, lower_bound) in downward.iter_mut().zip(downward_preliminary_bounds.into_iter()) {
-                if shortcut.upper_bound.fuzzy_lt(lower_bound) {
-                    if shortcut.required { removed_by_perfection += 1; }
-                    shortcut.required = false;
-                    shortcut.lower_bound = FlWeight::INFINITY;
-                    shortcut.upper_bound = FlWeight::INFINITY;
-                } else {
-                    shortcut.lower_bound = lower_bound;
-                }
-            }
-
-            for current_node in 0..n {
-                let (upward_below, upward_above) = upward.split_at_mut(self.first_out[current_node as usize] as usize);
-                let upward_active = &mut upward_above[0..self.neighbor_edge_indices(current_node as NodeId).len()];
-                let (downward_below, downward_above) = downward.split_at_mut(self.first_out[current_node as usize] as usize);
-                let downward_active = &mut downward_above[0..self.neighbor_edge_indices(current_node as NodeId).len()];
-                let shortcut_graph = PartialShortcutGraph::new(metric, upward_below, downward_below, 0);
-
-                for shortcut in &mut upward_active[..] {
-                    shortcut.invalidate_unneccesary_sources(&shortcut_graph);
+                for (shortcut, lower_bound) in upward.iter_mut().zip(upward_preliminary_bounds.into_iter()) {
+                    if shortcut.upper_bound.fuzzy_lt(lower_bound) {
+                        if shortcut.required { removed_by_perfection += 1; }
+                        shortcut.required = false;
+                        shortcut.lower_bound = FlWeight::INFINITY;
+                        shortcut.upper_bound = FlWeight::INFINITY;
+                    } else {
+                        shortcut.lower_bound = lower_bound;
+                    }
                 }
 
-                for shortcut in &mut downward_active[..] {
-                    shortcut.invalidate_unneccesary_sources(&shortcut_graph);
+                for (shortcut, lower_bound) in downward.iter_mut().zip(downward_preliminary_bounds.into_iter()) {
+                    if shortcut.upper_bound.fuzzy_lt(lower_bound) {
+                        if shortcut.required { removed_by_perfection += 1; }
+                        shortcut.required = false;
+                        shortcut.lower_bound = FlWeight::INFINITY;
+                        shortcut.upper_bound = FlWeight::INFINITY;
+                    } else {
+                        shortcut.lower_bound = lower_bound;
+                    }
                 }
-            }
 
-            report!("removed_by_perfection", removed_by_perfection);
-        });
-        drop(subctxt);
+                for current_node in 0..n {
+                    let (upward_below, upward_above) = upward.split_at_mut(self.first_out[current_node as usize] as usize);
+                    let upward_active = &mut upward_above[0..self.neighbor_edge_indices(current_node as NodeId).len()];
+                    let (downward_below, downward_above) = downward.split_at_mut(self.first_out[current_node as usize] as usize);
+                    let downward_active = &mut downward_above[0..self.neighbor_edge_indices(current_node as NodeId).len()];
+                    let shortcut_graph = PartialShortcutGraph::new(metric, upward_below, downward_below, 0);
+
+                    for shortcut in &mut upward_active[..] {
+                        shortcut.invalidate_unneccesary_sources(&shortcut_graph);
+                    }
+
+                    for shortcut in &mut downward_active[..] {
+                        shortcut.invalidate_unneccesary_sources(&shortcut_graph);
+                    }
+                }
+
+                report!("removed_by_perfection", removed_by_perfection);
+            });
+        }
 
         ShortcutGraph::new(metric, &self.first_out, &self.head, upward, downward)
     }
@@ -700,13 +702,17 @@ impl CCHGraph {
                                 other_iter.next();
                             }
                         }
-                        triangles.sort_by_key(|&(down, up)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
+                        if cfg!(feature = "tdcch-triangle-sorting") {
+                            triangles.sort_by_key(|&(down, up)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
+                        }
                         for &edges in &triangles {
                             upward_shortcut.merge(edges, &shortcut_graph, &mut buffers);
                         }
                         upward_shortcut.finalize_bounds(&shortcut_graph);
 
-                        triangles.sort_by_key(|&(up, down)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
+                        if cfg!(feature = "tdcch-triangle-sorting") {
+                            triangles.sort_by_key(|&(up, down)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
+                        }
                         for &(up, down) in &triangles {
                             downward_shortcut.merge((down, up), &shortcut_graph, &mut buffers);
                         }
@@ -777,13 +783,17 @@ impl CCHGraph {
                             }
                         }
 
-                        triangles.sort_by_key(|&(down, up)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
+                        if cfg!(feature = "tdcch-triangle-sorting") {
+                            triangles.sort_by_key(|&(down, up)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
+                        }
                         for &edges in &triangles {
                             upward_shortcut.merge(edges, &shortcut_graph, &mut buffers);
                         }
                         upward_shortcut.finalize_bounds(&shortcut_graph);
 
-                        triangles.sort_by_key(|&(up, down)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
+                        if cfg!(feature = "tdcch-triangle-sorting") {
+                            triangles.sort_by_key(|&(up, down)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
+                        }
                         for &(up, down) in &triangles {
                             downward_shortcut.merge((down, up), &shortcut_graph, &mut buffers);
                         }

@@ -6,12 +6,15 @@ edition = "2018"
 build = "build.rs"
 
 [features]
-default = ["tdcch-approx"]
+default = ["tdcch-approx", "tdcch-precustomization", "tdcch-postcustomization", "tdcch-triangle-sorting"]
 tdcch-disable-par = []
 tdcch-query-detailed-timing = []
 tdcch-stall-on-demand = []
 tdcch-approx = []
 tdcch-approx-imai-iri = []
+tdcch-precustomization = []
+tdcch-postcustomization = []
+tdcch-triangle-sorting = []
 report-to-stderr = []
 detailed-stats = []
 
