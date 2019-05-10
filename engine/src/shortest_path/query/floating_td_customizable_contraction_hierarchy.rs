@@ -228,7 +228,7 @@ impl<'a> Server<'a> {
                     let lower_bound_target = lower_bounds_to_target[target as usize];
                     let (time, next_on_path, evaled_edge_id) = self.customized_graph.outgoing.evaluate_next_segment_at::<True, _>(shortcut_id, distance, lower_bound_target, self.customized_graph, lower_bounds_to_target,
                         &mut |edge_id| relevant_upward.set(edge_id as usize)).unwrap();
-                    let lower = lower_bounds_to_target[next_on_path as usize];
+                    let lower = if cfg!(feature = "tdcch-query-astar") { lower_bounds_to_target[next_on_path as usize] } else { FlWeight::zero() };
 
                     let next_ea = distance + time;
                     let next = State { distance: next_ea + lower, node: next_on_path };
@@ -236,7 +236,7 @@ impl<'a> Server<'a> {
                     if next_ea < self.distances[next.node as usize] {
                         self.distances.set(next.node as usize, next_ea);
                         self.parents[next.node as usize] = (node, evaled_edge_id);
-                        if self.closest_node_priority_queue.contains_index(next.as_index()) {
+                    if self.closest_node_priority_queue.contains_index(next.as_index()) {
                             self.closest_node_priority_queue.decrease_key(next);
                         } else {
                             self.closest_node_priority_queue.push(next);
@@ -259,7 +259,7 @@ impl<'a> Server<'a> {
                         let lower_bound_target = lower_bounds_to_target[label.parent as usize];
                         let (time, next_on_path, evaled_edge_id) = self.customized_graph.incoming.evaluate_next_segment_at::<False, _>(label.shortcut_id, distance, lower_bound_target, self.customized_graph, lower_bounds_to_target,
                             &mut |edge_id| relevant_upward.set(edge_id as usize)).unwrap();
-                        let lower = lower_bounds_to_target[next_on_path as usize];
+                        let lower = if cfg!(feature = "tdcch-query-astar") { lower_bounds_to_target[next_on_path as usize] } else { FlWeight::zero() };
 
                         let next_ea = distance + time;
                         let next = State { distance: next_ea + lower, node: next_on_path };
