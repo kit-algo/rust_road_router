@@ -22,11 +22,10 @@ impl<T: Clone> TimestampedVector<T> {
     }
 
     pub fn reset(&mut self) {
-        let old = self.current;
-        self.current += 1;
+        let (new, overflow) = self.current.overflowing_add(1);
+        self.current = new;
 
-        if old > self.current {
-            // overflow, need to reinit
+        if overflow {
             for element in &mut self.data {
                 *element = self.default.clone();
             }
