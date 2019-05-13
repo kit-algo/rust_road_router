@@ -132,7 +132,7 @@ impl<'a> Server<'a> {
                     if lower_bound < tentative_distance.1 {
                         tentative_distance.0 = min(tentative_distance.0, lower_bound);
                         tentative_distance.1 = min(tentative_distance.1, upper_bound);
-                        debug_assert!(tentative_distance.0 <= tentative_distance.1);
+                        debug_assert!(!tentative_distance.1.fuzzy_lt(tentative_distance.0), "{:?}", tentative_distance);
                         self.meeting_nodes.push((node, lower_bound));
                     }
                 } else {
@@ -152,7 +152,7 @@ impl<'a> Server<'a> {
                     if lower_bound < tentative_distance.1 {
                         tentative_distance.0 = min(tentative_distance.0, lower_bound);
                         tentative_distance.1 = min(tentative_distance.1, self.forward.node_data(node).upper_bound + self.backward.node_data(node).upper_bound);
-                        debug_assert!(tentative_distance.0 <= tentative_distance.1);
+                        debug_assert!(!tentative_distance.1.fuzzy_lt(tentative_distance.0), "{:?}", tentative_distance);
                         self.meeting_nodes.push((node, lower_bound));
                     }
                 } else {
@@ -173,7 +173,7 @@ impl<'a> Server<'a> {
         let tentative_upper_bound = tentative_distance.1;
         let tentative_latest_arrival = departure_time + tentative_upper_bound;
 
-        for &(node, _) in self.meeting_nodes.iter().filter(|(_, lower_bound)| *lower_bound <= tentative_upper_bound) {
+        for &(node, _) in self.meeting_nodes.iter().filter(|(_, lower_bound)| !tentative_upper_bound.fuzzy_lt(*lower_bound)) {
             self.forward_tree_mask.set(node as usize);
             self.backward_tree_mask.set(node as usize);
         }
@@ -183,7 +183,7 @@ impl<'a> Server<'a> {
                 self.lower_bounds_to_target[node as usize] = self.backward.node_data(node).lower_bound;
                 let upper_bound = self.backward.node_data(node).upper_bound;
 
-                for label in self.backward.node_data(node).labels.iter().filter(|label| label.lower_bound <= upper_bound) {
+                for label in self.backward.node_data(node).labels.iter().filter(|label| !upper_bound.fuzzy_lt(label.lower_bound)) {
                     self.backward_tree_mask.set(label.parent as usize);
                 }
             }
@@ -194,7 +194,7 @@ impl<'a> Server<'a> {
                 let reverse_lower = self.lower_bounds_to_target[node as usize];
                 let upper_bound = self.forward.node_data(node).upper_bound;
 
-                for label in self.forward.node_data(node).labels.iter().filter(|label| label.lower_bound <= upper_bound) {
+                for label in self.forward.node_data(node).labels.iter().filter(|label| !upper_bound.fuzzy_lt(label.lower_bound)) {
                     debug_assert!(self.customized_graph.outgoing.bounds()[label.shortcut_id as usize].0.fuzzy_eq(label.lower_bound - self.forward.node_data(label.parent).lower_bound));
                     self.lower_bounds_to_target[label.parent as usize] = min(self.lower_bounds_to_target[label.parent as usize], reverse_lower + label.lower_bound - self.forward.node_data(label.parent).lower_bound);
                     self.forward_tree_mask.set(label.parent as usize);
@@ -208,8 +208,8 @@ impl<'a> Server<'a> {
         let forward_select_time = timer.get_passed();
 
         let relevant_upward = &mut self.relevant_upward;
-        debug_assert!(tentative_distance.0.fuzzy_eq(self.lower_bounds_to_target[self.from as usize]));
-        debug_assert!(FlWeight::zero().fuzzy_eq(self.lower_bounds_to_target[self.to as usize]));
+        debug_assert!(tentative_distance.0.fuzzy_eq(self.lower_bounds_to_target[self.from as usize]), "{:?}", dbg_each!(tentative_distance, self.lower_bounds_to_target[self.from as usize]));
+        debug_assert!(FlWeight::zero().fuzzy_eq(self.lower_bounds_to_target[self.to as usize]), "{:?}", dbg_each!(self.lower_bounds_to_target[self.to as usize]));
         let lower_bounds_to_target = &mut self.lower_bounds_to_target;
 
         self.closest_node_priority_queue.push(State { distance: departure_time + tentative_distance.0, node: self.from });
@@ -236,7 +236,7 @@ impl<'a> Server<'a> {
                     if next_ea < self.distances[next.node as usize] {
                         self.distances.set(next.node as usize, next_ea);
                         self.parents[next.node as usize] = (node, evaled_edge_id);
-                    if self.closest_node_priority_queue.contains_index(next.as_index()) {
+                        if self.closest_node_priority_queue.contains_index(next.as_index()) {
                             self.closest_node_priority_queue.decrease_key(next);
                         } else {
                             self.closest_node_priority_queue.push(next);
