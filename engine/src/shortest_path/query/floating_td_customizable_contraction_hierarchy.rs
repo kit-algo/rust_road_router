@@ -129,7 +129,7 @@ impl<'a> Server<'a> {
 
                     self.distances[node as usize] = min(self.distances[node as usize], departure_time + upper_bound + FlWeight::new(EPSILON));
 
-                    if lower_bound < tentative_distance.1 {
+                    if !tentative_distance.1.fuzzy_lt(lower_bound) {
                         tentative_distance.0 = min(tentative_distance.0, lower_bound);
                         tentative_distance.1 = min(tentative_distance.1, upper_bound);
                         debug_assert!(!tentative_distance.1.fuzzy_lt(tentative_distance.0), "{:?}", tentative_distance);
@@ -149,7 +149,7 @@ impl<'a> Server<'a> {
                     self.backward_tree_path.push(node);
 
                     let lower_bound = self.forward.node_data(node).lower_bound + self.backward.node_data(node).lower_bound;
-                    if lower_bound < tentative_distance.1 {
+                    if !tentative_distance.1.fuzzy_lt(lower_bound) {
                         tentative_distance.0 = min(tentative_distance.0, lower_bound);
                         tentative_distance.1 = min(tentative_distance.1, self.forward.node_data(node).upper_bound + self.backward.node_data(node).upper_bound);
                         debug_assert!(!tentative_distance.1.fuzzy_lt(tentative_distance.0), "{:?}", tentative_distance);
@@ -252,7 +252,7 @@ impl<'a> Server<'a> {
             if self.backward_tree_mask.get(node as usize) {
                 let upper_bound = self.backward.node_data(node).upper_bound;
 
-                for label in self.backward.node_data(node).labels.iter().filter(|label| label.lower_bound <= upper_bound) {
+                for label in self.backward.node_data(node).labels.iter().filter(|label| !upper_bound.fuzzy_lt(label.lower_bound)) {
                     if !min(tentative_latest_arrival, self.distances[label.parent as usize]).fuzzy_lt(distance + self.customized_graph.incoming.bounds()[label.shortcut_id as usize].0) {
                         if cfg!(feature = "detailed-stats") { relaxed_shortcut_arcs += 1; }
 
