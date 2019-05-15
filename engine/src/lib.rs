@@ -25,6 +25,7 @@ pub mod rank_select_map;
 pub mod import;
 pub mod link_speed_estimates;
 pub mod export;
+pub mod cli;
 
 mod index_heap;
 mod in_range_option;
