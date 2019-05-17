@@ -24,8 +24,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut base_dir = Some(path);
 
     while let Some(base) = base_dir {
-        if base.join("uniform_queries").exists() {
-            query_dir = Some(base.join("uniform_queries"));
+        if base.join("source_node").exists() {
+            query_dir = Some(base);
             break;
         } else {
             base_dir = base.parent();
