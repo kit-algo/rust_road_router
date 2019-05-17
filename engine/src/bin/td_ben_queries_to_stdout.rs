@@ -2,6 +2,7 @@ use std::{
     env,
     path::Path,
     error::Error,
+    io::{stdout, Write},
 };
 
 use bmw_routing_engine::{
@@ -34,7 +35,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let to = Vec::<u32>::load_from(query_dir.join("target_node").to_str().unwrap())?;
 
     for ((from, at), to) in from.into_iter().zip(at.into_iter()).zip(to.into_iter()) {
-        println!("{} {} {}", from, at, to);
+        if writeln!(stdout(), "{} {} {}", from, at, to).is_err() { break };
     }
 
     Ok(())
