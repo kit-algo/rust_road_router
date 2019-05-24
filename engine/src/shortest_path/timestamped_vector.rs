@@ -6,8 +6,8 @@ use std::sync::atomic::Ordering::SeqCst;
 pub struct TimestampedVector<T: Clone> {
     data: Vec<T>,
     // choose something small, as overflows are not a problem
-    current: u16,
-    timestamps: Vec<u16>,
+    current: u32,
+    timestamps: Vec<u32>,
     default: T
 }
 

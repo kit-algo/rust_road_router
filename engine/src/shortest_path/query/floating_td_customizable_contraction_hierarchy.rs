@@ -7,7 +7,7 @@ use super::floating_td_stepped_elimination_tree::{*, QueryProgress};
 
 use crate::graph::floating_time_dependent::*;
 use crate::shortest_path::customizable_contraction_hierarchy::cch_graph::CCHGraph;
-use crate::shortest_path::timestamped_vector::TimestampedVector;
+use crate::shortest_path::clearlist_vector::ClearlistVector;
 use crate::rank_select_map::{BitVec, FastClearBitVec};
 #[cfg(feature = "tdcch-query-detailed-timing")]
 use crate::benchmark::Timer;
@@ -34,8 +34,8 @@ pub struct Server<'a> {
     meeting_nodes: Vec<(NodeId, FlWeight)>,
     forward_tree_path: Vec<NodeId>,
     backward_tree_path: Vec<NodeId>,
-    distances: TimestampedVector<Timestamp>,
-    lower_bounds_to_target: TimestampedVector<FlWeight>,
+    distances: ClearlistVector<Timestamp>,
+    lower_bounds_to_target: ClearlistVector<FlWeight>,
     parents: Vec<(NodeId, EdgeId)>,
     backward_tree_mask: BitVec,
     forward_tree_mask: BitVec,
@@ -57,8 +57,8 @@ impl<'a> Server<'a> {
             customized_graph,
             forward_tree_path: Vec::new(),
             backward_tree_path: Vec::new(),
-            distances: TimestampedVector::new(n, Timestamp::NEVER),
-            lower_bounds_to_target: TimestampedVector::new(n, FlWeight::INFINITY),
+            distances: ClearlistVector::new(n, Timestamp::NEVER),
+            lower_bounds_to_target: ClearlistVector::new(n, FlWeight::INFINITY),
             parents: vec![(std::u32::MAX, std::u32::MAX); n],
             forward_tree_mask: BitVec::new(n),
             backward_tree_mask: BitVec::new(n),
@@ -85,7 +85,7 @@ impl<'a> Server<'a> {
         // initialize
         let mut tentative_distance = (FlWeight::INFINITY, FlWeight::INFINITY);
         self.distances.reset();
-        self.distances.set(self.from as usize, departure_time);
+        self.distances[self.from as usize] = departure_time;
         self.lower_bounds_to_target.reset();
         self.meeting_nodes.clear();
         self.forward.initialize_query(self.from);
@@ -234,7 +234,7 @@ impl<'a> Server<'a> {
                     let next = State { distance: next_ea + lower, node: next_on_path };
 
                     if next_ea < self.distances[next.node as usize] {
-                        self.distances.set(next.node as usize, next_ea);
+                        self.distances[next.node as usize] = next_ea;
                         self.parents[next.node as usize] = (node, evaled_edge_id);
                         if self.closest_node_priority_queue.contains_index(next.as_index()) {
                             self.closest_node_priority_queue.decrease_key(next);
@@ -265,7 +265,7 @@ impl<'a> Server<'a> {
                         let next = State { distance: next_ea + lower, node: next_on_path };
 
                         if next_ea < self.distances[next.node as usize] {
-                            self.distances.set(next.node as usize, next_ea);
+                            self.distances[next.node as usize] = next_ea;
                             self.parents[next.node as usize] = (node, evaled_edge_id);
                             if self.closest_node_priority_queue.contains_index(next.as_index()) {
                                 self.closest_node_priority_queue.decrease_key(next);

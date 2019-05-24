@@ -1,6 +1,6 @@
 use super::*;
 use crate::graph::first_out_graph::degrees_to_first_out;
-use crate::shortest_path::timestamped_vector::TimestampedVector;
+use crate::shortest_path::clearlist_vector::ClearlistVector;
 use crate::rank_select_map::*;
 use crate::io::*;
 use crate::util::*;
@@ -353,7 +353,7 @@ impl CustomizedSingleDirGraph {
         self.edge_source_at(edge_idx, t).map(|&source| ShortcutSource::from(source).evaluate(t, customized_graph, f)).unwrap_or(FlWeight::INFINITY)
     }
 
-    pub fn evaluate_next_segment_at<Dir: Bool, F>(&self, edge_id: EdgeId, t: Timestamp, lower_bound_target: FlWeight, customized_graph: &CustomizedGraph, lower_bounds_to_target: &mut TimestampedVector<FlWeight>, mark_upward: &mut F) -> Option<(FlWeight, NodeId, EdgeId)>
+    pub fn evaluate_next_segment_at<Dir: Bool, F>(&self, edge_id: EdgeId, t: Timestamp, lower_bound_target: FlWeight, customized_graph: &CustomizedGraph, lower_bounds_to_target: &mut ClearlistVector<FlWeight>, mark_upward: &mut F) -> Option<(FlWeight, NodeId, EdgeId)>
         where F: FnMut(EdgeId)
     {
         let edge_idx = edge_id as usize;
