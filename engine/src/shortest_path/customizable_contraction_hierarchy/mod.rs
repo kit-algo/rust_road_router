@@ -3,6 +3,9 @@ use crate::shortest_path::node_order::NodeOrder;
 use crate::benchmark::report_time;
 use crate::report::*;
 
+use std::ops::{Index, IndexMut};
+use std::cmp::Ordering;
+
 pub mod cch_graph;
 
 use self::cch_graph::CCHGraph;
@@ -30,10 +33,44 @@ impl Node {
         ShortcutResult::NewShortcut
     }
 
-    fn remove(&mut self, to: NodeId) {
-        let pos = self.edges.iter().position(|&node| to == node).unwrap();
-        self.edges.swap_remove(pos);
-        debug_assert_eq!(self.edges.iter().position(|&node| to == node), None);
+    fn merge_neighbors(&mut self, others: &[NodeId]) {
+        let mut new_edges = Vec::with_capacity(self.edges.len() + others.len());
+
+        let mut self_iter = self.edges.iter().peekable();
+        let mut other_iter = others.iter().peekable();
+
+        loop {
+            match (self_iter.peek(), other_iter.peek()) {
+                (Some(&&self_neighbor), Some(&&other_neighbor)) => {
+                    match self_neighbor.cmp(&other_neighbor) {
+                        Ordering::Less => {
+                            new_edges.push(self_neighbor);
+                            self_iter.next();
+                        },
+                        Ordering::Greater => {
+                            new_edges.push(other_neighbor);
+                            other_iter.next();
+                        },
+                        Ordering::Equal => {
+                            new_edges.push(self_neighbor);
+                            self_iter.next();
+                            other_iter.next();
+                        },
+                    }
+                },
+                (Some(&&neighbor), None) => {
+                    new_edges.push(neighbor);
+                    self_iter.next();
+                },
+                (None, Some(&&neighbor)) => {
+                    new_edges.push(neighbor);
+                    other_iter.next();
+                },
+                _ => break,
+            }
+        }
+
+        self.edges = new_edges;
     }
 }
 
@@ -48,6 +85,7 @@ impl<'a, Graph: for<'b> LinkIterGraph<'b>> ContractionGraph<'a, Graph> {
     fn new(graph: &'a Graph, node_order: NodeOrder) -> ContractionGraph<'a, Graph> {
         let n = graph.num_nodes() as NodeId;
 
+        // translate node ids to ranks
         let mut nodes: Vec<Node> = (0..n).map(|node| {
             let old_node_id = node_order.node(node);
             let edges = graph.neighbor_iter(old_node_id)
@@ -59,6 +97,7 @@ impl<'a, Graph: for<'b> LinkIterGraph<'b>> ContractionGraph<'a, Graph> {
             Node { edges }
         }).collect();
 
+        // make graph undirected
         for node_id in 0..n {
             let (nodes_before, nodes_after_including_node) = nodes.split_at_mut(node_id as usize);
             let (node, nodes_after) = nodes_after_including_node.split_first_mut().unwrap();
@@ -76,6 +115,11 @@ impl<'a, Graph: for<'b> LinkIterGraph<'b>> ContractionGraph<'a, Graph> {
             }
         }
 
+        for (node_id, node) in nodes.iter_mut().enumerate() {
+            node.edges.retain(|&neighbor| neighbor > node_id as NodeId); // remove down arcs
+            node.edges.sort();
+        }
+
         ContractionGraph {
             nodes,
             node_order,
@@ -90,15 +134,10 @@ impl<'a, Graph: for<'b> LinkIterGraph<'b>> ContractionGraph<'a, Graph> {
             let mut graph = self.partial_graph();
 
             while let Some((node, mut subgraph)) = graph.remove_lowest() {
-                for &from in &node.edges {
-                    for &to in &node.edges {
-                        if from != to {
-                            match subgraph.insert(from, to) {
-                                ShortcutResult::NewShortcut => num_shortcut_arcs += 1,
-                                ShortcutResult::Existed => (),
-                            }
-                        }
-                    }
+                if let Some((&lowest_neighbor, other_neighbors)) = node.edges.split_first() {
+                    let prev_deg = subgraph[lowest_neighbor as usize].edges.len();
+                    subgraph[lowest_neighbor as usize].merge_neighbors(other_neighbors);
+                    num_shortcut_arcs += subgraph[lowest_neighbor as usize].edges.len() - prev_deg;
                 }
 
                 graph = subgraph;
@@ -128,29 +167,25 @@ struct PartialContractionGraph<'a> {
 impl<'a> PartialContractionGraph<'a> {
     fn remove_lowest(self) -> Option<(&'a Node, PartialContractionGraph<'a>)> {
         if let Some((node, other_nodes)) = self.nodes.split_first_mut() {
-            let mut subgraph = PartialContractionGraph { nodes: other_nodes, id_offset: self.id_offset + 1 };
-            subgraph.remove_edges_to_removed(&node);
+            let subgraph = PartialContractionGraph { nodes: other_nodes, id_offset: self.id_offset + 1 };
             Some((node, subgraph))
         } else {
             None
         }
     }
+}
 
-    fn remove_edges_to_removed(&mut self, node: &Node) {
-        let node_id = self.id_offset - 1;
-        for &from in &node.edges {
-            debug_assert!(from > node_id);
-            self.nodes[(from - self.id_offset) as usize].remove(node_id);
-        }
+impl<'a> Index<usize> for PartialContractionGraph<'a> {
+    type Output = Node;
+
+    fn index(&self, idx: usize) -> &Node {
+        &self.nodes[idx - self.id_offset as usize]
     }
+}
 
-    fn insert(&mut self, from: NodeId, to: NodeId) -> ShortcutResult {
-        debug_assert_ne!(from, to);
-        let out_result = self.nodes[(from - self.id_offset) as usize].insert(to);
-        let in_result = self.nodes[(to - self.id_offset) as usize].insert(from);
-
-        debug_assert_eq!(out_result, in_result);
-        out_result
+impl<'a> IndexMut<usize> for PartialContractionGraph<'a> {
+    fn index_mut(&mut self, idx: usize) -> &mut Node {
+        &mut self.nodes[idx - self.id_offset as usize]
     }
 }
 
