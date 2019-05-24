@@ -1,6 +1,7 @@
 #!/usr/bin/env sh
 
 ./lib/flow-cutter/console \
+  flow_cutter_set thread_count ${2:-1} \
   load_routingkit_unweighted_graph "$1/first_out" "$1/head" \
   remove_multi_arcs \
   remove_loops \
