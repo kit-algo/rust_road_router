@@ -27,6 +27,9 @@ fn main() {
     report!("args", env::args().collect::<Vec<String>>());
     report!("num_threads", rayon::current_num_threads());
 
+    let core_ids = core_affinity::get_core_ids().unwrap();
+    core_affinity::set_for_current(core_ids[0]);
+
     let mut args = env::args();
     args.next();
 
