@@ -23,4 +23,6 @@ fn main() {
         println!("cargo:rustc-cfg=override_tdcch_approx");
     }
     println!("cargo:rerun-if-env-changed=TDCCH_APPROX");
+
+    println!("cargo:rerun-if-changed=foobaz");
 }
