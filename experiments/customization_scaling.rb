@@ -1,1 +1,0 @@
-5.times { (0...5).map { |p| 2**p }.each { |num_threads| `RAYON_NUM_THREADS=#{num_threads} cargo run --release /algoDaten/graphs/cleaned_td_road_data/ptv17-eur-car/day/di/ > ~/experiments/tdcch_vldb20/customization_scaling/$(date --iso-8601=seconds).json` } }
