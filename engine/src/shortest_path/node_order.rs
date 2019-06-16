@@ -40,6 +40,10 @@ impl NodeOrder {
         NodeOrder { node_order, ranks }
     }
 
+    pub fn order(&self) -> &[NodeId] {
+        &self.node_order
+    }
+
     pub fn rank(&self, node: NodeId) -> Rank {
         self.ranks[node as usize]
     }
