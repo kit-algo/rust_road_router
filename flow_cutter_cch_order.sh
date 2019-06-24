@@ -22,7 +22,6 @@ seed=5489
   flow_cutter_set bulk_assimilation_order_threshold 0.25 \
   flow_cutter_set bulk_step_fraction 0.05 \
   flow_cutter_set initial_assimilated_fraction 0.05 \
-  flow_cutter_set thread_count 2 \
   flow_cutter_config \
   report_time \
   reorder_nodes_in_accelerated_flow_cutter_cch_order \
