@@ -65,12 +65,27 @@ impl BitVec {
         self.data[index / STORAGE_BITS] &= !(1 << (index % STORAGE_BITS));
     }
 
+    pub fn unset_all_around(&mut self, index: usize) {
+        assert!(index < self.size, "index: {} size: {}", index, self.size);
+        self.data[index / STORAGE_BITS] = 0;
+    }
+
     pub fn len(&self) -> usize {
         self.size
     }
 
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        self.size == 0
+    }
+
+    pub fn clear(&mut self) {
+        for val in &mut self.data {
+            *val = 0;
+        }
+    }
+
+    pub fn count_ones(& self) -> usize {
+        self.data.iter().map(|v| v.count_ones() as usize).sum()
     }
 }
 
@@ -89,6 +104,44 @@ impl DataBytesMut for BitVec {
 impl Load for BitVec {
     fn new_with_bytes(num_bytes: usize) -> Self {
         BitVec::new(num_bytes * 8)
+    }
+}
+
+#[derive(Debug)]
+pub struct FastClearBitVec {
+    data: Vec<u64>,
+    to_clear: Vec<usize>,
+}
+
+impl FastClearBitVec {
+    pub fn new(size: usize) -> FastClearBitVec {
+        // ceiling to the right number of u64s
+        let num_ints = (size + STORAGE_BITS - 1) / STORAGE_BITS;
+        let data = vec![0; num_ints];
+        FastClearBitVec {
+            data,
+            to_clear: Vec::new(),
+        }
+    }
+
+    pub fn get(&self, index: usize) -> bool {
+        // shifting a 1 bit to the right place and masking
+        self.data[index / STORAGE_BITS] & (1 << (index % STORAGE_BITS)) != 0
+    }
+
+    pub fn set(&mut self, index: usize) {
+        if self.data[index / STORAGE_BITS] == 0 {
+            self.to_clear.push(index / STORAGE_BITS);
+        }
+        // shifting a 1 bit to the right place and then eighter set through | or negate and unset with &
+        self.data[index / STORAGE_BITS] |= 1 << (index % STORAGE_BITS);
+    }
+
+    pub fn clear(&mut self) {
+        for &idx in &self.to_clear {
+            self.data[idx] = 0;
+        }
+        self.to_clear.clear();
     }
 }
 

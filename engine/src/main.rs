@@ -15,7 +15,7 @@ use bmw_routing_engine::{
         }
     },
     io::Load,
-    benchmark::measure,
+    benchmark::report_time,
 };
 
 fn main() {
@@ -54,16 +54,16 @@ fn main() {
             val => Some(val),
         };
 
-        measure("simple dijkstra", || {
+        report_time("simple dijkstra", || {
             assert_eq!(simple_server.distance(from, to), ground_truth);
         });
-        measure("bidir dijkstra", || {
+        report_time("bidir dijkstra", || {
             assert_eq!(bi_dir_server.distance(from, to), ground_truth);
         });
-        measure("CH", || {
+        report_time("CH", || {
             assert_eq!(ch_server.distance(from, to), ground_truth);
         });
-        measure("own CH", || {
+        report_time("own CH", || {
             assert_eq!(ch_server_with_own_ch.distance(inverted_order[from as usize], inverted_order[to as usize]), ground_truth);
         });
     }

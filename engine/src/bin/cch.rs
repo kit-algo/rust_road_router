@@ -12,7 +12,7 @@ use bmw_routing_engine::{
         },
     },
     io::Load,
-    benchmark::measure,
+    benchmark::report_time,
 };
 
 fn main() {
@@ -44,11 +44,11 @@ fn main() {
             val => Some(val),
         };
 
-        measure("CCH query", || {
+        report_time("CCH query", || {
             assert_eq!(server.distance(from, to), ground_truth);
         });
 
-        measure("Dijkstra query", || {
+        report_time("Dijkstra query", || {
             assert_eq!(simple_server.distance(from, to), ground_truth);
         });
 

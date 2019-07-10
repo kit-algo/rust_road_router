@@ -1,14 +1,33 @@
 [package]
 name = "bmw_routing_engine"
 version = "0.1.0"
-authors = ["Tim \"S.D.Eagle\" Zeitz <dev.tim.zeitz@gmail.com>"]
+authors = ["Tim 'S.D.Eagle' Zeitz <dev.tim.zeitz@gmail.com>"]
 edition = "2018"
+build = "build.rs"
+
+[features]
+default = ["tdcch-approx", "tdcch-precustomization", "tdcch-postcustomization", "tdcch-triangle-sorting", "tdcch-query-astar"]
+tdcch-disable-par = []
+tdcch-query-detailed-timing = []
+tdcch-stall-on-demand = []
+tdcch-approx = []
+tdcch-approx-imai-iri = []
+tdcch-precustomization = []
+tdcch-postcustomization = []
+tdcch-triangle-sorting = []
+tdcch-query-astar = []
+report-to-stderr = []
+detailed-stats = []
 
 [dependencies]
 time = "^0.1.40"
 nav-types = "^0.3.0"
 csv = "^1.0.2"
 glob = "^0.2.11"
+rand = "^0.6.1"
+serde_json = "^1.0.35"
+rayon = "^1.0.3"
+core_affinity = "^0.5.9"
 
-# [profile.release]
-# debug = true
+[build-dependencies]
+built = "^0.3.0"

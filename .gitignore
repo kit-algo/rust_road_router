@@ -2,4 +2,5 @@
 *.sublime-*
 **/.gdb_history
 target/
-callgrind.out*
+*callgrind.out*
+.ipynb_checkpoints

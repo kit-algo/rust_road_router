@@ -1,20 +1,20 @@
-use std::ops::Index;
+use std::ops::{Index, IndexMut};
 use std::sync::atomic::compiler_fence;
 use std::sync::atomic::Ordering::SeqCst;
 
 #[derive(Debug)]
-pub struct TimestampedVector<T: Copy> {
+pub struct TimestampedVector<T: Clone> {
     data: Vec<T>,
     // choose something small, as overflows are not a problem
-    current: u16,
-    timestamps: Vec<u16>,
+    current: u32,
+    timestamps: Vec<u32>,
     default: T
 }
 
-impl<T: Copy> TimestampedVector<T> {
+impl<T: Clone> TimestampedVector<T> {
     pub fn new(size: usize, default: T) -> TimestampedVector<T> {
         TimestampedVector {
-            data: vec![default; size],
+            data: vec![default.clone(); size],
             current: 0,
             timestamps: vec![0; size],
             default
@@ -22,13 +22,12 @@ impl<T: Copy> TimestampedVector<T> {
     }
 
     pub fn reset(&mut self) {
-        let old = self.current;
-        self.current += 1;
+        let (new, overflow) = self.current.overflowing_add(1);
+        self.current = new;
 
-        if old > self.current {
-            // overflow, need to reinit
+        if overflow {
             for element in &mut self.data {
-                *element = self.default;
+                *element = self.default.clone();
             }
         }
     }
@@ -44,7 +43,7 @@ impl<T: Copy> TimestampedVector<T> {
     }
 }
 
-impl<T: Copy> Index<usize> for TimestampedVector<T> {
+impl<T: Clone> Index<usize> for TimestampedVector<T> {
     type Output = T;
 
     fn index(&self, index: usize) -> &T {
@@ -53,5 +52,14 @@ impl<T: Copy> Index<usize> for TimestampedVector<T> {
         } else {
             &self.default
         }
+    }
+}
+
+impl<T: Clone> IndexMut<usize> for TimestampedVector<T> {
+    fn index_mut(&mut self, index: usize) -> &mut T {
+        if self.timestamps[index] != self.current {
+            self.set(index, self.default.clone());
+        }
+        &mut self.data[index]
     }
 }
