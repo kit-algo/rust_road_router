@@ -32,7 +32,7 @@ pub struct LinkSpeedData {
     pub velocity: f32
 }
 
-pub fn estimate_iter<'a>(links: Box<Iterator<Item = &'a LinkData> + 'a>, traces: Box<Iterator<Item = &'a TraceData> + 'a>) -> Result<impl Iterator<Item = LinkSpeedData> + 'a, &'static str> {
+pub fn estimate_iter<'a>(links: Box<dyn Iterator<Item = &'a LinkData> + 'a>, traces: Box<dyn Iterator<Item = &'a TraceData> + 'a>) -> Result<impl Iterator<Item = LinkSpeedData> + 'a, &'static str> {
     let output_iter = LinkSpeedEstimator::new(EventIterator::new(links, traces)?);
     Ok(output_iter)
 }

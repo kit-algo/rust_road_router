@@ -74,7 +74,7 @@ impl<T: Default + Copy> Load for Vec<T> {
 }
 
 pub trait Deconstruct: Sized {
-    fn store_each(&self, store_callback: &Fn(&str, &dyn Store) -> Result<()>) -> Result<()>;
+    fn store_each(&self, store_callback: &dyn Fn(&str, &dyn Store) -> Result<()>) -> Result<()>;
 
     fn deconstruct_to(&self, dir: &str) -> Result<()> {
         let path = Path::new(dir);

@@ -4,23 +4,23 @@ use std::mem::replace;
 use super::*;
 
 trait State<'a>: Debug  {
-    fn on_link(self: Box<Self>, link: &'a LinkData) -> (Box<State + 'a>, Box<Iterator<Item = LinkSpeedData> + 'a>);
-    fn on_trace(self: Box<Self>, trace: &'a TraceData) -> (Box<State + 'a>, Box<Iterator<Item = LinkSpeedData> + 'a>);
-    fn on_done(self: Box<Self>) -> (Box<Iterator<Item = LinkSpeedData> + 'a>);
+    fn on_link(self: Box<Self>, link: &'a LinkData) -> (Box<dyn State + 'a>, Box<dyn Iterator<Item = LinkSpeedData> + 'a>);
+    fn on_trace(self: Box<Self>, trace: &'a TraceData) -> (Box<dyn State + 'a>, Box<dyn Iterator<Item = LinkSpeedData> + 'a>);
+    fn on_done(self: Box<Self>) -> (Box<dyn Iterator<Item = LinkSpeedData> + 'a>);
 }
 
 #[derive(Debug)]
 struct Init {}
 impl<'a> State<'a> for Init {
-    fn on_link(self: Box<Self>, link: &'a LinkData) -> (Box<State + 'a>, Box<Iterator<Item = LinkSpeedData>>) {
+    fn on_link(self: Box<Self>, link: &'a LinkData) -> (Box<dyn State + 'a>, Box<dyn Iterator<Item = LinkSpeedData>>) {
         (Box::new(InitialLink { link }), Box::new(empty()))
     }
 
-    fn on_trace(self: Box<Self>, _trace: &'a TraceData) -> (Box<State + 'a>, Box<Iterator<Item = LinkSpeedData>>) {
+    fn on_trace(self: Box<Self>, _trace: &'a TraceData) -> (Box<dyn State + 'a>, Box<dyn Iterator<Item = LinkSpeedData>>) {
         panic!("Init: trace before initial link");
     }
 
-    fn on_done(self: Box<Self>) -> (Box<Iterator<Item = LinkSpeedData>>) {
+    fn on_done(self: Box<Self>) -> (Box<dyn Iterator<Item = LinkSpeedData>>) {
         panic!("Init: stream ended, expected link");
     }
 }
@@ -30,16 +30,16 @@ struct InitialLink<'a> {
     link: &'a LinkData
 }
 impl<'a> State<'a> for InitialLink<'a> {
-    fn on_link(self: Box<Self>, _link: &'a LinkData) -> (Box<State + 'a>, Box<Iterator<Item = LinkSpeedData>>) {
+    fn on_link(self: Box<Self>, _link: &'a LinkData) -> (Box<dyn State + 'a>, Box<dyn Iterator<Item = LinkSpeedData>>) {
         panic!("InitialLink: no trace on initial link");
     }
 
-    fn on_trace(self: Box<Self>, trace: &'a TraceData) -> (Box<State + 'a>, Box<Iterator<Item = LinkSpeedData>>) {
+    fn on_trace(self: Box<Self>, trace: &'a TraceData) -> (Box<dyn State + 'a>, Box<dyn Iterator<Item = LinkSpeedData>>) {
         assert_eq!(self.link.link_id, trace.link_id);
         (Box::new(InitialLinkWithTrace { link: self.link, trace }), Box::new(empty()))
     }
 
-    fn on_done(self: Box<Self>) -> (Box<Iterator<Item = LinkSpeedData>>) {
+    fn on_done(self: Box<Self>) -> (Box<dyn Iterator<Item = LinkSpeedData>>) {
         panic!("InitialLink: stream ended, expected trace");
     }
 }
@@ -50,14 +50,14 @@ struct InitialLinkWithTrace<'a> {
     trace: &'a TraceData
 }
 impl<'a> State<'a> for InitialLinkWithTrace<'a> {
-    fn on_link(self: Box<Self>, link: &'a LinkData) -> (Box<State + 'a>, Box<Iterator<Item = LinkSpeedData>>) {
+    fn on_link(self: Box<Self>, link: &'a LinkData) -> (Box<dyn State + 'a>, Box<dyn Iterator<Item = LinkSpeedData>>) {
         assert_ne!(self.link.link_id, link.link_id);
         let mut intermediates = Vec::new();
         intermediates.push(link);
         (Box::new(IntermediateLinkAfterInitial { initial_link: self.link, trace: self.trace, intermediates }), Box::new(empty()))
     }
 
-    fn on_trace(self: Box<Self>, trace: &'a TraceData) -> (Box<State + 'a>, Box<Iterator<Item = LinkSpeedData>>) {
+    fn on_trace(self: Box<Self>, trace: &'a TraceData) -> (Box<dyn State + 'a>, Box<dyn Iterator<Item = LinkSpeedData>>) {
         assert_eq!(trace.link_id, self.trace.link_id);
         assert_eq!(trace.link_id, self.link.link_id);
 
@@ -71,7 +71,7 @@ impl<'a> State<'a> for InitialLinkWithTrace<'a> {
         (Box::new(LinkWithEntryTimestampAndTrace { link: self.link, last_trace: trace, entry_timestamp, quality: delta_fraction }), Box::new(empty()))
     }
 
-    fn on_done(self: Box<Self>) -> (Box<Iterator<Item = LinkSpeedData>>) {
+    fn on_done(self: Box<Self>) -> (Box<dyn Iterator<Item = LinkSpeedData>>) {
         panic!("InitialLinkWithTrace: stream ended, expected link or trace");
     }
 }
@@ -83,12 +83,12 @@ struct IntermediateLinkAfterInitial<'a> {
     intermediates: Vec<&'a LinkData>
 }
 impl<'a> State<'a> for IntermediateLinkAfterInitial<'a> {
-    fn on_link(mut self: Box<Self>, link: &'a LinkData) -> (Box<State + 'a>, Box<Iterator<Item = LinkSpeedData>>) {
+    fn on_link(mut self: Box<Self>, link: &'a LinkData) -> (Box<dyn State + 'a>, Box<dyn Iterator<Item = LinkSpeedData>>) {
         self.intermediates.push(link);
         (self, Box::new(empty()))
     }
 
-    fn on_trace(mut self: Box<Self>, trace: &'a TraceData) -> (Box<State + 'a>, Box<Iterator<Item = LinkSpeedData> + 'a>) {
+    fn on_trace(mut self: Box<Self>, trace: &'a TraceData) -> (Box<dyn State + 'a>, Box<dyn Iterator<Item = LinkSpeedData> + 'a>) {
         let link = self.intermediates.pop().unwrap();
         assert_eq!(link.link_id, trace.link_id);
 
@@ -134,7 +134,7 @@ impl<'a> State<'a> for IntermediateLinkAfterInitial<'a> {
         (Box::new(LinkWithEntryTimestampAndTrace { link, last_trace: trace, entry_timestamp, quality }), Box::new(output))
     }
 
-    fn on_done(self: Box<Self>) -> (Box<Iterator<Item = LinkSpeedData>>) {
+    fn on_done(self: Box<Self>) -> (Box<dyn Iterator<Item = LinkSpeedData>>) {
         panic!("IntermediateLinkAfterInitial: stream ended, expected link or trace");
     }
 }
@@ -147,20 +147,20 @@ struct LinkWithEntryTimestampAndTrace<'a> {
     quality: f64
 }
 impl<'a> State<'a> for LinkWithEntryTimestampAndTrace<'a> {
-    fn on_link(self: Box<Self>, link: &'a LinkData) -> (Box<State + 'a>, Box<Iterator<Item = LinkSpeedData>>) {
+    fn on_link(self: Box<Self>, link: &'a LinkData) -> (Box<dyn State + 'a>, Box<dyn Iterator<Item = LinkSpeedData>>) {
         let mut intermediates = Vec::new();
         intermediates.push(link);
         (Box::new(IntermediateLink { last_link_with_trace: self, intermediates }), Box::new(empty()))
     }
 
-    fn on_trace(mut self: Box<Self>, trace: &'a TraceData) -> (Box<State + 'a>, Box<Iterator<Item = LinkSpeedData>>) {
+    fn on_trace(mut self: Box<Self>, trace: &'a TraceData) -> (Box<dyn State + 'a>, Box<dyn Iterator<Item = LinkSpeedData>>) {
         assert_eq!(self.link.link_id, trace.link_id);
         self.quality += f64::from(trace.traversed_in_travel_direction_fraction - self.last_trace.traversed_in_travel_direction_fraction);
         self.last_trace = trace;
         (self.clone(), Box::new(empty()))
     }
 
-    fn on_done(self: Box<Self>) -> (Box<Iterator<Item = LinkSpeedData>>) {
+    fn on_done(self: Box<Self>) -> (Box<dyn Iterator<Item = LinkSpeedData>>) {
         let delta_t = self.last_trace.timestamp - self.entry_timestamp;
         let delta_s = f64::from(self.last_trace.traversed_in_travel_direction_fraction) * f64::from(self.link.length);
         let velocity = delta_s / delta_t as f64;
@@ -174,12 +174,12 @@ struct IntermediateLink<'a> {
     intermediates: Vec<&'a LinkData>
 }
 impl<'a> State<'a> for IntermediateLink<'a> {
-    fn on_link(mut self: Box<Self>, link: &'a LinkData) -> (Box<State + 'a>, Box<Iterator<Item = LinkSpeedData>>) {
+    fn on_link(mut self: Box<Self>, link: &'a LinkData) -> (Box<dyn State + 'a>, Box<dyn Iterator<Item = LinkSpeedData>>) {
         self.intermediates.push(link);
         (self, Box::new(empty()))
     }
 
-    fn on_trace(mut self: Box<Self>, trace: &'a TraceData) -> (Box<State + 'a>, Box<Iterator<Item = LinkSpeedData> + 'a>) {
+    fn on_trace(mut self: Box<Self>, trace: &'a TraceData) -> (Box<dyn State + 'a>, Box<dyn Iterator<Item = LinkSpeedData> + 'a>) {
         let link = self.intermediates.pop().unwrap();
         assert_eq!(link.link_id, trace.link_id);
 
@@ -224,15 +224,15 @@ impl<'a> State<'a> for IntermediateLink<'a> {
         (Box::new(LinkWithEntryTimestampAndTrace { link, last_trace: trace, entry_timestamp, quality }), Box::new(output))
     }
 
-    fn on_done(self: Box<Self>) -> (Box<Iterator<Item = LinkSpeedData>>) {
+    fn on_done(self: Box<Self>) -> (Box<dyn Iterator<Item = LinkSpeedData>>) {
         panic!("IntermediateLink: stream ended, expected link or trace");
     }
 }
 
 pub struct LinkSpeedEstimator<'a> {
-    state: Option<Box<State<'a> + 'a>>,
+    state: Option<Box<dyn State<'a> + 'a>>,
     event_iterator: EventIterator<'a>,
-    output_iterator: Box<Iterator<Item = LinkSpeedData> + 'a>,
+    output_iterator: Box<dyn Iterator<Item = LinkSpeedData> + 'a>,
 }
 
 impl<'a> LinkSpeedEstimator<'a> {

@@ -236,7 +236,7 @@ impl<'a> CustomizedGraph<'a> {
 }
 
 impl<'a> Deconstruct for CustomizedGraph<'a> {
-    fn store_each(&self, store: &Fn(&str, &dyn Store) -> std::io::Result<()>) -> std::io::Result<()> {
+    fn store_each(&self, store: &dyn Fn(&str, &dyn Store) -> std::io::Result<()>) -> std::io::Result<()> {
         store("outgoing_first_out", &self.outgoing.first_out)?;
         store("outgoing_head", &self.outgoing.head)?;
         store("outgoing_bounds", &self.outgoing.bounds)?;

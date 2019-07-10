@@ -35,7 +35,7 @@ pub struct CCHGraph {
 }
 
 impl Deconstruct for CCHGraph {
-    fn store_each(&self, store: &Fn(&str, &dyn Store) -> std::io::Result<()>) -> std::io::Result<()> {
+    fn store_each(&self, store: &dyn Fn(&str, &dyn Store) -> std::io::Result<()>) -> std::io::Result<()> {
         store("cch_first_out", &self.first_out)?;
         store("cch_head", &self.head)?;
         Ok(())

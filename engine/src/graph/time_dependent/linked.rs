@@ -58,7 +58,7 @@ impl<'a> Linked<'a> {
                     panic!("weird")
             }
         } else {
-            return Some((INFINITY, INFINITY));
+            Some((INFINITY, INFINITY))
         }
     }
 
@@ -88,7 +88,7 @@ impl<'a> Linked<'a> {
                     panic!("weird")
             }
         } else {
-            return Some((INFINITY, INFINITY));
+            Some((INFINITY, INFINITY))
         }
     }
 

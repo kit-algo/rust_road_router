@@ -147,7 +147,7 @@ pub trait RdfDataSource {
     fn link_geometries(&self) -> Vec<RdfLinkGeometry>;
 }
 
-pub fn read_graph(source: &RdfDataSource, (min_lat, min_lon): (i64, i64), (max_lat, max_lon): (i64, i64)) -> HereData {
+pub fn read_graph(source: &dyn RdfDataSource, (min_lat, min_lon): (i64, i64), (max_lat, max_lon): (i64, i64)) -> HereData {
 
     let included = |node: &RdfNode| {
         node.lat >= min_lat && node.lat <= max_lat && node.lon >= min_lon && node.lon <= max_lon

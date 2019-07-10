@@ -55,10 +55,14 @@ impl NodeOrder {
     pub fn len(&self) -> usize {
         self.node_order.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 impl Deconstruct for NodeOrder {
-    fn store_each(&self, store: &Fn(&str, &dyn Store) -> std::io::Result<()>) -> std::io::Result<()> {
+    fn store_each(&self, store: &dyn Fn(&str, &dyn Store) -> std::io::Result<()>) -> std::io::Result<()> {
         store("ranks", &self.ranks)
     }
 }

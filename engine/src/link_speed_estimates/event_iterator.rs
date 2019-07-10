@@ -13,8 +13,8 @@ enum IteratorToPoll {
 }
 
 pub struct EventIterator<'a> {
-    links: Box<Iterator<Item = &'a LinkData> + 'a>,
-    traces: Box<Iterator<Item = &'a TraceData> + 'a>,
+    links: Box<dyn Iterator<Item = &'a LinkData> + 'a>,
+    traces: Box<dyn Iterator<Item = &'a TraceData> + 'a>,
     iterator_to_poll: IteratorToPoll,
     next_link: Option<&'a LinkData>,
     next_trace: &'a TraceData,
@@ -22,7 +22,7 @@ pub struct EventIterator<'a> {
 }
 
 impl<'a> EventIterator<'a> {
-    pub fn new(mut links: Box<Iterator<Item = &'a LinkData> + 'a>, mut traces: Box<Iterator<Item = &'a TraceData> + 'a>) -> Result<EventIterator<'a>, &'static str> {
+    pub fn new(mut links: Box<dyn Iterator<Item = &'a LinkData> + 'a>, mut traces: Box<dyn Iterator<Item = &'a TraceData> + 'a>) -> Result<EventIterator<'a>, &'static str> {
         let next_link = links.next().ok_or("no links given")?;
         let next_trace = traces.next().ok_or("no traces given")?;
 
