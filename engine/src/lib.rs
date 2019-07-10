@@ -1,8 +1,5 @@
-#![feature(const_fn)]
 #![feature(allocator_api)]
 #![feature(euclidean_division)]
-#![feature(nll)]
-#![feature(stmt_expr_attributes)]
 
 #![allow(clippy::redundant_closure_call)]
 
