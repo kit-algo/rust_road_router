@@ -9,7 +9,7 @@ fi
 
 if [ ! -f /data/cch_perm ]; then
   echo "calculating nested dissection order with flow cutter - might take a while"
-  ./flow_cutter_cch_order.sh /data || { echo 'calculating nested dissection order with flowcutter failed' ; exit 1; }
+  ./flow_cutter_cch_order.sh /data $(nproc --all) || { echo 'calculating nested dissection order with flowcutter failed' ; exit 1; }
 fi
 
 cd server && exec cargo run --release --bin bmw_routing_server -- /data

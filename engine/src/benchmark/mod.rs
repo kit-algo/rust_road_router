@@ -22,7 +22,7 @@ pub struct Timer {
     start: time::Tm
 }
 
-impl Default for benchmark::Timer {
+impl Default for Timer {
     fn default() -> Self {
         Self::new()
     }

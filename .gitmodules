@@ -1,6 +1,3 @@
-[submodule "lib/flow-cutter"]
-	path = lib/flow-cutter
-	url = https://github.com/kit-algo/flow-cutter.git
-[submodule "lib/FlowCutter-Accelerated"]
-	path = lib/FlowCutter-Accelerated
-	url = i11git:/Student/Tim-Uhl/FlowCutter-Accelerated.git
+[submodule "lib/InertialFlowCutter"]
+	path = lib/InertialFlowCutter
+	url = https://github.com/kit-algo/InertialFlowCutter.git
