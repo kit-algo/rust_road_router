@@ -7,12 +7,12 @@ WORKDIR /app
 # Copy the current directory contents into the container at /app
 ADD . /app
 
-RUN pacman -Sy --noconfirm rustup cmake gcc make intel-tbb openmpi; \
+RUN pacman -Sy --noconfirm rustup cmake gcc make intel-tbb; \
   rustup install nightly; \
   rustup default nightly;
 
-# Build flow cutter -DUSE_KAHIP=OFF
-RUN mkdir -p lib/InertialFlowCutter/build/ && cd lib/InertialFlowCutter/build/ && cmake -DCMAKE_BUILD_TYPE=Release .. && make console && cd ../../..
+# Build flow cutter
+RUN mkdir -p lib/InertialFlowCutter/build/ && cd lib/InertialFlowCutter/build/ && cmake -DCMAKE_BUILD_TYPE=Release -DUSE_KAHIP=OFF .. && make console && cd ../../..
 
 # Install any needed dependencies and compile
 RUN cargo build --release -p bmw_routing_engine --bin import_here
