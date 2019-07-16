@@ -28,36 +28,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
-    pub fn lower_bound(&self) -> Weight {
-        *self.travel_time.iter().min().unwrap()
-    }
-
-    pub fn upper_bound(&self) -> Weight {
-        *self.travel_time.iter().max().unwrap()
-    }
-
-    pub fn bounds(&self) -> (Weight, Weight) {
-        debug_assert!(self.lower_bound() < INFINITY);
-        debug_assert!(self.upper_bound() < INFINITY);
-        (self.lower_bound(), self.upper_bound())
-    }
-
-    pub fn bounds_for(&self, range: &Range<Timestamp>) -> Option<(Weight, Weight)> {
-        // TODO make sure, we're only doing two binary searches at max here...
-        if range.start == range.end {
-            return None
-        }
-        let mut index_range = self.departure_time.index_range(&range, |&dt| dt);
-        index_range.start += 1;
-        if index_range.start < index_range.end {
-            index_range.end -= 1;
-        }
-        Some(self.travel_time[index_range].iter().cloned()
-            .chain(once(self.evaluate(range.start)))
-            .chain(once(self.evaluate(range.end - 1)))
-            .fold((INFINITY, 0), |(acc_min, acc_max), val| (min(acc_min, val), max(acc_max, val))))
-    }
-
     pub fn average(&self, range: WrappingRange) -> Weight {
         let monotone_range = range.monotonize();
         let total_time = monotone_range.end - monotone_range.start;
@@ -102,47 +72,11 @@ impl<'a> PiecewiseLinearFunction<'a> {
             PLFSeg { line: MonotoneLine::<TTIpp>::new(Line { from: TTIpp::new(dts[0], tts[0]), to: TTIpp::new(dts[1], tts[1]) }), valid: (dts[0]..dts[1]).intersection(&range) }
         })
     }
-
-    pub fn debug_to_s(&self, indent: usize) -> String {
-        let mut s = String::from("PLF: ");
-        for data in self.departure_time.iter().zip(self.travel_time.iter()) {
-            s.push('\n');
-            for _ in 0..indent {
-                s.push(' ');
-                s.push(' ');
-            }
-            s = s + &format!("{:?}", data);
-        }
-        s
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_bounds() {
-        run_test_with_periodicity(24, || {
-            let departure_time = vec![0, 6, 9, 14, 17, 20, 24];
-            let travel_time =    vec![2, 1, 3, 2,  4,  1,  2];
-            let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time);
-            assert_eq!(ttf.lower_bound(), 1);
-            assert_eq!(ttf.upper_bound(), 4);
-        });
-    }
-
-    #[test]
-    fn test_range_bounds() {
-        run_test_with_periodicity(24, || {
-            let departure_time = vec![0, 6, 9, 14, 17, 20, 24];
-            let travel_time =    vec![2, 1, 3, 2,  4,  1,  2];
-            let ttf = PiecewiseLinearFunction::new(&departure_time, &travel_time);
-            assert_eq!(ttf.bounds_for(&(0..24)), Some((1,4)));
-            assert_eq!(ttf.bounds_for(&(0..6)),  Some((1,2)));
-            assert_eq!(ttf.bounds_for(&(3..16)), Some((1,3)));
-        });
-    }
 
     #[test]
     fn test_eval_on_ipp() {

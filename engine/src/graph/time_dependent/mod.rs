@@ -1,30 +1,13 @@
 use super::*;
-use std::{
-    iter::once,
-    cmp::{min, max}
-};
 
 mod piecewise_linear_function;
 use self::piecewise_linear_function::*;
-
-mod shortcut_source;
-use self::shortcut_source::*;
-
-mod shortcut;
-pub use self::shortcut::*;
-
-mod linked;
-pub use self::linked::*;
 
 mod wrapping_range;
 pub use self::wrapping_range::*;
 
 mod graph;
 pub use self::graph::Graph as TDGraph;
-
-pub mod shortcut_graph;
-pub use self::shortcut_graph::ShortcutGraph;
-pub use self::shortcut_graph::SingleDirShortcutGraph;
 
 mod geometry;
 use self::geometry::*;
