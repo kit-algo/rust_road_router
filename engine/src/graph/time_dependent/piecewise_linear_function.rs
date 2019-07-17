@@ -51,7 +51,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
             return unsafe { *self.travel_time.get_unchecked(0) }
         }
 
-        match self.departure_time.locate(&departure, |&dt| dt) {
+        match self.departure_time.locate(departure, |&dt| dt) {
             Location::On(index) => unsafe { *self.travel_time.get_unchecked(index) },
             Location::Between(lower_index , upper_index) => {
                 let lf = unsafe {
