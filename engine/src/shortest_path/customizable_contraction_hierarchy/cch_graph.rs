@@ -296,23 +296,24 @@ impl CCHGraph {
 }
 
 
-struct SeperatorBasedParallelCustomization<'a, F, G> {
+struct SeperatorBasedParallelCustomization<'a, T, F, G> {
     cch: &'a CCHGraph,
     inverted: &'a [Vec<(NodeId, EdgeId)>],
     customize_cell: F,
     customize_separator: G,
+    _t: std::marker::PhantomData<T>,
 }
 
-use floating_time_dependent::*;
-impl<'a, F, G> SeperatorBasedParallelCustomization<'a, F, G>
-    where F: Sync + Fn(Range<usize>, usize, &mut [Shortcut], &mut [Shortcut]),
-          G: Sync + Fn(Range<usize>, usize, &mut [Shortcut], &mut [Shortcut])
+impl<'a, T, F, G> SeperatorBasedParallelCustomization<'a, T, F, G> where
+    T: Send + Sync,
+    F: Sync + Fn(Range<usize>, usize, &mut [T], &mut [T]),
+    G: Sync + Fn(Range<usize>, usize, &mut [T], &mut [T]),
 {
-    pub fn customize(&self, upward: &'a mut [Shortcut], downward: &'a mut [Shortcut]) {
+    pub fn customize(&self, upward: &'a mut [T], downward: &'a mut [T]) {
         self.customize_cell(&self.cch.separators(), 0, upward, downward);
     }
 
-    fn customize_cell(&self, sep_tree: &SeparatorTree, offset: usize, upward: &'a mut [Shortcut], downward: &'a mut [Shortcut]) {
+    fn customize_cell(&self, sep_tree: &SeparatorTree, offset: usize, upward: &'a mut [T], downward: &'a mut [T]) {
         let edge_offset = self.cch.first_out[offset] as usize;
 
         if cfg!(feature = "tdcch-disable-par") || sep_tree.num_nodes < self.cch.num_nodes() / (32 * rayon::current_num_threads()) {
@@ -523,7 +524,8 @@ pub mod ftd_cch {
                     cch: &cch,
                     inverted: &inverted,
                     customize_cell: ftd_cch::create_customization_fn(&cch, metric, &inverted, SeqIter(&cch)),
-                    customize_separator: ftd_cch::create_customization_fn(&cch, metric, &inverted, ParIter(&cch))
+                    customize_separator: ftd_cch::create_customization_fn(&cch, metric, &inverted, ParIter(&cch)),
+                    _t: std::marker::PhantomData,
                 }.customize(&mut upward, &mut downward);
             });
 
