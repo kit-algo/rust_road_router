@@ -372,8 +372,6 @@ impl CCHGraph {
             }
         }
 
-        let sep_tree = self.separators();
-
         {
             let subctxt = push_context("main".to_string());
 
@@ -426,7 +424,12 @@ impl CCHGraph {
                     }
                 });
 
-                self.customize_par_by_sep(&sep_tree, 0, &mut upward, &mut downward, metric, &inverted);
+                SeperatorBasedParallelCustomization {
+                    cch: &self,
+                    inverted: &inverted,
+                    customize_cell: self.create_customization_fn(metric, &inverted, SeqIter(&self)),
+                    customize_separator: self.create_customization_fn(metric, &inverted, ParIter(&self))
+                }.customize(&mut upward, &mut downward);
             });
 
             tx.send(()).unwrap();
@@ -551,142 +554,73 @@ impl CCHGraph {
         ShortcutGraph::new(metric, &self.first_out, &self.head, upward, downward)
     }
 
-    fn customize_par_by_sep(&self, sep_tree: &SeparatorTree, offset: usize, upward: &mut [Shortcut], downward: &mut [Shortcut], metric: &floating_time_dependent::TDGraph, inverted: &[Vec<(NodeId, EdgeId)>]) {
-        SeperatorBasedParallelCustomization {
-            cch: &self,
-            inverted,
-            customize_cell: |nodes, edge_offset, upward: &mut [Shortcut], downward: &mut [Shortcut]| {
-                MERGE_BUFFERS.with(|buffers| {
-                    let mut buffers = buffers.borrow_mut();
+    fn create_customization_fn<'s, F: 's>(&'s self, metric: &'s floating_time_dependent::TDGraph, inverted: &'s [Vec<(NodeId, EdgeId)>], merge_iter: F) -> impl Fn(Range<usize>, usize, &mut [Shortcut], &mut [Shortcut]) + 's where
+        for <'p> F: ForEachIter<'p, 's>,
+    {
+        move |nodes, edge_offset, upward: &mut [Shortcut], downward: &mut [Shortcut]| {
+            for current_node in nodes {
 
-                    for current_node in nodes {
+                let (upward_below, upward_above) = upward.split_at_mut(self.first_out[current_node as usize] as usize - edge_offset);
+                let upward_active = &mut upward_above[0..self.neighbor_edge_indices(current_node as NodeId).len()];
+                let (downward_below, downward_above) = downward.split_at_mut(self.first_out[current_node as usize] as usize - edge_offset);
+                let downward_active = &mut downward_above[0..self.neighbor_edge_indices(current_node as NodeId).len()];
+                let shortcut_graph = PartialShortcutGraph::new(metric, upward_below, downward_below, edge_offset);
 
-                        let (upward_below, upward_above) = upward.split_at_mut(self.first_out[current_node as usize] as usize - edge_offset);
-                        let upward_active = &mut upward_above[0..self.neighbor_edge_indices(current_node as NodeId).len()];
-                        let (downward_below, downward_above) = downward.split_at_mut(self.first_out[current_node as usize] as usize - edge_offset);
-                        let downward_active = &mut downward_above[0..self.neighbor_edge_indices(current_node as NodeId).len()];
-                        let shortcut_graph = PartialShortcutGraph::new(metric, upward_below, downward_below, edge_offset);
+                debug_assert_eq!(upward_active.len(), self.degree(current_node as NodeId));
+                debug_assert_eq!(downward_active.len(), self.degree(current_node as NodeId));
 
-                        debug_assert_eq!(upward_active.len(), self.degree(current_node as NodeId));
-                        debug_assert_eq!(downward_active.len(), self.degree(current_node as NodeId));
+                merge_iter.for_each(current_node as NodeId, upward_active, downward_active, |((&node, upward_shortcut), downward_shortcut)| {
+                    MERGE_BUFFERS.with(|buffers| {
+                        let mut buffers = buffers.borrow_mut();
 
-                        let merge_iter = self.head[self.neighbor_edge_indices_usize(current_node as NodeId)].iter()
-                            .zip(upward_active.iter_mut())
-                            .zip(downward_active.iter_mut());
+                        let mut triangles = Vec::new();
 
-                        merge_iter.for_each(|((&node, upward_shortcut), downward_shortcut)| {
-                            let mut triangles = Vec::new();
+                        let mut current_iter = inverted[current_node as usize].iter().peekable();
+                        let mut other_iter = inverted[node as usize].iter().peekable();
 
-                            let mut current_iter = inverted[current_node as usize].iter().peekable();
-                            let mut other_iter = inverted[node as usize].iter().peekable();
+                        while let (Some((lower_from_current, edge_from_cur_id)), Some((lower_from_other, edge_from_oth_id))) = (current_iter.peek(), other_iter.peek()) {
+                            debug_assert_eq!(self.head()[*edge_from_cur_id as usize], current_node as NodeId);
+                            debug_assert_eq!(self.head()[*edge_from_oth_id as usize], node);
+                            debug_assert_eq!(self.edge_id_to_tail(*edge_from_cur_id), *lower_from_current);
+                            debug_assert_eq!(self.edge_id_to_tail(*edge_from_oth_id), *lower_from_other);
 
-                            while let (Some((lower_from_current, edge_from_cur_id)), Some((lower_from_other, edge_from_oth_id))) = (current_iter.peek(), other_iter.peek()) {
-                                debug_assert_eq!(self.head()[*edge_from_cur_id as usize], current_node as NodeId);
-                                debug_assert_eq!(self.head()[*edge_from_oth_id as usize], node);
-                                debug_assert_eq!(self.edge_id_to_tail(*edge_from_cur_id), *lower_from_current);
-                                debug_assert_eq!(self.edge_id_to_tail(*edge_from_oth_id), *lower_from_other);
+                            if lower_from_current < lower_from_other {
+                                current_iter.next();
+                            } else if lower_from_other < lower_from_current {
+                                other_iter.next();
+                            } else {
+                                triangles.push((*edge_from_cur_id, *edge_from_oth_id));
 
-                                if lower_from_current < lower_from_other {
-                                    current_iter.next();
-                                } else if lower_from_other < lower_from_current {
-                                    other_iter.next();
-                                } else {
-                                    debug_assert!(*lower_from_current >= offset as NodeId, "{} {}", offset, lower_from_current);
-                                    debug_assert!(*lower_from_other >= offset as NodeId, "{} {}", offset, lower_from_other);
-
-                                    triangles.push((*edge_from_cur_id, *edge_from_oth_id));
-
-                                    current_iter.next();
-                                    other_iter.next();
-                                }
+                                current_iter.next();
+                                other_iter.next();
                             }
-                            if cfg!(feature = "tdcch-triangle-sorting") {
-                                triangles.sort_by_key(|&(down, up)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
-                            }
-                            for &edges in &triangles {
-                                upward_shortcut.merge(edges, &shortcut_graph, &mut buffers);
-                            }
-                            upward_shortcut.finalize_bounds(&shortcut_graph);
-
-                            if cfg!(feature = "tdcch-triangle-sorting") {
-                                triangles.sort_by_key(|&(up, down)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
-                            }
-                            for &(up, down) in &triangles {
-                                downward_shortcut.merge((down, up), &shortcut_graph, &mut buffers);
-                            }
-                            downward_shortcut.finalize_bounds(&shortcut_graph);
-                        });
-
-                        for &(_, edge_id) in &inverted[current_node as usize] {
-                            upward[edge_id as usize - edge_offset].clear_plf();
-                            downward[edge_id as usize - edge_offset].clear_plf();
                         }
+                        if cfg!(feature = "tdcch-triangle-sorting") {
+                            triangles.sort_by_key(|&(down, up)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
+                        }
+                        for &edges in &triangles {
+                            upward_shortcut.merge(edges, &shortcut_graph, &mut buffers);
+                        }
+                        upward_shortcut.finalize_bounds(&shortcut_graph);
 
-                        NODES_CUSTOMIZED.fetch_add(1, Ordering::Relaxed);
-                    }
-                });
-            },
-            customize_separator: |nodes, edge_offset, upward: &mut [Shortcut], downward: &mut [Shortcut]| {
-                for current_node in nodes {
-
-                    let (upward_below, upward_above) = upward.split_at_mut(self.first_out[current_node as usize] as usize - edge_offset);
-                    let upward_active = &mut upward_above[0..self.neighbor_edge_indices(current_node as NodeId).len()];
-                    let (downward_below, downward_above) = downward.split_at_mut(self.first_out[current_node as usize] as usize - edge_offset);
-                    let downward_active = &mut downward_above[0..self.neighbor_edge_indices(current_node as NodeId).len()];
-                    let shortcut_graph = PartialShortcutGraph::new(metric, upward_below, downward_below, edge_offset);
-
-                    let merge_iter = self.head[self.neighbor_edge_indices_usize(current_node as NodeId)].par_iter()
-                        .zip_eq(upward_active.par_iter_mut())
-                        .zip_eq(downward_active.par_iter_mut());
-
-                    merge_iter.for_each(|((&node, upward_shortcut), downward_shortcut)| {
-                        MERGE_BUFFERS.with(|buffers| {
-                            let mut buffers = buffers.borrow_mut();
-                            let mut triangles = Vec::new();
-
-                            let mut current_iter = inverted[current_node as usize].iter().peekable();
-                            let mut other_iter = inverted[node as usize].iter().peekable();
-
-                            while let (Some((lower_from_current, edge_from_cur_id)), Some((lower_from_other, edge_from_oth_id))) = (current_iter.peek(), other_iter.peek()) {
-                                if lower_from_current < lower_from_other {
-                                    current_iter.next();
-                                } else if lower_from_other < lower_from_current {
-                                    other_iter.next();
-                                } else {
-                                    triangles.push((*edge_from_cur_id, *edge_from_oth_id));
-
-                                    current_iter.next();
-                                    other_iter.next();
-                                }
-                            }
-
-                            if cfg!(feature = "tdcch-triangle-sorting") {
-                                triangles.sort_by_key(|&(down, up)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
-                            }
-                            for &edges in &triangles {
-                                upward_shortcut.merge(edges, &shortcut_graph, &mut buffers);
-                            }
-                            upward_shortcut.finalize_bounds(&shortcut_graph);
-
-                            if cfg!(feature = "tdcch-triangle-sorting") {
-                                triangles.sort_by_key(|&(up, down)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
-                            }
-                            for &(up, down) in &triangles {
-                                downward_shortcut.merge((down, up), &shortcut_graph, &mut buffers);
-                            }
-                            downward_shortcut.finalize_bounds(&shortcut_graph);
-                        });
+                        if cfg!(feature = "tdcch-triangle-sorting") {
+                            triangles.sort_by_key(|&(up, down)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
+                        }
+                        for &(up, down) in &triangles {
+                            downward_shortcut.merge((down, up), &shortcut_graph, &mut buffers);
+                        }
+                        downward_shortcut.finalize_bounds(&shortcut_graph);
                     });
+                });
 
-                    for &(_, edge_id) in &inverted[current_node as usize] {
-                        upward[edge_id as usize - edge_offset].clear_plf();
-                        downward[edge_id as usize - edge_offset].clear_plf();
-                    }
-
-                    NODES_CUSTOMIZED.fetch_add(1, Ordering::Relaxed);
+                for &(_, edge_id) in &inverted[current_node as usize] {
+                    upward[edge_id as usize - edge_offset].clear_plf();
+                    downward[edge_id as usize - edge_offset].clear_plf();
                 }
+
+                NODES_CUSTOMIZED.fetch_add(1, Ordering::Relaxed);
             }
-        }.customize(sep_tree, offset, upward, downward);
+        }
     }
 
     pub fn node_order(&self) -> &NodeOrder {
@@ -750,7 +684,11 @@ impl<'a, F, G> SeperatorBasedParallelCustomization<'a, F, G>
     where F: Sync + Fn(Range<usize>, usize, &mut [Shortcut], &mut [Shortcut]),
           G: Sync + Fn(Range<usize>, usize, &mut [Shortcut], &mut [Shortcut])
 {
-    fn customize(&self, sep_tree: &SeparatorTree, offset: usize, upward: &mut [Shortcut], downward: &mut [Shortcut]) {
+    pub fn customize(&self, upward: &'a mut [Shortcut], downward: &'a mut [Shortcut]) {
+        self.customize_cell(&self.cch.separators(), 0, upward, downward);
+    }
+
+    fn customize_cell(&self, sep_tree: &SeparatorTree, offset: usize, upward: &'a mut [Shortcut], downward: &'a mut [Shortcut]) {
         let edge_offset = self.cch.first_out[offset] as usize;
 
         if cfg!(feature = "tdcch-disable-par") || sep_tree.num_nodes < self.cch.num_nodes() / (32 * rayon::current_num_threads()) {
@@ -767,7 +705,7 @@ impl<'a, F, G> SeperatorBasedParallelCustomization<'a, F, G>
                     let (this_sub_down, rest_down) = (move || { sub_downward })().split_at_mut(self.cch.first_out[sub_offset + sub.num_nodes] as usize - sub_edge_offset);
                     debug_assert_eq!(self.inverted[sub_offset].len(), 0, "{:?}", dbg!(sub));
                     sub_edge_offset += this_sub_up.len();
-                    s.spawn(move |_| self.customize(sub, sub_offset, this_sub_up, this_sub_down));
+                    s.spawn(move |_| self.customize_cell(sub, sub_offset, this_sub_up, this_sub_down));
                     sub_offset += sub.num_nodes;
                     sub_upward = rest_up;
                     sub_downward = rest_down;
@@ -776,5 +714,31 @@ impl<'a, F, G> SeperatorBasedParallelCustomization<'a, F, G>
 
             (self.customize_separator)(sub_offset..offset + sep_tree.num_nodes, edge_offset, upward, downward)
         }
+    }
+}
+
+trait ForEachIter<'s, 'c> {
+    fn for_each(&self, current_node: NodeId, upward_active: &'s mut [Shortcut], downward_active: &'s mut [Shortcut], f: impl Send + Sync + Fn(((&'c NodeId, &'s mut Shortcut), &'s mut Shortcut)));
+}
+
+struct SeqIter<'c>(&'c CCHGraph);
+
+impl<'s, 'c> ForEachIter<'s, 'c> for SeqIter<'c> {
+    fn for_each(&self, current_node: NodeId, upward_active: &'s mut [Shortcut], downward_active: &'s mut [Shortcut], f: impl Send + Sync + Fn(((&'c NodeId, &'s mut Shortcut), &'s mut Shortcut))) {
+        self.0.head[self.0.neighbor_edge_indices_usize(current_node)].iter()
+            .zip(upward_active.iter_mut())
+            .zip(downward_active.iter_mut())
+            .for_each(f);
+    }
+}
+
+struct ParIter<'c>(&'c CCHGraph);
+
+impl<'s, 'c> ForEachIter<'s, 'c> for ParIter<'c> {
+    fn for_each(&self, current_node: NodeId, upward_active: &'s mut [Shortcut], downward_active: &'s mut [Shortcut], f: impl Send + Sync + Fn(((&'c NodeId, &'s mut Shortcut), &'s mut Shortcut))) {
+        self.0.head[self.0.neighbor_edge_indices_usize(current_node)].par_iter()
+            .zip_eq(upward_active.par_iter_mut())
+            .zip_eq(downward_active.par_iter_mut())
+            .for_each(f);
     }
 }
