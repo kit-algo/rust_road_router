@@ -10,7 +10,7 @@ use bmw_routing_engine::{
         floating_time_dependent::*,
     },
     shortest_path::{
-        customizable_contraction_hierarchy::{cch_graph::*},
+        customizable_contraction_hierarchy::cch_graph::*,
         node_order::NodeOrder,
     },
     io::*,
@@ -55,7 +55,7 @@ fn main() {
     let customized_folder = path.join("customized");
 
     let _cch_customization_ctxt = algo_runs_ctxt.push_collection_item();
-    let td_cch_graph: CustomizedGraph = cch.customize_floating_td(&graph).into();
+    let td_cch_graph: CustomizedGraph = ftd_cch::customize(&cch, &graph).into();
     if !customized_folder.exists() { std::fs::create_dir(&customized_folder).expect("could not create cch folder"); }
     td_cch_graph.deconstruct_to(customized_folder.to_str().unwrap()).expect("could not save customized");
 }
