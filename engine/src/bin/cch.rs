@@ -6,10 +6,7 @@ use bmw_routing_engine::{
     shortest_path::{
         customizable_contraction_hierarchy,
         node_order::NodeOrder,
-        query::{
-            customizable_contraction_hierarchy::Server,
-            dijkstra::Server as DijkServer,
-        },
+        query::customizable_contraction_hierarchy::Server,
     },
     io::Load,
     benchmark::report_time,
@@ -36,7 +33,6 @@ fn main() {
     let cch = customizable_contraction_hierarchy::contract(&graph, NodeOrder::from_node_order(cch_order));
 
     let mut server = Server::new(&cch, &graph);
-    let mut simple_server = DijkServer::new(graph);
 
     for ((&from, &to), &ground_truth) in from.iter().zip(to.iter()).zip(ground_truth.iter()).take(100) {
         let ground_truth = match ground_truth {
@@ -47,11 +43,5 @@ fn main() {
         report_time("CCH query", || {
             assert_eq!(server.distance(from, to), ground_truth);
         });
-
-        report_time("Dijkstra query", || {
-            assert_eq!(simple_server.distance(from, to), ground_truth);
-        });
-
-        assert_eq!(simple_server.path(), server.path());
     }
 }

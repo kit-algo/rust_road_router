@@ -201,7 +201,9 @@ impl CCHGraph {
             let mut node_incoming_weights = vec![(INFINITY, InRangeOption::new(None)); n as usize];
 
             for current_node in 0..n {
+                let mut max_neighbor_rank = 0;
                 for (Link { node, weight }, edge_id) in downward.neighbor_iter(current_node).zip(downward.neighbor_edge_indices(current_node)) {
+                    max_neighbor_rank = std::cmp::max(max_neighbor_rank, node);
                     node_incoming_weights[node as usize] = (weight, InRangeOption::new(Some(edge_id)));
                     debug_assert_eq!(downward.link(edge_id).node, node);
                 }
@@ -214,6 +216,7 @@ impl CCHGraph {
                     debug_assert_eq!(self.edge_id_to_tail(edge_id), current_node);
                     let shortcut_edge_ids = upward.neighbor_edge_indices(node);
                     for ((&target, shortcut_weight), shortcut_edge_id) in upward.mut_weight_link_iter(node).zip(shortcut_edge_ids) {
+                        if target > max_neighbor_rank { break; }
                         debug_assert_eq!(self.edge_id_to_tail(shortcut_edge_id), node);
                         if weight + node_outgoing_weights[target as usize].0 < *shortcut_weight {
                             *shortcut_weight = weight + node_outgoing_weights[target as usize].0;
@@ -226,6 +229,7 @@ impl CCHGraph {
                     debug_assert_eq!(self.edge_id_to_tail(edge_id), current_node);
                     let shortcut_edge_ids = downward.neighbor_edge_indices(node);
                     for ((&target, shortcut_weight), shortcut_edge_id) in downward.mut_weight_link_iter(node).zip(shortcut_edge_ids) {
+                        if target > max_neighbor_rank { break; }
                         debug_assert_eq!(self.edge_id_to_tail(shortcut_edge_id), node);
                         if weight + node_incoming_weights[target as usize].0 < *shortcut_weight {
                             *shortcut_weight = weight + node_incoming_weights[target as usize].0;
