@@ -126,12 +126,25 @@ impl CCHGraph {
 
         #[allow(clippy::match_ref_pats)]
         while let &[only_child] = &children[node as usize][..] {
+            if !cfg!(feature = "tdcch-disable-par") { assert_eq!(node, only_child + 1, "Disconnected ID Ranges in nested dissection separator") };
             node = only_child;
             nodes.push(only_child)
         }
 
-        let children: Vec<_> = children[node as usize].iter().map(|&child| Self::aggregate_chain(child, children)).collect();
+        let children: Vec<_> = children[node as usize].iter().map(|&child| { debug_assert!(child < node); Self::aggregate_chain(child, children) }).collect();
         let num_nodes = nodes.len() + children.iter().map(|child| child.num_nodes).sum::<usize>();
+
+        if !cfg!(feature = "tdcch-disable-par") {
+            let mut child_range_start = nodes[0] + 1 - num_nodes as u32;
+            for child in &children {
+                assert_eq!(child_range_start, child.nodes[0] + 1 - child.num_nodes as u32, "Disconnected ID Ranges in nested dissection cells");
+                child_range_start += child.num_nodes as u32;
+            }
+
+            // for children in children.windows(2) {
+            //     assert!(children[0].num_nodes >= children[1].num_nodes, "Sub cells not sorted by descending size");
+            // }
+        }
 
         SeparatorTree {
             nodes,
