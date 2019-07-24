@@ -1,5 +1,4 @@
 use std::{
-    cmp::Ordering,
     path::Path,
     env,
 };
@@ -14,27 +13,6 @@ use bmw_routing_engine::{
     io::*,
     report::*,
 };
-
-#[derive(PartialEq,PartialOrd)]
-struct NonNan(f32);
-
-impl NonNan {
-    fn new(val: f32) -> Option<NonNan> {
-        if val.is_nan() {
-            None
-        } else {
-            Some(NonNan(val))
-        }
-    }
-}
-
-impl Eq for NonNan {}
-
-impl Ord for NonNan {
-    fn cmp(&self, other: &NonNan) -> Ordering {
-        self.partial_cmp(other).unwrap()
-    }
-}
 
 fn main() {
     let _reporter = enable_reporting();
@@ -85,79 +63,4 @@ fn main() {
     drop(cch_build_ctxt);
 
     cch.deconstruct_to(cch_folder.to_str().unwrap()).expect("could not save cch");
-}
-
-#[derive(Debug)]
-struct CCHReordering<'a> {
-    node_order: NodeOrder,
-    latitude: &'a [f32],
-    longitude: &'a [f32],
-}
-
-impl<'a> CCHReordering<'a> {
-    fn distance (&self, n1: NodeId, n2: NodeId) -> NonNan {
-        use nav_types::WGS84;
-        NonNan::new(WGS84::new(self.latitude[self.node_order.node(n1) as usize], self.longitude[self.node_order.node(n1) as usize], 0.0)
-            .distance(&WGS84::new(self.latitude[self.node_order.node(n2) as usize], self.longitude[self.node_order.node(n2) as usize], 0.0))).unwrap()
-    }
-
-    fn reorder_sep(&self, nodes: &mut [NodeId]) {
-        let furthest = nodes.first().map(|&first| {
-            nodes.iter().max_by_key(|&&node| self.distance(first, node)).unwrap()
-        });
-
-        if let Some(&furthest) = furthest {
-            nodes.sort_by_key(|&node| self.distance(node, furthest))
-        }
-    }
-
-    fn reorder_tree(&self, separators: &mut SeparatorTree, level: usize) {
-        if level > 2 { return }
-
-        self.reorder_sep(&mut separators.nodes);
-        for child in &mut separators.children {
-            self.reorder_tree(child, level + 1);
-            // if let Some(&first) = child.nodes.first() {
-            //     if let Some(&last) = child.nodes.last() {
-            //         if let Some(&node) = separators.nodes.first() {
-            //             if self.distance(first, node) < self.distance(last, node) {
-            //                 child.nodes.reverse()
-            //             }
-            //         }
-            //     }
-            // }
-        }
-    }
-
-    fn to_ordering(&self, seperators: SeparatorTree, order: &mut Vec<NodeId>) {
-        order.extend(seperators.nodes);
-        for child in seperators.children {
-            self.to_ordering(child, order);
-        }
-    }
-
-    pub fn reorder(self, mut separators: SeparatorTree) -> NodeOrder {
-        self.reorder_tree(&mut separators, 0);
-        let mut order = Vec::new();
-        self.to_ordering(separators, &mut order);
-
-        for rank in &mut order {
-            *rank = self.node_order.node(*rank);
-        }
-        order.reverse();
-
-        NodeOrder::from_node_order(order)
-    }
-
-    pub fn reorder_for_seperator_based_customization(self, separators: SeparatorTree) -> NodeOrder {
-        let mut order = Vec::new();
-        self.to_ordering(separators, &mut order);
-
-        for rank in &mut order {
-            *rank = self.node_order.node(*rank);
-        }
-        order.reverse();
-
-        NodeOrder::from_node_order(order)
-    }
 }
