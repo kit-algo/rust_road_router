@@ -126,7 +126,7 @@ impl CCHGraph {
 
         #[allow(clippy::match_ref_pats)]
         while let &[only_child] = &children[node as usize][..] {
-            if !cfg!(feature = "tdcch-disable-par") { assert_eq!(node, only_child + 1, "Disconnected ID Ranges in nested dissection separator") };
+            if !cfg!(feature = "cch-disable-par") { assert_eq!(node, only_child + 1, "Disconnected ID Ranges in nested dissection separator") };
             node = only_child;
             nodes.push(only_child)
         }
@@ -134,7 +134,7 @@ impl CCHGraph {
         let children: Vec<_> = children[node as usize].iter().map(|&child| { debug_assert!(child < node); Self::aggregate_chain(child, children) }).collect();
         let num_nodes = nodes.len() + children.iter().map(|child| child.num_nodes).sum::<usize>();
 
-        if !cfg!(feature = "tdcch-disable-par") {
+        if !cfg!(feature = "cch-disable-par") {
             let mut child_range_start = nodes[0] + 1 - num_nodes as u32;
             for child in &children {
                 assert_eq!(child_range_start, child.nodes[0] + 1 - child.num_nodes as u32, "Disconnected ID Ranges in nested dissection cells");
@@ -322,7 +322,7 @@ impl<'a, T, F, G> SeperatorBasedParallelCustomization<'a, T, F, G> where
     fn customize_cell(&self, sep_tree: &SeparatorTree, offset: usize, upward: &'a mut [T], downward: &'a mut [T]) {
         let edge_offset = self.cch.first_out[offset] as usize;
 
-        if cfg!(feature = "tdcch-disable-par") || sep_tree.num_nodes < self.cch.num_nodes() / (32 * rayon::current_num_threads()) {
+        if cfg!(feature = "cch-disable-par") || sep_tree.num_nodes < self.cch.num_nodes() / (32 * rayon::current_num_threads()) {
             (self.customize_cell)(offset..offset + sep_tree.num_nodes, edge_offset, upward, downward);
         } else {
             let mut sub_offset = offset;
