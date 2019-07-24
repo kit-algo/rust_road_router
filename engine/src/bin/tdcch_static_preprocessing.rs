@@ -6,10 +6,7 @@ use std::{
 
 #[macro_use] extern crate bmw_routing_engine;
 use bmw_routing_engine::{
-    graph::{
-        *,
-        floating_time_dependent::*,
-    },
+    graph::*,
     shortest_path::{
         customizable_contraction_hierarchy::{self, cch_graph::*},
         node_order::NodeOrder,
@@ -54,15 +51,11 @@ fn main() {
 
     let first_out = Vec::load_from(path.join("first_out").to_str().unwrap()).expect("could not read first_out");
     let head = Vec::load_from(path.join("head").to_str().unwrap()).expect("could not read head");
-    let first_ipp_of_arc = Vec::load_from(path.join("first_ipp_of_arc").to_str().unwrap()).expect("could not read first_ipp_of_arc");
-    let ipp_departure_time = Vec::<u32>::load_from(path.join("ipp_departure_time").to_str().unwrap()).expect("could not read ipp_departure_time");
-    let ipp_travel_time = Vec::<u32>::load_from(path.join("ipp_travel_time").to_str().unwrap()).expect("could not read ipp_travel_time");
+    let weight = vec![0; head.len()];
 
-    report!("unprocessed_graph", { "num_nodes": first_out.len() - 1, "num_arcs": head.len(), "num_ipps": ipp_departure_time.len() });
+    let graph = OwnedGraph::new(first_out, head, weight);
 
-    let graph = TDGraph::new(first_out, head, first_ipp_of_arc, ipp_departure_time, ipp_travel_time);
-
-    report!("graph", { "num_nodes": graph.num_nodes(), "num_arcs": graph.num_arcs(), "num_ipps": graph.num_ipps(), "num_constant_ttfs": graph.num_constant() });
+    report!("graph", { "num_nodes": graph.num_nodes(), "num_arcs": graph.num_arcs() });
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
 
