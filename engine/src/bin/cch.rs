@@ -51,6 +51,7 @@ fn main() {
             };
 
             assert_eq!(server.distance(from, to), ground_truth);
+            server.path();
         }
     });
 }

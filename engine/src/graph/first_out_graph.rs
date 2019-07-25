@@ -26,9 +26,9 @@ impl<FirstOutContainer, HeadContainer, WeightContainer> FirstOutGraph<FirstOutCo
     HeadContainer: AsSlice<NodeId>,
     WeightContainer: AsSlice<Weight>,
 {
-    fn first_out(&self) -> &[EdgeId] { self.first_out.as_slice() }
-    fn head(&self) -> &[NodeId] { self.head.as_slice() }
-    fn weight(&self) -> &[Weight] { self.weight.as_slice() }
+    pub fn first_out(&self) -> &[EdgeId] { self.first_out.as_slice() }
+    pub fn head(&self) -> &[NodeId] { self.head.as_slice() }
+    pub fn weight(&self) -> &[Weight] { self.weight.as_slice() }
 
     pub fn new(first_out: FirstOutContainer, head: HeadContainer, weight: WeightContainer) -> FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> {
         assert!(first_out.as_slice().len() < <NodeId>::max_value() as usize);
@@ -109,6 +109,7 @@ impl<'a, FirstOutContainer, HeadContainer, WeightContainer> LinkIterGraph<'a> fo
 {
     type Iter = std::iter::Map<std::iter::Zip<std::slice::Iter<'a, NodeId>, std::slice::Iter<'a, Weight>>, fn((&NodeId, &Weight))->Link>;
 
+    #[inline]
     fn neighbor_iter(&'a self, node: NodeId) -> Self::Iter {
         let range = self.neighbor_edge_indices_usize(node);
         self.head()[range.clone()].iter()
@@ -124,6 +125,7 @@ impl<'a, FirstOutContainer, HeadContainer, WeightContainer> MutWeightLinkIterGra
 {
     type Iter = std::iter::Zip<std::slice::Iter<'a, NodeId>, std::slice::IterMut<'a, Weight>>;
 
+    #[inline]
     fn mut_weight_link_iter(&'a mut self, node: NodeId) -> Self::Iter {
         let range = self.neighbor_edge_indices_usize(node);
         self.head.as_slice()[range.clone()].iter().zip(self.weight.as_mut_slice()[range].iter_mut())
@@ -135,6 +137,7 @@ impl<FirstOutContainer, HeadContainer, WeightContainer> RandomLinkAccessGraph fo
     HeadContainer: AsSlice<NodeId>,
     WeightContainer: AsSlice<Weight>,
 {
+    #[inline]
     fn link(&self, edge_id: EdgeId) -> Link {
         Link { node: self.head()[edge_id as usize], weight: self.weight()[edge_id as usize] }
     }
@@ -144,6 +147,7 @@ impl<FirstOutContainer, HeadContainer, WeightContainer> RandomLinkAccessGraph fo
         self.neighbor_iter(from).enumerate().find(|&(_, Link { node, .. })| node == to).map(|(i, _)| (first_out + i) as EdgeId )
     }
 
+    #[inline]
     fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {
         (self.first_out()[node as usize] as EdgeId)..(self.first_out()[(node + 1) as usize] as EdgeId)
     }

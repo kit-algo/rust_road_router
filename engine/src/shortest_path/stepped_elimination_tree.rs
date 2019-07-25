@@ -2,6 +2,8 @@ use super::*;
 use super::timestamped_vector::TimestampedVector;
 use super::stepped_dijkstra::QueryProgress;
 use crate::in_range_option::InRangeOption;
+use crate::shortest_path::customizable_contraction_hierarchy::cch_graph::CCHGraph;
+use crate::as_slice::AsSlice;
 
 #[derive(Debug)]
 pub struct SteppedEliminationTree<'b, Graph: for<'a> LinkIterGraph<'a>> {
@@ -85,5 +87,34 @@ impl<'b, Graph: for<'a> LinkIterGraph<'a>> SteppedEliminationTree<'b, Graph> {
 
     pub fn graph(&self) -> &Graph {
         &self.graph
+    }
+
+}
+
+impl<'b, FirstOutContainer, HeadContainer, WeightContainer> SteppedEliminationTree<'b, FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>> where
+    FirstOutContainer: AsSlice<EdgeId>,
+    HeadContainer: AsSlice<NodeId>,
+    WeightContainer: AsSlice<Weight>,
+{
+    pub fn unpack_path(&mut self, target: NodeId, forward: bool, cch: &CCHGraph, other_weights: &[Weight]) {
+        let origin = self.origin();
+        let mut current = target;
+        while current != origin {
+            let pred = self.predecessor(current);
+            let weight = self.tentative_distance(current) - self.tentative_distance(pred);
+
+            let unpacked = if forward {
+                cch.unpack_arc(pred, current, weight, self.graph.weight(), other_weights)
+            } else {
+                cch.unpack_arc(current, pred, weight, other_weights, self.graph.weight())
+            };
+            if let Some((middle, first_weight, second_weight)) = unpacked {
+                self.predecessors[current as usize] = middle;
+                self.predecessors[middle as usize] = pred;
+                self.distances[middle as usize] = self.tentative_distance(pred) + if forward { first_weight } else { second_weight };
+            } else {
+                current = pred;
+            }
+        }
     }
 }
