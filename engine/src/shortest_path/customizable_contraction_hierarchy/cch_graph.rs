@@ -23,7 +23,7 @@ pub struct SeparatorTree {
 }
 
 impl SeparatorTree {
-    pub fn validate_for_parallelization(&self) {
+    fn validate_for_parallelization(&self) {
         for nodes in self.nodes.windows(2) {
             assert_eq!(nodes[0], nodes[1] + 1, "Disconnected ID Ranges in nested dissection separator")
         }
@@ -40,6 +40,48 @@ impl SeparatorTree {
 
         for child in &self.children {
             child.validate_for_parallelization();
+        }
+    }
+
+    fn new(cch: &CCHGraph) -> Self {
+        let mut children = vec![Vec::new(); cch.num_nodes()];
+        let mut roots = Vec::new();
+
+        for (node_index, parent) in cch.elimination_tree.iter().enumerate() {
+            if let Some(parent) = parent.value() {
+                children[parent as usize].push(node_index as NodeId);
+            } else {
+                roots.push(node_index as NodeId);
+            }
+        }
+
+        let children: Vec<_> = roots.into_iter().map(|root| SeparatorTree::new_subtree(root, &children)).collect();
+        let num_nodes = children.iter().map(|child| child.num_nodes).sum::<usize>();
+        debug_assert_eq!(num_nodes, cch.num_nodes());
+
+        SeparatorTree { nodes: Vec::new(), children, num_nodes }
+    }
+
+    fn new_subtree(root: NodeId, children: &[Vec<NodeId>]) -> SeparatorTree {
+        let mut node = root;
+        let mut nodes = vec![root];
+
+        #[allow(clippy::match_ref_pats)]
+        while let &[only_child] = &children[node as usize][..] {
+            node = only_child;
+            nodes.push(only_child)
+        }
+
+        let children: Vec<_> = children[node as usize].iter().map(|&child| { debug_assert!(child < node); Self::new_subtree(child, children) }).collect();
+        let num_nodes = nodes.len() + children.iter().map(|child| child.num_nodes).sum::<usize>();
+
+        debug_assert!(num_nodes > 0);
+        debug_assert!(!nodes.is_empty());
+
+        SeparatorTree {
+            nodes,
+            children,
+            num_nodes,
         }
     }
 }
@@ -81,9 +123,8 @@ impl<'g, Graph: for<'a> LinkIterGraph<'a>> ReconstructPrepared<CCHGraph> for CCH
 
 impl CCHGraph {
     pub(super) fn new<Graph: for<'a> LinkIterGraph<'a>>(contracted_graph: ContractedGraph<Graph>) -> CCHGraph {
-        let ContractedGraph(contracted_graph) = contracted_graph;
-        let graph = Self::adjancecy_lists_to_first_out_graph(contracted_graph.nodes);
-        Self::new_from(contracted_graph.original_graph, contracted_graph.node_order, graph)
+        let (cch, order, orig) = contracted_graph.decompose();
+        Self::new_from(orig, order, cch)
     }
 
     fn new_from<Graph: for<'a> LinkIterGraph<'a>>(original_graph: &Graph, node_order: NodeOrder, contracted_graph: OwnedGraph) -> Self {
@@ -146,63 +187,7 @@ impl CCHGraph {
     }
 
     pub fn separators(&self) -> SeparatorTree {
-        let mut children = vec![Vec::new(); self.num_nodes()];
-        let mut roots = Vec::new();
-
-        for (node_index, parent) in self.elimination_tree.iter().enumerate() {
-            if let Some(parent) = parent.value() {
-                children[parent as usize].push(node_index as NodeId);
-            } else {
-                roots.push(node_index as NodeId);
-            }
-        }
-
-        let children: Vec<_> = roots.into_iter().map(|root| Self::aggregate_chain(root, &children)).collect();
-        let num_nodes = children.iter().map(|child| child.num_nodes).sum::<usize>();
-        debug_assert_eq!(num_nodes, self.num_nodes());
-
-        SeparatorTree { nodes: Vec::new(), children, num_nodes }
-    }
-
-    fn aggregate_chain(root: NodeId, children: &[Vec<NodeId>]) -> SeparatorTree {
-        let mut node = root;
-        let mut nodes = vec![root];
-
-        #[allow(clippy::match_ref_pats)]
-        while let &[only_child] = &children[node as usize][..] {
-            node = only_child;
-            nodes.push(only_child)
-        }
-
-        let children: Vec<_> = children[node as usize].iter().map(|&child| { debug_assert!(child < node); Self::aggregate_chain(child, children) }).collect();
-        let num_nodes = nodes.len() + children.iter().map(|child| child.num_nodes).sum::<usize>();
-
-        debug_assert!(num_nodes > 0);
-        debug_assert!(!nodes.is_empty());
-
-        SeparatorTree {
-            nodes,
-            children,
-            num_nodes,
-        }
-    }
-
-    fn adjancecy_lists_to_first_out_graph(adjancecy_lists: Vec<Node>) -> OwnedGraph {
-        let n = adjancecy_lists.len();
-
-        let first_out: Vec<EdgeId> = {
-            let degrees = adjancecy_lists.iter().map(|neighbors| neighbors.edges.len() as EdgeId);
-            degrees_to_first_out(degrees).collect()
-        };
-        debug_assert_eq!(first_out.len(), n + 1);
-
-        let head: Vec<NodeId> = adjancecy_lists
-            .into_iter()
-            .flat_map(|neighbors| neighbors.edges.into_iter())
-            .collect();
-
-        let m = head.len();
-        OwnedGraph::new(first_out, head, vec![INFINITY; m])
+        SeparatorTree::new(&self)
     }
 
     fn build_elimination_tree(graph: &OwnedGraph) -> Vec<InRangeOption<NodeId>> {
