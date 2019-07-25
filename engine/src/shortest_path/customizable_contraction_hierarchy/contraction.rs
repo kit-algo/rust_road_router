@@ -1,9 +1,13 @@
-use std::ops::{Index, IndexMut};
-use std::cmp::Ordering;
 use super::*;
-use crate::graph::first_out_graph::degrees_to_first_out;
-use crate::benchmark::report_time;
-use crate::report::*;
+use std::{
+    ops::{Index, IndexMut},
+    cmp::Ordering,
+};
+use crate::{
+    graph::first_out_graph::degrees_to_first_out,
+    benchmark::report_time,
+    report::*,
+};
 
 #[derive(Debug, PartialEq)]
 enum ShortcutResult {

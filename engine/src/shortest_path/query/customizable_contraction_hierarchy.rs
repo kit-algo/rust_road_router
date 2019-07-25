@@ -1,6 +1,6 @@
 use super::*;
 use super::stepped_elimination_tree::SteppedEliminationTree;
-use crate::shortest_path::customizable_contraction_hierarchy::CCH;
+use crate::shortest_path::customizable_contraction_hierarchy::*;
 
 #[derive(Debug)]
 pub struct Server<'a> {
@@ -15,7 +15,7 @@ impl<'a> Server<'a> {
     pub fn new<Graph>(cch_graph: &'a CCH, metric: &Graph) -> Server<'a> where
         Graph: for<'b> LinkIterGraph<'b> + RandomLinkAccessGraph
     {
-        let (upward, downward) = cch_graph.customize(metric);
+        let (upward, downward) = customize(cch_graph, metric);
         let forward = SteppedEliminationTree::new(upward, cch_graph.elimination_tree());
         let backward = SteppedEliminationTree::new(downward, cch_graph.elimination_tree());
 
