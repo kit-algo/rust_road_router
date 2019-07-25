@@ -52,7 +52,7 @@ fn main() {
 
     let cch_folder = path.join("cch");
     let node_order = NodeOrder::reconstruct_from(cch_folder.to_str().unwrap()).expect("could not read node order");
-    let cch = CCHGraphReconstrctor { original_graph: &graph, node_order }.reconstruct_from(cch_folder.to_str().unwrap()).expect("could not read cch");
+    let cch = CCHReconstrctor { original_graph: &graph, node_order }.reconstruct_from(cch_folder.to_str().unwrap()).expect("could not read cch");
 
     let customized_folder = path.join("customized");
 

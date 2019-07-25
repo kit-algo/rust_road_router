@@ -6,8 +6,8 @@ mod contraction;
 use contraction::*;
 
 
-pub fn contract<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, node_order: NodeOrder) -> CCHGraph {
-    CCHGraph::new(ContractionGraph::new(graph, node_order).contract())
+pub fn contract<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, node_order: NodeOrder) -> CCH {
+    CCH::new(ContractionGraph::new(graph, node_order).contract())
 }
 
 
@@ -55,7 +55,7 @@ impl SeparatorTree {
         }
     }
 
-    fn new(cch: &CCHGraph) -> Self {
+    fn new(cch: &CCH) -> Self {
         let mut children = vec![Vec::new(); cch.num_nodes()];
         let mut roots = Vec::new();
 
@@ -99,7 +99,7 @@ impl SeparatorTree {
 }
 
 #[derive(Debug)]
-pub struct CCHGraph {
+pub struct CCH {
     first_out: Vec<EdgeId>,
     head: Vec<NodeId>,
     tail: Vec<NodeId>,
@@ -109,7 +109,7 @@ pub struct CCHGraph {
     inverted: OwnedGraph,
 }
 
-impl Deconstruct for CCHGraph {
+impl Deconstruct for CCH {
     fn store_each(&self, store: &dyn Fn(&str, &dyn Store) -> std::io::Result<()>) -> std::io::Result<()> {
         store("cch_first_out", &self.first_out)?;
         store("cch_head", &self.head)?;
@@ -118,23 +118,23 @@ impl Deconstruct for CCHGraph {
 }
 
 #[derive(Debug)]
-pub struct CCHGraphReconstrctor<'g, Graph: for<'a> LinkIterGraph<'a>> {
+pub struct CCHReconstrctor<'g, Graph: for<'a> LinkIterGraph<'a>> {
     pub original_graph: &'g Graph,
     pub node_order: NodeOrder,
 }
 
-impl<'g, Graph: for<'a> LinkIterGraph<'a>> ReconstructPrepared<CCHGraph> for CCHGraphReconstrctor<'g, Graph> {
-    fn reconstruct_with(self, loader: Loader) -> std::io::Result<CCHGraph> {
+impl<'g, Graph: for<'a> LinkIterGraph<'a>> ReconstructPrepared<CCH> for CCHReconstrctor<'g, Graph> {
+    fn reconstruct_with(self, loader: Loader) -> std::io::Result<CCH> {
         let head: Vec<NodeId> = loader.load("cch_head")?;
         let m = head.len();
         let cch_graph = OwnedGraph::new(loader.load("cch_first_out")?, head, vec![INFINITY; m]);
         assert_eq!(cch_graph.num_nodes(), self.original_graph.num_nodes());
-        Ok(CCHGraph::new_from(self.original_graph, self.node_order, cch_graph))
+        Ok(CCH::new_from(self.original_graph, self.node_order, cch_graph))
     }
 }
 
-impl CCHGraph {
-    pub(super) fn new<Graph: for<'a> LinkIterGraph<'a>>(contracted_graph: ContractedGraph<Graph>) -> CCHGraph {
+impl CCH {
+    pub(super) fn new<Graph: for<'a> LinkIterGraph<'a>>(contracted_graph: ContractedGraph<Graph>) -> CCH {
         let (cch, order, orig) = contracted_graph.decompose();
         Self::new_from(orig, order, cch)
     }
@@ -187,7 +187,7 @@ impl CCHGraph {
         let inverted = OwnedGraph::new(down_first_out, down_head, down_up_edge_ids);
         let (first_out, head, _) = contracted_graph.decompose();
 
-        CCHGraph {
+        CCH {
             first_out,
             head,
             node_order,
@@ -383,7 +383,7 @@ thread_local! { static UPWARD_WORKSPACE: RefCell<Vec<Weight>> = RefCell::new(Vec
 thread_local! { static DOWNWARD_WORKSPACE: RefCell<Vec<Weight>> = RefCell::new(Vec::new()); }
 
 struct SeperatorBasedParallelCustomization<'a, T, F, G> {
-    cch: &'a CCHGraph,
+    cch: &'a CCH,
     separators: SeparatorTree,
     customize_cell: F,
     customize_separator: G,
@@ -435,7 +435,7 @@ pub mod ftd_cch {
     use super::*;
     use floating_time_dependent::*;
 
-    pub fn customize<'a, 'b: 'a>(cch: &'a CCHGraph, metric: &'b TDGraph) -> ShortcutGraph<'a> {
+    pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph<'a> {
         use crate::report::*;
         use std::cmp::min;
 
@@ -733,7 +733,7 @@ pub mod ftd_cch {
         ShortcutGraph::new(metric, &cch.first_out, &cch.head, upward, downward)
     }
 
-    fn create_customization_fn<'s, F: 's>(cch: &'s CCHGraph, metric: &'s TDGraph, merge_iter: F) -> impl Fn(Range<usize>, usize, &mut [Shortcut], &mut [Shortcut]) + 's where
+    fn create_customization_fn<'s, F: 's>(cch: &'s CCH, metric: &'s TDGraph, merge_iter: F) -> impl Fn(Range<usize>, usize, &mut [Shortcut], &mut [Shortcut]) + 's where
         for <'p> F: ForEachIter<'p, 's>,
     {
         move |nodes, edge_offset, upward: &mut [Shortcut], downward: &mut [Shortcut]| {
@@ -808,7 +808,7 @@ pub mod ftd_cch {
         fn for_each(&self, current_node: NodeId, upward_active: &'s mut [Shortcut], downward_active: &'s mut [Shortcut], f: impl Send + Sync + Fn(((&'c NodeId, &'s mut Shortcut), &'s mut Shortcut)));
     }
 
-    struct SeqIter<'c>(&'c CCHGraph);
+    struct SeqIter<'c>(&'c CCH);
 
     impl<'s, 'c> ForEachIter<'s, 'c> for SeqIter<'c> {
         fn for_each(&self, current_node: NodeId, upward_active: &'s mut [Shortcut], downward_active: &'s mut [Shortcut], f: impl Send + Sync + Fn(((&'c NodeId, &'s mut Shortcut), &'s mut Shortcut))) {
@@ -819,7 +819,7 @@ pub mod ftd_cch {
         }
     }
 
-    struct ParIter<'c>(&'c CCHGraph);
+    struct ParIter<'c>(&'c CCH);
 
     impl<'s, 'c> ForEachIter<'s, 'c> for ParIter<'c> {
         fn for_each(&self, current_node: NodeId, upward_active: &'s mut [Shortcut], downward_active: &'s mut [Shortcut], f: impl Send + Sync + Fn(((&'c NodeId, &'s mut Shortcut), &'s mut Shortcut))) {

@@ -6,7 +6,7 @@ use super::*;
 use super::floating_td_stepped_elimination_tree::{*, QueryProgress};
 
 use crate::graph::floating_time_dependent::*;
-use crate::shortest_path::customizable_contraction_hierarchy::CCHGraph;
+use crate::shortest_path::customizable_contraction_hierarchy::CCH;
 use crate::shortest_path::clearlist_vector::ClearlistVector;
 use crate::rank_select_map::{BitVec, FastClearBitVec};
 #[cfg(feature = "tdcch-query-detailed-timing")]
@@ -29,7 +29,7 @@ impl Indexing for State {
 pub struct Server<'a> {
     forward: FloatingTDSteppedEliminationTree<'a, 'a>,
     backward: FloatingTDSteppedEliminationTree<'a, 'a>,
-    cch_graph: &'a CCHGraph,
+    cch_graph: &'a CCH,
     customized_graph: &'a CustomizedGraph<'a>,
     meeting_nodes: Vec<(NodeId, FlWeight)>,
     forward_tree_path: Vec<NodeId>,
@@ -46,7 +46,7 @@ pub struct Server<'a> {
 }
 
 impl<'a> Server<'a> {
-    pub fn new(cch_graph: &'a CCHGraph, customized_graph: &'a CustomizedGraph<'a>) -> Self {
+    pub fn new(cch_graph: &'a CCH, customized_graph: &'a CustomizedGraph<'a>) -> Self {
         let n = customized_graph.original_graph.num_nodes();
         let m = cch_graph.num_arcs();
         Self {

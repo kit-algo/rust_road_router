@@ -2,7 +2,7 @@ use super::*;
 use super::timestamped_vector::TimestampedVector;
 use super::stepped_dijkstra::QueryProgress;
 use crate::in_range_option::InRangeOption;
-use crate::shortest_path::customizable_contraction_hierarchy::CCHGraph;
+use crate::shortest_path::customizable_contraction_hierarchy::CCH;
 use crate::as_slice::AsSlice;
 
 #[derive(Debug)]
@@ -96,7 +96,7 @@ impl<'b, FirstOutContainer, HeadContainer, WeightContainer> SteppedEliminationTr
     HeadContainer: AsSlice<NodeId>,
     WeightContainer: AsSlice<Weight>,
 {
-    pub fn unpack_path(&mut self, target: NodeId, forward: bool, cch: &CCHGraph, other_weights: &[Weight]) {
+    pub fn unpack_path(&mut self, target: NodeId, forward: bool, cch: &CCH, other_weights: &[Weight]) {
         let origin = self.origin();
         let mut current = target;
         while current != origin {

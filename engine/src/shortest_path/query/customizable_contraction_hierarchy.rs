@@ -1,18 +1,18 @@
 use super::*;
 use super::stepped_elimination_tree::SteppedEliminationTree;
-use crate::shortest_path::customizable_contraction_hierarchy::CCHGraph;
+use crate::shortest_path::customizable_contraction_hierarchy::CCH;
 
 #[derive(Debug)]
 pub struct Server<'a> {
     forward: SteppedEliminationTree<'a, FirstOutGraph<&'a[EdgeId], &'a[NodeId], Vec<Weight>>>,
     backward: SteppedEliminationTree<'a, FirstOutGraph<&'a[EdgeId], &'a[NodeId], Vec<Weight>>>,
-    cch_graph: &'a CCHGraph,
+    cch_graph: &'a CCH,
     tentative_distance: Weight,
     meeting_node: NodeId,
 }
 
 impl<'a> Server<'a> {
-    pub fn new<Graph>(cch_graph: &'a CCHGraph, metric: &Graph) -> Server<'a> where
+    pub fn new<Graph>(cch_graph: &'a CCH, metric: &Graph) -> Server<'a> where
         Graph: for<'b> LinkIterGraph<'b> + RandomLinkAccessGraph
     {
         let (upward, downward) = cch_graph.customize(metric);

@@ -1,5 +1,5 @@
 use super::*;
-use crate::shortest_path::customizable_contraction_hierarchy::CCHGraph;
+use crate::shortest_path::customizable_contraction_hierarchy::CCH;
 use crate::shortest_path::td_stepped_dijkstra::TDSteppedDijkstra;
 use crate::graph::time_dependent::*;
 use crate::graph::RandomLinkAccessGraph;
@@ -14,12 +14,12 @@ use std::ops::Range;
 pub struct Server<'a> {
     dijkstra: TDSteppedDijkstra,
     samples: Vec<CCHServer<'a>>,
-    cch_graph: &'a CCHGraph,
+    cch_graph: &'a CCH,
     active_edges: TimestampedVector<bool>
 }
 
 impl<'a> Server<'a> {
-    pub fn new(graph: TDGraph, cch: &'a CCHGraph) -> Server<'a> {
+    pub fn new(graph: TDGraph, cch: &'a CCH) -> Server<'a> {
         let hour = period() / 24;
         let samples = vec![
             Range { start: 22, end: 5 },
