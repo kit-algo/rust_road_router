@@ -4,7 +4,7 @@ use std::path::Path;
 use bmw_routing_engine::{
     graph::*,
     shortest_path::{
-        customizable_contraction_hierarchy,
+        customizable_contraction_hierarchy::*,
         node_order::NodeOrder,
         query::customizable_contraction_hierarchy::Server,
     },
@@ -33,9 +33,9 @@ fn main() {
     let cch_order = Vec::load_from(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm");
     let cch_order = NodeOrder::from_node_order(cch_order);
 
-    let cch = customizable_contraction_hierarchy::contract(&graph, cch_order.clone());
-    let cch_order = customizable_contraction_hierarchy::cch_graph::CCHReordering { node_order: cch_order, latitude: &[], longitude: &[] }.reorder_for_seperator_based_customization(cch.separators());
-    let cch = customizable_contraction_hierarchy::contract(&graph, cch_order);
+    let cch = contract(&graph, cch_order.clone());
+    let cch_order = CCHReordering { node_order: cch_order, latitude: &[], longitude: &[] }.reorder_for_seperator_based_customization(cch.separators());
+    let cch = contract(&graph, cch_order);
 
     let mut server = Server::new(&cch, &graph);
 

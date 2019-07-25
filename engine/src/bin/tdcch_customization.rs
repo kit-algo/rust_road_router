@@ -10,7 +10,7 @@ use bmw_routing_engine::{
         floating_time_dependent::*,
     },
     shortest_path::{
-        customizable_contraction_hierarchy::cch_graph::*,
+        customizable_contraction_hierarchy::*,
         node_order::NodeOrder,
     },
     io::*,

@@ -6,7 +6,7 @@ use super::*;
 use super::floating_td_stepped_elimination_tree::{*, QueryProgress};
 
 use crate::graph::floating_time_dependent::*;
-use crate::shortest_path::customizable_contraction_hierarchy::cch_graph::CCHGraph;
+use crate::shortest_path::customizable_contraction_hierarchy::CCHGraph;
 use crate::shortest_path::clearlist_vector::ClearlistVector;
 use crate::rank_select_map::{BitVec, FastClearBitVec};
 #[cfg(feature = "tdcch-query-detailed-timing")]

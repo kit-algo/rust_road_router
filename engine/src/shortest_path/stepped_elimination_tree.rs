@@ -2,7 +2,7 @@ use super::*;
 use super::timestamped_vector::TimestampedVector;
 use super::stepped_dijkstra::QueryProgress;
 use crate::in_range_option::InRangeOption;
-use crate::shortest_path::customizable_contraction_hierarchy::cch_graph::CCHGraph;
+use crate::shortest_path::customizable_contraction_hierarchy::CCHGraph;
 use crate::as_slice::AsSlice;
 
 #[derive(Debug)]

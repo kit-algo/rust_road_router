@@ -7,7 +7,7 @@ use std::{
 use bmw_routing_engine::{
     graph::*,
     shortest_path::{
-        customizable_contraction_hierarchy::{self, cch_graph::*},
+        customizable_contraction_hierarchy::*,
         node_order::NodeOrder,
     },
     io::*,
@@ -42,7 +42,7 @@ fn main() {
 
     let cch_order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm"));
     let cch_build_ctxt = algo_runs_ctxt.push_collection_item();
-    let cch = customizable_contraction_hierarchy::contract(&graph, cch_order.clone());
+    let cch = contract(&graph, cch_order.clone());
     drop(cch_build_ctxt);
 
     let latitude = Vec::<f32>::load_from(path.join("latitude").to_str().unwrap()).expect("could not read latitude");
@@ -51,7 +51,7 @@ fn main() {
     let cch_order = CCHReordering { node_order: cch_order, latitude: &latitude, longitude: &longitude }.reorder(cch.separators());
 
     let cch_build_ctxt = algo_runs_ctxt.push_collection_item();
-    let cch = customizable_contraction_hierarchy::contract(&graph, cch_order.clone());
+    let cch = contract(&graph, cch_order.clone());
     drop(cch_build_ctxt);
 
     let cch_order = CCHReordering { node_order: cch_order, latitude: &latitude, longitude: &longitude }.reorder_for_seperator_based_customization(cch.separators());
@@ -59,7 +59,7 @@ fn main() {
     cch_order.deconstruct_to(cch_folder.to_str().unwrap()).expect("could not save cch order");
 
     let cch_build_ctxt = algo_runs_ctxt.push_collection_item();
-    let cch = customizable_contraction_hierarchy::contract(&graph, cch_order.clone());
+    let cch = contract(&graph, cch_order.clone());
     drop(cch_build_ctxt);
 
     cch.deconstruct_to(cch_folder.to_str().unwrap()).expect("could not save cch");

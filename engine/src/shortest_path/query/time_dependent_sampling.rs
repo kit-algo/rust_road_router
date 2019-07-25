@@ -1,5 +1,5 @@
 use super::*;
-use crate::shortest_path::customizable_contraction_hierarchy::cch_graph::CCHGraph;
+use crate::shortest_path::customizable_contraction_hierarchy::CCHGraph;
 use crate::shortest_path::td_stepped_dijkstra::TDSteppedDijkstra;
 use crate::graph::time_dependent::*;
 use crate::graph::RandomLinkAccessGraph;
