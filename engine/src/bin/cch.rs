@@ -13,12 +13,6 @@ use bmw_routing_engine::{
 };
 
 fn main() {
-    let core_ids = core_affinity::get_core_ids().unwrap();
-    rayon::ThreadPoolBuilder::new().start_handler(move |thread_idx| core_affinity::set_for_current(core_ids[thread_idx])).build_global().unwrap();
-
-    let core_ids = core_affinity::get_core_ids().unwrap();
-    core_affinity::set_for_current(core_ids[0]);
-
     let mut args = env::args();
     args.next();
 
@@ -42,6 +36,9 @@ fn main() {
     let from = Vec::load_from(path.join("test/source").to_str().unwrap()).expect("could not read source");
     let to = Vec::load_from(path.join("test/target").to_str().unwrap()).expect("could not read target");
     let ground_truth = Vec::load_from(path.join("test/travel_time_length").to_str().unwrap()).expect("could not read travel_time_length");
+
+    let core_ids = core_affinity::get_core_ids().unwrap();
+    core_affinity::set_for_current(core_ids[0]);
 
     report_time("10000 CCH queries", || {
         for ((&from, &to), &ground_truth) in from.iter().zip(to.iter()).zip(ground_truth.iter()).take(10000) {

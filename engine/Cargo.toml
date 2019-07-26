@@ -29,6 +29,7 @@ rand = "^0.6.1"
 serde_json = "^1.0.35"
 rayon = "^1.0.3"
 core_affinity = "^0.5.9"
+scoped-tls = "^1.0.0"
 
 [build-dependencies]
 built = "^0.3.0"

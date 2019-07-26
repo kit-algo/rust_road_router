@@ -3,6 +3,9 @@
 
 #![allow(clippy::redundant_closure_call)]
 
+#[macro_use]
+extern crate scoped_tls;
+
 macro_rules! dbg_each {
     ($($val:expr),+) => {
         (|| {

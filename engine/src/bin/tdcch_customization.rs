@@ -20,9 +20,6 @@ use bmw_routing_engine::{
 fn main() {
     let _reporter = enable_reporting();
 
-    let core_ids = core_affinity::get_core_ids().unwrap();
-    rayon::ThreadPoolBuilder::new().start_handler(move |thread_idx| core_affinity::set_for_current(core_ids[thread_idx])).build_global().unwrap();
-
     report!("program", "tdcch");
     report!("start_time", format!("{}", time::now_utc().rfc822()));
     report!("args", env::args().collect::<Vec<String>>());

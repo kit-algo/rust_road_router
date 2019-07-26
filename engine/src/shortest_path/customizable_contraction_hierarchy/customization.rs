@@ -6,8 +6,8 @@ mod parallelization;
 use parallelization::*;
 pub mod ftd;
 
-thread_local! { static UPWARD_WORKSPACE: RefCell<Vec<Weight>> = RefCell::new(Vec::new()); }
-thread_local! { static DOWNWARD_WORKSPACE: RefCell<Vec<Weight>> = RefCell::new(Vec::new()); }
+scoped_thread_local!(static UPWARD_WORKSPACE: RefCell<Vec<Weight>>);
+scoped_thread_local!(static DOWNWARD_WORKSPACE: RefCell<Vec<Weight>>);
 
 pub fn customize<'c, Graph>(cch: &'c CCH, metric: &Graph) ->
     (FirstOutGraph<&'c [EdgeId], &'c [NodeId], Vec<Weight>>, FirstOutGraph<&'c [EdgeId], &'c [NodeId], Vec<Weight>>)
@@ -17,24 +17,12 @@ where
     let n = cch.num_nodes() as NodeId;
     let m = cch.num_arcs();
 
-    UPWARD_WORKSPACE.with(|node_outgoing_weights| {
-        let mut node_outgoing_weights = node_outgoing_weights.borrow_mut();
-        node_outgoing_weights.resize(n as usize, INFINITY);
-    });
-
-    DOWNWARD_WORKSPACE.with(|node_incoming_weights| {
-        let mut node_incoming_weights = node_incoming_weights.borrow_mut();
-        node_incoming_weights.resize(n as usize, INFINITY);
-    });
-
     let customize = |nodes: Range<usize>, offset, upward_weights: &mut [Weight], downward_weights: &mut [Weight]| {
         UPWARD_WORKSPACE.with(|node_outgoing_weights| {
             let mut node_outgoing_weights = node_outgoing_weights.borrow_mut();
-            if node_outgoing_weights.len() != n as usize { node_outgoing_weights.resize(n as usize, INFINITY) }
 
             DOWNWARD_WORKSPACE.with(|node_incoming_weights| {
                 let mut node_incoming_weights = node_incoming_weights.borrow_mut();
-                if node_incoming_weights.len() != n as usize { node_incoming_weights.resize(n as usize, INFINITY) }
 
                 for current_node in nodes {
                     let current_node = current_node as NodeId;
@@ -88,7 +76,13 @@ where
     });
 
     report_time("CCH Customization", || {
-        customization.customize(&mut upward_weights, &mut downward_weights);
+        customization.customize(&mut upward_weights, &mut downward_weights, |cb| {
+            UPWARD_WORKSPACE.set(&RefCell::new(vec![INFINITY; n as usize]), || {
+                DOWNWARD_WORKSPACE.set(&RefCell::new(vec![INFINITY; n as usize]), || {
+                    cb()
+                });
+            });
+        });
     });
 
     let upward = FirstOutGraph::new(&cch.first_out[..], &cch.head[..], upward_weights);

@@ -24,11 +24,19 @@ impl<'a, T, F, G> SeperatorBasedParallelCustomization<'a, T, F, G> where
         }
     }
 
-    pub fn customize(&self, upward: &'a mut [T], downward: &'a mut [T]) {
+    pub fn customize(&self, upward: &'a mut [T], downward: &'a mut [T], setup: impl Fn(Box<dyn FnOnce() + '_>) + Sync) {
         if cfg!(feature = "cch-disable-par") {
-            (self.customize_cell)(0..self.cch.num_nodes(), 0, upward, downward);
+            setup(Box::new(|| (self.customize_cell)(0..self.cch.num_nodes(), 0, upward, downward)));
         } else {
-            self.customize_tree(&self.separators, 0, upward, downward);
+            let core_ids = core_affinity::get_core_ids().unwrap();
+            rayon::ThreadPoolBuilder::new()
+                .build_scoped(
+                    |thread| {
+                        core_affinity::set_for_current(core_ids[thread.index()]);
+                        setup(Box::new(|| thread.run()));
+                    },
+                    |pool| pool.install(|| self.customize_tree(&self.separators, 0, upward, downward)),
+                ).unwrap();
         }
     }
 

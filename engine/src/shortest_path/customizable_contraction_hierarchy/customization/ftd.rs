@@ -6,6 +6,8 @@ use std::{
     sync::atomic::Ordering,
 };
 
+scoped_thread_local!(static MERGE_BUFFERS: RefCell<MergeBuffers>);
+
 pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph<'a> {
     report!("algo", "Floating TDCCH Customization");
 
@@ -169,7 +171,11 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph
                 }
             });
 
-            customization.customize(&mut upward, &mut downward);
+            customization.customize(&mut upward, &mut downward, |cb| {
+                MERGE_BUFFERS.set(&RefCell::new(MergeBuffers::new()), || {
+                    cb();
+                });
+            });
         });
 
         tx.send(()).unwrap();
@@ -362,8 +368,6 @@ fn create_customization_fn<'s, F: 's>(cch: &'s CCH, metric: &'s TDGraph, merge_i
         }
     }
 }
-
-thread_local! { static MERGE_BUFFERS: RefCell<MergeBuffers> = RefCell::new(MergeBuffers::new()); }
 
 trait ForEachIter<'s, 'c> {
     fn for_each(&self, current_node: NodeId, upward_active: &'s mut [Shortcut], downward_active: &'s mut [Shortcut], f: impl Send + Sync + Fn(((&'c NodeId, &'s mut Shortcut), &'s mut Shortcut)));
