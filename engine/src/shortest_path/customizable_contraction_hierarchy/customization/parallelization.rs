@@ -25,13 +25,17 @@ impl<'a, T, F, G> SeperatorBasedParallelCustomization<'a, T, F, G> where
     }
 
     pub fn customize(&self, upward: &'a mut [T], downward: &'a mut [T]) {
-        self.customize_cell(&self.separators, 0, upward, downward);
+        if cfg!(feature = "cch-disable-par") {
+            (self.customize_cell)(0..self.cch.num_nodes(), 0, upward, downward);
+        } else {
+            self.customize_tree(&self.separators, 0, upward, downward);
+        }
     }
 
-    fn customize_cell(&self, sep_tree: &SeparatorTree, offset: usize, upward: &'a mut [T], downward: &'a mut [T]) {
+    fn customize_tree(&self, sep_tree: &SeparatorTree, offset: usize, upward: &'a mut [T], downward: &'a mut [T]) {
         let edge_offset = self.cch.first_out[offset] as usize;
 
-        if cfg!(feature = "cch-disable-par") || sep_tree.num_nodes < self.cch.num_nodes() / (32 * rayon::current_num_threads()) {
+        if sep_tree.num_nodes < self.cch.num_nodes() / (32 * rayon::current_num_threads()) {
             (self.customize_cell)(offset..offset + sep_tree.num_nodes, edge_offset, upward, downward);
         } else {
             let mut sub_offset = offset;
@@ -45,9 +49,9 @@ impl<'a, T, F, G> SeperatorBasedParallelCustomization<'a, T, F, G> where
                     let (this_sub_down, rest_down) = (move || { sub_downward })().split_at_mut(self.cch.first_out[sub_offset + sub.num_nodes] as usize - sub_edge_offset);
                     sub_edge_offset += this_sub_up.len();
                     if sub.num_nodes < self.cch.num_nodes() / (32 * rayon::current_num_threads()) {
-                        self.customize_cell(sub, sub_offset, this_sub_up, this_sub_down);
+                        self.customize_tree(sub, sub_offset, this_sub_up, this_sub_down);
                     } else {
-                        s.spawn(move |_| self.customize_cell(sub, sub_offset, this_sub_up, this_sub_down));
+                        s.spawn(move |_| self.customize_tree(sub, sub_offset, this_sub_up, this_sub_down));
                     }
                     sub_offset += sub.num_nodes;
                     sub_upward = rest_up;
