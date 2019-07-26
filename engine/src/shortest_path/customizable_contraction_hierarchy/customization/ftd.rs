@@ -7,6 +7,8 @@ use std::{
 };
 
 scoped_thread_local!(static MERGE_BUFFERS: RefCell<MergeBuffers>);
+scoped_thread_local!(static UPWARD_WORKSPACE: RefCell<Vec<(FlWeight, FlWeight)>>);
+scoped_thread_local!(static DOWNWARD_WORKSPACE: RefCell<Vec<(FlWeight, FlWeight)>>);
 
 pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph<'a> {
     report!("algo", "Floating TDCCH Customization");
@@ -30,38 +32,68 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph
     });
     drop(subctxt);
 
+    let customize = |nodes: Range<usize>, offset, upward_weights: &mut [Shortcut], downward_weights: &mut [Shortcut]| {
+        UPWARD_WORKSPACE.with(|node_outgoing_weights| {
+            let mut node_outgoing_weights = node_outgoing_weights.borrow_mut();
+
+            DOWNWARD_WORKSPACE.with(|node_incoming_weights| {
+                let mut node_incoming_weights = node_incoming_weights.borrow_mut();
+
+                for current_node in nodes {
+                    let current_node = current_node as NodeId;
+                    let mut edges = cch.neighbor_edge_indices_usize(current_node);
+                    edges.start -= offset;
+                    edges.end -= offset;
+                    for ((node, down), up) in cch.neighbor_iter(current_node).zip(&downward_weights[edges.clone()]).zip(&upward_weights[edges.clone()]) {
+                        node_incoming_weights[node as usize] = (down.lower_bound, down.upper_bound);
+                        node_outgoing_weights[node as usize] = (up.lower_bound, up.upper_bound);
+                    }
+
+                    for Link { node: low_node, weight: first_edge_id } in cch.inverted.neighbor_iter(current_node) {
+                        let first_down_weight: &Shortcut = &downward_weights[first_edge_id as usize - offset];
+                        let first_up_weight: &Shortcut = &upward_weights[first_edge_id as usize - offset];
+                        let mut low_up_edges = cch.neighbor_edge_indices_usize(low_node);
+                        low_up_edges.start -= offset;
+                        low_up_edges.end -= offset;
+                        for ((node, upward_weight), downward_weight) in cch.neighbor_iter(low_node).rev().zip(upward_weights[low_up_edges.clone()].iter().rev()).zip(downward_weights[low_up_edges].iter().rev()) {
+                            if node <= current_node { break; }
+
+                            let relax = unsafe { node_outgoing_weights.get_unchecked_mut(node as usize) };
+                            relax.0 = std::cmp::min(relax.0, upward_weight.lower_bound + first_down_weight.lower_bound);
+                            relax.1 = std::cmp::min(relax.1, upward_weight.upper_bound + first_down_weight.upper_bound);
+                            let relax = unsafe { node_incoming_weights.get_unchecked_mut(node as usize) };
+                            relax.0 = std::cmp::min(relax.0, downward_weight.lower_bound + first_up_weight.lower_bound);
+                            relax.1 = std::cmp::min(relax.1, downward_weight.upper_bound + first_up_weight.upper_bound);
+                        }
+                    }
+
+                    for (((node, down), up), _edge_id) in cch.neighbor_iter(current_node).zip(&mut downward_weights[edges.clone()]).zip(&mut upward_weights[edges.clone()]).zip(edges) {
+                        down.lower_bound = node_incoming_weights[node as usize].0;
+                        down.upper_bound = node_incoming_weights[node as usize].1;
+                        up.lower_bound = node_outgoing_weights[node as usize].0;
+                        up.upper_bound = node_outgoing_weights[node as usize].1;
+                        down.update_is_constant();
+                        up.update_is_constant();
+                    }
+                }
+            });
+        });
+    };
+
     if cfg!(feature = "tdcch-precustomization") {
+        let static_customization = SeperatorBasedParallelCustomization::new(cch, customize, customize);
+
         let _subctxt = push_context("precustomization".to_string());
         report_time("TD-CCH Pre-Customization", || {
             let mut node_edge_ids = vec![InRangeOption::new(None); n as usize];
 
-            for current_node in 0..n {
-                for (node, edge_id) in cch.neighbor_iter(current_node).zip(cch.neighbor_edge_indices(current_node)) {
-                    upward[edge_id as usize].update_is_constant();
-                    downward[edge_id as usize].update_is_constant();
-                    node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
-                }
-
-                for (node, edge_id) in cch.neighbor_iter(current_node).zip(cch.neighbor_edge_indices(current_node)) {
-                    debug_assert_eq!(cch.edge_id_to_tail(edge_id), current_node);
-                    let shortcut_edge_ids = cch.neighbor_edge_indices(node);
-                    for (target, shortcut_edge_id) in cch.neighbor_iter(node).zip(shortcut_edge_ids) {
-                        debug_assert_eq!(cch.edge_id_to_tail(shortcut_edge_id), node);
-                        if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
-                            debug_assert!(shortcut_edge_id > edge_id);
-                            debug_assert!(shortcut_edge_id > other_edge_id);
-                            upward[shortcut_edge_id as usize].upper_bound = min(upward[shortcut_edge_id as usize].upper_bound, downward[edge_id as usize].upper_bound + upward[other_edge_id as usize].upper_bound);
-                            upward[shortcut_edge_id as usize].lower_bound = min(upward[shortcut_edge_id as usize].lower_bound, downward[edge_id as usize].lower_bound + upward[other_edge_id as usize].lower_bound);
-                            downward[shortcut_edge_id as usize].upper_bound = min(downward[shortcut_edge_id as usize].upper_bound, downward[other_edge_id as usize].upper_bound + upward[edge_id as usize].upper_bound);
-                            downward[shortcut_edge_id as usize].lower_bound = min(downward[shortcut_edge_id as usize].lower_bound, downward[other_edge_id as usize].lower_bound + upward[edge_id as usize].lower_bound);
-                        }
-                    }
-                }
-
-                for node in cch.neighbor_iter(current_node) {
-                    node_edge_ids[node as usize] = InRangeOption::new(None);
-                }
-            }
+            static_customization.customize(&mut upward, &mut downward, |cb| {
+                UPWARD_WORKSPACE.set(&RefCell::new(vec![(FlWeight::INFINITY, FlWeight::INFINITY); n as usize]), || {
+                    DOWNWARD_WORKSPACE.set(&RefCell::new(vec![(FlWeight::INFINITY, FlWeight::INFINITY); n as usize]), || {
+                        cb()
+                    });
+                });
+            });
 
             let upward_preliminary_bounds: Vec<_> = upward.iter().map(|s| s.lower_bound).collect();
             let downward_preliminary_bounds: Vec<_> = downward.iter().map(|s| s.lower_bound).collect();
