@@ -1,11 +1,11 @@
 use super::*;
 
 pub struct SeperatorBasedParallelCustomization<'a, T, F, G> {
-    pub(super) cch: &'a CCH,
-    pub(super) separators: SeparatorTree,
-    pub(super) customize_cell: F,
-    pub(super) customize_separator: G,
-    pub(super) _t: std::marker::PhantomData<T>,
+    cch: &'a CCH,
+    separators: SeparatorTree,
+    customize_cell: F,
+    customize_separator: G,
+    _t: std::marker::PhantomData<T>,
 }
 
 impl<'a, T, F, G> SeperatorBasedParallelCustomization<'a, T, F, G> where
@@ -13,6 +13,17 @@ impl<'a, T, F, G> SeperatorBasedParallelCustomization<'a, T, F, G> where
     F: Sync + Fn(Range<usize>, usize, &mut [T], &mut [T]),
     G: Sync + Fn(Range<usize>, usize, &mut [T], &mut [T]),
 {
+    pub fn new(cch: &'a CCH, customize_cell: F, customize_separator: G) -> Self {
+        let separators = cch.separators();
+        if cfg!(feature = "cch-disable-par") {
+            separators.validate_for_parallelization();
+        }
+
+        SeperatorBasedParallelCustomization {
+            cch, separators, customize_cell, customize_separator, _t: std::marker::PhantomData::<T>
+        }
+    }
+
     pub fn customize(&self, upward: &'a mut [T], downward: &'a mut [T]) {
         self.customize_cell(&self.separators, 0, upward, downward);
     }

@@ -27,8 +27,6 @@ where
         node_incoming_weights.resize(n as usize, INFINITY);
     });
 
-    let separators = cch.separators();
-
     let customize = |nodes: Range<usize>, offset, upward_weights: &mut [Weight], downward_weights: &mut [Weight]| {
         UPWARD_WORKSPACE.with(|node_outgoing_weights| {
             let mut node_outgoing_weights = node_outgoing_weights.borrow_mut();
@@ -73,17 +71,7 @@ where
         });
     };
 
-    if !cfg!(feature = "cch-disable-par") {
-        separators.validate_for_parallelization();
-    }
-
-    let customization = SeperatorBasedParallelCustomization {
-        cch: &cch,
-        separators,
-        customize_cell: customize,
-        customize_separator: customize,
-        _t: std::marker::PhantomData::<Weight>,
-    };
+    let customization = SeperatorBasedParallelCustomization::new(cch, customize, customize);
 
     let mut upward_weights = vec![INFINITY; m];
     let mut downward_weights = vec![INFINITY; m];

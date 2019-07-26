@@ -124,6 +124,8 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph
         let (tx, rx) = channel();
         let (events_tx, events_rx) = channel();
 
+        let customization = SeperatorBasedParallelCustomization::new(cch, create_customization_fn(&cch, metric, SeqIter(&cch)), create_customization_fn(&cch, metric, ParIter(&cch)));
+
         report_time("TD-CCH Customization", || {
             thread::spawn(move || {
                 let timer = Timer::new();
@@ -167,13 +169,7 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph
                 }
             });
 
-            SeperatorBasedParallelCustomization {
-                cch: &cch,
-                separators: cch.separators(),
-                customize_cell: create_customization_fn(&cch, metric, SeqIter(&cch)),
-                customize_separator: create_customization_fn(&cch, metric, ParIter(&cch)),
-                _t: std::marker::PhantomData,
-            }.customize(&mut upward, &mut downward);
+            customization.customize(&mut upward, &mut downward);
         });
 
         tx.send(()).unwrap();
