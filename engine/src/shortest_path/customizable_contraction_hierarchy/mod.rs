@@ -19,7 +19,7 @@ mod reorder;
 pub use reorder::*;
 
 
-pub fn contract<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, node_order: NodeOrder) -> CCH {
+pub fn contract<Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph>(graph: &Graph, node_order: NodeOrder) -> CCH {
     CCH::new(ContractionGraph::new(graph, node_order).contract())
 }
 
@@ -29,7 +29,7 @@ pub struct CCH {
     head: Vec<NodeId>,
     tail: Vec<NodeId>,
     node_order: NodeOrder,
-    original_edge_to_ch_edge: Vec<EdgeId>,
+    cch_edge_to_orig_arc: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,
     elimination_tree: Vec<InRangeOption<NodeId>>,
     inverted: OwnedGraph,
 }
@@ -48,7 +48,7 @@ pub struct CCHReconstrctor<'g, Graph: for<'a> LinkIterGraph<'a>> {
     pub node_order: NodeOrder,
 }
 
-impl<'g, Graph: for<'a> LinkIterGraph<'a>> ReconstructPrepared<CCH> for CCHReconstrctor<'g, Graph> {
+impl<'g, Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph> ReconstructPrepared<CCH> for CCHReconstrctor<'g, Graph> {
     fn reconstruct_with(self, loader: Loader) -> std::io::Result<CCH> {
         let head: Vec<NodeId> = loader.load("cch_head")?;
         let m = head.len();
@@ -59,32 +59,25 @@ impl<'g, Graph: for<'a> LinkIterGraph<'a>> ReconstructPrepared<CCH> for CCHRecon
 }
 
 impl CCH {
-    pub(super) fn new<Graph: for<'a> LinkIterGraph<'a>>(contracted_graph: ContractedGraph<Graph>) -> CCH {
+    pub(super) fn new<Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph>(contracted_graph: ContractedGraph<Graph>) -> CCH {
         let (cch, order, orig) = contracted_graph.decompose();
         Self::new_from(orig, order, cch)
     }
 
-    fn new_from<Graph: for<'a> LinkIterGraph<'a>>(original_graph: &Graph, node_order: NodeOrder, contracted_graph: OwnedGraph) -> Self {
+    fn new_from<Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph>(original_graph: &Graph, node_order: NodeOrder, contracted_graph: OwnedGraph) -> Self {
         let elimination_tree = Self::build_elimination_tree(&contracted_graph);
         let n = contracted_graph.num_nodes() as NodeId;
         let m = contracted_graph.num_arcs();
         let mut tail = vec![0; m];
 
-        let original_edge_to_ch_edge = (0..n).flat_map(|node| {
-            {
-                let contracted_graph = &contracted_graph;
-                let node_order = &node_order;
-
-                original_graph.neighbor_iter(node).map(move |Link { node: neighbor, .. }| {
-                    let node_rank = node_order.rank(node);
-                    let neighbor_rank = node_order.rank(neighbor);
-                    if node_rank < neighbor_rank {
-                        contracted_graph.edge_index(node_rank, neighbor_rank).unwrap()
-                    } else {
-                        contracted_graph.edge_index(neighbor_rank, node_rank).unwrap()
-                    }
-                })
-            }
+        let cch_edge_to_orig_arc = (0..n).flat_map(|node| {
+            let node_order = &node_order;
+            contracted_graph.neighbor_iter(node).map(move |Link { node: neighbor, .. }| {
+                (
+                    InRangeOption::new(original_graph.edge_index(node_order.node(node), node_order.node(neighbor))),
+                    InRangeOption::new(original_graph.edge_index(node_order.node(neighbor), node_order.node(node)))
+                )
+            })
         }).collect();
 
         for node in 0..n {
@@ -116,7 +109,7 @@ impl CCH {
             first_out,
             head,
             node_order,
-            original_edge_to_ch_edge,
+            cch_edge_to_orig_arc,
             elimination_tree,
             tail,
             inverted

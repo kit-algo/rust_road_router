@@ -1,5 +1,6 @@
 use super::*;
 use std::cell::RefCell;
+use rayon::prelude::*;
 
 mod parallelization;
 use parallelization::*;
@@ -8,8 +9,10 @@ pub mod ftd;
 thread_local! { static UPWARD_WORKSPACE: RefCell<Vec<Weight>> = RefCell::new(Vec::new()); }
 thread_local! { static DOWNWARD_WORKSPACE: RefCell<Vec<Weight>> = RefCell::new(Vec::new()); }
 
-pub fn customize<'c, Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph>(cch: &'c CCH, metric: &Graph) ->
+pub fn customize<'c, Graph>(cch: &'c CCH, metric: &Graph) ->
     (FirstOutGraph<&'c [EdgeId], &'c [NodeId], Vec<Weight>>, FirstOutGraph<&'c [EdgeId], &'c [NodeId], Vec<Weight>>)
+where
+    Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph + Sync
 {
     let n = cch.num_nodes() as NodeId;
     let m = cch.num_arcs();
@@ -86,17 +89,14 @@ pub fn customize<'c, Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph>(c
     let mut downward_weights = vec![INFINITY; m];
 
     report_time("CCH apply weights", || {
-        for node in 0..n {
-            for (edge_id, Link { node: neighbor, weight }) in metric.neighbor_edge_indices(node).zip(metric.neighbor_iter(node)) {
-                let ch_edge_id = cch.original_edge_to_ch_edge[edge_id as usize];
-
-                if cch.node_order.rank(node) < cch.node_order.rank(neighbor) {
-                    upward_weights[ch_edge_id as usize] = weight;
-                } else {
-                    downward_weights[ch_edge_id as usize] = weight;
-                }
+        upward_weights.par_iter_mut().zip(downward_weights.par_iter_mut()).zip(cch.cch_edge_to_orig_arc.par_iter()).for_each(|((up_weight, down_weight), &(up_arc, down_arc))| {
+            if let Some(up_arc) = up_arc.value() {
+                *up_weight = metric.link(up_arc).weight;
             }
-        }
+            if let Some(down_arc) = down_arc.value() {
+                *down_weight = metric.link(down_arc).weight;
+            }
+        });
     });
 
     report_time("CCH Customization", || {

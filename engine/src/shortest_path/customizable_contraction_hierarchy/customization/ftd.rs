@@ -1,6 +1,5 @@
 use super::*;
 use floating_time_dependent::*;
-use rayon::prelude::*;
 use crate::report::*;
 use std::{
     cmp::min,
@@ -18,17 +17,14 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph
 
     let subctxt = push_context("weight_applying".to_string());
     report_time("TD-CCH apply weights", || {
-        for node in 0..n {
-            for (edge_id, neighbor) in metric.neighbor_edge_indices(node).zip(metric.neighbor_iter(node).map(|link| link.node)) {
-                let ch_edge_id = cch.original_edge_to_ch_edge[edge_id as usize];
-
-                if cch.node_order.rank(node) < cch.node_order.rank(neighbor) {
-                    upward[ch_edge_id as usize] = Shortcut::new(Some(edge_id), metric);
-                } else {
-                    downward[ch_edge_id as usize] = Shortcut::new(Some(edge_id), metric);
-                }
+        upward.par_iter_mut().zip(downward.par_iter_mut()).zip(cch.cch_edge_to_orig_arc.par_iter()).for_each(|((up_weight, down_weight), &(up_arc, down_arc))| {
+            if let Some(up_arc) = up_arc.value() {
+                *up_weight = Shortcut::new(Some(up_arc), metric);
             }
-        }
+            if let Some(down_arc) = down_arc.value() {
+                *down_weight = Shortcut::new(Some(down_arc), metric);
+            }
+        });
     });
     drop(subctxt);
 
