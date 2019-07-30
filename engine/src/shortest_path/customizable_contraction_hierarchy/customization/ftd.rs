@@ -9,6 +9,7 @@ use std::{
 scoped_thread_local!(static MERGE_BUFFERS: RefCell<MergeBuffers>);
 scoped_thread_local!(static UPWARD_WORKSPACE: RefCell<Vec<(FlWeight, FlWeight)>>);
 scoped_thread_local!(static DOWNWARD_WORKSPACE: RefCell<Vec<(FlWeight, FlWeight)>>);
+scoped_thread_local!(static PERFECT_WORKSPACE: RefCell<Vec<InRangeOption<EdgeId>>>);
 
 pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph<'a> {
     report!("algo", "Floating TDCCH Customization");
@@ -80,13 +81,60 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph
         });
     };
 
-    if cfg!(feature = "tdcch-precustomization") {
-        let static_customization = SeperatorBasedParallelCustomization::new(cch, customize, customize);
+    let customize_perfect = |nodes: Range<usize>, upward: *mut Shortcut, downward: *mut Shortcut| {
+        PERFECT_WORKSPACE.with(|node_edge_ids| {
+            let mut node_edge_ids = node_edge_ids.borrow_mut();
 
+            for current_node in nodes.rev() {
+                let current_node = current_node as NodeId;
+                for (node, edge_id) in cch.neighbor_iter(current_node).zip(cch.neighbor_edge_indices(current_node)) {
+                    node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
+                }
+
+                for (node, edge_id) in cch.neighbor_iter(current_node).zip(cch.neighbor_edge_indices(current_node)) {
+                    let shortcut_edge_ids = cch.neighbor_edge_indices(node);
+                    for (target, shortcut_edge_id) in cch.neighbor_iter(node).zip(shortcut_edge_ids) {
+                        if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
+                            unsafe {
+                                (*upward.add(other_edge_id as usize)).upper_bound = min((*upward.add(other_edge_id as usize)).upper_bound, (*upward.add(edge_id as usize)).upper_bound + (*upward.add(shortcut_edge_id as usize)).upper_bound);
+                                (*upward.add(other_edge_id as usize)).lower_bound = min((*upward.add(other_edge_id as usize)).lower_bound, (*upward.add(edge_id as usize)).lower_bound + (*upward.add(shortcut_edge_id as usize)).lower_bound);
+
+                                (*upward.add(edge_id as usize)).upper_bound = min((*upward.add(edge_id as usize)).upper_bound, (*upward.add(other_edge_id as usize)).upper_bound + (*downward.add(shortcut_edge_id as usize)).upper_bound);
+                                (*upward.add(edge_id as usize)).lower_bound = min((*upward.add(edge_id as usize)).lower_bound, (*upward.add(other_edge_id as usize)).lower_bound + (*downward.add(shortcut_edge_id as usize)).lower_bound);
+
+                                (*downward.add(other_edge_id as usize)).upper_bound = min((*downward.add(other_edge_id as usize)).upper_bound, (*downward.add(edge_id as usize)).upper_bound + (*downward.add(shortcut_edge_id as usize)).upper_bound);
+                                (*downward.add(other_edge_id as usize)).lower_bound = min((*downward.add(other_edge_id as usize)).lower_bound, (*downward.add(edge_id as usize)).lower_bound + (*downward.add(shortcut_edge_id as usize)).lower_bound);
+
+                                (*downward.add(edge_id as usize)).upper_bound = min((*downward.add(edge_id as usize)).upper_bound, (*downward.add(other_edge_id as usize)).upper_bound + (*upward.add(shortcut_edge_id as usize)).upper_bound);
+                                (*downward.add(edge_id as usize)).lower_bound = min((*downward.add(edge_id as usize)).lower_bound, (*downward.add(other_edge_id as usize)).lower_bound + (*upward.add(shortcut_edge_id as usize)).lower_bound);
+                            }
+                        }
+                    }
+                }
+
+                for node in cch.neighbor_iter(current_node) {
+                    node_edge_ids[node as usize] = InRangeOption::new(None);
+                }
+            }
+        });
+    };
+
+    let static_customization = SeperatorBasedParallelCustomization::new(cch, customize, customize);
+    let static_perfect_customization = SeperatorBasedPerfectParallelCustomization::new(cch, customize_perfect, customize_perfect);
+
+    let disable_dominated = |(shortcut, &lower_bound): (&mut Shortcut, &FlWeight)| {
+        if shortcut.upper_bound.fuzzy_lt(lower_bound) {
+            shortcut.required = false;
+            shortcut.lower_bound = FlWeight::INFINITY;
+            shortcut.upper_bound = FlWeight::INFINITY;
+        } else {
+            shortcut.lower_bound = lower_bound;
+        }
+    };
+
+    if cfg!(feature = "tdcch-precustomization") {
         let _subctxt = push_context("precustomization".to_string());
         report_time("TD-CCH Pre-Customization", || {
-            let mut node_edge_ids = vec![InRangeOption::new(None); n as usize];
-
             static_customization.customize(&mut upward, &mut downward, |cb| {
                 UPWARD_WORKSPACE.set(&RefCell::new(vec![(FlWeight::INFINITY, FlWeight::INFINITY); n as usize]), || {
                     DOWNWARD_WORKSPACE.set(&RefCell::new(vec![(FlWeight::INFINITY, FlWeight::INFINITY); n as usize]), || {
@@ -98,54 +146,14 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph
             let upward_preliminary_bounds: Vec<_> = upward.iter().map(|s| s.lower_bound).collect();
             let downward_preliminary_bounds: Vec<_> = downward.iter().map(|s| s.lower_bound).collect();
 
-            for current_node in (0..n).rev() {
-                for (node, edge_id) in cch.neighbor_iter(current_node).zip(cch.neighbor_edge_indices(current_node)) {
-                    node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
-                }
+            static_perfect_customization.customize(&mut upward, &mut downward, |cb| {
+                PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::new(None); n as usize]), || {
+                    cb()
+                });
+            });
 
-                for (node, edge_id) in cch.neighbor_iter(current_node).zip(cch.neighbor_edge_indices(current_node)) {
-                    let shortcut_edge_ids = cch.neighbor_edge_indices(node);
-                    for (target, shortcut_edge_id) in cch.neighbor_iter(node).zip(shortcut_edge_ids) {
-                        if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
-                            upward[other_edge_id as usize].upper_bound = min(upward[other_edge_id as usize].upper_bound, upward[edge_id as usize].upper_bound + upward[shortcut_edge_id as usize].upper_bound);
-                            upward[other_edge_id as usize].lower_bound = min(upward[other_edge_id as usize].lower_bound, upward[edge_id as usize].lower_bound + upward[shortcut_edge_id as usize].lower_bound);
-
-                            upward[edge_id as usize].upper_bound = min(upward[edge_id as usize].upper_bound, upward[other_edge_id as usize].upper_bound + downward[shortcut_edge_id as usize].upper_bound);
-                            upward[edge_id as usize].lower_bound = min(upward[edge_id as usize].lower_bound, upward[other_edge_id as usize].lower_bound + downward[shortcut_edge_id as usize].lower_bound);
-
-                            downward[other_edge_id as usize].upper_bound = min(downward[other_edge_id as usize].upper_bound, downward[edge_id as usize].upper_bound + downward[shortcut_edge_id as usize].upper_bound);
-                            downward[other_edge_id as usize].lower_bound = min(downward[other_edge_id as usize].lower_bound, downward[edge_id as usize].lower_bound + downward[shortcut_edge_id as usize].lower_bound);
-
-                            downward[edge_id as usize].upper_bound = min(downward[edge_id as usize].upper_bound, downward[other_edge_id as usize].upper_bound + upward[shortcut_edge_id as usize].upper_bound);
-                            downward[edge_id as usize].lower_bound = min(downward[edge_id as usize].lower_bound, downward[other_edge_id as usize].lower_bound + upward[shortcut_edge_id as usize].lower_bound);
-                        }
-                    }
-                }
-
-                for node in cch.neighbor_iter(current_node) {
-                    node_edge_ids[node as usize] = InRangeOption::new(None);
-                }
-            }
-
-            for (shortcut, lower_bound) in upward.iter_mut().zip(upward_preliminary_bounds.into_iter()) {
-                if shortcut.upper_bound.fuzzy_lt(lower_bound) {
-                    shortcut.required = false;
-                    shortcut.lower_bound = FlWeight::INFINITY;
-                    shortcut.upper_bound = FlWeight::INFINITY;
-                } else {
-                    shortcut.lower_bound = lower_bound;
-                }
-            }
-
-            for (shortcut, lower_bound) in downward.iter_mut().zip(downward_preliminary_bounds.into_iter()) {
-                if shortcut.upper_bound.fuzzy_lt(lower_bound) {
-                    shortcut.required = false;
-                    shortcut.lower_bound = FlWeight::INFINITY;
-                    shortcut.upper_bound = FlWeight::INFINITY;
-                } else {
-                    shortcut.lower_bound = lower_bound;
-                }
-            }
+            upward.par_iter_mut().zip(upward_preliminary_bounds.par_iter()).for_each(disable_dominated);
+            downward.par_iter_mut().zip(downward_preliminary_bounds.par_iter()).for_each(disable_dominated);
         });
     }
 
@@ -252,62 +260,17 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph
     if cfg!(feature = "tdcch-postcustomization") {
         let _subctxt = push_context("postcustomization".to_string());
         report_time("TD-CCH Post-Customization", || {
-            let mut removed_by_perfection = 0;
-            let mut node_edge_ids = vec![InRangeOption::new(None); n as usize];
-
             let upward_preliminary_bounds: Vec<_> = upward.iter().map(|s| s.lower_bound).collect();
             let downward_preliminary_bounds: Vec<_> = downward.iter().map(|s| s.lower_bound).collect();
 
-            for current_node in (0..n).rev() {
-                for (node, edge_id) in cch.neighbor_iter(current_node).zip(cch.neighbor_edge_indices(current_node)) {
-                    node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
-                }
+            static_perfect_customization.customize(&mut upward, &mut downward, |cb| {
+                PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::new(None); n as usize]), || {
+                    cb()
+                });
+            });
 
-                for (node, edge_id) in cch.neighbor_iter(current_node).zip(cch.neighbor_edge_indices(current_node)) {
-                    let shortcut_edge_ids = cch.neighbor_edge_indices(node);
-                    for (target, shortcut_edge_id) in cch.neighbor_iter(node).zip(shortcut_edge_ids) {
-                        if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
-                            upward[other_edge_id as usize].upper_bound = min(upward[other_edge_id as usize].upper_bound, upward[edge_id as usize].upper_bound + upward[shortcut_edge_id as usize].upper_bound);
-                            upward[other_edge_id as usize].lower_bound = min(upward[other_edge_id as usize].lower_bound, upward[edge_id as usize].lower_bound + upward[shortcut_edge_id as usize].lower_bound);
-
-                            upward[edge_id as usize].upper_bound = min(upward[edge_id as usize].upper_bound, upward[other_edge_id as usize].upper_bound + downward[shortcut_edge_id as usize].upper_bound);
-                            upward[edge_id as usize].lower_bound = min(upward[edge_id as usize].lower_bound, upward[other_edge_id as usize].lower_bound + downward[shortcut_edge_id as usize].lower_bound);
-
-                            downward[other_edge_id as usize].upper_bound = min(downward[other_edge_id as usize].upper_bound, downward[edge_id as usize].upper_bound + downward[shortcut_edge_id as usize].upper_bound);
-                            downward[other_edge_id as usize].lower_bound = min(downward[other_edge_id as usize].lower_bound, downward[edge_id as usize].lower_bound + downward[shortcut_edge_id as usize].lower_bound);
-
-                            downward[edge_id as usize].upper_bound = min(downward[edge_id as usize].upper_bound, downward[other_edge_id as usize].upper_bound + upward[shortcut_edge_id as usize].upper_bound);
-                            downward[edge_id as usize].lower_bound = min(downward[edge_id as usize].lower_bound, downward[other_edge_id as usize].lower_bound + upward[shortcut_edge_id as usize].lower_bound);
-                        }
-                    }
-                }
-
-                for node in cch.neighbor_iter(current_node) {
-                    node_edge_ids[node as usize] = InRangeOption::new(None);
-                }
-            }
-
-            for (shortcut, lower_bound) in upward.iter_mut().zip(upward_preliminary_bounds.into_iter()) {
-                if shortcut.upper_bound.fuzzy_lt(lower_bound) {
-                    if shortcut.required { removed_by_perfection += 1; }
-                    shortcut.required = false;
-                    shortcut.lower_bound = FlWeight::INFINITY;
-                    shortcut.upper_bound = FlWeight::INFINITY;
-                } else {
-                    shortcut.lower_bound = lower_bound;
-                }
-            }
-
-            for (shortcut, lower_bound) in downward.iter_mut().zip(downward_preliminary_bounds.into_iter()) {
-                if shortcut.upper_bound.fuzzy_lt(lower_bound) {
-                    if shortcut.required { removed_by_perfection += 1; }
-                    shortcut.required = false;
-                    shortcut.lower_bound = FlWeight::INFINITY;
-                    shortcut.upper_bound = FlWeight::INFINITY;
-                } else {
-                    shortcut.lower_bound = lower_bound;
-                }
-            }
+            upward.par_iter_mut().zip(upward_preliminary_bounds.par_iter()).for_each(disable_dominated);
+            downward.par_iter_mut().zip(downward_preliminary_bounds.par_iter()).for_each(disable_dominated);
 
             for current_node in 0..n {
                 let (upward_below, upward_above) = upward.split_at_mut(cch.first_out[current_node as usize] as usize);
@@ -324,8 +287,6 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph
                     shortcut.invalidate_unneccesary_sources(&shortcut_graph);
                 }
             }
-
-            report!("removed_by_perfection", removed_by_perfection);
         });
     }
 
