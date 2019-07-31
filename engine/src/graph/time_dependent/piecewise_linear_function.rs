@@ -13,7 +13,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         debug_assert_eq!(departure_time.len(), travel_time.len());
         debug_assert!(!departure_time.is_empty());
         debug_assert_eq!(departure_time[0], 0, "{:?}", departure_time);
-        debug_assert_eq!(*departure_time.last().unwrap(), period());
+        // debug_assert_eq!(*departure_time.last().unwrap(), period());
         debug_assert_eq!(*travel_time.last().unwrap(), travel_time[0]);
         for dt in &departure_time[0..departure_time.len()-1] {
             debug_assert!(*dt < period());
@@ -45,9 +45,13 @@ impl<'a> PiecewiseLinearFunction<'a> {
         self.evaluate(departure % period())
     }
 
+    pub fn lower_bound(&self) -> Weight {
+        *self.travel_time.iter().min().unwrap()
+    }
+
     pub(super) fn evaluate(&self, departure: Timestamp) -> Weight {
         debug_assert!(departure <= period());
-        if self.departure_time.len() == 2 {
+        if self.departure_time.len() <= 2 {
             return unsafe { *self.travel_time.get_unchecked(0) }
         }
 

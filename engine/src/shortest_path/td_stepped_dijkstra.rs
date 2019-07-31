@@ -61,20 +61,22 @@ impl TDSteppedDijkstra {
         self.closest_node_priority_queue.push(State { distance: query.departure_time, node: from });
     }
 
-    pub fn next_step<F: Fn(EdgeId) -> bool>(&mut self, check_edge: F) -> QueryProgress {
+    pub fn next_step<F: Fn(EdgeId) -> bool, G: FnMut(NodeId) -> Weight>(&mut self, check_edge: F, potential: G) -> QueryProgress {
         match self.result {
             Some(result) => QueryProgress::Done(result),
             None => {
-                self.settle_next_node(check_edge)
+                self.settle_next_node(check_edge, potential)
             }
         }
     }
 
-    fn settle_next_node<F: Fn(EdgeId) -> bool>(&mut self, check_edge: F) -> QueryProgress {
+    fn settle_next_node<F: Fn(EdgeId) -> bool, G: FnMut(NodeId) -> Weight>(&mut self, check_edge: F, mut potential: G) -> QueryProgress {
         let to = self.query().to;
 
         // Examine the frontier with lower distance nodes first (min-heap)
-        if let Some(State { distance, node }) = self.closest_node_priority_queue.pop() {
+        if let Some(State { node, .. }) = self.closest_node_priority_queue.pop() {
+            let distance = self.distances[node as usize];
+
             // Alternatively we could have continued to find all shortest paths
             if node == to {
                 let result = Some(distance - self.query().departure_time);
@@ -87,11 +89,13 @@ impl TDSteppedDijkstra {
             for (&neighbor, edge_id) in self.graph.neighbor_and_edge_id_iter(node) {
                 if check_edge(edge_id) {
                     let plf = self.graph.travel_time_function(edge_id);
-                    let next = State { distance: distance + plf.eval(distance), node: neighbor };
+                    let next_distance = distance + plf.eval(distance);
 
-                    if next.distance < self.distances[next.node as usize] {
-                        self.distances.set(next.node as usize, next.distance);
-                        self.predecessors[next.node as usize] = node;
+                    if next_distance < self.distances[neighbor as usize] {
+                        self.distances.set(neighbor as usize, next_distance);
+                        self.predecessors[neighbor as usize] = node;
+
+                        let next = State { distance: next_distance + potential(neighbor), node: neighbor };
                         if self.closest_node_priority_queue.contains_index(next.as_index()) {
                             self.closest_node_priority_queue.decrease_key(next);
                         } else {

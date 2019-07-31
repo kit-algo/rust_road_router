@@ -21,7 +21,7 @@ impl Server {
         self.dijkstra.initialize_query(TDQuery { from, to, departure_time });
 
         loop {
-            match self.dijkstra.next_step(|_| true) {
+            match self.dijkstra.next_step(|_| true, |_| 0) {
                 QueryProgress::Progress(_) => continue,
                 QueryProgress::Done(result) => return result
             }
