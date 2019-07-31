@@ -1,5 +1,4 @@
 #![feature(allocator_api)]
-#![feature(euclidean_division)]
 
 #![allow(clippy::redundant_closure_call)]
 
