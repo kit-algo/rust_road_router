@@ -2,7 +2,7 @@ use crate::graph::*;
 
 pub mod timestamped_vector;
 pub mod clearlist_vector;
-mod stepped_dijkstra;
+pub mod stepped_dijkstra;
 mod stepped_elimination_tree;
 mod td_stepped_dijkstra;
 mod floating_td_stepped_dijkstra;
@@ -17,8 +17,8 @@ pub mod query;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Query {
-    from: NodeId,
-    to: NodeId
+    pub from: NodeId,
+    pub to: NodeId
 }
 
 #[derive(Debug, Clone, Copy)]

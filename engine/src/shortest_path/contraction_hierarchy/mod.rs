@@ -67,12 +67,14 @@ impl ContractionGraph {
         let nodes = {
             let outs = (0..n).map(|node|
                 graph.neighbor_iter(node_order[node])
+                    .filter(|&Link { node: head, .. }| head != node_order[node])
                     .map(|Link { node, weight }| (Link { node: node_ranks[node as usize], weight }, n as NodeId))
                     .collect()
             );
             let reversed = graph.reverse();
             let ins = (0..n).map(|node|
                 reversed.neighbor_iter(node_order[node])
+                    .filter(|&Link { node: head, .. }| head != node_order[node])
                     .map(|Link { node, weight }| (Link { node: node_ranks[node as usize], weight }, n as NodeId))
                     .collect()
             );
@@ -89,6 +91,28 @@ impl ContractionGraph {
         let mut graph = self.partial_graph();
 
         while let Some((node, mut subgraph)) = graph.remove_lowest() {
+            for &(Link { node: from, weight: from_weight }, _) in &node.incoming {
+                for &(Link { node: to, weight: to_weight }, _) in &node.outgoing {
+                    if subgraph.shortcut_required(from, to, from_weight + to_weight) {
+                        let node_id = subgraph.id_offset - 1;
+                        subgraph.insert_or_decrease(from, to, from_weight + to_weight, node_id);
+                    }
+                }
+            }
+
+            graph = subgraph;
+        }
+    }
+
+    fn contract_partially(&mut self, mut contraction_count: usize) {
+        let mut graph = self.partial_graph();
+
+        while let Some((node, mut subgraph)) = graph.remove_lowest() {
+            if contraction_count == 0 {
+                break;
+            } else {
+                contraction_count -= 1;
+            }
             for &(Link { node: from, weight: from_weight }, _) in &node.incoming {
                 for &(Link { node: to, weight: to_weight }, _) in &node.outgoing {
                     if subgraph.shortcut_required(from, to, from_weight + to_weight) {
@@ -146,6 +170,7 @@ impl<'a> PartialContractionGraph<'a> {
 
     fn remove_edges_to_removed(&mut self, node: &Node) {
         for &(Link { node: from, .. }, _) in &node.incoming {
+            debug_assert!(from >= self.id_offset, "{}, {}", from, self.id_offset);
             self.nodes[(from - self.id_offset) as usize].remove_outgoing(self.id_offset - 1);
         }
         for &(Link { node: to, .. }, _) in &node.outgoing {
@@ -162,6 +187,8 @@ impl<'a> PartialContractionGraph<'a> {
     }
 
     fn shortcut_required(&self, from: NodeId, to: NodeId, shortcut_weight: Weight) -> bool {
+        if from == to { return false }
+
         let mut server = crate::shortest_path::query::bidirectional_dijkstra::Server {
             forward_dijkstra: SteppedDijkstra::new(ForwardWrapper { graph: &self }),
             backward_dijkstra: SteppedDijkstra::new(BackwardWrapper { graph: &self }),
@@ -176,6 +203,12 @@ impl<'a> PartialContractionGraph<'a> {
             None => true,
         }
     }
+}
+
+pub fn overlay<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, node_order: Vec<NodeId>, contraction_count: usize) -> (OwnedGraph, OwnedGraph) {
+    let mut graph = ContractionGraph::new(graph, node_order);
+    graph.contract_partially(contraction_count);
+    graph.into_first_out_graphs().0
 }
 
 pub fn contract<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, node_order: Vec<NodeId>) -> ((OwnedGraph, OwnedGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
