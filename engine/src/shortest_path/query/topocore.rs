@@ -51,52 +51,60 @@ impl Server {
         let mut forward_progress = 0;
         let mut backward_progress = 0;
 
-        while !(forward_done && backward_done) {
-        // while !(forward_done && backward_done) && forward_progress + backward_progress < self.tentative_distance {
+        let forward_dijkstra = &mut self.forward_dijkstra;
+        let backward_dijkstra = &mut self.backward_dijkstra;
+        let meeting_node = &mut self.meeting_node;
+
+        while !(forward_done && backward_done) && (forward_progress + backward_progress < tentative_distance || forward_non_core_count > 0 || backward_non_core_count > 0) {
             if !forward_done && (backward_done || forward_progress <= backward_progress) {
-                match self.forward_dijkstra.next_step_with_queue_insert_callback(|node| if !in_core(node) { forward_non_core_count += 1; }) {
+                match forward_dijkstra.next_step_with_callbacks(
+                    |node, distance| {
+                        if distance + backward_dijkstra.tentative_distance(node) < tentative_distance {
+                            tentative_distance = distance + backward_dijkstra.tentative_distance(node);
+                            *meeting_node = node;
+                        }
+                    },
+                    |node| if !in_core(node) { forward_non_core_count += 1; }) {
                     QueryProgress::Progress(State { distance, node }) => {
-                        dbg!("forward", distance, node);
-                        if !dbg!(in_core(node)) { forward_non_core_count -= 1; }
+                        if !in_core(node) { forward_non_core_count -= 1; }
 
                         forward_progress = distance;
-                        if distance + self.backward_dijkstra.tentative_distance(node) < tentative_distance {
-                            tentative_distance = distance + self.backward_dijkstra.tentative_distance(node);
-                            self.meeting_node = node;
-                        }
                     },
                     QueryProgress::Done(result) => {
                         if let Some(distance) = result {
                             if !in_core(to) { forward_non_core_count -= 1; }
+                            forward_progress = distance;
 
                             if distance < tentative_distance {
                                 tentative_distance = distance;
-                                self.meeting_node = to;
+                                *meeting_node = to;
                             }
                         }
                         forward_done = true;
                     }
                 }
             } else {
-                match self.backward_dijkstra.next_step_with_queue_insert_callback(|node| if !in_core(node) { backward_non_core_count += 1; }) {
+                match backward_dijkstra.next_step_with_callbacks(
+                    |node, distance| {
+                        if distance + forward_dijkstra.tentative_distance(node) < tentative_distance {
+                            tentative_distance = distance + forward_dijkstra.tentative_distance(node);
+                            *meeting_node = node;
+                        }
+                    },
+                    |node| if !in_core(node) { backward_non_core_count += 1; }) {
                     QueryProgress::Progress(State { distance, node }) => {
-                        dbg!("backward", distance, node);
-                        if !dbg!(in_core(node)) { backward_non_core_count -= 1; }
+                        if !in_core(node) { backward_non_core_count -= 1; }
 
                         backward_progress = distance;
-                        if distance + self.forward_dijkstra.tentative_distance(node) < tentative_distance {
-                            tentative_distance = distance + self.forward_dijkstra.tentative_distance(node);
-                            self.meeting_node = node;
-                        }
                     },
                     QueryProgress::Done(result) => {
                         if let Some(distance) = result {
                             if !in_core(from) { backward_non_core_count -= 1; }
-
                             backward_progress = distance;
+
                             if distance < tentative_distance {
                                 tentative_distance = distance;
-                                self.meeting_node = from;
+                                *meeting_node = from;
                             }
                         }
                         backward_done = true;

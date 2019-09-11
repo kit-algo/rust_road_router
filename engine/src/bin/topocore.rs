@@ -45,7 +45,7 @@ fn main() {
         let (res, time) = measure(|| {
             topocore.distance(from, to)
         });
-        assert_eq!(res, ground_truth);
+        assert_eq!(res, ground_truth, "{} - {}", from, to);
 
         total_query_time = total_query_time + time;
     }
