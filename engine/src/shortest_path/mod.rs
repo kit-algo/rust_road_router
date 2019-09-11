@@ -13,6 +13,7 @@ use self::stepped_dijkstra::{SteppedDijkstra, QueryProgress, State};
 pub mod node_order;
 pub mod contraction_hierarchy;
 pub mod customizable_contraction_hierarchy;
+pub mod topocore;
 pub mod query;
 
 #[derive(Debug, Clone, Copy)]

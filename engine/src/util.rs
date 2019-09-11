@@ -36,3 +36,17 @@ impl Ord for NonNan {
         self.partial_cmp(other).unwrap()
     }
 }
+
+pub trait TapOps: Sized {
+    fn tap<R, F>(self, f: F) -> Self
+        where F: FnOnce(&mut Self) -> R;
+}
+
+impl<T> TapOps for T where T: Sized {
+    fn tap<R, F>(mut self, f: F) -> Self
+        where F: FnOnce(&mut Self) -> R
+    {
+        let _ = f(&mut self);
+        self
+    }
+}
