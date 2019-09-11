@@ -64,12 +64,21 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
         match self.result {
             Some(result) => QueryProgress::Done(result),
             None => {
-                self.settle_next_node()
+                self.settle_next_node(|_| {})
             }
         }
     }
 
-    fn settle_next_node(&mut self) -> QueryProgress {
+    pub fn next_step_with_queue_insert_callback(&mut self, on_queue_insert: impl FnMut(NodeId)) -> QueryProgress {
+        match self.result {
+            Some(result) => QueryProgress::Done(result),
+            None => {
+                self.settle_next_node(on_queue_insert)
+            }
+        }
+    }
+
+    fn settle_next_node(&mut self, mut on_queue_insert: impl FnMut(NodeId)) -> QueryProgress {
         let to = self.query.as_ref().expect("query was not initialized properly").to;
 
         // Examine the frontier with lower distance nodes first (min-heap)
@@ -93,6 +102,7 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
                     if self.closest_node_priority_queue.contains_index(next.as_index()) {
                         self.closest_node_priority_queue.decrease_key(next);
                     } else {
+                        on_queue_insert(next.node);
                         self.closest_node_priority_queue.push(next);
                     }
                 }

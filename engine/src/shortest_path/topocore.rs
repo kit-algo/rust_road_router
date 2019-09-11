@@ -260,9 +260,12 @@ pub fn preprocess<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> super::que
 
     let mut new_order = Vec::with_capacity(n);
 
+    let mut core_size = 0;
+
     for rank in 0..n {
         if !to_contract.get(rank) {
             new_order.push(order.node(rank as NodeId));
+            core_size += 1;
         }
     }
     for rank in 0..n {
@@ -305,7 +308,8 @@ pub fn preprocess<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> super::que
     super::query::topocore::Server::new(
         OwnedGraph::new(forward_first_out, forward_head, forward_weight),
         OwnedGraph::new(backward_first_out, backward_head, backward_weight),
-        new_order
+        new_order,
+        core_size
     )
 }
 

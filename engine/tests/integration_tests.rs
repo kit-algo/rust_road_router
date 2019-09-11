@@ -54,3 +54,13 @@ fn bidir_dijkstra_correct_distances() {
     assert_eq!(server.distance(0, 4), Some(5));
     assert_eq!(server.distance(4, 0), None);
 }
+
+#[test]
+fn bidir_dijkstra_stopping_crit() {
+    let first_out = vec![0,      3, 4, 5, 6, 6];
+    let head      = vec![1,3,4,  2, 4, 4,];
+    let weight    = vec![4,7,13, 4, 4, 7,];
+    let mut server = BiDijkServer::new(OwnedGraph::new(first_out, head, weight));
+
+    assert_eq!(server.distance(0, 4), Some(12));
+}
