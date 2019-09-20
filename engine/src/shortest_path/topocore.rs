@@ -341,24 +341,6 @@ fn dfs<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, visit: &mut impl FnMut(N
     }
 }
 
-// fn dfs<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, visit: &mut impl FnMut(NodeId)) {
-//     let mut visited = BitVec::new(graph.num_nodes());
-//     for node in 0..graph.num_nodes() {
-//         dfs_traverse(graph, node as NodeId, &mut visited, visit);
-//     }
-// }
-
-// fn dfs_traverse<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, node: NodeId, visited: &mut BitVec, visit: &mut impl FnMut(NodeId)) {
-//     if visited.get(node as usize) { return };
-//     visit(node);
-//     visited.set(node as usize);
-
-//     for Link { node: head, .. } in graph.neighbor_iter(node) {
-//         dfs_traverse(graph, head, visited, visit);
-//     }
-// }
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
