@@ -8,13 +8,28 @@ pub enum QueryProgress {
     Done(Option<Weight>),
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Ord, PartialOrd)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct State {
     pub distance: Weight,
     pub node: NodeId,
 }
 
+impl std::cmp::PartialOrd for State {
+    #[inline]
+    fn partial_cmp(&self, rhs: &Self) -> Option<std::cmp::Ordering> {
+        self.distance.partial_cmp(&rhs.distance)
+    }
+}
+
+impl std::cmp::Ord for State {
+    #[inline]
+    fn cmp(&self, rhs: &Self) -> std::cmp::Ordering {
+        self.distance.cmp(&rhs.distance)
+    }
+}
+
 impl Indexing for State {
+    #[inline]
     fn as_index(&self) -> usize {
         self.node as usize
     }
@@ -55,8 +70,6 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
         self.closest_node_priority_queue.clear();
         self.distances.reset();
 
-        // Starte with origin
-        self.distances.set(from as usize, 0);
         self.closest_node_priority_queue.push(State { distance: 0, node: from });
     }
 

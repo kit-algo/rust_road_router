@@ -94,45 +94,69 @@ impl<T: Ord + Indexing> IndexdMinHeap<T> {
         self.move_down_in_tree(position);
     }
 
-    fn move_up_in_tree(&mut self, position: usize) {
-        unsafe {
-            let mut position = position;
-            let mut hole = Hole::new(&mut self.data, position);
+    fn move_up_in_tree(&mut self, mut position: usize) {
+        while position > 0 {
+            let parent = (position - 1) / TREE_ARITY;
 
-            while position > 0 {
-                let parent = (position - 1) / TREE_ARITY;
-
-                if hole.get(parent) < hole.element() {
+            unsafe {
+                if self.data.get_unchecked(parent) < self.data.get_unchecked(position) {
                     break;
                 }
 
-                self.positions[hole.get(parent).as_index()] = position;
-                hole.move_to(parent);
-                position = parent;
+                self.positions.swap(self.data.get_unchecked(parent).as_index(), self.data.get_unchecked(position).as_index());
+                self.data.swap(parent, position);
             }
-
-            self.positions[hole.element().as_index()] = position;
+            position = parent;
         }
     }
 
+    // fn move_up_in_tree(&mut self, position: usize) {
+    //     unsafe {
+    //         let mut hole = Hole::new(&mut self.data, position);
+
+    //         while hole.pos > 0 {
+    //             let parent = (hole.pos - 1) / TREE_ARITY;
+
+    //             if hole.get(parent) < hole.element() {
+    //                 break;
+    //             }
+
+    //             *self.positions.get_unchecked_mut(hole.get(parent).as_index()) = hole.pos;
+    //             hole.move_to(parent);
+    //         }
+
+    //         *self.positions.get_unchecked_mut(hole.element().as_index()) = hole.pos;
+    //     }
+    // }
+
+    // fn move_down_in_tree(&mut self, mut position: usize) {
+    //     while let Some(smallest_child) = IndexdMinHeap::<T>::children_index_range(position, self.len()).min_by_key(|&child_index| unsafe { self.data.get_unchecked(child_index) }) {
+    //         unsafe {
+    //             if self.data.get_unchecked(smallest_child) >= self.data.get_unchecked(position) { return; } // no child is smaller
+
+    //             self.positions.swap(self.data.get_unchecked(position).as_index(), self.data.get_unchecked(smallest_child).as_index());
+    //             self.data.swap(smallest_child, position);
+    //             position = smallest_child;
+    //         }
+    //     }
+    // }
+
     fn move_down_in_tree(&mut self, position: usize) {
         unsafe {
-            let mut position = position;
             let heap_size = self.len();
             let mut hole = Hole::new(&mut self.data, position);
 
             loop {
-                if let Some(smallest_child) = IndexdMinHeap::<T>::children_index_range(position, heap_size).min_by_key(|&child_index| hole.get(child_index)) {
+                if let Some(smallest_child) = IndexdMinHeap::<T>::children_index_range(hole.pos, heap_size).min_by_key(|&child_index| hole.get(child_index)) {
                     if hole.get(smallest_child) >= hole.element() {
-                        self.positions[hole.element().as_index()] = position;
+                        *self.positions.get_unchecked_mut(hole.element().as_index()) = hole.pos;
                         return; // no child is smaller
                     }
 
-                    self.positions[hole.get(smallest_child).as_index()] = position;
+                    *self.positions.get_unchecked_mut(hole.get(smallest_child).as_index()) = hole.pos;
                     hole.move_to(smallest_child);
-                    position = smallest_child;
                 } else {
-                    self.positions[hole.element().as_index()] = position;
+                    *self.positions.get_unchecked_mut(hole.element().as_index()) = hole.pos;
                     return; // no children at all
                 }
             }
