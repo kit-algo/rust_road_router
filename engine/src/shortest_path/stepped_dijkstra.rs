@@ -134,10 +134,6 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
         self.distances[node as usize]
     }
 
-    pub fn distances_pointer(&self) -> *const TimestampedVector<Weight> {
-        &self.distances
-    }
-
     pub fn predecessor(&self, node: NodeId) -> NodeId {
         self.predecessors[node as usize]
     }

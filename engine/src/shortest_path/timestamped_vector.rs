@@ -1,6 +1,4 @@
 use std::ops::{Index, IndexMut};
-use std::sync::atomic::compiler_fence;
-use std::sync::atomic::Ordering::SeqCst;
 
 #[derive(Debug)]
 pub struct TimestampedVector<T: Clone> {
@@ -34,11 +32,6 @@ impl<T: Clone> TimestampedVector<T> {
 
     pub fn set(&mut self, index: usize, value: T) {
         self.data[index] = value;
-        // we are going to access this container from two different threads
-        // unsyncrhnoized and with one thread modifying it - completely unsafe
-        // but fine for this case, we only need to make sure, that the timestamp
-        // is always modified after the value - which is the cause for this memory fence
-        compiler_fence(SeqCst);
         self.timestamps[index] = self.current;
     }
 }
