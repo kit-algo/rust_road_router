@@ -1,3 +1,4 @@
+use crate::shortest_path::customizable_contraction_hierarchy::CCH;
 use crate::shortest_path::node_order::NodeOrder;
 use crate::rank_select_map::*;
 use crate::util::TapOps;
@@ -30,7 +31,7 @@ impl<'a, 'b> LinkIterGraph<'a> for UndirectedGraph<'b> {
 }
 
 #[allow(clippy::cognitive_complexity)]
-pub fn preprocess<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> super::query::topocore::Server {
+pub fn preprocess<'c, Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, cch: &'c CCH, lower_bound: &(impl for<'b> LinkIterGraph<'b> + RandomLinkAccessGraph + Sync)) -> super::query::topocore::Server<'c> {
     let order = dfs_pre_order(graph);
 
     let n = graph.num_nodes();
@@ -374,7 +375,9 @@ pub fn preprocess<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> super::que
         OwnedGraph::new(forward_first_out, forward_head, forward_weight),
         OwnedGraph::new(backward_first_out, backward_head, backward_weight),
         new_order,
-        core_size
+        core_size,
+        cch,
+        lower_bound
     )
 }
 

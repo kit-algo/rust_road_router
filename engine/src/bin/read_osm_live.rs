@@ -1,0 +1,124 @@
+use bmw_routing_engine::{
+    graph::*,
+    io::*,
+    cli::CliErr,
+    rank_select_map::*,
+    benchmark::*,
+    shortest_path::{
+        customizable_contraction_hierarchy::*,
+        node_order::NodeOrder,
+        topocore::*,
+        query::{customizable_contraction_hierarchy::Server, dijkstra::Server as DijkServer},
+    }
+};
+use std::{env, error::Error, path::Path, fs::File};
+
+use csv::ReaderBuilder;
+use glob::glob;
+use time::Duration;
+use rand::prelude::*;
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let mut args = env::args();
+    args.next();
+    let arg = &args.next().ok_or_else(|| Box::new(CliErr("No graph directory arg given")))?;
+    let path = Path::new(arg);
+
+    let first_out = Vec::<NodeId>::load_from(path.join("first_out").to_str().unwrap())?;
+    let head = Vec::<EdgeId>::load_from(path.join("head").to_str().unwrap())?;
+    let travel_time = Vec::<EdgeId>::load_from(path.join("travel_time").to_str().unwrap())?;
+    let mut live_travel_time = travel_time.clone();
+    let geo_distance = Vec::<EdgeId>::load_from(path.join("geo_distance").to_str().unwrap())?;
+    let osm_node_ids = Vec::<u64>::load_from(path.join("osm_node_ids").to_str().unwrap())?;
+
+    for ids in osm_node_ids.windows(2) {
+        assert!(ids[0] < ids[1]);
+    }
+
+    let mut osm_ids_present = BitVec::new(*osm_node_ids.last().unwrap() as usize + 1);
+    for osm_id in osm_node_ids {
+        osm_ids_present.set(osm_id as usize);
+    }
+    let id_map = RankSelectMap::new(osm_ids_present);
+    let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
+
+    let arg = &args.next().ok_or_else(|| Box::new(CliErr("No live data directory arg given")))?;
+    let live_dir = Path::new(arg);
+
+    let mut total = 0;
+    let mut found = 0;
+    let mut too_fast = 0;
+
+    for live in glob(live_dir.join("*").to_str().unwrap()).unwrap() {
+        let file = File::open(live?.clone()).unwrap();
+        let mut reader = ReaderBuilder::new()
+            .has_headers(false)
+            .delimiter(b',')
+            .quoting(false)
+            .double_quote(false)
+            .escape(None)
+            .from_reader(file);
+
+        for line in reader.records() {
+            total += 1;
+
+            let record = line?;
+            let from = record[0].parse()?;
+            let to = record[1].parse()?;
+            let speed = record[2].parse::<u32>()?;
+
+            if let (Some(from), Some(to)) = (id_map.get(from), id_map.get(to)) {
+                if let Some(edge_idx) = graph.edge_index(from as NodeId, to as NodeId) {
+                    found += 1;
+                    let edge_idx = edge_idx as usize;
+
+                    let new_tt = 100 * 36 * geo_distance[edge_idx] / speed;
+                    if travel_time[edge_idx] <= new_tt {
+                        live_travel_time[edge_idx] = new_tt;
+                    } else {
+                        too_fast += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    dbg!(total, found, too_fast);
+
+    let cch_order = Vec::load_from(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm");
+    let cch_order = NodeOrder::from_node_order(cch_order);
+
+    let cch = contract(&graph, cch_order.clone());
+    let cch_order = CCHReordering { node_order: cch_order, latitude: &[], longitude: &[] }.reorder_for_seperator_based_customization(cch.separators());
+    let cch = contract(&graph, cch_order);
+
+    let live_graph = FirstOutGraph::new(&first_out[..], &head[..], &live_travel_time[..]);
+
+    let mut dijkstra = DijkServer::new(live_graph.clone());
+    // let mut cch_live_server = Server::new(&cch, &live_graph);
+
+    let mut topocore = report_time("topocore preprocessing", || {
+        preprocess(&live_graph, &cch, &graph)
+    });
+
+    let num_queries = 100;
+    let seed = Default::default();
+    let mut rng = StdRng::from_seed(seed);
+    let mut total_query_time = Duration::zero();
+
+    for i in 0..num_queries {
+        dbg!(i);
+        let from: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
+        let to: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
+        let ground_truth = dijkstra.distance(from, to);
+
+        let (res, time) = measure(|| {
+            topocore.distance(from, to)
+        });
+        assert_eq!(res, ground_truth, "{} - {}", from, to);
+
+        total_query_time = total_query_time + time;
+    }
+
+    Ok(())
+}
