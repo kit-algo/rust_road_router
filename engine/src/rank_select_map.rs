@@ -19,9 +19,7 @@ const STORAGE_BITS: usize = size_of::<u64>() * 8;
 
 // this is a little helper data structure
 // what we need is a vector of bits with a few extras
-// - it needs to be efficiently, no idea if rust is currently doing that,
-//   could be that it uses one byte per bit, I couldnt find any definitive answer in the docs
-// - we need access to the ints containing the actualy bits, the do popcount on them
+// - we need access to the ints containing the actualy bits, then do popcount on them
 // - the memory needs to be aligned to the cache line width
 // -> create a thin wrapper around a Vec<u64>, where we do the first allocation ourselves, and have operations to set individual bits
 
@@ -81,6 +79,12 @@ impl BitVec {
     pub fn clear(&mut self) {
         for val in &mut self.data {
             *val = 0;
+        }
+    }
+
+    pub fn set_all(&mut self) {
+        for val in &mut self.data {
+            *val = !0;
         }
     }
 
