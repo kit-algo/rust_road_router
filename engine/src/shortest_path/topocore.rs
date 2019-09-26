@@ -1,8 +1,33 @@
 use crate::shortest_path::node_order::NodeOrder;
-use crate::rank_select_map::BitVec;
+use crate::rank_select_map::*;
 use crate::util::TapOps;
+use crate::in_range_option::InRangeOption;
 use std::cmp::{min, max};
 use super::*;
+
+#[derive(Debug)]
+struct UndirectedGraph<'a> {
+    ins: &'a [Vec<Link>],
+    outs: &'a [Vec<Link>],
+}
+
+impl<'a> Graph for UndirectedGraph<'a> {
+    fn num_nodes(&self) -> usize {
+        self.ins.len()
+    }
+
+    fn num_arcs(&self) -> usize {
+        unimplemented!()
+    }
+}
+
+impl<'a, 'b> LinkIterGraph<'a> for UndirectedGraph<'b> {
+    type Iter = std::iter::Chain<std::iter::Cloned<std::slice::Iter<'a, Link>>, std::iter::Cloned<std::slice::Iter<'a, Link>>>;
+
+    fn neighbor_iter(&'a self, node: NodeId) -> Self::Iter {
+        self.ins[node as usize].iter().cloned().chain(self.outs[node as usize].iter().cloned())
+    }
+}
 
 #[allow(clippy::cognitive_complexity)]
 pub fn preprocess<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> super::query::topocore::Server {
@@ -38,7 +63,17 @@ pub fn preprocess<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> super::que
     }).collect();
 
     let mut to_contract = BitVec::new(n);
+    to_contract.set_all();
     let mut queue = Vec::new();
+
+    let biggest = biconnected(&UndirectedGraph { ins: &ins[..], outs: &outs[..] })
+        .into_iter()
+        .max_by_key(|edges| edges.len())
+        .unwrap();
+    for (u, v) in biggest {
+        to_contract.unset(u as usize);
+        to_contract.unset(v as usize);
+    }
 
     let deg_zero_or_one = |node_outs: &Vec<Link>, node_ins: &Vec<Link>| {
         node_outs.is_empty() || node_ins.is_empty() || (
@@ -47,6 +82,21 @@ pub fn preprocess<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> super::que
             node_outs[0].node == node_ins[0].node
         )
     };
+
+    for node in 0..n {
+        if !to_contract.get(node) {
+            outs[node].retain(|link| !to_contract.get(link.node as usize));
+            ins[node].retain(|link| !to_contract.get(link.node as usize));
+        }
+    }
+
+    for node in 0..n {
+        if !to_contract.get(node) {
+            for &Link { node: neighbor, .. } in outs[node].iter().chain(&ins[node]) {
+                debug_assert!(!to_contract.get(neighbor as usize));
+            }
+        }
+    }
 
     for node in 0..n {
         if deg_zero_or_one(&outs[node], &ins[node]) && !to_contract.get(node) {
@@ -81,6 +131,7 @@ pub fn preprocess<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> super::que
 
     for node in 0..n {
         if !to_contract.get(node) {
+            debug_assert!(!deg_zero_or_one(&outs[node], &ins[node]));
             for &Link { node: neighbor, .. } in outs[node].iter().chain(&ins[node]) {
                 debug_assert!(!to_contract.get(neighbor as usize));
             }
@@ -122,14 +173,14 @@ pub fn preprocess<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> super::que
         }
     };
 
-
     for node in 0..n {
         if !to_contract.get(node) && deg_two(&outs[node], &ins[node]) {
+            debug_assert!(!deg_zero_or_one(&outs[node], &ins[node]));
             to_contract.set(node);
 
             let mut prev = node;
             let mut next = outs[node][0].node as usize;
-            while deg_two(&outs[next as usize], &ins[next as usize]) && !to_contract.get(next) {
+            while !deg_zero_or_one(&outs[next], &ins[next]) && deg_two(&outs[next as usize], &ins[next as usize]) && !to_contract.get(next) {
                 to_contract.set(next);
                 let (first, second) = deg_two_neighbors(&outs[next], &ins[next]);
                 if prev as NodeId == first {
@@ -141,7 +192,8 @@ pub fn preprocess<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> super::que
                 }
             }
 
-            if to_contract.get(next) { continue; } // isolated cycle
+            debug_assert!(!deg_zero_or_one(&outs[next], &ins[next]));
+            debug_assert!(!to_contract.get(next)); // isolated cycle
 
             let end1 = next;
             let end1_prev = prev;
@@ -149,7 +201,7 @@ pub fn preprocess<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> super::que
 
             let (mut forward, mut backward) = deg_two_weights(next as NodeId, &outs[prev], &ins[prev]);
 
-            while deg_two(&outs[next as usize], &ins[next as usize]) {
+            while !deg_zero_or_one(&outs[next], &ins[next]) && deg_two(&outs[next as usize], &ins[next as usize]) {
                 to_contract.set(next);
                 let (first, second) = deg_two_neighbors(&outs[next], &ins[next]);
                 if prev as NodeId == first {
@@ -166,20 +218,23 @@ pub fn preprocess<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> super::que
             }
             let end2 = next;
 
-
             if let Some(pos) = outs[end1].iter().position(|&Link { node: head, .. }| head == end1_prev as NodeId) {
                 outs[end1].swap_remove(pos);
             }
+            debug_assert_eq!(outs[end1].iter().position(|&Link { node: head, .. }| head == end1_prev as NodeId), None);
             if let Some(pos) = ins[end1].iter().position(|&Link { node: head, .. }| head == end1_prev as NodeId) {
                 ins[end1].swap_remove(pos);
             }
+            debug_assert_eq!(ins[end1].iter().position(|&Link { node: head, .. }| head == end1_prev as NodeId), None);
 
             if let Some(pos) = outs[next].iter().position(|&Link { node: head, .. }| head == prev as NodeId) {
                 outs[next].swap_remove(pos);
             }
+            debug_assert_eq!(outs[next].iter().position(|&Link { node: head, .. }| head == prev as NodeId), None);
             if let Some(pos) = ins[next].iter().position(|&Link { node: head, .. }| head == prev as NodeId) {
                 ins[next].swap_remove(pos);
             }
+            debug_assert_eq!(ins[next].iter().position(|&Link { node: head, .. }| head == prev as NodeId), None);
 
             if let Some(weight) = forward {
                 if end1 != end2 {
@@ -193,6 +248,16 @@ pub fn preprocess<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> super::que
                     insert_or_decrease(&mut outs[end2], end1 as NodeId, weight);
                 }
             }
+
+            debug_assert!(!to_contract.get(end1));
+            for &Link { node: neighbor, .. } in outs[end1].iter().chain(&ins[end1]) {
+                debug_assert!(!to_contract.get(neighbor as usize), "{} {} {} {} {} {}", end1, end1_prev, neighbor, end2, prev, node);
+            }
+            debug_assert!(!to_contract.get(end2));
+            for &Link { node: neighbor, .. } in outs[end2].iter().chain(&ins[end2]) {
+                debug_assert!(!to_contract.get(neighbor as usize));
+            }
+
         }
     }
 
@@ -339,6 +404,68 @@ fn dfs<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, visit: &mut impl FnMut(N
             }
         }
     }
+}
+
+fn biconnected<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> Vec<Vec<(NodeId, NodeId)>> {
+    let mut stack = Vec::new();
+
+    let mut dfs_num_counter = 0;
+    let mut dfs_num = vec![InRangeOption::<usize>::new(None); graph.num_nodes()];
+    let mut dfs_low = vec![0; graph.num_nodes()];
+    let mut dfs_parent = vec![0; graph.num_nodes()];
+    let mut edge_stack = Vec::new();
+    let mut components = Vec::new();
+
+    for node in 0..graph.num_nodes() {
+        if dfs_num[node].value().is_some() { continue; }
+
+        debug_assert!(edge_stack.is_empty());
+        debug_assert!(stack.is_empty());
+        dfs_parent[node] = node;
+        stack.push((node, graph.neighbor_iter(node as NodeId)));
+
+        while let Some(&mut (node, ref mut neighbors)) = stack.last_mut() {
+            if dfs_num[node].value().is_none() {
+                dfs_low[node] = dfs_num_counter;
+                dfs_num[node] = InRangeOption::new(Some(dfs_num_counter));
+                dfs_num_counter += 1;
+            }
+
+            if let Some(Link { node: neighbor, .. }) = neighbors.next() {
+                if dfs_num[neighbor as usize].value().is_none() {
+                    dfs_parent[neighbor as usize] = node;
+                    edge_stack.push((node as NodeId, neighbor));
+                    stack.push((neighbor as usize, graph.neighbor_iter(neighbor)));
+                } else if dfs_parent[node] != neighbor as usize {
+                    edge_stack.push((node as NodeId, neighbor));
+                    dfs_low[node] = std::cmp::min(dfs_low[node], dfs_num[neighbor as usize].value().unwrap());
+                }
+            } else {
+                stack.pop();
+                let v = dfs_parent[node];
+                let w = node;
+                dfs_low[v] = std::cmp::min(dfs_low[v], dfs_low[w]);
+
+                if dfs_low[w] >= dfs_num[v].value().unwrap() {
+                    let mut component = Vec::new();
+                    while let Some(&(u_1, _u_2)) = edge_stack.last() {
+                        if dfs_num[u_1 as usize].value().unwrap() >= dfs_num[w].value().unwrap() {
+                            component.push(edge_stack.pop().unwrap());
+                        } else {
+                            break;
+                        }
+                    }
+                    if let Some((u_1, u_2)) = edge_stack.pop() {
+                        debug_assert_eq!((u_1, u_2), (v as NodeId, w as NodeId));
+                        component.push((u_1, u_2));
+                    }
+                    components.push(component);
+                }
+            }
+        }
+    }
+
+    components
 }
 
 #[cfg(test)]
