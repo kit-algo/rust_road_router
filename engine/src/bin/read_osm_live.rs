@@ -26,7 +26,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let first_out = Vec::<NodeId>::load_from(path.join("first_out").to_str().unwrap())?;
     let head = Vec::<EdgeId>::load_from(path.join("head").to_str().unwrap())?;
-    let travel_time = Vec::<EdgeId>::load_from(path.join("travel_time").to_str().unwrap())?;
+    let mut travel_time = Vec::<EdgeId>::load_from(path.join("travel_time").to_str().unwrap())?;
     let mut live_travel_time = travel_time.clone();
     let geo_distance = Vec::<EdgeId>::load_from(path.join("geo_distance").to_str().unwrap())?;
     let osm_node_ids = Vec::<u64>::load_from(path.join("osm_node_ids").to_str().unwrap())?;
@@ -40,6 +40,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         osm_ids_present.set(osm_id as usize);
     }
     let id_map = RankSelectMap::new(osm_ids_present);
+    let mut graph = FirstOutGraph::new(&first_out[..], &head[..], &mut travel_time[..]);
+    unify_parallel_edges(&mut graph);
+    drop(graph);
     let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
 
     let arg = &args.next().ok_or_else(|| Box::new(CliErr("No live data directory arg given")))?;
@@ -92,33 +95,52 @@ fn main() -> Result<(), Box<dyn Error>> {
     let cch_order = CCHReordering { node_order: cch_order, latitude: &[], longitude: &[] }.reorder_for_seperator_based_customization(cch.separators());
     let cch = contract(&graph, cch_order);
 
+    let mut live_graph = FirstOutGraph::new(&first_out[..], &head[..], &mut live_travel_time[..]);
+    unify_parallel_edges(&mut live_graph);
+    drop(live_graph);
     let live_graph = FirstOutGraph::new(&first_out[..], &head[..], &live_travel_time[..]);
 
-    let mut dijkstra = DijkServer::new(live_graph.clone());
-    // let mut cch_live_server = Server::new(&cch, &live_graph);
+    let mut cch_static_server = Server::new(&cch, &graph);
+    let mut cch_live_server = Server::new(&cch, &live_graph);
 
     let mut topocore = report_time("topocore preprocessing", || {
         preprocess(&live_graph, &cch, &graph)
+        // preprocess(&graph, &cch, &graph)
     });
 
     let num_queries = 100;
+    let mut live_count = 0;
     let seed = Default::default();
     let mut rng = StdRng::from_seed(seed);
     let mut total_query_time = Duration::zero();
+    let mut live_query_time = Duration::zero();
 
     for i in 0..num_queries {
         dbg!(i);
         let from: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
         let to: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
-        let ground_truth = dijkstra.distance(from, to);
+        let ground_truth = cch_live_server.distance(from, to);
+        // let ground_truth = cch_static_server.distance(from, to);
 
         let (res, time) = measure(|| {
             topocore.distance(from, to)
         });
-        assert_eq!(res, ground_truth, "{} - {}", from, to);
+        let live = cch_static_server.distance(from, to) != ground_truth;
+        eprintln!("live: {:?}", live);
+        if live {
+            live_query_time = live_query_time + time;
+            live_count += 1;
+        }
+        if res != ground_truth {
+            eprintln!("topo {:?} ground_truth {:?} ({} - {})", res, ground_truth, from, to);
+            assert!(ground_truth < res);
+        }
 
         total_query_time = total_query_time + time;
     }
+
+    eprintln!("Avg. query time {}", total_query_time / (num_queries as i32));
+    eprintln!("Avg. live query time {}", live_query_time / (live_count as i32));
 
     Ok(())
 }

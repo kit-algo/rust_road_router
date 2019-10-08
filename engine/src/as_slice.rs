@@ -16,6 +16,12 @@ impl<'a, V> AsSlice<V> for &'a [V] {
     }
 }
 
+impl<'a, V> AsSlice<V> for &'a mut [V] {
+    fn as_slice(&self) -> &[V] {
+        self
+    }
+}
+
 impl<V> AsSlice<V> for Arc<Vec<V>> {
     fn as_slice(&self) -> &[V] {
         &self[..]

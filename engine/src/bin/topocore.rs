@@ -34,8 +34,6 @@ fn main() {
 
     let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
 
-    eprintln!("{}", graph.num_nodes());
-
     let cch_order = Vec::load_from(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm");
     let cch_order = NodeOrder::from_node_order(cch_order);
 

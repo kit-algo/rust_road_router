@@ -78,12 +78,12 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
         match self.result {
             Some(result) => QueryProgress::Done(result),
             None => {
-                self.settle_next_node(|_| { 0 }, |_, _| {}, |_| {})
+                self.settle_next_node(|_, dist| { dist }, |_, _| {}, |_| {})
             }
         }
     }
 
-    pub fn next_step_with_callbacks(&mut self, potential: impl FnMut(NodeId) -> Weight, on_improve: impl FnMut(NodeId, Weight), on_queue_insert: impl FnMut(NodeId)) -> QueryProgress {
+    pub fn next_step_with_callbacks(&mut self, potential: impl FnMut(NodeId, Weight) -> Weight, on_improve: impl FnMut(NodeId, Weight), on_queue_insert: impl FnMut(NodeId)) -> QueryProgress {
         match self.result {
             Some(result) => QueryProgress::Done(result),
             None => {
@@ -92,17 +92,16 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
         }
     }
 
-    fn settle_next_node(&mut self, mut potential: impl FnMut(NodeId) -> Weight, mut on_improve: impl FnMut(NodeId, Weight), mut on_queue_insert: impl FnMut(NodeId)) -> QueryProgress {
+    fn settle_next_node(&mut self, mut potential: impl FnMut(NodeId, Weight) -> Weight, mut on_improve: impl FnMut(NodeId, Weight), mut on_queue_insert: impl FnMut(NodeId)) -> QueryProgress {
         let to = self.query.as_ref().expect("query was not initialized properly").to;
 
         // Examine the frontier with lower distance nodes first (min-heap)
-        if let Some(State { node, .. }) = self.closest_node_priority_queue.pop() {
+        if let Some(State { node, distance: dist_with_pot }) = self.closest_node_priority_queue.pop() {
             let distance = self.distances[node as usize];
 
             // Alternatively we could have continued to find all shortest paths
             if node == to {
                 self.result = Some(Some(distance));
-                return QueryProgress::Done(Some(distance));
             }
 
             // For each node we can reach, see if we can find a way with
@@ -116,7 +115,7 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
                     self.distances.set(edge.node as usize, next_distance);
                     self.predecessors[edge.node as usize] = node;
 
-                    let next = State { distance: next_distance + potential(edge.node), node: edge.node };
+                    let next = State { distance: potential(edge.node, next_distance), node: edge.node };
                     if self.closest_node_priority_queue.contains_index(next.as_index()) {
                         self.closest_node_priority_queue.decrease_key(next);
                     } else {
@@ -128,7 +127,7 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
                 }
             }
 
-            QueryProgress::Progress(State { distance, node })
+            QueryProgress::Progress(State { distance: dist_with_pot, node })
         } else {
             self.result = Some(None);
             QueryProgress::Done(None)
@@ -149,5 +148,9 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
 
     pub fn graph(&self) -> &Graph {
         &self.graph
+    }
+
+    pub fn queue(&self) -> &IndexdMinHeap<State> {
+        &self.closest_node_priority_queue
     }
 }

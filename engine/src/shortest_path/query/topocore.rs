@@ -87,6 +87,8 @@ impl<'a> Server<'a> {
 
         let mut forward_progress = 0;
         let mut backward_progress = 0;
+        let mut forward_progress_wo_pot = 0;
+        let mut backward_progress_wo_pot = 0;
 
         let forward_dijkstra = &mut self.forward_dijkstra;
         let backward_dijkstra = &mut self.backward_dijkstra;
@@ -103,11 +105,20 @@ impl<'a> Server<'a> {
         let backward_up_graph = &self.backward_up_graph;
         let forward_elimination_tree = &self.forward_elimination_tree;
 
+        let lower_tent_dist = Self::potential(forward_potentials, forward_up_graph, backward_elimination_tree, cch.node_order().rank(order.node(from)));
+
         // while !(forward_done && backward_done) {
-        while !(forward_done && backward_done) && (forward_progress + backward_progress < tentative_distance || forward_non_core_count > 0 || backward_non_core_count > 0) {
-            if !forward_done && (backward_done || forward_progress <= backward_progress) {
+        while !(dbg!(forward_done) && dbg!(backward_done)) && (dbg!(forward_non_core_count) > 0 || dbg!(backward_non_core_count) > 0 || dbg!(forward_progress) + dbg!(backward_progress) <= dbg!(tentative_distance) + dbg!(lower_tent_dist)) {
+        // while !(forward_done && backward_done) && (forward_progress + backward_progress <= tentative_distance + lower_tent_dist || forward_non_core_count > 0 || backward_non_core_count > 0) {
+            if !forward_done && (backward_done || forward_progress_wo_pot <= backward_progress_wo_pot) {
                 match forward_dijkstra.next_step_with_callbacks(
-                    |node| Self::potential(forward_potentials, forward_up_graph, backward_elimination_tree, cch.node_order().rank(order.node(node))),
+                    // |node| Self::potential(forward_potentials, forward_up_graph, backward_elimination_tree, cch.node_order().rank(order.node(node))),
+                    |node, distance| if in_core(node) {
+                        (2 * distance
+                            + Self::potential(forward_potentials, forward_up_graph, backward_elimination_tree, cch.node_order().rank(order.node(node)))
+                            - Self::potential(backward_potentials, backward_up_graph, forward_elimination_tree, cch.node_order().rank(order.node(node))))
+                            / 2
+                    } else { distance },
                     // |_| 0,
                     |node, distance| {
                         if distance + backward_dijkstra.tentative_distance(node) < tentative_distance {
@@ -117,26 +128,37 @@ impl<'a> Server<'a> {
                     },
                     |node| if !in_core(node) { forward_non_core_count += 1; }) {
                     QueryProgress::Progress(State { distance, node }) => {
+                        // dbg!(node, distance);
                         if !in_core(node) { forward_non_core_count -= 1; }
 
                         forward_progress = distance;
+                        forward_progress_wo_pot = forward_dijkstra.tentative_distance(node);
+                        // if backward_dijkstra.tentative_distance(node) != INFINITY && !backward_dijkstra.queue().contains_index(node as usize) && forward_non_core_count == 0 && backward_non_core_count == 0 {
+                        //     break;
+                        // }
                     },
-                    QueryProgress::Done(result) => {
-                        if let Some(distance) = result {
-                            if !in_core(to) { forward_non_core_count -= 1; }
-                            forward_progress = distance;
+                    QueryProgress::Done(_result) => {
+                        // if let Some(distance) = result {
+                        //     if !in_core(to) { forward_non_core_count -= 1; }
+                        //     forward_progress = distance;
 
-                            if distance < tentative_distance {
-                                tentative_distance = distance;
-                                *meeting_node = to;
-                            }
-                        }
+                        //     if distance < tentative_distance {
+                        //         tentative_distance = distance;
+                        //         *meeting_node = to;
+                        //     }
+                        // }
                         forward_done = true;
                     }
                 }
             } else {
                 match backward_dijkstra.next_step_with_callbacks(
-                    |node| Self::potential(backward_potentials, backward_up_graph, forward_elimination_tree, cch.node_order().rank(order.node(node))),
+                    // |node| Self::potential(backward_potentials, backward_up_graph, forward_elimination_tree, cch.node_order().rank(order.node(node))),
+                    |node, distance| if in_core(node) {
+                        (2 * distance
+                            + Self::potential(backward_potentials, backward_up_graph, forward_elimination_tree, cch.node_order().rank(order.node(node)))
+                            - Self::potential(forward_potentials, forward_up_graph, backward_elimination_tree, cch.node_order().rank(order.node(node))))
+                            / 2
+                    } else { distance },
                     // |_| 0,
                     |node, distance| {
                         if distance + forward_dijkstra.tentative_distance(node) < tentative_distance {
@@ -146,20 +168,25 @@ impl<'a> Server<'a> {
                     },
                     |node| if !in_core(node) { backward_non_core_count += 1; }) {
                     QueryProgress::Progress(State { distance, node }) => {
+                        // dbg!(node, distance);
                         if !in_core(node) { backward_non_core_count -= 1; }
 
                         backward_progress = distance;
+                        backward_progress_wo_pot = backward_dijkstra.tentative_distance(node);
+                        // if forward_dijkstra.tentative_distance(node) != INFINITY && !forward_dijkstra.queue().contains_index(node as usize) && forward_non_core_count == 0 && backward_non_core_count == 0 {
+                        //     break;
+                        // }
                     },
-                    QueryProgress::Done(result) => {
-                        if let Some(distance) = result {
-                            if !in_core(from) { backward_non_core_count -= 1; }
-                            backward_progress = distance;
+                    QueryProgress::Done(_result) => {
+                        // if let Some(distance) = result {
+                        //     if !in_core(from) { backward_non_core_count -= 1; }
+                        //     backward_progress = distance;
 
-                            if distance < tentative_distance {
-                                tentative_distance = distance;
-                                *meeting_node = from;
-                            }
-                        }
+                        //     if distance < tentative_distance {
+                        //         tentative_distance = distance;
+                        //         *meeting_node = from;
+                        //     }
+                        // }
                         backward_done = true;
                     }
                 }

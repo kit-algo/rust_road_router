@@ -67,6 +67,21 @@ pub trait MutWeightLinkIterGraph<'a>: Graph {
     fn mut_weight_link_iter(&'a mut self, node: NodeId) -> Self::Iter;
 }
 
+pub fn unify_parallel_edges<G: for<'a> MutWeightLinkIterGraph<'a>>(graph: &mut G) {
+    let mut weight_cache = vec![INFINITY; graph.num_nodes()];
+    for node in 0..graph.num_nodes() {
+        for (&node, weight) in graph.mut_weight_link_iter(node as NodeId) {
+            weight_cache[node as usize] = std::cmp::min(weight_cache[node as usize], *weight);
+        }
+        for (&node, weight) in graph.mut_weight_link_iter(node as NodeId) {
+            *weight = weight_cache[node as usize];
+        }
+        for (&node, _weight) in graph.mut_weight_link_iter(node as NodeId) {
+            weight_cache[node as usize] = INFINITY;
+        }
+    }
+}
+
 pub trait RandomLinkAccessGraph {
     fn link(&self, edge_id: EdgeId) -> Link;
     fn edge_index(&self, from: NodeId, to: NodeId) -> Option<EdgeId>;
