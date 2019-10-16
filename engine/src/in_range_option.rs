@@ -1,5 +1,5 @@
 use std::fmt::Debug;
-use std::{u32, u64, usize};
+use std::{i32, u32, u64, usize};
 
 pub trait Sentinel: PartialEq + Copy {
     const SENTINEL: Self;
@@ -7,6 +7,10 @@ pub trait Sentinel: PartialEq + Copy {
 
 impl Sentinel for u32 {
     const SENTINEL: u32 = u32::MAX;
+}
+
+impl Sentinel for i32 {
+    const SENTINEL: i32 = i32::MAX;
 }
 
 impl Sentinel for u64 {
