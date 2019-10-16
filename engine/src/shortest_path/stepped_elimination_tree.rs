@@ -81,6 +81,10 @@ impl<'b, Graph: for<'a> LinkIterGraph<'a>> SteppedEliminationTree<'b, Graph> {
         self.predecessors[node as usize]
     }
 
+    pub fn parent(&self, node: NodeId) -> InRangeOption<NodeId> {
+        self.elimination_tree[node as usize]
+    }
+
     pub fn origin(&self) -> NodeId {
         self.origin.unwrap()
     }

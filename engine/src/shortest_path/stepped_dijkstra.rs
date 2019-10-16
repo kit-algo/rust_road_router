@@ -78,25 +78,25 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
         match self.result {
             Some(result) => QueryProgress::Done(result),
             None => {
-                self.settle_next_node(|_, dist| { dist }, |_, _| {}, |_| {})
+                self.settle_next_node(|_, dist| { dist })
             }
         }
     }
 
-    pub fn next_step_with_callbacks(&mut self, potential: impl FnMut(NodeId, Weight) -> Weight, on_improve: impl FnMut(NodeId, Weight), on_queue_insert: impl FnMut(NodeId)) -> QueryProgress {
+    pub fn next_step_with_callbacks(&mut self, potential: impl FnMut(NodeId, Weight) -> Weight) -> QueryProgress {
         match self.result {
             Some(result) => QueryProgress::Done(result),
             None => {
-                self.settle_next_node(potential, on_improve, on_queue_insert)
+                self.settle_next_node(potential)
             }
         }
     }
 
-    fn settle_next_node(&mut self, mut potential: impl FnMut(NodeId, Weight) -> Weight, mut on_improve: impl FnMut(NodeId, Weight), mut on_queue_insert: impl FnMut(NodeId)) -> QueryProgress {
+    fn settle_next_node(&mut self, mut potential: impl FnMut(NodeId, Weight) -> Weight) -> QueryProgress {
         let to = self.query.as_ref().expect("query was not initialized properly").to;
 
         // Examine the frontier with lower distance nodes first (min-heap)
-        if let Some(State { node, distance: dist_with_pot }) = self.closest_node_priority_queue.pop() {
+        if let Some(State { node, distance: _dist_with_pot }) = self.closest_node_priority_queue.pop() {
             let distance = self.distances[node as usize];
 
             // Alternatively we could have continued to find all shortest paths
@@ -119,15 +119,13 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
                     if self.closest_node_priority_queue.contains_index(next.as_index()) {
                         self.closest_node_priority_queue.decrease_key(next);
                     } else {
-                        on_queue_insert(next.node);
                         self.closest_node_priority_queue.push(next);
                     }
 
-                    on_improve(next.node, next_distance);
                 }
             }
 
-            QueryProgress::Progress(State { distance: dist_with_pot, node })
+            QueryProgress::Progress(State { distance, node })
         } else {
             self.result = Some(None);
             QueryProgress::Done(None)
