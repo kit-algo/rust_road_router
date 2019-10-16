@@ -8,8 +8,8 @@ use bmw_routing_engine::{
         customizable_contraction_hierarchy::*,
         node_order::NodeOrder,
         topocore::*,
-        query::{customizable_contraction_hierarchy::Server, dijkstra::Server as DijkServer},
-    }
+        query::customizable_contraction_hierarchy::Server,
+    },
 };
 use std::{env, error::Error, path::Path, fs::File};
 
@@ -108,23 +108,28 @@ fn main() -> Result<(), Box<dyn Error>> {
         // preprocess(&graph, &cch, &graph)
     });
 
-    let num_queries = 100;
+    let mut query_count = 0;
     let mut live_count = 0;
     let seed = Default::default();
     let mut rng = StdRng::from_seed(seed);
     let mut total_query_time = Duration::zero();
     let mut live_query_time = Duration::zero();
 
-    for i in 0..num_queries {
+    for i in 0..100 {
         dbg!(i);
         let from: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
         let to: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
         let ground_truth = cch_live_server.distance(from, to);
         // let ground_truth = cch_static_server.distance(from, to);
 
+        if ground_truth.is_none() { continue; }
+
+        query_count += 1;
+
         let (res, time) = measure(|| {
             topocore.distance(from, to)
         });
+        topocore.path();
         let live = cch_static_server.distance(from, to) != ground_truth;
         eprintln!("live: {:?}", live);
         if live {
@@ -139,8 +144,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         total_query_time = total_query_time + time;
     }
 
-    eprintln!("Avg. query time {}", total_query_time / (num_queries as i32));
-    eprintln!("Avg. live query time {}", live_query_time / (live_count as i32));
+    if query_count > 0 { eprintln!("Avg. query time {}", total_query_time / (query_count as i32)) };
+    if live_count > 0 { eprintln!("Avg. live query time {}", live_query_time / (live_count as i32)) };
 
     Ok(())
 }
