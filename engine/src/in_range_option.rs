@@ -10,7 +10,7 @@ impl Sentinel for u32 {
 }
 
 impl Sentinel for i32 {
-    const SENTINEL: i32 = i32::MAX;
+    const SENTINEL: i32 = i32::MIN;
 }
 
 impl Sentinel for u64 {

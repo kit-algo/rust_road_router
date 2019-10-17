@@ -43,7 +43,7 @@ impl<'a> Server<'a> {
         }
     }
 
-    pub fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
+    pub fn distance(&mut self, from: NodeId, to: NodeId, lower_bound: Weight) -> Option<Weight> {
         self.potentials.reset();
         self.backward_elimination_tree.initialize_query(self.cch.node_order().rank(to));
         while self.backward_elimination_tree.next().is_some() {
@@ -94,9 +94,8 @@ impl<'a> Server<'a> {
             if !forward_done && (backward_done || forward_progress <= backward_progress) {
                 match forward_dijkstra.next_step_with_callbacks(
                     |node, distance| {
-                        ((2 * distance) as i32
-                            + Self::potential(potentials, forward_elimination_tree, backward_elimination_tree, cch.node_order().rank(order.node(node)), stack)) as Weight
-                            / 2
+                        (distance as i32
+                            + Self::potential(potentials, forward_elimination_tree, backward_elimination_tree, cch.node_order().rank(order.node(node)), stack, lower_bound)) as Weight
                         // distance
                             + if in_core(node) { INFINITY } else { 0 }
                     }) {
@@ -120,8 +119,8 @@ impl<'a> Server<'a> {
             } else {
                 match backward_dijkstra.next_step_with_callbacks(
                     |node, distance| {
-                        ((2 * distance) as i32
-                            - Self::potential(potentials, forward_elimination_tree, backward_elimination_tree, cch.node_order().rank(order.node(node)), stack)) as Weight
+                        (distance as i32
+                            - Self::potential(potentials, forward_elimination_tree, backward_elimination_tree, cch.node_order().rank(order.node(node)), stack, lower_bound)) as Weight
                             / 2
                         // distance
                             + if in_core(node) { INFINITY } else { 0 }
@@ -159,7 +158,8 @@ impl<'a> Server<'a> {
         forward: &mut SteppedEliminationTree<'_, FirstOutGraph<&[EdgeId], &[NodeId], Vec<Weight>>>,
         backward: &mut SteppedEliminationTree<'_, FirstOutGraph<&[EdgeId], &[NodeId], Vec<Weight>>>,
         node: NodeId,
-        stack: &mut Vec<NodeId>
+        stack: &mut Vec<NodeId>,
+        total_lower_bound: Weight
     ) -> i32
     {
         let mut cur_node = node;
@@ -185,7 +185,8 @@ impl<'a> Server<'a> {
                 .unwrap_or(INFINITY);
             forward.distances_mut()[node as usize] = std::cmp::min(forward.tentative_distance(node), min_by_up);
 
-            potentials[node as usize] = InRangeOption::new(Some(backward.tentative_distance(node) as i32 - forward.tentative_distance(node) as i32));
+            let potential = std::cmp::max(backward.tentative_distance(node) as i32, total_lower_bound as i32 - forward.tentative_distance(node) as i32);
+            potentials[node as usize] = InRangeOption::new(Some(potential));
         }
 
         potentials[node as usize].value().unwrap()

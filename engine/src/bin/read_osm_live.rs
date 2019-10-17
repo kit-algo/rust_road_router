@@ -126,13 +126,15 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         query_count += 1;
 
+        let lower_bound = cch_static_server.distance(from, to);
         let (res, time) = measure(|| {
-            topocore.distance(from, to)
+            topocore.distance(from, to, lower_bound.unwrap())
         });
         topocore.path();
-        let live = cch_static_server.distance(from, to) != ground_truth;
+        let live = lower_bound != ground_truth;
         eprintln!("live: {:?}", live);
         if live {
+            eprintln!("{}% length of static", ground_truth.unwrap() * 100 / lower_bound.unwrap());
             live_query_time = live_query_time + time;
             live_count += 1;
         }

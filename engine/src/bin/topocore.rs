@@ -59,7 +59,7 @@ fn main() {
 
         let (res, time) = measure(|| {
             // simple_server.distance(from, to)
-            topocore.distance(from, to)
+            topocore.distance(from, to, ground_truth.unwrap())
         });
         topocore.path();
         if res != ground_truth {
