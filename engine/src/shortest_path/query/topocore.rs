@@ -16,7 +16,7 @@ pub struct Server<'a> {
 
     cch: &'a CCH,
 
-    potentials: TimestampedVector<InRangeOption<i32>>,
+    potentials: TimestampedVector<InRangeOption<Weight>>,
     forward_elimination_tree: SteppedEliminationTree<'a, FirstOutGraph<&'a[EdgeId], &'a[NodeId], Vec<Weight>>>,
     backward_elimination_tree: SteppedEliminationTree<'a, FirstOutGraph<&'a[EdgeId], &'a[NodeId], Vec<Weight>>>,
 }
@@ -43,23 +43,17 @@ impl<'a> Server<'a> {
         }
     }
 
-    pub fn distance(&mut self, from: NodeId, to: NodeId, lower_bound: Weight) -> Option<Weight> {
+    pub fn distance(&mut self, from: NodeId, to: NodeId, _lower_bound: Weight) -> Option<Weight> {
         self.potentials.reset();
         self.backward_elimination_tree.initialize_query(self.cch.node_order().rank(to));
         while self.backward_elimination_tree.next().is_some() {
             self.backward_elimination_tree.next_step();
-        }
-        self.forward_elimination_tree.initialize_query(self.cch.node_order().rank(from));
-        while self.forward_elimination_tree.next().is_some() {
-            self.forward_elimination_tree.next_step();
         }
 
         let from = self.order.rank(from);
         let to = self.order.rank(to);
         // initialize
         let mut tentative_distance = INFINITY;
-        let mut forward_done = false;
-        let mut backward_done = false;
 
         // node ids were reordered so that core nodes are at the "front" of the order, that is come first
         // so we can check if a node is in core by checking if its id is smaller than the number of nodes in the core
@@ -69,9 +63,6 @@ impl<'a> Server<'a> {
 
         self.forward_dijkstra.initialize_query(Query { from, to });
         self.backward_dijkstra.initialize_query(Query { from: to, to: from });
-
-        let mut forward_progress = 0;
-        let mut backward_progress = 0;
 
         let mut settled_core_nodes = 0;
         let mut settled_non_core_nodes = 0;
@@ -85,63 +76,29 @@ impl<'a> Server<'a> {
         let order = &self.order;
 
         let potentials = &mut self.potentials;
-        let backward_elimination_tree = &mut self.backward_elimination_tree;
-        let forward_elimination_tree = &mut self.forward_elimination_tree;
+        let backward_elimination_tree = &self.backward_elimination_tree;
+        let forward_elimination_tree = &self.forward_elimination_tree;
 
-        // while !(forward_done && backward_done) {
-        // while !(dbg!(forward_done) && dbg!(backward_done)) && (dbg!(forward_progress) + dbg!(backward_progress) <= dbg!(tentative_distance) + dbg!(lower_tent_dist)) {
-        loop {
-            if !forward_done && (backward_done || forward_progress <= backward_progress) {
-                match forward_dijkstra.next_step_with_callbacks(
-                    |node, distance| {
-                        (distance as i32
-                            + Self::potential(potentials, forward_elimination_tree, backward_elimination_tree, cch.node_order().rank(order.node(node)), stack, lower_bound)) as Weight
-                        // distance
-                            + if in_core(node) { INFINITY } else { 0 }
-                    }) {
-                    QueryProgress::Progress(State { distance, node }) => {
-                        if in_core(node) { settled_core_nodes += 1 } else { settled_non_core_nodes += 1 }
+        while let QueryProgress::Progress(State { node, .. }) = backward_dijkstra.next_step_with_callbacks(|_, distance| distance, |tail, link, dijk| !in_core(tail) || dijk.queue().contains_index(link.node as usize)) {
+            if in_core(node) { settled_core_nodes += 1 } else { settled_non_core_nodes += 1 }
+        }
 
-                        if distance + backward_dijkstra.tentative_distance(node) < tentative_distance {
-                            tentative_distance = distance + backward_dijkstra.tentative_distance(node);
-                            *meeting_node = node;
-                        }
+        while let QueryProgress::Progress(State { distance, node }) = forward_dijkstra.next_step_with_callbacks(
+            |node, distance| {
+                distance
+                    + Self::potential(potentials, forward_elimination_tree, backward_elimination_tree, cch.node_order().rank(order.node(node)), stack)
+                    + if in_core(node) { INFINITY } else { 0 }
+            }, |_,_,_| true)
+        {
+            if in_core(node) { settled_core_nodes += 1 } else { settled_non_core_nodes += 1 }
 
-                        forward_progress = distance;
-                        if backward_dijkstra.tentative_distance(node) != INFINITY && !backward_dijkstra.queue().contains_index(node as usize) {
-                            break;
-                        }
-                    },
-                    QueryProgress::Done(_result) => {
-                        forward_done = true;
-                    }
-                }
-            } else {
-                match backward_dijkstra.next_step_with_callbacks(
-                    |node, distance| {
-                        (distance as i32
-                            - Self::potential(potentials, forward_elimination_tree, backward_elimination_tree, cch.node_order().rank(order.node(node)), stack, lower_bound)) as Weight
-                            / 2
-                        // distance
-                            + if in_core(node) { INFINITY } else { 0 }
-                    }) {
-                    QueryProgress::Progress(State { distance, node }) => {
-                        if in_core(node) { settled_core_nodes += 1 } else { settled_non_core_nodes += 1 }
+            if distance + backward_dijkstra.tentative_distance(node) < tentative_distance {
+                tentative_distance = distance + backward_dijkstra.tentative_distance(node);
+                *meeting_node = node;
+            }
 
-                        if distance + forward_dijkstra.tentative_distance(node) < tentative_distance {
-                            tentative_distance = distance + forward_dijkstra.tentative_distance(node);
-                            *meeting_node = node;
-                        }
-
-                        backward_progress = distance;
-                        if forward_dijkstra.tentative_distance(node) != INFINITY && !forward_dijkstra.queue().contains_index(node as usize) {
-                            break;
-                        }
-                    },
-                    QueryProgress::Done(_result) => {
-                        backward_done = true;
-                    }
-                }
+            if backward_dijkstra.tentative_distance(node) != INFINITY {
+                break;
             }
         }
 
@@ -154,13 +111,12 @@ impl<'a> Server<'a> {
     }
 
     fn potential(
-        potentials: &mut TimestampedVector<InRangeOption<i32>>,
-        forward: &mut SteppedEliminationTree<'_, FirstOutGraph<&[EdgeId], &[NodeId], Vec<Weight>>>,
-        backward: &mut SteppedEliminationTree<'_, FirstOutGraph<&[EdgeId], &[NodeId], Vec<Weight>>>,
+        potentials: &mut TimestampedVector<InRangeOption<Weight>>,
+        forward: &SteppedEliminationTree<'_, FirstOutGraph<&[EdgeId], &[NodeId], Vec<Weight>>>,
+        backward: &SteppedEliminationTree<'_, FirstOutGraph<&[EdgeId], &[NodeId], Vec<Weight>>>,
         node: NodeId,
         stack: &mut Vec<NodeId>,
-        total_lower_bound: Weight
-    ) -> i32
+    ) -> Weight
     {
         let mut cur_node = node;
         while potentials[cur_node as usize].value().is_none() {
@@ -174,19 +130,11 @@ impl<'a> Server<'a> {
 
         while let Some(node) = stack.pop() {
             let min_by_up = forward.graph().neighbor_iter(node)
-                .map(|edge| edge.weight + backward.tentative_distance(edge.node))
+                .map(|edge| edge.weight + potentials[edge.node as usize].value().unwrap())
                 .min()
                 .unwrap_or(INFINITY);
-            backward.distances_mut()[node as usize] = std::cmp::min(backward.tentative_distance(node), min_by_up);
 
-            let min_by_up = backward.graph().neighbor_iter(node)
-                .map(|edge| edge.weight + forward.tentative_distance(edge.node))
-                .min()
-                .unwrap_or(INFINITY);
-            forward.distances_mut()[node as usize] = std::cmp::min(forward.tentative_distance(node), min_by_up);
-
-            let potential = std::cmp::max(backward.tentative_distance(node) as i32, total_lower_bound as i32 - forward.tentative_distance(node) as i32);
-            potentials[node as usize] = InRangeOption::new(Some(potential));
+            potentials[node as usize] = InRangeOption::new(Some(std::cmp::min(backward.tentative_distance(node), min_by_up)));
         }
 
         potentials[node as usize].value().unwrap()

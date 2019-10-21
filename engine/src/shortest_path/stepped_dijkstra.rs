@@ -78,21 +78,21 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
         match self.result {
             Some(result) => QueryProgress::Done(result),
             None => {
-                self.settle_next_node(|_, dist| { dist })
+                self.settle_next_node(|_, dist| { dist }, |_, _, _| true)
             }
         }
     }
 
-    pub fn next_step_with_callbacks(&mut self, potential: impl FnMut(NodeId, Weight) -> Weight) -> QueryProgress {
+    pub fn next_step_with_callbacks(&mut self, potential: impl FnMut(NodeId, Weight) -> Weight, relax_edge: impl FnMut(NodeId, Link, &Self) -> bool) -> QueryProgress {
         match self.result {
             Some(result) => QueryProgress::Done(result),
             None => {
-                self.settle_next_node(potential)
+                self.settle_next_node(potential, relax_edge)
             }
         }
     }
 
-    fn settle_next_node(&mut self, mut potential: impl FnMut(NodeId, Weight) -> Weight) -> QueryProgress {
+    fn settle_next_node(&mut self, mut potential: impl FnMut(NodeId, Weight) -> Weight, mut relax_edge: impl FnMut(NodeId, Link, &Self) -> bool) -> QueryProgress {
         let to = self.query.as_ref().expect("query was not initialized properly").to;
 
         // Examine the frontier with lower distance nodes first (min-heap)
@@ -107,6 +107,7 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
             // For each node we can reach, see if we can find a way with
             // a lower distance going through this node
             for edge in self.graph.neighbor_iter(node) {
+                if !relax_edge(node, edge, &self) { continue; }
                 let next_distance = distance + edge.weight;
 
                 // If so, add it to the frontier and continue

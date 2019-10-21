@@ -475,48 +475,48 @@ fn biconnected<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> Vec<Vec<(Node
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_minimal_chain() {
-        let first_out = vec![0,  1,     3,  4];
-        let head =      vec![1,  0, 2,  1];
-        let weight =    vec![1,  1, 1,  1];
-        let graph = OwnedGraph::new(first_out, head, weight);
-        let mut topocore = preprocess(&graph);
-        assert_eq!(topocore.distance(0, 2), Some(2));
-        assert_eq!(topocore.distance(2, 0), Some(2));
-    }
+    // #[test]
+    // fn test_minimal_chain() {
+    //     let first_out = vec![0,  1,     3,  4];
+    //     let head =      vec![1,  0, 2,  1];
+    //     let weight =    vec![1,  1, 1,  1];
+    //     let graph = OwnedGraph::new(first_out, head, weight);
+    //     let mut topocore = preprocess(&graph);
+    //     assert_eq!(topocore.distance(0, 2), Some(2));
+    //     assert_eq!(topocore.distance(2, 0), Some(2));
+    // }
 
-    #[test]
-    fn test_triangle() {
-        let first_out = vec![0,  1,  2,  3];
-        let head =      vec![1,  2,  0];
-        let weight =    vec![1,  1,  1];
-        let graph = OwnedGraph::new(first_out, head, weight);
-        let mut topocore = preprocess(&graph);
-        assert_eq!(topocore.distance(0, 2), Some(2));
-        assert_eq!(topocore.distance(0, 1), Some(1));
-        assert_eq!(topocore.distance(2, 0), Some(1));
-        assert_eq!(topocore.distance(2, 1), Some(2));
-    }
+    // #[test]
+    // fn test_triangle() {
+    //     let first_out = vec![0,  1,  2,  3];
+    //     let head =      vec![1,  2,  0];
+    //     let weight =    vec![1,  1,  1];
+    //     let graph = OwnedGraph::new(first_out, head, weight);
+    //     let mut topocore = preprocess(&graph);
+    //     assert_eq!(topocore.distance(0, 2), Some(2));
+    //     assert_eq!(topocore.distance(0, 1), Some(1));
+    //     assert_eq!(topocore.distance(2, 0), Some(1));
+    //     assert_eq!(topocore.distance(2, 1), Some(2));
+    // }
 
-    #[test]
-    fn test_square_with_diag() {
-        let first_out = vec![0,     3,   5,     8,  10];
-        let head =      vec![1,2,3, 0,2, 0,1,3, 0,2];
-        let weight =    vec![1,5,2, 1,1, 5,1,2, 2,2];
-        let graph = OwnedGraph::new(first_out, head, weight);
-        let mut topocore = preprocess(&graph);
-        assert_eq!(topocore.distance(0, 1), Some(1));
-        assert_eq!(topocore.distance(1, 0), Some(1));
-        assert_eq!(topocore.distance(0, 2), Some(2));
-        assert_eq!(topocore.distance(2, 0), Some(2));
-        assert_eq!(topocore.distance(0, 3), Some(2));
-        assert_eq!(topocore.distance(3, 0), Some(2));
-        assert_eq!(topocore.distance(1, 2), Some(1));
-        assert_eq!(topocore.distance(2, 1), Some(1));
-        assert_eq!(topocore.distance(1, 3), Some(3));
-        assert_eq!(topocore.distance(3, 1), Some(3));
-        assert_eq!(topocore.distance(2, 3), Some(2));
-        assert_eq!(topocore.distance(3, 2), Some(2));
-    }
+    // #[test]
+    // fn test_square_with_diag() {
+    //     let first_out = vec![0,     3,   5,     8,  10];
+    //     let head =      vec![1,2,3, 0,2, 0,1,3, 0,2];
+    //     let weight =    vec![1,5,2, 1,1, 5,1,2, 2,2];
+    //     let graph = OwnedGraph::new(first_out, head, weight);
+    //     let mut topocore = preprocess(&graph);
+    //     assert_eq!(topocore.distance(0, 1), Some(1));
+    //     assert_eq!(topocore.distance(1, 0), Some(1));
+    //     assert_eq!(topocore.distance(0, 2), Some(2));
+    //     assert_eq!(topocore.distance(2, 0), Some(2));
+    //     assert_eq!(topocore.distance(0, 3), Some(2));
+    //     assert_eq!(topocore.distance(3, 0), Some(2));
+    //     assert_eq!(topocore.distance(1, 2), Some(1));
+    //     assert_eq!(topocore.distance(2, 1), Some(1));
+    //     assert_eq!(topocore.distance(1, 3), Some(3));
+    //     assert_eq!(topocore.distance(3, 1), Some(3));
+    //     assert_eq!(topocore.distance(2, 3), Some(2));
+    //     assert_eq!(topocore.distance(3, 2), Some(2));
+    // }
 }
