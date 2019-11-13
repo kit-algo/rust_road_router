@@ -27,6 +27,8 @@ fn main() {
     let first_out = Vec::load_from(path.join("first_out").to_str().unwrap()).expect("could not read first_out");
     let head = Vec::load_from(path.join("head").to_str().unwrap()).expect("could not read head");
     let travel_time = Vec::load_from(path.join("travel_time").to_str().unwrap()).expect("could not read travel_time");
+    #[cfg(feature = "chpot_visualize")] let lat = Vec::<f32>::load_from(path.join("latitude").to_str().unwrap()).expect("could not read latitude");
+    #[cfg(feature = "chpot_visualize")] let lng = Vec::<f32>::load_from(path.join("longitude").to_str().unwrap()).expect("could not read longitude");
 
     let from = Vec::load_from(path.join("test/source").to_str().unwrap()).expect("could not read source");
     let to = Vec::load_from(path.join("test/target").to_str().unwrap()).expect("could not read target");
@@ -59,7 +61,8 @@ fn main() {
 
         let (res, time) = measure(|| {
             // simple_server.distance(from, to)
-            topocore.distance(from, to, ground_truth.unwrap())
+            #[cfg(feature = "chpot_visualize")] { topocore.distance(from, to, &lat, &lng) }
+            #[cfg(not(feature = "chpot_visualize"))] { topocore.distance(from, to) }
         });
         topocore.path();
         if res != ground_truth {

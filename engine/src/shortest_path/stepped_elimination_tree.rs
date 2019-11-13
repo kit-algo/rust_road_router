@@ -77,10 +77,6 @@ impl<'b, Graph: for<'a> LinkIterGraph<'a>> SteppedEliminationTree<'b, Graph> {
         self.distances[node as usize]
     }
 
-    pub fn distances_mut(&mut self) -> &mut TimestampedVector<Weight> {
-        &mut self.distances
-    }
-
     pub fn predecessor(&self, node: NodeId) -> NodeId {
         self.predecessors[node as usize]
     }

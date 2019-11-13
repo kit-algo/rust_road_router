@@ -17,6 +17,7 @@ tdcch-precustomization = []
 tdcch-postcustomization = []
 tdcch-triangle-sorting = []
 tdcch-query-astar = []
+chpot-visualize = []
 report-to-stderr = []
 detailed-stats = []
 

@@ -43,7 +43,19 @@ impl<'a> Server<'a> {
         }
     }
 
-    pub fn distance(&mut self, from: NodeId, to: NodeId, _lower_bound: Weight) -> Option<Weight> {
+    pub fn distance(
+        &mut self,
+        from: NodeId,
+        to: NodeId,
+        #[cfg(feature = "chpot_visualize")] lat: &[f32],
+        #[cfg(feature = "chpot_visualize")] lng: &[f32])
+    -> Option<Weight> {
+
+        #[cfg(feature = "chpot_visualize")] {
+            println!("L.marker([{}, {}], {{ title: \"from\", icon: blackIcon }}).addTo(map);", lat[from as usize], lng[from as usize]);
+            println!("L.marker([{}, {}], {{ title: \"from\", icon: blackIcon }}).addTo(map);", lat[to as usize], lng[to as usize]);
+        };
+
         self.potentials.reset();
         self.backward_elimination_tree.initialize_query(self.cch.node_order().rank(to));
         while self.backward_elimination_tree.next().is_some() {
@@ -79,8 +91,13 @@ impl<'a> Server<'a> {
         let backward_elimination_tree = &self.backward_elimination_tree;
         let forward_elimination_tree = &self.forward_elimination_tree;
 
-        while let QueryProgress::Progress(State { node, .. }) = backward_dijkstra.next_step_with_callbacks(|_, distance| distance, |tail, link, dijk| !in_core(tail) || dijk.queue().contains_index(link.node as usize)) {
+        while let QueryProgress::Progress(State { node, distance }) = backward_dijkstra.next_step_with_callbacks(|_, distance| distance, |tail, link, dijk| !in_core(tail) || dijk.queue().contains_index(link.node as usize)) {
             if in_core(node) { settled_core_nodes += 1 } else { settled_non_core_nodes += 1 }
+            #[cfg(feature = "chpot_visualize")] {
+                let node = self.order.node(node);
+                println!("var marker = L.marker([{}, {}], {{ icon: redIcon }}).addTo(map);", lat[node as usize], lng[node as usize]);
+                println!("marker.bindPopup(\"id: {}<br>distance: {}\");", node, distance);
+            };
         }
 
         while let QueryProgress::Progress(State { distance, node }) = forward_dijkstra.next_step_with_callbacks(
@@ -91,6 +108,12 @@ impl<'a> Server<'a> {
             }, |_,_,_| true)
         {
             if in_core(node) { settled_core_nodes += 1 } else { settled_non_core_nodes += 1 }
+
+            #[cfg(feature = "chpot_visualize")] {
+                let node_id = self.order.node(node) as usize;
+                println!("var marker = L.marker([{}, {}], {{ icon: blueIcon }}).addTo(map);", lat[node_id], lng[node_id]);
+                println!("marker.bindPopup(\"id: {}<br>distance: {}<br>potential: {}\");", node_id, distance, Self::potential(potentials, forward_elimination_tree, backward_elimination_tree, cch.node_order().rank(order.node(node)), stack));
+            };
 
             if distance + backward_dijkstra.tentative_distance(node) < tentative_distance {
                 tentative_distance = distance + backward_dijkstra.tentative_distance(node);

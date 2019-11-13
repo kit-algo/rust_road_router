@@ -27,6 +27,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let first_out = Vec::<NodeId>::load_from(path.join("first_out").to_str().unwrap())?;
     let head = Vec::<EdgeId>::load_from(path.join("head").to_str().unwrap())?;
     let mut travel_time = Vec::<EdgeId>::load_from(path.join("travel_time").to_str().unwrap())?;
+    #[cfg(feature = "chpot_visualize")] let lat = Vec::<f32>::load_from(path.join("latitude").to_str().unwrap())?;
+    #[cfg(feature = "chpot_visualize")] let lng = Vec::<f32>::load_from(path.join("longitude").to_str().unwrap())?;
     let mut live_travel_time = travel_time.clone();
     let geo_distance = Vec::<EdgeId>::load_from(path.join("geo_distance").to_str().unwrap())?;
     let osm_node_ids = Vec::<u64>::load_from(path.join("osm_node_ids").to_str().unwrap())?;
@@ -128,7 +130,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let lower_bound = cch_static_server.distance(from, to);
         let (res, time) = measure(|| {
-            topocore.distance(from, to, lower_bound.unwrap())
+            #[cfg(feature = "chpot_visualize")] { topocore.distance(from, to, &lat, &lng) }
+            #[cfg(not(feature = "chpot_visualize"))] { topocore.distance(from, to) }
         });
         topocore.path();
         let live = lower_bound != ground_truth;
