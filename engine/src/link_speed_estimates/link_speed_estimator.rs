@@ -6,7 +6,7 @@ use super::*;
 trait State<'a>: Debug  {
     fn on_link(self: Box<Self>, link: &'a LinkData) -> (Box<dyn State + 'a>, Box<dyn Iterator<Item = LinkSpeedData> + 'a>);
     fn on_trace(self: Box<Self>, trace: &'a TraceData) -> (Box<dyn State + 'a>, Box<dyn Iterator<Item = LinkSpeedData> + 'a>);
-    fn on_done(self: Box<Self>) -> (Box<dyn Iterator<Item = LinkSpeedData> + 'a>);
+    fn on_done(self: Box<Self>) -> Box<dyn Iterator<Item = LinkSpeedData> + 'a>;
 }
 
 #[derive(Debug)]
@@ -20,7 +20,7 @@ impl<'a> State<'a> for Init {
         panic!("Init: trace before initial link");
     }
 
-    fn on_done(self: Box<Self>) -> (Box<dyn Iterator<Item = LinkSpeedData>>) {
+    fn on_done(self: Box<Self>) -> Box<dyn Iterator<Item = LinkSpeedData>> {
         panic!("Init: stream ended, expected link");
     }
 }
@@ -39,7 +39,7 @@ impl<'a> State<'a> for InitialLink<'a> {
         (Box::new(InitialLinkWithTrace { link: self.link, trace }), Box::new(empty()))
     }
 
-    fn on_done(self: Box<Self>) -> (Box<dyn Iterator<Item = LinkSpeedData>>) {
+    fn on_done(self: Box<Self>) -> Box<dyn Iterator<Item = LinkSpeedData>> {
         panic!("InitialLink: stream ended, expected trace");
     }
 }
@@ -71,7 +71,7 @@ impl<'a> State<'a> for InitialLinkWithTrace<'a> {
         (Box::new(LinkWithEntryTimestampAndTrace { link: self.link, last_trace: trace, entry_timestamp, quality: delta_fraction }), Box::new(empty()))
     }
 
-    fn on_done(self: Box<Self>) -> (Box<dyn Iterator<Item = LinkSpeedData>>) {
+    fn on_done(self: Box<Self>) -> Box<dyn Iterator<Item = LinkSpeedData>> {
         panic!("InitialLinkWithTrace: stream ended, expected link or trace");
     }
 }
@@ -134,7 +134,7 @@ impl<'a> State<'a> for IntermediateLinkAfterInitial<'a> {
         (Box::new(LinkWithEntryTimestampAndTrace { link, last_trace: trace, entry_timestamp, quality }), Box::new(output))
     }
 
-    fn on_done(self: Box<Self>) -> (Box<dyn Iterator<Item = LinkSpeedData>>) {
+    fn on_done(self: Box<Self>) -> Box<dyn Iterator<Item = LinkSpeedData>> {
         panic!("IntermediateLinkAfterInitial: stream ended, expected link or trace");
     }
 }
@@ -160,7 +160,7 @@ impl<'a> State<'a> for LinkWithEntryTimestampAndTrace<'a> {
         (self.clone(), Box::new(empty()))
     }
 
-    fn on_done(self: Box<Self>) -> (Box<dyn Iterator<Item = LinkSpeedData>>) {
+    fn on_done(self: Box<Self>) -> Box<dyn Iterator<Item = LinkSpeedData>> {
         let delta_t = self.last_trace.timestamp - self.entry_timestamp;
         let delta_s = f64::from(self.last_trace.traversed_in_travel_direction_fraction) * f64::from(self.link.length);
         let velocity = delta_s / delta_t as f64;
@@ -224,7 +224,7 @@ impl<'a> State<'a> for IntermediateLink<'a> {
         (Box::new(LinkWithEntryTimestampAndTrace { link, last_trace: trace, entry_timestamp, quality }), Box::new(output))
     }
 
-    fn on_done(self: Box<Self>) -> (Box<dyn Iterator<Item = LinkSpeedData>>) {
+    fn on_done(self: Box<Self>) -> Box<dyn Iterator<Item = LinkSpeedData>> {
         panic!("IntermediateLink: stream ended, expected link or trace");
     }
 }
