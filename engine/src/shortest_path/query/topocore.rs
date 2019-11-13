@@ -10,7 +10,7 @@ pub struct Server<'a> {
     forward_dijkstra: SteppedDijkstra<OwnedGraph>,
     backward_dijkstra: SteppedDijkstra<OwnedGraph>,
     order: NodeOrder,
-    core_size: NodeId,
+    core_size: usize,
     meeting_node: NodeId,
     stack: Vec<NodeId>,
 
@@ -22,7 +22,7 @@ pub struct Server<'a> {
 }
 
 impl<'a> Server<'a> {
-    pub fn new<Graph>(forward: OwnedGraph, backward: OwnedGraph, order: NodeOrder, core_size: NodeId, cch: &'a CCH, lower_bound: &Graph) -> Server<'a> where
+    pub fn new<Graph>(topocore: crate::shortest_path::topocore::Topocore, cch: &'a CCH, lower_bound: &Graph) -> Server<'a> where
         Graph: for<'b> LinkIterGraph<'b> + RandomLinkAccessGraph + Sync
     {
         let (forward_up_graph, backward_up_graph) = customize(cch, lower_bound);
@@ -30,12 +30,12 @@ impl<'a> Server<'a> {
         let backward_elimination_tree = SteppedEliminationTree::new(backward_up_graph, cch.elimination_tree());
 
         Server {
-            forward_dijkstra: SteppedDijkstra::new(forward),
-            backward_dijkstra: SteppedDijkstra::new(backward),
-            core_size,
+            forward_dijkstra: SteppedDijkstra::new(topocore.forward),
+            backward_dijkstra: SteppedDijkstra::new(topocore.backward),
+            core_size: topocore.core_size,
             meeting_node: 0,
             stack: Vec::new(),
-            order,
+            order: topocore.order,
             cch,
             forward_elimination_tree,
             backward_elimination_tree,
@@ -70,7 +70,7 @@ impl<'a> Server<'a> {
         // node ids were reordered so that core nodes are at the "front" of the order, that is come first
         // so we can check if a node is in core by checking if its id is smaller than the number of nodes in the core
         let in_core = { let core_size = self.core_size; move |node| {
-            node < core_size
+            (node as usize) < core_size
         } };
 
         self.forward_dijkstra.initialize_query(Query { from, to });
@@ -187,7 +187,7 @@ impl<'a> Server<'a> {
         let mut core_nodes = 0;
         let mut non_core_nodes = 0;
         for node in &mut path {
-            if *node < self.core_size {
+            if (*node as usize) < self.core_size {
                 core_nodes += 1;
             } else {
                 non_core_nodes += 1;

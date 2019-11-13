@@ -1,10 +1,17 @@
-use crate::shortest_path::customizable_contraction_hierarchy::CCH;
 use crate::shortest_path::node_order::NodeOrder;
 use crate::rank_select_map::*;
 use crate::util::TapOps;
 use crate::in_range_option::InRangeOption;
 use std::cmp::{min, max};
 use super::*;
+
+#[derive(Debug)]
+pub struct Topocore {
+    pub forward: OwnedGraph,
+    pub backward: OwnedGraph,
+    pub order: NodeOrder,
+    pub core_size: usize,
+}
 
 #[derive(Debug)]
 struct UndirectedGraph<'a> {
@@ -31,7 +38,7 @@ impl<'a, 'b> LinkIterGraph<'a> for UndirectedGraph<'b> {
 }
 
 #[allow(clippy::cognitive_complexity)]
-pub fn preprocess<'c, Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, cch: &'c CCH, lower_bound: &(impl for<'b> LinkIterGraph<'b> + RandomLinkAccessGraph + Sync)) -> super::query::topocore::Server<'c> {
+pub fn preprocess<'c, Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> Topocore {
     let order = dfs_pre_order(graph);
 
     let n = graph.num_nodes();
@@ -371,14 +378,12 @@ pub fn preprocess<'c, Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, cch: &'c 
         }
     }
 
-    super::query::topocore::Server::new(
-        OwnedGraph::new(forward_first_out, forward_head, forward_weight),
-        OwnedGraph::new(backward_first_out, backward_head, backward_weight),
-        new_order,
+    Topocore {
+        forward: OwnedGraph::new(forward_first_out, forward_head, forward_weight),
+        backward: OwnedGraph::new(backward_first_out, backward_head, backward_weight),
+        order: new_order,
         core_size,
-        cch,
-        lower_bound
-    )
+    }
 }
 
 fn dfs_pre_order<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> NodeOrder {

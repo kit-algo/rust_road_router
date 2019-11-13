@@ -11,6 +11,7 @@ use bmw_routing_engine::{
     graph::*,
     shortest_path::{
         topocore::preprocess,
+        query::topocore::Server as TopoServer,
         // query::dijkstra::Server as DijkServer,
     },
     io::Load,
@@ -45,9 +46,10 @@ fn main() {
 
     // let mut simple_server = DijkServer::new(graph);
 
-    let mut topocore = report_time("topocore preprocessing", || {
-        preprocess(&graph, &cch, &graph)
+    let topocore = report_time("topocore preprocessing", || {
+        preprocess(&graph)
     });
+    let mut topocore = TopoServer::new(topocore, &cch, &graph);
 
     let mut total_query_time = Duration::zero();
 

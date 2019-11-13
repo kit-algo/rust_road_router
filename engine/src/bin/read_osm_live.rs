@@ -9,6 +9,7 @@ use bmw_routing_engine::{
         node_order::NodeOrder,
         topocore::*,
         query::customizable_contraction_hierarchy::Server,
+        query::topocore::Server as TopoServer,
     },
 };
 use std::{env, error::Error, path::Path, fs::File};
@@ -105,10 +106,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut cch_static_server = Server::new(&cch, &graph);
     let mut cch_live_server = Server::new(&cch, &live_graph);
 
-    let mut topocore = report_time("topocore preprocessing", || {
-        preprocess(&live_graph, &cch, &graph)
-        // preprocess(&graph, &cch, &graph)
+    let topocore = report_time("topocore preprocessing", || {
+        preprocess(&live_graph)
     });
+    let mut topocore = TopoServer::new(topocore, &cch, &graph);
 
     let mut query_count = 0;
     let mut live_count = 0;
