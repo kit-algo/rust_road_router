@@ -1,9 +1,9 @@
-use crate::shortest_path::node_order::NodeOrder;
-use crate::rank_select_map::*;
-use crate::util::TapOps;
-use crate::in_range_option::InRangeOption;
-use std::cmp::{min, max};
 use super::*;
+use crate::in_range_option::InRangeOption;
+use crate::rank_select_map::*;
+use crate::shortest_path::node_order::NodeOrder;
+use crate::util::TapOps;
+use std::cmp::{max, min};
 
 #[derive(Debug)]
 pub struct Topocore {
@@ -43,52 +43,61 @@ pub fn preprocess<'c, Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> Topoco
 
     let n = graph.num_nodes();
 
-    let link_lexicographic = |a: &Link, b: &Link| {
-        match a.node.cmp(&b.node) {
-            std::cmp::Ordering::Equal => a.weight.cmp(&b.weight),
-            res => res,
-        }
+    let link_lexicographic = |a: &Link, b: &Link| match a.node.cmp(&b.node) {
+        std::cmp::Ordering::Equal => a.weight.cmp(&b.weight),
+        res => res,
     };
 
-    let mut outs: Vec<Vec<Link>> = (0..n).map(|rank| {
-        let node = order.node(rank as NodeId);
-        graph.neighbor_iter(node)
-            .filter(|&Link { node: head, .. }| head != node)
-            .map(|Link { node, weight }| Link { node: order.rank(node), weight })
-            .collect::<Vec<_>>()
-            .tap(|neighbors| neighbors.sort_unstable_by(link_lexicographic))
-            .tap(|neighbors| neighbors.dedup_by(|a,b| a.node == b.node))
-    }).collect();
+    let mut outs: Vec<Vec<Link>> = (0..n)
+        .map(|rank| {
+            let node = order.node(rank as NodeId);
+            graph
+                .neighbor_iter(node)
+                .filter(|&Link { node: head, .. }| head != node)
+                .map(|Link { node, weight }| Link {
+                    node: order.rank(node),
+                    weight,
+                })
+                .collect::<Vec<_>>()
+                .tap(|neighbors| neighbors.sort_unstable_by(link_lexicographic))
+                .tap(|neighbors| neighbors.dedup_by(|a, b| a.node == b.node))
+        })
+        .collect();
     let reversed = graph.reverse();
-    let mut ins: Vec<Vec<Link>> = (0..n).map(|rank| {
-        let node = order.node(rank as NodeId);
-        reversed.neighbor_iter(node)
-            .filter(|&Link { node: head, .. }| head != node)
-            .map(|Link { node, weight }| Link { node: order.rank(node), weight })
-            .collect::<Vec<_>>()
-            .tap(|neighbors| neighbors.sort_unstable_by(link_lexicographic))
-            .tap(|neighbors| neighbors.dedup_by(|a,b| a.node == b.node))
-    }).collect();
+    let mut ins: Vec<Vec<Link>> = (0..n)
+        .map(|rank| {
+            let node = order.node(rank as NodeId);
+            reversed
+                .neighbor_iter(node)
+                .filter(|&Link { node: head, .. }| head != node)
+                .map(|Link { node, weight }| Link {
+                    node: order.rank(node),
+                    weight,
+                })
+                .collect::<Vec<_>>()
+                .tap(|neighbors| neighbors.sort_unstable_by(link_lexicographic))
+                .tap(|neighbors| neighbors.dedup_by(|a, b| a.node == b.node))
+        })
+        .collect();
 
     let mut to_contract = BitVec::new(n);
     to_contract.set_all();
     let mut queue = Vec::new();
 
-    let biggest = biconnected(&UndirectedGraph { ins: &ins[..], outs: &outs[..] })
-        .into_iter()
-        .max_by_key(|edges| edges.len())
-        .unwrap();
+    let biggest = biconnected(&UndirectedGraph {
+        ins: &ins[..],
+        outs: &outs[..],
+    })
+    .into_iter()
+    .max_by_key(|edges| edges.len())
+    .unwrap();
     for (u, v) in biggest {
         to_contract.unset(u as usize);
         to_contract.unset(v as usize);
     }
 
     let deg_zero_or_one = |node_outs: &Vec<Link>, node_ins: &Vec<Link>| {
-        node_outs.is_empty() || node_ins.is_empty() || (
-            node_outs.len() == 1 &&
-            node_ins.len() == 1 &&
-            node_outs[0].node == node_ins[0].node
-        )
+        node_outs.is_empty() || node_ins.is_empty() || (node_outs.len() == 1 && node_ins.len() == 1 && node_outs[0].node == node_ins[0].node)
     };
 
     for node in 0..n {
@@ -146,35 +155,39 @@ pub fn preprocess<'c, Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> Topoco
         }
     }
 
-    let deg_two = |node_outs: &Vec<Link>, node_ins: &Vec<Link>| {
-        match (&node_outs[..], &node_ins[..]) {
-            (&[_], &[_]) => true,
-            (&[Link { node: out_node, .. }], &[Link { node: in1, .. }, Link { node: in2, .. }]) => out_node == in1 || out_node == in2,
-            (&[Link { node: out1, .. }, Link { node: out2, .. }], &[Link { node: in_node, .. }]) => in_node == out1 || in_node == out2,
-            (&[Link { node: out1, .. }, Link { node: out2, .. }], &[Link { node: in1, .. }, Link { node: in2, .. }]) =>
-                max(out1, out2) == max(in1, in2) && min(out1, out2) == min(in1, in2),
-            _ => false,
+    let deg_two = |node_outs: &Vec<Link>, node_ins: &Vec<Link>| match (&node_outs[..], &node_ins[..]) {
+        (&[_], &[_]) => true,
+        (&[Link { node: out_node, .. }], &[Link { node: in1, .. }, Link { node: in2, .. }]) => out_node == in1 || out_node == in2,
+        (&[Link { node: out1, .. }, Link { node: out2, .. }], &[Link { node: in_node, .. }]) => in_node == out1 || in_node == out2,
+        (&[Link { node: out1, .. }, Link { node: out2, .. }], &[Link { node: in1, .. }, Link { node: in2, .. }]) => {
+            max(out1, out2) == max(in1, in2) && min(out1, out2) == min(in1, in2)
         }
+        _ => false,
     };
 
-    let deg_two_neighbors = |node_outs: &Vec<Link>, node_ins: &Vec<Link>| {
-        match (&node_outs[..], &node_ins[..]) {
-            (&[Link { node: out_node, .. }], &[Link { node: in_node, .. }]) => (out_node, in_node),
-            (&[Link { node: _out_node, .. }], &[Link { node: in1, .. }, Link { node: in2, .. }]) => (in1, in2),
-            (&[Link { node: out1, .. }, Link { node: out2, .. }], &[Link { node: _in_node, .. }]) => (out1, out2),
-            (&[Link { node: out1, .. }, Link { node: out2, .. }], &[Link { node: _in1, .. }, Link { node: _in2, .. }]) =>
-                (max(out1, out2), min(out1, out2)),
-            _ => panic!("called neighbors on none deg 2 node"),
-        }
+    let deg_two_neighbors = |node_outs: &Vec<Link>, node_ins: &Vec<Link>| match (&node_outs[..], &node_ins[..]) {
+        (&[Link { node: out_node, .. }], &[Link { node: in_node, .. }]) => (out_node, in_node),
+        (&[Link { node: _out_node, .. }], &[Link { node: in1, .. }, Link { node: in2, .. }]) => (in1, in2),
+        (&[Link { node: out1, .. }, Link { node: out2, .. }], &[Link { node: _in_node, .. }]) => (out1, out2),
+        (&[Link { node: out1, .. }, Link { node: out2, .. }], &[Link { node: _in1, .. }, Link { node: _in2, .. }]) => (max(out1, out2), min(out1, out2)),
+        _ => panic!("called neighbors on none deg 2 node"),
     };
 
     let deg_two_weights = |other: NodeId, node_outs: &Vec<Link>, node_ins: &Vec<Link>| {
-        (node_outs.iter().find(|&&Link { node: head, .. }| head == other).map(|&Link { weight, .. }| weight),
-            node_ins.iter().find(|&&Link { node: head, .. }| head == other).map(|&Link { weight, .. }| weight))
+        (
+            node_outs
+                .iter()
+                .find(|&&Link { node: head, .. }| head == other)
+                .map(|&Link { weight, .. }| weight),
+            node_ins
+                .iter()
+                .find(|&&Link { node: head, .. }| head == other)
+                .map(|&Link { weight, .. }| weight),
+        )
     };
 
     let insert_or_decrease = |links: &mut Vec<Link>, target: NodeId, weight: Weight| {
-        if let Some(link) = links.iter_mut().find(|&& mut Link { node, .. }| node == target) {
+        if let Some(link) = links.iter_mut().find(|&&mut Link { node, .. }| node == target) {
             link.weight = min(link.weight, weight);
         } else {
             links.push(Link { node: target, weight });
@@ -259,13 +272,21 @@ pub fn preprocess<'c, Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> Topoco
 
             debug_assert!(!to_contract.get(end1));
             for &Link { node: neighbor, .. } in outs[end1].iter().chain(&ins[end1]) {
-                debug_assert!(!to_contract.get(neighbor as usize), "{} {} {} {} {} {}", end1, end1_prev, neighbor, end2, prev, node);
+                debug_assert!(
+                    !to_contract.get(neighbor as usize),
+                    "{} {} {} {} {} {}",
+                    end1,
+                    end1_prev,
+                    neighbor,
+                    end2,
+                    prev,
+                    node
+                );
             }
             debug_assert!(!to_contract.get(end2));
             for &Link { node: neighbor, .. } in outs[end2].iter().chain(&ins[end2]) {
                 debug_assert!(!to_contract.get(neighbor as usize));
             }
-
         }
     }
 
@@ -278,7 +299,9 @@ pub fn preprocess<'c, Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> Topoco
     }
 
     let neighborhood = |node_outs: &Vec<Link>, node_ins: &Vec<Link>| {
-        node_outs.iter().chain(node_ins.iter())
+        node_outs
+            .iter()
+            .chain(node_ins.iter())
             .map(|&Link { node, .. }| node)
             .collect::<Vec<_>>()
             .tap(|neighborhood| neighborhood.sort())
@@ -310,8 +333,16 @@ pub fn preprocess<'c, Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> Topoco
             outs[head as usize].swap_remove(pos);
         }
 
-        for &Link { node: head, weight: first_weight } in &node_out {
-            for &Link { node: tail, weight: second_weight } in &node_in {
+        for &Link {
+            node: head,
+            weight: first_weight,
+        } in &node_out
+        {
+            for &Link {
+                node: tail,
+                weight: second_weight,
+            } in &node_in
+            {
                 if head != tail {
                     insert_or_decrease(&mut outs[tail as usize], head, first_weight + second_weight);
                     insert_or_decrease(&mut ins[head as usize], tail, first_weight + second_weight);
@@ -350,9 +381,9 @@ pub fn preprocess<'c, Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> Topoco
     let m_forward: usize = outs.iter().map(|links| links.len()).sum();
     let m_backward: usize = ins.iter().map(|links| links.len()).sum();
 
-    let mut forward_first_out: Vec<EdgeId> = Vec::with_capacity(n+1);
+    let mut forward_first_out: Vec<EdgeId> = Vec::with_capacity(n + 1);
     forward_first_out.push(0);
-    let mut backward_first_out: Vec<EdgeId> = Vec::with_capacity(n+1);
+    let mut backward_first_out: Vec<EdgeId> = Vec::with_capacity(n + 1);
     backward_first_out.push(0);
     let mut forward_head = Vec::with_capacity(m_forward);
     let mut forward_weight = Vec::with_capacity(m_forward);
@@ -398,10 +429,14 @@ fn dfs<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, visit: &mut impl FnMut(N
     let mut visited = BitVec::new(graph.num_nodes());
     let mut stack = Vec::new();
     for node in 0..graph.num_nodes() {
-        if !visited.get(node) { stack.push(node as NodeId); }
+        if !visited.get(node) {
+            stack.push(node as NodeId);
+        }
 
         while let Some(node) = stack.pop() {
-            if visited.get(node as usize) { continue; }
+            if visited.get(node as usize) {
+                continue;
+            }
             visit(node);
             visited.set(node as usize);
 
@@ -425,7 +460,9 @@ fn biconnected<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> Vec<Vec<(Node
     let mut components = Vec::new();
 
     for node in 0..graph.num_nodes() {
-        if dfs_num[node].value().is_some() { continue; }
+        if dfs_num[node].value().is_some() {
+            continue;
+        }
 
         debug_assert!(edge_stack.is_empty());
         debug_assert!(stack.is_empty());

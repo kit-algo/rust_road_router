@@ -1,10 +1,6 @@
 use std::env;
 
-use bmw_routing_engine::{
-    graph::*,
-    export::*,
-    io::Load,
-};
+use bmw_routing_engine::{export::*, graph::*, io::Load};
 use std::path::Path;
 
 fn main() {

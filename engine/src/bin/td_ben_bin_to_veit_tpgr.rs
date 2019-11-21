@@ -1,15 +1,6 @@
-use std::{
-    env,
-    path::Path,
-    error::Error,
-    fs::File,
-    io::prelude::*,
-};
+use std::{env, error::Error, fs::File, io::prelude::*, path::Path};
 
-use bmw_routing_engine::{
-    io::*,
-    cli::CliErr,
-};
+use bmw_routing_engine::{cli::CliErr, io::*};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args();
@@ -33,12 +24,23 @@ fn main() -> Result<(), Box<dyn Error>> {
     writeln!(output, "{} {} {} 864000", node_count, arc_count, ipp_count)?;
 
     for (node, edge_ids) in first_out.windows(2).enumerate() {
-        for edge_id in edge_ids[0] .. edge_ids[1] {
+        for edge_id in edge_ids[0]..edge_ids[1] {
             let edge_id = edge_id as usize;
-            write!(output, "{} {} {}", node, head[edge_id], first_ipp_of_arc[edge_id + 1] - first_ipp_of_arc[edge_id])?;
-            for ipp_idx in first_ipp_of_arc[edge_id] .. first_ipp_of_arc[edge_id + 1] {
+            write!(
+                output,
+                "{} {} {}",
+                node,
+                head[edge_id],
+                first_ipp_of_arc[edge_id + 1] - first_ipp_of_arc[edge_id]
+            )?;
+            for ipp_idx in first_ipp_of_arc[edge_id]..first_ipp_of_arc[edge_id + 1] {
                 let ipp_idx = ipp_idx as usize;
-                write!(output, " {} {}", (f64::from(ipp_departure_time[ipp_idx]) * 864_000.0) / period, (f64::from(ipp_travel_time[ipp_idx]) * 864_000.0) / period)?;
+                write!(
+                    output,
+                    " {} {}",
+                    (f64::from(ipp_departure_time[ipp_idx]) * 864_000.0) / period,
+                    (f64::from(ipp_travel_time[ipp_idx]) * 864_000.0) / period
+                )?;
             }
             writeln!(output)?;
         }

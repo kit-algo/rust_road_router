@@ -1,19 +1,19 @@
-use super::*;
-use crate::shortest_path::timestamped_vector::TimestampedVector;
-use crate::in_range_option::InRangeOption;
-use crate::shortest_path::td_stepped_dijkstra::TDSteppedDijkstra;
-use crate::graph::time_dependent::*;
-use super::td_stepped_dijkstra::QueryProgress;
 use super::stepped_elimination_tree::SteppedEliminationTree;
+use super::td_stepped_dijkstra::QueryProgress;
+use super::*;
+use crate::graph::time_dependent::*;
+use crate::in_range_option::InRangeOption;
 use crate::shortest_path::customizable_contraction_hierarchy::*;
+use crate::shortest_path::td_stepped_dijkstra::TDSteppedDijkstra;
+use crate::shortest_path::timestamped_vector::TimestampedVector;
 
 #[derive(Debug)]
 pub struct Server<'a> {
     dijkstra: TDSteppedDijkstra,
-    backward: SteppedEliminationTree<'a, FirstOutGraph<&'a[EdgeId], &'a[NodeId], Vec<Weight>>>,
-    upward: FirstOutGraph<&'a[EdgeId], &'a[NodeId], Vec<Weight>>,
+    backward: SteppedEliminationTree<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], Vec<Weight>>>,
+    upward: FirstOutGraph<&'a [EdgeId], &'a [NodeId], Vec<Weight>>,
     potentials: TimestampedVector<InRangeOption<Weight>>,
-    cch: &'a CCH
+    cch: &'a CCH,
 }
 
 impl Server<'_> {
@@ -30,7 +30,7 @@ impl Server<'_> {
             backward,
             upward,
             cch,
-            potentials: TimestampedVector::new(cch.num_nodes(), InRangeOption::new(None))
+            potentials: TimestampedVector::new(cch.num_nodes(), InRangeOption::new(None)),
         }
     }
 
@@ -38,14 +38,14 @@ impl Server<'_> {
         potentials: &mut TimestampedVector<InRangeOption<Weight>>,
         upward: &FirstOutGraph<&[EdgeId], &[NodeId], Vec<Weight>>,
         backward: &SteppedEliminationTree<'_, FirstOutGraph<&[EdgeId], &[NodeId], Vec<Weight>>>,
-        node: NodeId
-    ) -> Weight
-    {
+        node: NodeId,
+    ) -> Weight {
         if let Some(pot) = potentials[node as usize].value() {
             return pot;
         }
 
-        let min_by_up = upward.neighbor_iter(node)
+        let min_by_up = upward
+            .neighbor_iter(node)
             .map(|edge| edge.weight + Self::potential(potentials, upward, backward, edge.node))
             .min()
             .unwrap_or(INFINITY);
@@ -72,9 +72,8 @@ impl Server<'_> {
         loop {
             match dijkstra.next_step(|_| true, |node| Self::potential(potentials, upward, backward, cch.node_order().rank(node))) {
                 QueryProgress::Progress(_) => continue,
-                QueryProgress::Done(result) => return result
+                QueryProgress::Done(result) => return result,
             }
         }
     }
-
 }

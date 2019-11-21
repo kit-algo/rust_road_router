@@ -1,7 +1,7 @@
 use std::env;
-use std::path::Path;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::path::Path;
 
 fn main() {
     let mut args = env::args();

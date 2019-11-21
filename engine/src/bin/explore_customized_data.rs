@@ -1,4 +1,4 @@
-use bmw_routing_engine::{io::*, cli::CliErr};
+use bmw_routing_engine::{cli::CliErr, io::*};
 use std::{env, error::Error, path::Path};
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -17,7 +17,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     println!("Arcs: {}", first_out.len() - 1);
     println!("Average: {}", f64::from(*first_out.last().unwrap()) / (first_out.len() - 1) as f64);
-    println!("Unique: {}", first_out.windows(2).filter(|w| w[1] - w[0] == 1).count() as f64 / (first_out.len() - 1) as f64);
+    println!(
+        "Unique: {}",
+        first_out.windows(2).filter(|w| w[1] - w[0] == 1).count() as f64 / (first_out.len() - 1) as f64
+    );
     println!("Max: {}", first_out.windows(2).map(|w| w[1] - w[0]).max().unwrap());
 
     Ok(())

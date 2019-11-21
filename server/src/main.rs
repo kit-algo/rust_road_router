@@ -1,38 +1,31 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 
-#[macro_use] extern crate rocket;
-#[macro_use] extern crate serde_derive;
+#[macro_use]
+extern crate rocket;
+#[macro_use]
+extern crate serde_derive;
 
 use std::{
     env,
-    path::{Path, PathBuf},
     iter::once,
-
-    sync::{Mutex, Arc},
-    thread,
+    path::{Path, PathBuf},
     sync::mpsc::{self, Sender},
+    sync::{Arc, Mutex},
+    thread,
 };
 
-use rocket::{
-    response::NamedFile,
-    request::Form,
-    State,
-};
+use rocket::{request::Form, response::NamedFile, State};
 use rocket_contrib::json::Json;
 
-use kdtree::kdtree::{KdtreePointTrait, Kdtree};
+use kdtree::kdtree::{Kdtree, KdtreePointTrait};
 
 use bmw_routing_engine::{
-    graph::{*, link_id_to_tail_mapper::*},
-    rank_select_map::*,
-    import::here::link_id_mapper::*,
-    shortest_path::{
-        customizable_contraction_hierarchy,
-        node_order::NodeOrder,
-        query::customizable_contraction_hierarchy::Server,
-    },
-    io::*,
     benchmark::report_time,
+    graph::{link_id_to_tail_mapper::*, *},
+    import::here::link_id_mapper::*,
+    io::*,
+    rank_select_map::*,
+    shortest_path::{customizable_contraction_hierarchy, node_order::NodeOrder, query::customizable_contraction_hierarchy::Server},
 };
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -53,13 +46,13 @@ struct GeoQuery {
     from_lat: f32,
     from_lng: f32,
     to_lat: f32,
-    to_lng: f32
+    to_lng: f32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct GeoResponse {
     distance: Weight,
-    path: Vec<(f32, f32)>
+    path: Vec<(f32, f32)>,
 }
 
 #[derive(Debug, FromForm, Copy, Clone)]
@@ -75,14 +68,14 @@ struct HereQuery {
 #[derive(Debug, Serialize, Deserialize)]
 struct HereResponse {
     distance: Weight,
-    path: Vec<(u64, bool)>
+    path: Vec<(u64, bool)>,
 }
 
 #[derive(Debug)]
 enum Request {
     Geo((GeoQuery, Sender<Option<GeoResponse>>)),
     Here((HereQuery, Sender<Option<HereResponse>>)),
-    Customize((Vec<(u64, bool, SerializedWeight)>)),
+    Customize(Vec<(u64, bool, SerializedWeight)>),
 }
 
 #[get("/")]
@@ -135,24 +128,26 @@ use serde_json::Value;
 
 impl<'de> Deserialize<'de> for SerializedWeight {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer<'de>
+    where
+        D: Deserializer<'de>,
     {
         let v = Value::deserialize(deserializer)?;
         match v {
             Value::Null => Ok(SerializedWeight(INFINITY)),
-            Value::Number(w) => {
-                match w.as_u64() {
-                    Some(w) => {
-                        if w < INFINITY.into() {
-                            Ok(SerializedWeight(w as Weight))
-                        } else {
-                            Err(<D as Deserializer>::Error::custom(format!("Got {} as weight which is bigger than the max weight {}.", w, INFINITY)))
-                        }
-                    },
-                    None => Err(<D as Deserializer>::Error::custom("Got float or negative number as weight")),
+            Value::Number(w) => match w.as_u64() {
+                Some(w) => {
+                    if w < INFINITY.into() {
+                        Ok(SerializedWeight(w as Weight))
+                    } else {
+                        Err(<D as Deserializer>::Error::custom(format!(
+                            "Got {} as weight which is bigger than the max weight {}.",
+                            w, INFINITY
+                        )))
+                    }
                 }
+                None => Err(<D as Deserializer>::Error::custom("Got float or negative number as weight")),
             },
-            _ => Err(<D as Deserializer>::Error::custom("Got invalid JSON Value for Weight, expected null or number"))
+            _ => Err(<D as Deserializer>::Error::custom("Got invalid JSON Value for Weight, expected null or number")),
         }
     }
 }
@@ -180,12 +175,16 @@ fn main() {
         let lat = Vec::load_from(path.join("latitude").to_str().unwrap()).expect("could not read latitude");
         let lng = Vec::load_from(path.join("longitude").to_str().unwrap()).expect("could not read longitude");
 
-        let mut coords: Vec<NodeCoord> = lat.iter().zip(lng.iter()).enumerate().map(|(node_id, (&lat, &lng))| {
-            NodeCoord { node_id: node_id as NodeId, coords: [f64::from(lat), f64::from(lng)] }
-        }).collect();
-        let tree = report_time("build kd tree", || {
-             Kdtree::new(&mut coords)
-        });
+        let mut coords: Vec<NodeCoord> = lat
+            .iter()
+            .zip(lng.iter())
+            .enumerate()
+            .map(|(node_id, (&lat, &lng))| NodeCoord {
+                node_id: node_id as NodeId,
+                coords: [f64::from(lat), f64::from(lng)],
+            })
+            .collect();
+        let tree = report_time("build kd tree", || Kdtree::new(&mut coords));
 
         let link_id_mapping = BitVec::load_from(path.join("link_id_mapping").to_str().unwrap()).expect("could not read link_id_mapping");
         let link_id_mapping = InvertableRankSelectMap::new(RankSelectMap::new(link_id_mapping));
@@ -201,21 +200,29 @@ fn main() {
 
         let server = Arc::new(Mutex::new(Server::new(&cch, &graph)));
 
-        let coords = |node: NodeId| -> (f32, f32) {
-            (lat[node as usize], lng[node as usize])
-        };
+        let coords = |node: NodeId| -> (f32, f32) { (lat[node as usize], lng[node as usize]) };
 
         let closest_node = |(p_lat, p_lng): (f32, f32)| -> NodeId {
-            tree.nearest_search(&NodeCoord { coords: [f64::from(p_lat), f64::from(p_lng)], node_id: 0 }).node_id
+            tree.nearest_search(&NodeCoord {
+                coords: [f64::from(p_lat), f64::from(p_lng)],
+                node_id: 0,
+            })
+            .node_id
         };
 
         crossbeam_utils::thread::scope(|scope| {
             for query_params in rx_query {
                 match query_params {
-                    Request::Geo((GeoQuery { from_lat, from_lng, to_lat, to_lng }, tx_result)) => {
-                        let (from, to) = report_time("match nodes", || {
-                            (closest_node((from_lat, from_lng)), closest_node((to_lat, to_lng)))
-                        });
+                    Request::Geo((
+                        GeoQuery {
+                            from_lat,
+                            from_lng,
+                            to_lat,
+                            to_lng,
+                        },
+                        tx_result,
+                    )) => {
+                        let (from, to) = report_time("match nodes", || (closest_node((from_lat, from_lng)), closest_node((to_lat, to_lng))));
 
                         let mut server = server.lock().unwrap();
                         let result = report_time("cch query", || {
@@ -226,8 +233,18 @@ fn main() {
                         });
 
                         tx_result.send(result).unwrap();
-                    },
-                    Request::Here((HereQuery { from_link_id, from_direction, from_link_fraction, to_link_id, to_direction, to_link_fraction }, tx_result)) => {
+                    }
+                    Request::Here((
+                        HereQuery {
+                            from_link_id,
+                            from_direction,
+                            from_link_fraction,
+                            to_link_id,
+                            to_direction,
+                            to_link_fraction,
+                        },
+                        tx_result,
+                    )) => {
                         let from_link_direction = if from_direction { LinkDirection::FromRef } else { LinkDirection::ToRef };
                         let from_link_local_id = id_mapper.here_to_local_link_id(from_link_id, from_link_direction).expect("non existing link");
                         let from_link = graph.link(from_link_local_id);
@@ -246,20 +263,27 @@ fn main() {
                                 let mut second_node_iter = path_iter.clone();
                                 second_node_iter.next();
 
-                                let path = once((from_link_id, from_direction)).chain(path_iter.zip(second_node_iter).map(|(first_node, second_node)| {
-                                    graph.edge_index(*first_node, *second_node).unwrap()
-                                }).map(|link_id| {
-                                    let (id, dir) = id_mapper.local_to_here_link_id(link_id);
-                                    (id, dir == LinkDirection::FromRef)
-                                })).chain(once((to_link_id, to_direction))).collect();
+                                let path = once((from_link_id, from_direction))
+                                    .chain(
+                                        path_iter
+                                            .zip(second_node_iter)
+                                            .map(|(first_node, second_node)| graph.edge_index(*first_node, *second_node).unwrap())
+                                            .map(|link_id| {
+                                                let (id, dir) = id_mapper.local_to_here_link_id(link_id);
+                                                (id, dir == LinkDirection::FromRef)
+                                            }),
+                                    )
+                                    .chain(once((to_link_id, to_direction)))
+                                    .collect();
 
-                                let distance = distance + (from_link_fraction * from_link.weight as f32) as u32 + (to_link_fraction * to_link.weight as f32) as u32;
+                                let distance =
+                                    distance + (from_link_fraction * from_link.weight as f32) as u32 + (to_link_fraction * to_link.weight as f32) as u32;
                                 HereResponse { distance, path }
                             })
                         });
 
                         tx_result.send(result).unwrap();
-                    },
+                    }
                     Request::Customize(updates) => {
                         let server = server.clone();
                         let mut travel_time = travel_time.clone();
@@ -280,7 +304,7 @@ fn main() {
                             }
                             *server.lock().unwrap() = Server::new(&cch, &FirstOutGraph::new(&first_out[..], &head[..], travel_time));
                         });
-                    },
+                    }
                 }
             }
         });

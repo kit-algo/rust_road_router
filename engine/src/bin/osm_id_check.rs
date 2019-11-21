@@ -1,10 +1,5 @@
-use bmw_routing_engine::{
-    graph::*,
-    io::*,
-    cli::CliErr,
-    rank_select_map::*,
-};
-use std::{env, error::Error, path::Path, fs::File};
+use bmw_routing_engine::{cli::CliErr, graph::*, io::*, rank_select_map::*};
+use std::{env, error::Error, fs::File, path::Path};
 
 use csv::ReaderBuilder;
 use glob::glob;
@@ -64,7 +59,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    eprintln!("known nodes: {}% ({}/{})", nodes_found_count * 100 / total_count, nodes_found_count, total_count);
+    eprintln!(
+        "known nodes: {}% ({}/{})",
+        nodes_found_count * 100 / total_count,
+        nodes_found_count,
+        total_count
+    );
     eprintln!("known arcs: {}% ({}/{})", arc_found_count * 100 / total_count, arc_found_count, total_count);
 
     Ok(())

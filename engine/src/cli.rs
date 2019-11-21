@@ -1,6 +1,6 @@
 //! Utility module for command line interfaces
 
-use std::{fmt, fmt::Display, error::Error};
+use std::{error::Error, fmt, fmt::Display};
 
 /// An error struct to wrap simple static error messages
 #[derive(Debug)]

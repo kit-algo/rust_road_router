@@ -2,8 +2,8 @@ use std::{
     fs::{metadata, File},
     io::{prelude::*, Result},
     mem,
-    slice,
     path::Path,
+    slice,
 };
 
 pub trait DataBytes {
@@ -41,7 +41,7 @@ impl<T: Copy> DataBytesMut for Vec<T> {
     }
 }
 
-pub trait Store : DataBytes {
+pub trait Store: DataBytes {
     fn write_to(&self, filename: &str) -> Result<()> {
         File::create(filename)?.write_all(self.data_bytes())
     }
@@ -50,7 +50,7 @@ pub trait Store : DataBytes {
 impl<T: DataBytes> Store for T {}
 impl<T> Store for [T] where [T]: DataBytes {}
 
-pub trait Load : DataBytesMut + Sized {
+pub trait Load: DataBytesMut + Sized {
     fn new_with_bytes(num_bytes: usize) -> Self;
 
     fn load_from(filename: &str) -> Result<Self> {
@@ -79,15 +79,13 @@ pub trait Deconstruct: Sized {
     fn deconstruct_to(&self, dir: &str) -> Result<()> {
         let path = Path::new(dir);
 
-        self.store_each(&|name, object: &dyn Store| {
-            object.write_to(path.join(name).to_str().unwrap())
-        })
+        self.store_each(&|name, object: &dyn Store| object.write_to(path.join(name).to_str().unwrap()))
     }
 }
 
 #[derive(Debug)]
 pub struct Loader<'a> {
-    path: &'a Path
+    path: &'a Path,
 }
 
 impl<'a> Loader<'a> {

@@ -22,7 +22,10 @@ pub struct EventIterator<'a> {
 }
 
 impl<'a> EventIterator<'a> {
-    pub fn new(mut links: Box<dyn Iterator<Item = &'a LinkData> + 'a>, mut traces: Box<dyn Iterator<Item = &'a TraceData> + 'a>) -> Result<EventIterator<'a>, &'static str> {
+    pub fn new(
+        mut links: Box<dyn Iterator<Item = &'a LinkData> + 'a>,
+        mut traces: Box<dyn Iterator<Item = &'a TraceData> + 'a>,
+    ) -> Result<EventIterator<'a>, &'static str> {
         let next_link = links.next().ok_or("no links given")?;
         let next_trace = traces.next().ok_or("no traces given")?;
 
@@ -32,7 +35,7 @@ impl<'a> EventIterator<'a> {
             iterator_to_poll: IteratorToPoll::Links,
             next_link: Some(next_link),
             next_trace,
-            done: false
+            done: false,
         })
     }
 }
@@ -41,7 +44,9 @@ impl<'a> Iterator for EventIterator<'a> {
     type Item = Event<'a>;
 
     fn next(&mut self) -> Option<Event<'a>> {
-        if self.done { return None }
+        if self.done {
+            return None;
+        }
 
         match self.iterator_to_poll {
             IteratorToPoll::Links => {
@@ -56,7 +61,7 @@ impl<'a> Iterator for EventIterator<'a> {
                 self.next_link = self.links.next();
 
                 result
-            },
+            }
             IteratorToPoll::Traces => {
                 let result = Some(Event::Trace(self.next_trace));
 
@@ -69,15 +74,15 @@ impl<'a> Iterator for EventIterator<'a> {
                         }
 
                         self.next_trace = trace;
-                    },
+                    }
                     None => {
                         debug_assert_eq!(self.links.next(), None);
                         self.done = true;
-                    },
+                    }
                 }
 
                 result
-            },
+            }
         }
     }
 }

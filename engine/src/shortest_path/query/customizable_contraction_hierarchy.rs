@@ -1,19 +1,20 @@
-use super::*;
 use super::stepped_elimination_tree::SteppedEliminationTree;
+use super::*;
 use crate::shortest_path::customizable_contraction_hierarchy::*;
 
 #[derive(Debug)]
 pub struct Server<'a> {
-    forward: SteppedEliminationTree<'a, FirstOutGraph<&'a[EdgeId], &'a[NodeId], Vec<Weight>>>,
-    backward: SteppedEliminationTree<'a, FirstOutGraph<&'a[EdgeId], &'a[NodeId], Vec<Weight>>>,
+    forward: SteppedEliminationTree<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], Vec<Weight>>>,
+    backward: SteppedEliminationTree<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], Vec<Weight>>>,
     cch_graph: &'a CCH,
     tentative_distance: Weight,
     meeting_node: NodeId,
 }
 
 impl<'a> Server<'a> {
-    pub fn new<Graph>(cch_graph: &'a CCH, metric: &Graph) -> Server<'a> where
-        Graph: for<'b> LinkIterGraph<'b> + RandomLinkAccessGraph + Sync
+    pub fn new<Graph>(cch_graph: &'a CCH, metric: &Graph) -> Server<'a>
+    where
+        Graph: for<'b> LinkIterGraph<'b> + RandomLinkAccessGraph + Sync,
     {
         let (upward, downward) = customize(cch_graph, metric);
         let forward = SteppedEliminationTree::new(upward, cch_graph.elimination_tree());
@@ -51,13 +52,15 @@ impl<'a> Server<'a> {
 
         match self.tentative_distance {
             INFINITY => None,
-            dist => Some(dist)
+            dist => Some(dist),
         }
     }
 
     pub fn path(&mut self) -> Vec<NodeId> {
-        self.forward.unpack_path(self.meeting_node, true, self.cch_graph, self.backward.graph().weight());
-        self.backward.unpack_path(self.meeting_node, true, self.cch_graph, self.forward.graph().weight());
+        self.forward
+            .unpack_path(self.meeting_node, true, self.cch_graph, self.backward.graph().weight());
+        self.backward
+            .unpack_path(self.meeting_node, true, self.cch_graph, self.forward.graph().weight());
 
         let mut path = Vec::new();
         path.push(self.meeting_node);

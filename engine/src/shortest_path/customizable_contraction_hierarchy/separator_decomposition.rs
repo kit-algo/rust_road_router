@@ -15,7 +15,11 @@ impl SeparatorTree {
 
         let mut child_range_start = self.nodes.first().cloned().unwrap_or(self.num_nodes as u32 - 1) + 1 - self.num_nodes as u32;
         for child in &self.children {
-            assert_eq!(child_range_start, child.nodes[0] + 1 - child.num_nodes as u32, "Disconnected ID Ranges in nested dissection cells");
+            assert_eq!(
+                child_range_start,
+                child.nodes[0] + 1 - child.num_nodes as u32,
+                "Disconnected ID Ranges in nested dissection cells"
+            );
             child_range_start += child.num_nodes as u32;
         }
 
@@ -44,7 +48,11 @@ impl SeparatorTree {
         let num_nodes = children.iter().map(|child| child.num_nodes).sum::<usize>();
         debug_assert_eq!(num_nodes, cch.num_nodes());
 
-        SeparatorTree { nodes: Vec::new(), children, num_nodes }
+        SeparatorTree {
+            nodes: Vec::new(),
+            children,
+            num_nodes,
+        }
     }
 
     fn new_subtree(root: NodeId, children: &[Vec<NodeId>]) -> SeparatorTree {
@@ -57,16 +65,18 @@ impl SeparatorTree {
             nodes.push(only_child)
         }
 
-        let children: Vec<_> = children[node as usize].iter().map(|&child| { debug_assert!(child < node); Self::new_subtree(child, children) }).collect();
+        let children: Vec<_> = children[node as usize]
+            .iter()
+            .map(|&child| {
+                debug_assert!(child < node);
+                Self::new_subtree(child, children)
+            })
+            .collect();
         let num_nodes = nodes.len() + children.iter().map(|child| child.num_nodes).sum::<usize>();
 
         debug_assert!(num_nodes > 0);
         debug_assert!(!nodes.is_empty());
 
-        SeparatorTree {
-            nodes,
-            children,
-            num_nodes,
-        }
+        SeparatorTree { nodes, children, num_nodes }
     }
 }

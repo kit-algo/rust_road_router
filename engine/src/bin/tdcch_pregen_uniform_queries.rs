@@ -1,22 +1,16 @@
-use std::{
-    path::Path,
-    env,
-};
+use std::{env, path::Path};
 
-#[macro_use] extern crate bmw_routing_engine;
+#[macro_use]
+extern crate bmw_routing_engine;
 use bmw_routing_engine::{
+    benchmark::*,
     graph::{
+        floating_time_dependent::{shortcut_graph::CustomizedGraphReconstrctor, *},
         *,
-        floating_time_dependent::{*, shortcut_graph::CustomizedGraphReconstrctor},
-    },
-    shortest_path::{
-        customizable_contraction_hierarchy::*,
-        node_order::NodeOrder,
-        query::floating_td_customizable_contraction_hierarchy::Server,
     },
     io::*,
-    benchmark::*,
     report::*,
+    shortest_path::{customizable_contraction_hierarchy::*, node_order::NodeOrder, query::floating_td_customizable_contraction_hierarchy::Server},
 };
 
 fn main() {
@@ -52,11 +46,22 @@ fn main() {
 
     let cch_folder = path.join("cch");
     let node_order = NodeOrder::reconstruct_from(cch_folder.to_str().unwrap()).expect("could not read node order");
-    let cch = CCHReconstrctor { original_graph: &graph, node_order }.reconstruct_from(cch_folder.to_str().unwrap()).expect("could not read cch");
+    let cch = CCHReconstrctor {
+        original_graph: &graph,
+        node_order,
+    }
+    .reconstruct_from(cch_folder.to_str().unwrap())
+    .expect("could not read cch");
 
     let customized_folder = path.join("customized");
 
-    let td_cch_graph = CustomizedGraphReconstrctor { original_graph: &graph, first_out: cch.first_out(), head: cch.head() }.reconstruct_from(customized_folder.to_str().unwrap()).expect("could not read customized");
+    let td_cch_graph = CustomizedGraphReconstrctor {
+        original_graph: &graph,
+        first_out: cch.first_out(),
+        head: cch.head(),
+    }
+    .reconstruct_from(customized_folder.to_str().unwrap())
+    .expect("could not read customized");
 
     let mut server = Server::new(&cch, &td_cch_graph);
 
@@ -81,9 +86,7 @@ fn main() {
             let at = Timestamp::new(f64::from(at) / 1000.0);
 
             let _tdcch_query_ctxt = algo_runs_ctxt.push_collection_item();
-            let (ea, time) = measure(|| {
-                server.distance(from, to, at).map(|dist| dist + at)
-            });
+            let (ea, time) = measure(|| server.distance(from, to, at).map(|dist| dist + at));
 
             report!("from", from);
             report!("to", to);
@@ -95,7 +98,10 @@ fn main() {
             if ea.is_some() {
                 let (path, unpacking_duration) = measure(|| server.path());
                 report!("num_nodes_on_shortest_path", path.len());
-                report!("unpacking_running_time_ms", unpacking_duration.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+                report!(
+                    "unpacking_running_time_ms",
+                    unpacking_duration.to_std().unwrap().as_nanos() as f64 / 1_000_000.0
+                );
             }
         }
     }

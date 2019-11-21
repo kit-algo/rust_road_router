@@ -1,29 +1,24 @@
-use std::{
-    path::Path,
-    env,
-};
+use std::{env, path::Path};
 
-#[macro_use] extern crate bmw_routing_engine;
+#[macro_use]
+extern crate bmw_routing_engine;
 use bmw_routing_engine::{
+    benchmark::*,
     graph::{
+        floating_time_dependent::{shortcut_graph::CustomizedGraphReconstrctor, *},
         *,
-        floating_time_dependent::{*, shortcut_graph::CustomizedGraphReconstrctor},
     },
+    io::*,
+    report::*,
     shortest_path::{
         customizable_contraction_hierarchy::*,
         node_order::NodeOrder,
-        query::{
-            floating_td_customizable_contraction_hierarchy::Server,
-            floating_td_dijkstra::Server as DijkServer
-        },
+        query::{floating_td_customizable_contraction_hierarchy::Server, floating_td_dijkstra::Server as DijkServer},
     },
-    io::*,
-    benchmark::*,
-    report::*,
 };
 
-use time::Duration;
 use rand::prelude::*;
+use time::Duration;
 
 fn main() {
     // let _reporter = enable_reporting();
@@ -60,11 +55,22 @@ fn main() {
 
     let cch_folder = path.join("cch");
     let node_order = NodeOrder::reconstruct_from(cch_folder.to_str().unwrap()).expect("could not read node order");
-    let cch = CCHReconstrctor { original_graph: &graph, node_order }.reconstruct_from(cch_folder.to_str().unwrap()).expect("could not read cch");
+    let cch = CCHReconstrctor {
+        original_graph: &graph,
+        node_order,
+    }
+    .reconstruct_from(cch_folder.to_str().unwrap())
+    .expect("could not read cch");
 
     let customized_folder = path.join("customized");
 
-    let td_cch_graph = CustomizedGraphReconstrctor { original_graph: &graph, first_out: cch.first_out(), head: cch.head() }.reconstruct_from(customized_folder.to_str().unwrap()).expect("could not read customized");
+    let td_cch_graph = CustomizedGraphReconstrctor {
+        original_graph: &graph,
+        first_out: cch.first_out(),
+        head: cch.head(),
+    }
+    .reconstruct_from(customized_folder.to_str().unwrap())
+    .expect("could not read customized");
 
     let mut td_dijk_server = DijkServer::new(graph.clone());
     let mut server = Server::new(&cch, &td_cch_graph);
@@ -91,7 +97,11 @@ fn main() {
             }
 
             if !ea.unwrap_or(Timestamp::NEVER).fuzzy_eq(ea_ground_truth) {
-                eprintln!("TDCCH ❌ Rel Err for rank {}: {}", rank, f64::from((ea.unwrap_or(Timestamp::NEVER) - at) / (ea_ground_truth - at)) - 1.0);
+                eprintln!(
+                    "TDCCH ❌ Rel Err for rank {}: {}",
+                    rank,
+                    f64::from((ea.unwrap_or(Timestamp::NEVER) - at) / (ea_ground_truth - at)) - 1.0
+                );
             }
             if cfg!(feature = "tdcch-approx") {
                 assert!(!ea.unwrap_or(Timestamp::NEVER).fuzzy_lt(ea_ground_truth), "{} {} {:?}", from, to, at);
@@ -100,7 +110,10 @@ fn main() {
             }
             if !cfg!(feature = "tdcch-approx") || ea.is_some() {
                 let (path, unpacking_duration) = measure(|| server.path());
-                report!("unpacking_running_time_ms", unpacking_duration.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+                report!(
+                    "unpacking_running_time_ms",
+                    unpacking_duration.to_std().unwrap().as_nanos() as f64 / 1_000_000.0
+                );
                 rank_times[rank].push((duration, unpacking_duration));
                 graph.check_path(path);
             }
@@ -110,7 +123,9 @@ fn main() {
     for (rank, rank_times) in rank_times.into_iter().enumerate() {
         let count = rank_times.len();
         if count > 0 {
-            let (sum, sum_unpacking) = rank_times.into_iter().fold((Duration::zero(), Duration::zero()), |(acc1, acc2), (t1, t2)| (acc1 + t1, acc2 + t2));
+            let (sum, sum_unpacking) = rank_times
+                .into_iter()
+                .fold((Duration::zero(), Duration::zero()), |(acc1, acc2), (t1, t2)| (acc1 + t1, acc2 + t2));
             let avg = sum / count as i32;
             let avg_unpacking = sum_unpacking / count as i32;
             eprintln!("rank: {} - avg running time: {} - avg unpacking time: {}", rank, avg, avg_unpacking);
@@ -143,9 +158,7 @@ fn main() {
             let at = Timestamp::new(f64::from(at) / 1000.0);
 
             let dijkstra_query_ctxt = algo_runs_ctxt.push_collection_item();
-            let (ground_truth, time) = measure(|| {
-                td_dijk_server.distance(from, to, at).map(|dist| dist + at)
-            });
+            let (ground_truth, time) = measure(|| td_dijk_server.distance(from, to, at).map(|dist| dist + at));
             report!("from", from);
             report!("to", to);
             report!("departure_time", f64::from(at));
@@ -158,9 +171,7 @@ fn main() {
             dijkstra_time = dijkstra_time + time;
 
             let _tdcch_query_ctxt = algo_runs_ctxt.push_collection_item();
-            let (ea, time) = measure(|| {
-                server.distance(from, to, at).map(|dist| dist + at)
-            });
+            let (ea, time) = measure(|| server.distance(from, to, at).map(|dist| dist + at));
             tdcch_time = tdcch_time + time;
 
             report!("from", from);
@@ -175,11 +186,20 @@ fn main() {
             }
 
             if !ea.unwrap_or(Timestamp::NEVER).fuzzy_eq(ground_truth.unwrap_or(Timestamp::NEVER)) {
-                eprintln!("TDCCH ❌ Rel Err {}", f64::from((ea.unwrap_or(Timestamp::NEVER) - at) / (ground_truth.unwrap_or(Timestamp::NEVER) - at)) - 1.0);
+                eprintln!(
+                    "TDCCH ❌ Rel Err {}",
+                    f64::from((ea.unwrap_or(Timestamp::NEVER) - at) / (ground_truth.unwrap_or(Timestamp::NEVER) - at)) - 1.0
+                );
             }
 
             if cfg!(feature = "tdcch-approx") {
-                assert!(!ea.unwrap_or(Timestamp::NEVER).fuzzy_lt(ground_truth.unwrap_or(Timestamp::NEVER)), "{} {} {:?}", from, to, at);
+                assert!(
+                    !ea.unwrap_or(Timestamp::NEVER).fuzzy_lt(ground_truth.unwrap_or(Timestamp::NEVER)),
+                    "{} {} {:?}",
+                    from,
+                    to,
+                    at
+                );
             } else {
                 assert!(ea.unwrap_or(Timestamp::NEVER).fuzzy_eq(ground_truth.unwrap_or(Timestamp::NEVER)));
             }

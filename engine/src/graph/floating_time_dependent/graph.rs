@@ -1,6 +1,6 @@
 use super::*;
-use crate::graph::Graph as GraphTrait;
 use crate::graph::time_dependent::period as int_period;
+use crate::graph::Graph as GraphTrait;
 
 type IPPIndex = u32;
 
@@ -13,19 +13,20 @@ pub struct Graph {
 }
 
 impl Graph {
-    pub fn new(first_out: Vec<EdgeId>,
-               head: Vec<NodeId>,
-               mut first_ipp_of_arc: Vec<IPPIndex>,
-               ipp_departure_time: Vec<u32>,
-               ipp_travel_time: Vec<u32>) -> Graph {
-
+    pub fn new(
+        first_out: Vec<EdgeId>,
+        head: Vec<NodeId>,
+        mut first_ipp_of_arc: Vec<IPPIndex>,
+        ipp_departure_time: Vec<u32>,
+        ipp_travel_time: Vec<u32>,
+    ) -> Graph {
         let mut new_ipp_departure_time = Vec::with_capacity(ipp_departure_time.len() + 2 * head.len());
         let mut new_ipp_travel_time = Vec::with_capacity(ipp_departure_time.len() + 2 * head.len());
 
         let mut added = 0;
 
         for i in 0..head.len() {
-            let range = first_ipp_of_arc[i] as usize .. first_ipp_of_arc[i+1] as usize;
+            let range = first_ipp_of_arc[i] as usize..first_ipp_of_arc[i + 1] as usize;
             assert_ne!(range.start, range.end);
 
             first_ipp_of_arc[i] += added;
@@ -48,16 +49,26 @@ impl Graph {
         }
         first_ipp_of_arc[head.len()] += added;
 
-        let ipps = new_ipp_departure_time.into_iter().zip(new_ipp_travel_time.into_iter()).map(|(dt, tt)| {
-            TTFPoint { at: Timestamp::new(f64::from(dt) / 1000.0), val: FlWeight::new(f64::from(tt) / 1000.0) }
-        }).collect();
+        let ipps = new_ipp_departure_time
+            .into_iter()
+            .zip(new_ipp_travel_time.into_iter())
+            .map(|(dt, tt)| TTFPoint {
+                at: Timestamp::new(f64::from(dt) / 1000.0),
+                val: FlWeight::new(f64::from(tt) / 1000.0),
+            })
+            .collect();
 
-        Graph { first_out, head, first_ipp_of_arc, ipps }
+        Graph {
+            first_out,
+            head,
+            first_ipp_of_arc,
+            ipps,
+        }
     }
 
     pub fn travel_time_function(&self, edge_id: EdgeId) -> PiecewiseLinearFunction {
         let edge_id = edge_id as usize;
-        PiecewiseLinearFunction::new(&self.ipps[self.first_ipp_of_arc[edge_id] as usize .. self.first_ipp_of_arc[edge_id + 1] as usize])
+        PiecewiseLinearFunction::new(&self.ipps[self.first_ipp_of_arc[edge_id] as usize..self.first_ipp_of_arc[edge_id + 1] as usize])
     }
 
     pub fn neighbor_and_edge_id_iter(&self, node: NodeId) -> impl Iterator<Item = (&NodeId, EdgeId)> {
@@ -80,7 +91,16 @@ impl Graph {
             let (prev_node, prev_t) = prev;
             let edge = self.edge_index(prev_node, node).expect("path contained nonexisting edge");
             let evaled = prev_t + self.travel_time_function(edge).evaluate(prev_t);
-            assert!(t.fuzzy_eq(evaled), "expected {:?} - got {:?} at edge {} from {} (at {:?}) to {}", evaled, t, edge, prev_node, prev_t, node);
+            assert!(
+                t.fuzzy_eq(evaled),
+                "expected {:?} - got {:?} at edge {} from {} (at {:?}) to {}",
+                evaled,
+                t,
+                edge,
+                prev_node,
+                prev_t,
+                node
+            );
             prev = (node, t);
         }
     }
@@ -90,7 +110,11 @@ impl Graph {
     }
 
     pub fn num_constant(&self) -> usize {
-        self.first_ipp_of_arc.windows(2).map(|firsts| firsts[1] - firsts[0]).filter(|&deg| deg == 1).count()
+        self.first_ipp_of_arc
+            .windows(2)
+            .map(|firsts| firsts[1] - firsts[0])
+            .filter(|&deg| deg == 1)
+            .count()
     }
 }
 
@@ -105,7 +129,7 @@ impl GraphTrait for Graph {
 }
 
 impl<'a> LinkIterGraph<'a> for Graph {
-    type Iter = std::iter::Map<std::slice::Iter<'a, NodeId>, fn(&NodeId)->Link>;
+    type Iter = std::iter::Map<std::slice::Iter<'a, NodeId>, fn(&NodeId) -> Link>;
 
     fn neighbor_iter(&'a self, node: NodeId) -> Self::Iter {
         let range = self.neighbor_edge_indices_usize(node);
@@ -115,12 +139,18 @@ impl<'a> LinkIterGraph<'a> for Graph {
 
 impl RandomLinkAccessGraph for Graph {
     fn link(&self, edge_id: EdgeId) -> Link {
-        Link { node: self.head[edge_id as usize], weight: 0 }
+        Link {
+            node: self.head[edge_id as usize],
+            weight: 0,
+        }
     }
 
     fn edge_index(&self, from: NodeId, to: NodeId) -> Option<EdgeId> {
         let first_out = self.first_out[from as usize] as usize;
-        self.neighbor_iter(from).enumerate().find(|&(_, Link { node, .. })| node == to).map(|(i, _)| (first_out + i) as EdgeId )
+        self.neighbor_iter(from)
+            .enumerate()
+            .find(|&(_, Link { node, .. })| node == to)
+            .map(|(i, _)| (first_out + i) as EdgeId)
     }
 
     fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {

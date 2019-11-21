@@ -1,9 +1,9 @@
-use super::*;
-use super::timestamped_vector::TimestampedVector;
 use super::stepped_dijkstra::QueryProgress;
+use super::timestamped_vector::TimestampedVector;
+use super::*;
+use crate::as_slice::AsSlice;
 use crate::in_range_option::InRangeOption;
 use crate::shortest_path::customizable_contraction_hierarchy::CCH;
-use crate::as_slice::AsSlice;
 
 #[derive(Debug)]
 pub struct SteppedEliminationTree<'b, Graph: for<'a> LinkIterGraph<'a>> {
@@ -12,7 +12,7 @@ pub struct SteppedEliminationTree<'b, Graph: for<'a> LinkIterGraph<'a>> {
     predecessors: Vec<NodeId>,
     elimination_tree: &'b [InRangeOption<NodeId>],
     next: Option<NodeId>,
-    origin: Option<NodeId>
+    origin: Option<NodeId>,
 }
 
 impl<'b, Graph: for<'a> LinkIterGraph<'a>> SteppedEliminationTree<'b, Graph> {
@@ -26,7 +26,7 @@ impl<'b, Graph: for<'a> LinkIterGraph<'a>> SteppedEliminationTree<'b, Graph> {
             predecessors: vec![n as NodeId; n],
             elimination_tree,
             next: None,
-            origin: None
+            origin: None,
         }
     }
 
@@ -53,7 +53,10 @@ impl<'b, Graph: for<'a> LinkIterGraph<'a>> SteppedEliminationTree<'b, Graph> {
             // For each node we can reach, see if we can find a way with
             // a lower distance going through this node
             for edge in self.graph.neighbor_iter(node) {
-                let next = State { distance: distance + edge.weight, node: edge.node };
+                let next = State {
+                    distance: distance + edge.weight,
+                    node: edge.node,
+                };
 
                 // If so, add it to the frontier and continue
                 if next.distance < self.distances[next.node as usize] {
@@ -92,10 +95,10 @@ impl<'b, Graph: for<'a> LinkIterGraph<'a>> SteppedEliminationTree<'b, Graph> {
     pub fn graph(&self) -> &Graph {
         &self.graph
     }
-
 }
 
-impl<'b, FirstOutContainer, HeadContainer, WeightContainer> SteppedEliminationTree<'b, FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>> where
+impl<'b, FirstOutContainer, HeadContainer, WeightContainer> SteppedEliminationTree<'b, FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>>
+where
     FirstOutContainer: AsSlice<EdgeId>,
     HeadContainer: AsSlice<NodeId>,
     WeightContainer: AsSlice<Weight>,

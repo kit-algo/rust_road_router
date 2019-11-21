@@ -1,7 +1,7 @@
-use super::*;
 use self::timestamped_vector::TimestampedVector;
-use crate::index_heap::{IndexdMinHeap, Indexing};
+use super::*;
 use crate::graph::time_dependent::TDGraph;
+use crate::index_heap::{IndexdMinHeap, Indexing};
 
 #[derive(Debug, Clone)]
 pub enum QueryProgress {
@@ -58,15 +58,16 @@ impl TDSteppedDijkstra {
 
         // Starte with origin
         self.distances.set(from as usize, query.departure_time);
-        self.closest_node_priority_queue.push(State { distance: query.departure_time, node: from });
+        self.closest_node_priority_queue.push(State {
+            distance: query.departure_time,
+            node: from,
+        });
     }
 
     pub fn next_step<F: Fn(EdgeId) -> bool, G: FnMut(NodeId) -> Weight>(&mut self, check_edge: F, potential: G) -> QueryProgress {
         match self.result {
             Some(result) => QueryProgress::Done(result),
-            None => {
-                self.settle_next_node(check_edge, potential)
-            }
+            None => self.settle_next_node(check_edge, potential),
         }
     }
 
@@ -95,7 +96,10 @@ impl TDSteppedDijkstra {
                         self.distances.set(neighbor as usize, next_distance);
                         self.predecessors[neighbor as usize] = node;
 
-                        let next = State { distance: next_distance + potential(neighbor), node: neighbor };
+                        let next = State {
+                            distance: next_distance + potential(neighbor),
+                            node: neighbor,
+                        };
                         if self.closest_node_priority_queue.contains_index(next.as_index()) {
                             self.closest_node_priority_queue.decrease_key(next);
                         } else {
@@ -105,7 +109,10 @@ impl TDSteppedDijkstra {
                 }
             }
 
-            QueryProgress::Progress(State { distance: distance - self.query().departure_time, node })
+            QueryProgress::Progress(State {
+                distance: distance - self.query().departure_time,
+                node,
+            })
         } else {
             self.result = Some(None);
             QueryProgress::Done(None)

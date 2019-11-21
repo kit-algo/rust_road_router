@@ -8,7 +8,8 @@ pub struct SeperatorBasedParallelCustomization<'a, T, F, G> {
     _t: std::marker::PhantomData<T>,
 }
 
-impl<'a, T, F, G> SeperatorBasedParallelCustomization<'a, T, F, G> where
+impl<'a, T, F, G> SeperatorBasedParallelCustomization<'a, T, F, G>
+where
     T: Send + Sync,
     F: Sync + Fn(Range<usize>, usize, &mut [T], &mut [T]),
     G: Sync + Fn(Range<usize>, usize, &mut [T], &mut [T]),
@@ -20,7 +21,11 @@ impl<'a, T, F, G> SeperatorBasedParallelCustomization<'a, T, F, G> where
         }
 
         SeperatorBasedParallelCustomization {
-            cch, separators, customize_cell, customize_separator, _t: std::marker::PhantomData::<T>
+            cch,
+            separators,
+            customize_cell,
+            customize_separator,
+            _t: std::marker::PhantomData::<T>,
         }
     }
 
@@ -36,7 +41,8 @@ impl<'a, T, F, G> SeperatorBasedParallelCustomization<'a, T, F, G> where
                         setup(Box::new(|| thread.run()));
                     },
                     |pool| pool.install(|| self.customize_tree(&self.separators, 0, upward, downward)),
-                ).unwrap();
+                )
+                .unwrap();
         }
     }
 
@@ -53,8 +59,9 @@ impl<'a, T, F, G> SeperatorBasedParallelCustomization<'a, T, F, G> where
 
             rayon::scope(|s| {
                 for sub in &sep_tree.children {
-                    let (this_sub_up, rest_up) = (move || { sub_upward })().split_at_mut(self.cch.first_out[sub_offset + sub.num_nodes] as usize - sub_edge_offset);
-                    let (this_sub_down, rest_down) = (move || { sub_downward })().split_at_mut(self.cch.first_out[sub_offset + sub.num_nodes] as usize - sub_edge_offset);
+                    let (this_sub_up, rest_up) = (move || sub_upward)().split_at_mut(self.cch.first_out[sub_offset + sub.num_nodes] as usize - sub_edge_offset);
+                    let (this_sub_down, rest_down) =
+                        (move || sub_downward)().split_at_mut(self.cch.first_out[sub_offset + sub.num_nodes] as usize - sub_edge_offset);
                     sub_edge_offset += this_sub_up.len();
                     if sub.num_nodes < self.cch.num_nodes() / (32 * rayon::current_num_threads()) {
                         self.customize_tree(sub, sub_offset, this_sub_up, this_sub_down);
@@ -90,7 +97,8 @@ pub struct SeperatorBasedPerfectParallelCustomization<'a, T, F, G> {
     _t: std::marker::PhantomData<T>,
 }
 
-impl<'a, T, F, G> SeperatorBasedPerfectParallelCustomization<'a, T, F, G> where
+impl<'a, T, F, G> SeperatorBasedPerfectParallelCustomization<'a, T, F, G>
+where
     T: Send + Sync,
     F: Sync + Fn(Range<usize>, *mut T, *mut T),
     G: Sync + Fn(Range<usize>, *mut T, *mut T),
@@ -102,13 +110,19 @@ impl<'a, T, F, G> SeperatorBasedPerfectParallelCustomization<'a, T, F, G> where
         }
 
         SeperatorBasedPerfectParallelCustomization {
-            cch, separators, customize_cell, customize_separator, _t: std::marker::PhantomData::<T>
+            cch,
+            separators,
+            customize_cell,
+            customize_separator,
+            _t: std::marker::PhantomData::<T>,
         }
     }
 
     pub fn customize(&self, upward: &'a mut [T], downward: &'a mut [T], setup: impl Fn(Box<dyn FnOnce() + '_>) + Sync) {
         if cfg!(feature = "cch-disable-par") {
-            setup(Box::new(|| (self.customize_cell)(0..self.cch.num_nodes(), upward.as_mut_ptr(), downward.as_mut_ptr())));
+            setup(Box::new(|| {
+                (self.customize_cell)(0..self.cch.num_nodes(), upward.as_mut_ptr(), downward.as_mut_ptr())
+            }));
         } else {
             let core_ids = core_affinity::get_core_ids().unwrap();
             rayon::ThreadPoolBuilder::new()
@@ -118,16 +132,17 @@ impl<'a, T, F, G> SeperatorBasedPerfectParallelCustomization<'a, T, F, G> where
                         setup(Box::new(|| thread.run()));
                     },
                     |pool| pool.install(|| self.customize_tree(&self.separators, self.cch.num_nodes(), upward.as_mut_ptr(), downward.as_mut_ptr())),
-                ).unwrap();
+                )
+                .unwrap();
         }
     }
 
     fn customize_tree(&self, sep_tree: &SeparatorTree, offset: usize, upward: *mut T, downward: *mut T) {
         if sep_tree.num_nodes < self.cch.num_nodes() / (32 * rayon::current_num_threads()) {
-            (self.customize_cell)(offset - sep_tree.num_nodes .. offset, upward, downward);
+            (self.customize_cell)(offset - sep_tree.num_nodes..offset, upward, downward);
         } else {
             let mut end_next = offset - sep_tree.nodes.len();
-            (self.customize_separator)(end_next .. offset, upward, downward);
+            (self.customize_separator)(end_next..offset, upward, downward);
             let upward = PtrWrapper(upward);
             let downward = PtrWrapper(downward);
 

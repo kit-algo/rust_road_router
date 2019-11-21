@@ -1,23 +1,20 @@
 use bmw_routing_engine::{
+    benchmark::*,
+    cli::CliErr,
     graph::*,
     io::*,
-    cli::CliErr,
     rank_select_map::*,
-    benchmark::*,
     shortest_path::{
-        customizable_contraction_hierarchy::*,
-        node_order::NodeOrder,
+        customizable_contraction_hierarchy::*, node_order::NodeOrder, query::customizable_contraction_hierarchy::Server, query::topocore::Server as TopoServer,
         topocore::*,
-        query::customizable_contraction_hierarchy::Server,
-        query::topocore::Server as TopoServer,
     },
 };
-use std::{env, error::Error, path::Path, fs::File};
+use std::{env, error::Error, fs::File, path::Path};
 
 use csv::ReaderBuilder;
 use glob::glob;
-use time::Duration;
 use rand::prelude::*;
+use time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args();
@@ -28,8 +25,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let first_out = Vec::<NodeId>::load_from(path.join("first_out").to_str().unwrap())?;
     let head = Vec::<EdgeId>::load_from(path.join("head").to_str().unwrap())?;
     let mut travel_time = Vec::<EdgeId>::load_from(path.join("travel_time").to_str().unwrap())?;
-    #[cfg(feature = "chpot_visualize")] let lat = Vec::<f32>::load_from(path.join("latitude").to_str().unwrap())?;
-    #[cfg(feature = "chpot_visualize")] let lng = Vec::<f32>::load_from(path.join("longitude").to_str().unwrap())?;
+    #[cfg(feature = "chpot_visualize")]
+    let lat = Vec::<f32>::load_from(path.join("latitude").to_str().unwrap())?;
+    #[cfg(feature = "chpot_visualize")]
+    let lng = Vec::<f32>::load_from(path.join("longitude").to_str().unwrap())?;
     let mut live_travel_time = travel_time.clone();
     let geo_distance = Vec::<EdgeId>::load_from(path.join("geo_distance").to_str().unwrap())?;
     let osm_node_ids = Vec::<u64>::load_from(path.join("osm_node_ids").to_str().unwrap())?;
@@ -95,7 +94,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let cch_order = NodeOrder::from_node_order(cch_order);
 
     let cch = contract(&graph, cch_order.clone());
-    let cch_order = CCHReordering { node_order: cch_order, latitude: &[], longitude: &[] }.reorder_for_seperator_based_customization(cch.separators());
+    let cch_order = CCHReordering {
+        node_order: cch_order,
+        latitude: &[],
+        longitude: &[],
+    }
+    .reorder_for_seperator_based_customization(cch.separators());
     let cch = contract(&graph, cch_order);
 
     let mut live_graph = FirstOutGraph::new(&first_out[..], &head[..], &mut live_travel_time[..]);
@@ -106,9 +110,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut cch_static_server = Server::new(&cch, &graph);
     let mut cch_live_server = Server::new(&cch, &live_graph);
 
-    let topocore = report_time("topocore preprocessing", || {
-        preprocess(&live_graph)
-    });
+    let topocore = report_time("topocore preprocessing", || preprocess(&live_graph));
     let mut topocore = TopoServer::new(topocore, &cch, &graph);
 
     let mut query_count = 0;
@@ -125,14 +127,22 @@ fn main() -> Result<(), Box<dyn Error>> {
         let ground_truth = cch_live_server.distance(from, to);
         // let ground_truth = cch_static_server.distance(from, to);
 
-        if ground_truth.is_none() { continue; }
+        if ground_truth.is_none() {
+            continue;
+        }
 
         query_count += 1;
 
         let lower_bound = cch_static_server.distance(from, to);
         let (res, time) = measure(|| {
-            #[cfg(feature = "chpot_visualize")] { topocore.distance(from, to, &lat, &lng) }
-            #[cfg(not(feature = "chpot_visualize"))] { topocore.distance(from, to) }
+            #[cfg(feature = "chpot_visualize")]
+            {
+                topocore.distance(from, to, &lat, &lng)
+            }
+            #[cfg(not(feature = "chpot_visualize"))]
+            {
+                topocore.distance(from, to)
+            }
         });
         topocore.path();
         let live = lower_bound != ground_truth;
@@ -150,8 +160,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         total_query_time = total_query_time + time;
     }
 
-    if query_count > 0 { eprintln!("Avg. query time {}", total_query_time / (query_count as i32)) };
-    if live_count > 0 { eprintln!("Avg. live query time {}", live_query_time / (live_count as i32)) };
+    if query_count > 0 {
+        eprintln!("Avg. query time {}", total_query_time / (query_count as i32))
+    };
+    if live_count > 0 {
+        eprintln!("Avg. live query time {}", live_query_time / (live_count as i32))
+    };
 
     Ok(())
 }

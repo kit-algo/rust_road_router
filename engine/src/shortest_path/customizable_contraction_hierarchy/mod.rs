@@ -1,11 +1,5 @@
 use super::*;
-use crate::{
-    shortest_path::node_order::NodeOrder,
-    graph::first_out_graph::degrees_to_first_out,
-    in_range_option::InRangeOption,
-    benchmark::*,
-    io::*,
-};
+use crate::{benchmark::*, graph::first_out_graph::degrees_to_first_out, in_range_option::InRangeOption, io::*, shortest_path::node_order::NodeOrder};
 use std::ops::Range;
 
 mod contraction;
@@ -17,7 +11,6 @@ mod separator_decomposition;
 use separator_decomposition::*;
 mod reorder;
 pub use reorder::*;
-
 
 pub fn contract<Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph>(graph: &Graph, node_order: NodeOrder) -> CCH {
     CCH::new(ContractionGraph::new(graph, node_order).contract())
@@ -70,23 +63,30 @@ impl CCH {
         let m = contracted_graph.num_arcs();
         let mut tail = vec![0; m];
 
-        let cch_edge_to_orig_arc = (0..n).flat_map(|node| {
-            let node_order = &node_order;
-            contracted_graph.neighbor_iter(node).map(move |Link { node: neighbor, .. }| {
-                (
-                    InRangeOption::new(original_graph.edge_index(node_order.node(node), node_order.node(neighbor))),
-                    InRangeOption::new(original_graph.edge_index(node_order.node(neighbor), node_order.node(node)))
-                )
+        let cch_edge_to_orig_arc = (0..n)
+            .flat_map(|node| {
+                let node_order = &node_order;
+                contracted_graph.neighbor_iter(node).map(move |Link { node: neighbor, .. }| {
+                    (
+                        InRangeOption::new(original_graph.edge_index(node_order.node(node), node_order.node(neighbor))),
+                        InRangeOption::new(original_graph.edge_index(node_order.node(neighbor), node_order.node(node))),
+                    )
+                })
             })
-        }).collect();
+            .collect();
 
         for node in 0..n {
-            tail[contracted_graph.neighbor_edge_indices_usize(node)].iter_mut().for_each(|tail| *tail = node);
+            tail[contracted_graph.neighbor_edge_indices_usize(node)]
+                .iter_mut()
+                .for_each(|tail| *tail = node);
         }
 
         let mut inverted = vec![Vec::new(); n as usize];
         for current_node in 0..n {
-            for (Link { node, .. }, edge_id) in contracted_graph.neighbor_iter(current_node).zip(contracted_graph.neighbor_edge_indices(current_node)) {
+            for (Link { node, .. }, edge_id) in contracted_graph
+                .neighbor_iter(current_node)
+                .zip(contracted_graph.neighbor_edge_indices(current_node))
+            {
                 inverted[node as usize].push((current_node, edge_id));
             }
         }
@@ -97,10 +97,7 @@ impl CCH {
         };
         debug_assert_eq!(down_first_out.len(), n as usize + 1);
 
-        let (down_head, down_up_edge_ids): (Vec<_>, Vec<_>) = inverted
-            .into_iter()
-            .flat_map(|neighbors| neighbors.into_iter())
-            .unzip();
+        let (down_head, down_up_edge_ids): (Vec<_>, Vec<_>) = inverted.into_iter().flat_map(|neighbors| neighbors.into_iter()).unzip();
 
         let inverted = OwnedGraph::new(down_first_out, down_head, down_up_edge_ids);
         let (first_out, head, _) = contracted_graph.decompose();
@@ -112,7 +109,7 @@ impl CCH {
             cch_edge_to_orig_arc,
             elimination_tree,
             tail,
-            inverted
+            inverted,
         }
     }
 
@@ -121,7 +118,10 @@ impl CCH {
     }
 
     fn build_elimination_tree(graph: &OwnedGraph) -> Vec<InRangeOption<NodeId>> {
-        (0..graph.num_nodes()).map(|node_id| graph.neighbor_iter(node_id as NodeId).map(|l| l.node).min()).map(InRangeOption::new).collect()
+        (0..graph.num_nodes())
+            .map(|node_id| graph.neighbor_iter(node_id as NodeId).map(|l| l.node).min())
+            .map(InRangeOption::new)
+            .collect()
     }
 
     pub fn node_order(&self) -> &NodeOrder {
@@ -157,7 +157,10 @@ impl CCH {
     #[inline]
     fn neighbor_edge_indices_usize(&self, node: NodeId) -> Range<usize> {
         let range = self.neighbor_edge_indices(node);
-        Range { start: range.start as usize, end: range.end as usize }
+        Range {
+            start: range.start as usize,
+            end: range.end as usize,
+        }
     }
 
     #[inline]
@@ -178,7 +181,17 @@ impl CCH {
         let mut current_iter = self.inverted.neighbor_iter(from).peekable();
         let mut other_iter = self.inverted.neighbor_iter(to).peekable();
 
-        while let (Some(&Link { node: lower_from_first, weight: edge_from_first_id }), Some(&Link { node: lower_from_second, weight: edge_from_second_id })) = (current_iter.peek(), other_iter.peek()) {
+        while let (
+            Some(&Link {
+                node: lower_from_first,
+                weight: edge_from_first_id,
+            }),
+            Some(&Link {
+                node: lower_from_second,
+                weight: edge_from_second_id,
+            }),
+        ) = (current_iter.peek(), other_iter.peek())
+        {
             if lower_from_first < lower_from_second {
                 current_iter.next();
             } else if lower_from_second < lower_from_first {

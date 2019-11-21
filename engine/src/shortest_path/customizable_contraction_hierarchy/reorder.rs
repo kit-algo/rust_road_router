@@ -9,16 +9,27 @@ pub struct CCHReordering<'a> {
 }
 
 impl<'a> CCHReordering<'a> {
-    fn distance (&self, n1: NodeId, n2: NodeId) -> NonNan {
+    fn distance(&self, n1: NodeId, n2: NodeId) -> NonNan {
         use nav_types::WGS84;
-        NonNan::new(WGS84::new(self.latitude[self.node_order.node(n1) as usize], self.longitude[self.node_order.node(n1) as usize], 0.0)
-            .distance(&WGS84::new(self.latitude[self.node_order.node(n2) as usize], self.longitude[self.node_order.node(n2) as usize], 0.0))).unwrap()
+        NonNan::new(
+            WGS84::new(
+                self.latitude[self.node_order.node(n1) as usize],
+                self.longitude[self.node_order.node(n1) as usize],
+                0.0,
+            )
+            .distance(&WGS84::new(
+                self.latitude[self.node_order.node(n2) as usize],
+                self.longitude[self.node_order.node(n2) as usize],
+                0.0,
+            )),
+        )
+        .unwrap()
     }
 
     fn reorder_sep(&self, nodes: &mut [NodeId]) {
-        let furthest = nodes.first().map(|&first| {
-            nodes.iter().max_by_key(|&&node| self.distance(first, node)).unwrap()
-        });
+        let furthest = nodes
+            .first()
+            .map(|&first| nodes.iter().max_by_key(|&&node| self.distance(first, node)).unwrap());
 
         if let Some(&furthest) = furthest {
             nodes.sort_by_key(|&node| self.distance(node, furthest))
@@ -26,7 +37,9 @@ impl<'a> CCHReordering<'a> {
     }
 
     fn reorder_tree(&self, separators: &mut SeparatorTree, level: usize) {
-        if level > 2 { return }
+        if level > 2 {
+            return;
+        }
 
         self.reorder_sep(&mut separators.nodes);
         for child in &mut separators.children {

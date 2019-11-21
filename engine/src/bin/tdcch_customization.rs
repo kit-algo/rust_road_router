@@ -1,20 +1,12 @@
-use std::{
-    path::Path,
-    env,
-};
+use std::{env, path::Path};
 
-#[macro_use] extern crate bmw_routing_engine;
+#[macro_use]
+extern crate bmw_routing_engine;
 use bmw_routing_engine::{
-    graph::{
-        *,
-        floating_time_dependent::*,
-    },
-    shortest_path::{
-        customizable_contraction_hierarchy::*,
-        node_order::NodeOrder,
-    },
+    graph::{floating_time_dependent::*, *},
     io::*,
     report::*,
+    shortest_path::{customizable_contraction_hierarchy::*, node_order::NodeOrder},
 };
 
 fn main() {
@@ -47,12 +39,21 @@ fn main() {
 
     let cch_folder = path.join("cch");
     let node_order = NodeOrder::reconstruct_from(cch_folder.to_str().unwrap()).expect("could not read node order");
-    let cch = CCHReconstrctor { original_graph: &graph, node_order }.reconstruct_from(cch_folder.to_str().unwrap()).expect("could not read cch");
+    let cch = CCHReconstrctor {
+        original_graph: &graph,
+        node_order,
+    }
+    .reconstruct_from(cch_folder.to_str().unwrap())
+    .expect("could not read cch");
 
     let customized_folder = path.join("customized");
 
     let _cch_customization_ctxt = algo_runs_ctxt.push_collection_item();
     let td_cch_graph: CustomizedGraph = ftd_cch::customize(&cch, &graph).into();
-    if !customized_folder.exists() { std::fs::create_dir(&customized_folder).expect("could not create cch folder"); }
-    td_cch_graph.deconstruct_to(customized_folder.to_str().unwrap()).expect("could not save customized");
+    if !customized_folder.exists() {
+        std::fs::create_dir(&customized_folder).expect("could not create cch folder");
+    }
+    td_cch_graph
+        .deconstruct_to(customized_folder.to_str().unwrap())
+        .expect("could not save customized");
 }

@@ -24,10 +24,18 @@ impl<'a> Cursor<'a> {
 
         if ipps.len() == 1 {
             return if t > Timestamp::zero() {
-                Cursor { ipps, current_index: 0, offset: (period() + offset).into() }
+                Cursor {
+                    ipps,
+                    current_index: 0,
+                    offset: (period() + offset).into(),
+                }
             } else {
-                Cursor { ipps, current_index: 0, offset }
-            }
+                Cursor {
+                    ipps,
+                    current_index: 0,
+                    offset,
+                }
+            };
         }
 
         let pos = ipps.binary_search_by(|p| {
@@ -40,22 +48,33 @@ impl<'a> Cursor<'a> {
             }
         });
 
-
         let i = match pos {
             Ok(i) => i,
             Err(i) => i,
         };
         if i == ipps.len() - 1 {
-            Cursor { ipps, current_index: 0, offset: (period() + offset).into() }
+            Cursor {
+                ipps,
+                current_index: 0,
+                offset: (period() + offset).into(),
+            }
         } else {
-            Cursor { ipps, current_index: i, offset }
+            Cursor {
+                ipps,
+                current_index: i,
+                offset,
+            }
         }
     }
 }
 
 impl<'a> MergeCursor<'a> for Cursor<'a> {
     fn new(ipps: &'a [TTFPoint]) -> Cursor<'a> {
-        Cursor { ipps, current_index: 0, offset: FlWeight::new(0.0) }
+        Cursor {
+            ipps,
+            current_index: 0,
+            offset: FlWeight::new(0.0),
+        }
     }
 
     fn cur(&self) -> TTFPoint {
@@ -106,8 +125,16 @@ impl<'a> MergeCursor<'a> for PartialPlfMergeCursor<'a> {
     fn new(ipps: &'a [TTFPoint]) -> Self {
         let mut iter = ipps.iter();
         let next = iter.next().unwrap().clone();
-        let cur = TTFPoint { at: next.at - FlWeight::new(1.0), val: next.val };
-        let mut cursor = PartialPlfMergeCursor { prev: TTFPoint::default(), cur, next, iter };
+        let cur = TTFPoint {
+            at: next.at - FlWeight::new(1.0),
+            val: next.val,
+        };
+        let mut cursor = PartialPlfMergeCursor {
+            prev: TTFPoint::default(),
+            cur,
+            next,
+            iter,
+        };
         cursor.advance();
         cursor
     }
@@ -151,7 +178,10 @@ impl<'a> PartialPlfLinkCursor<'a> {
     pub fn new(ipps: &'a [TTFPoint]) -> Self {
         let mut iter = ipps.iter();
         let cur = iter.next().unwrap().clone();
-        let prev = TTFPoint { at: cur.at - FlWeight::new(1.0), val: cur.val };
+        let prev = TTFPoint {
+            at: cur.at - FlWeight::new(1.0),
+            val: cur.val,
+        };
         PartialPlfLinkCursor { prev, cur, iter, done: false }
     }
 

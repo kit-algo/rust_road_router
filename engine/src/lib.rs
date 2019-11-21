@@ -1,5 +1,4 @@
 #![feature(allocator_api)]
-
 #![allow(clippy::redundant_closure_call)]
 
 #[macro_use]
@@ -15,27 +14,28 @@ macro_rules! dbg_each {
     };
 }
 
-#[macro_use] pub mod report;
-pub mod shortest_path;
-pub mod graph;
-pub mod io;
+#[macro_use]
+pub mod report;
 pub mod benchmark;
-pub mod rank_select_map;
-pub mod import;
-pub mod link_speed_estimates;
-pub mod export;
 pub mod cli;
+pub mod export;
+pub mod graph;
+pub mod import;
+pub mod io;
+pub mod link_speed_estimates;
+pub mod rank_select_map;
+pub mod shortest_path;
 
-mod index_heap;
-mod in_range_option;
-mod as_slice;
 mod as_mut_slice;
+mod as_slice;
+mod in_range_option;
+mod index_heap;
 mod math;
 mod sorted_search_slice_ext;
 mod util;
 
 // Use of a mod or pub mod is not actually necessary.
 pub mod built_info {
-   // The file has been placed there by the build script.
-   include!(concat!(env!("OUT_DIR"), "/built.rs"));
+    // The file has been placed there by the build script.
+    include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }

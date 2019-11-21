@@ -14,7 +14,11 @@ pub struct LinkIdMapper {
 }
 
 impl LinkIdMapper {
-    pub fn new(link_id_mapping: InvertableRankSelectMap, here_rank_to_link_id: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>, num_arcs: usize) -> LinkIdMapper {
+    pub fn new(
+        link_id_mapping: InvertableRankSelectMap,
+        here_rank_to_link_id: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,
+        num_arcs: usize,
+    ) -> LinkIdMapper {
         let mut link_id_to_here_rank = vec![0; num_arcs];
         for (rank, &(from_ref, to_ref)) in here_rank_to_link_id.iter().enumerate() {
             if let Some(link_id) = from_ref.value() {
@@ -24,7 +28,11 @@ impl LinkIdMapper {
                 link_id_to_here_rank[link_id as usize] = rank as EdgeId;
             }
         }
-        LinkIdMapper { link_id_mapping, here_rank_to_link_id, link_id_to_here_rank }
+        LinkIdMapper {
+            link_id_mapping,
+            here_rank_to_link_id,
+            link_id_to_here_rank,
+        }
     }
 
     pub fn here_to_local_link_id(&self, here_link_id: u64, direction: LinkDirection) -> Option<EdgeId> {

@@ -1,7 +1,7 @@
-use super::*;
 use self::timestamped_vector::TimestampedVector;
-use crate::index_heap::{IndexdMinHeap, Indexing};
+use super::*;
 use crate::graph::floating_time_dependent::*;
+use crate::index_heap::{IndexdMinHeap, Indexing};
 
 #[derive(Debug, Clone)]
 pub enum QueryProgress {
@@ -60,7 +60,10 @@ impl FloatingTDSteppedDijkstra {
             for (&neighbor, edge_id) in self.graph.neighbor_and_edge_id_iter(node) {
                 if check_edge(edge_id) {
                     let plf = self.graph.travel_time_function(edge_id);
-                    let next = State { distance: distance + plf.evaluate(distance), node: neighbor };
+                    let next = State {
+                        distance: distance + plf.evaluate(distance),
+                        node: neighbor,
+                    };
 
                     if next.distance < self.distances[next.node as usize] {
                         self.distances.set(next.node as usize, next.distance);

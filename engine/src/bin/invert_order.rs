@@ -1,11 +1,6 @@
 use std::env;
 
-use bmw_routing_engine::{
-    shortest_path::{
-        node_order::NodeOrder,
-    },
-    io::*,
-};
+use bmw_routing_engine::{io::*, shortest_path::node_order::NodeOrder};
 
 fn main() {
     let mut args = env::args();

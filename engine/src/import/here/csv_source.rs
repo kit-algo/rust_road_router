@@ -1,12 +1,12 @@
 use super::*;
 use csv::ReaderBuilder;
 use glob::glob;
-use std::path::Path;
 use std::fs::File;
+use std::path::Path;
 
 #[derive(Debug)]
 pub struct CSVSource<'a> {
-    directory: &'a Path
+    directory: &'a Path,
 }
 
 impl<'a> CSVSource<'a> {
@@ -35,12 +35,18 @@ impl<'a> RdfDataSource for CSVSource<'a> {
                         let record = line.unwrap();
 
                         elements.push(RdfLink {
-                            link_id: record[0].parse().unwrap_or_else(|_| panic!("could not parse {:?} as link_id in line {} of {:?}", &record[0], i, path)),
-                            ref_node_id: record[1].parse().unwrap_or_else(|_| panic!("could not parse {:?} as ref_node_id in line {} of {:?}", &record[1], i, path)),
-                            nonref_node_id: record[2].parse().unwrap_or_else(|_| panic!("could not parse {:?} as nonref_node_id in line {} of {:?}", &record[2], i, path))
+                            link_id: record[0]
+                                .parse()
+                                .unwrap_or_else(|_| panic!("could not parse {:?} as link_id in line {} of {:?}", &record[0], i, path)),
+                            ref_node_id: record[1]
+                                .parse()
+                                .unwrap_or_else(|_| panic!("could not parse {:?} as ref_node_id in line {} of {:?}", &record[1], i, path)),
+                            nonref_node_id: record[2]
+                                .parse()
+                                .unwrap_or_else(|_| panic!("could not parse {:?} as nonref_node_id in line {} of {:?}", &record[2], i, path)),
                         });
                     }
-                },
+                }
                 Err(e) => println!("{:?}", e),
             }
         }
@@ -67,22 +73,29 @@ impl<'a> RdfDataSource for CSVSource<'a> {
                         let record = line.unwrap();
 
                         elements.push(RdfNavLink {
-                            link_id: record[0].parse().unwrap_or_else(|_| panic!("could not parse {:?} as link_id in line {} of {:?}", &record[0], i, path)),
-                            functional_class: record[4].parse().unwrap_or_else(|_| panic!("could not parse {:?} as travel_direction in line {} of {:?}", &record[6], i, path)),
-                            travel_direction: record[6].parse().unwrap_or_else(|_| panic!("could not parse {:?} as travel_direction in line {} of {:?}", &record[6], i, path)),
-                            speed_category: record[19].parse().unwrap_or_else(|_| panic!("could not parse {:?} as speed_category in line {} of {:?}", &record[19], i, path)),
+                            link_id: record[0]
+                                .parse()
+                                .unwrap_or_else(|_| panic!("could not parse {:?} as link_id in line {} of {:?}", &record[0], i, path)),
+                            functional_class: record[4]
+                                .parse()
+                                .unwrap_or_else(|_| panic!("could not parse {:?} as travel_direction in line {} of {:?}", &record[6], i, path)),
+                            travel_direction: record[6]
+                                .parse()
+                                .unwrap_or_else(|_| panic!("could not parse {:?} as travel_direction in line {} of {:?}", &record[6], i, path)),
+                            speed_category: record[19]
+                                .parse()
+                                .unwrap_or_else(|_| panic!("could not parse {:?} as speed_category in line {} of {:?}", &record[19], i, path)),
                             from_ref_speed_limit: record[25].parse().ok(),
-                            to_ref_speed_limit: record[26].parse().ok()
+                            to_ref_speed_limit: record[26].parse().ok(),
                         });
                     }
-                },
+                }
                 Err(e) => println!("{:?}", e),
             }
         }
 
         elements
     }
-
 
     fn nodes(&self) -> Vec<RdfNode> {
         let mut elements = vec![];
@@ -103,13 +116,19 @@ impl<'a> RdfDataSource for CSVSource<'a> {
                         let record = line.unwrap();
 
                         elements.push(RdfNode {
-                            node_id: record[0].parse().unwrap_or_else(|_| panic!("could not parse {:?} as node_id in line {} of {:?}", &record[0], i, path)),
-                            lat: record[1].parse().unwrap_or_else(|_| panic!("could not parse {:?} as lat in line {} of {:?}", &record[1], i, path)),
-                            lon: record[2].parse().unwrap_or_else(|_| panic!("could not parse {:?} as lon in line {} of {:?}", &record[2], i, path)),
+                            node_id: record[0]
+                                .parse()
+                                .unwrap_or_else(|_| panic!("could not parse {:?} as node_id in line {} of {:?}", &record[0], i, path)),
+                            lat: record[1]
+                                .parse()
+                                .unwrap_or_else(|_| panic!("could not parse {:?} as lat in line {} of {:?}", &record[1], i, path)),
+                            lon: record[2]
+                                .parse()
+                                .unwrap_or_else(|_| panic!("could not parse {:?} as lon in line {} of {:?}", &record[2], i, path)),
                             z_coord: record[3].parse().ok(),
                         });
                     }
-                },
+                }
                 Err(e) => println!("{:?}", e),
             }
         }
@@ -136,14 +155,22 @@ impl<'a> RdfDataSource for CSVSource<'a> {
                         let record = line.unwrap();
 
                         elements.push(RdfLinkGeometry {
-                            link_id: record[0].parse().unwrap_or_else(|_| panic!("could not parse {:?} as link_id in line {} of {:?}", &record[0], i, path)),
-                            seq_num: record[1].parse().unwrap_or_else(|_| panic!("could not parse {:?} as seq_num in line {} of {:?}", &record[1], i, path)),
-                            lat: record[2].parse().unwrap_or_else(|_| panic!("could not parse {:?} as lat in line {} of {:?}", &record[2], i, path)),
-                            lon: record[3].parse().unwrap_or_else(|_| panic!("could not parse {:?} as lon in line {} of {:?}", &record[3], i, path)),
+                            link_id: record[0]
+                                .parse()
+                                .unwrap_or_else(|_| panic!("could not parse {:?} as link_id in line {} of {:?}", &record[0], i, path)),
+                            seq_num: record[1]
+                                .parse()
+                                .unwrap_or_else(|_| panic!("could not parse {:?} as seq_num in line {} of {:?}", &record[1], i, path)),
+                            lat: record[2]
+                                .parse()
+                                .unwrap_or_else(|_| panic!("could not parse {:?} as lat in line {} of {:?}", &record[2], i, path)),
+                            lon: record[3]
+                                .parse()
+                                .unwrap_or_else(|_| panic!("could not parse {:?} as lon in line {} of {:?}", &record[3], i, path)),
                             z_coord: record[4].parse().ok(),
                         });
                     }
-                },
+                }
                 Err(e) => println!("{:?}", e),
             }
         }

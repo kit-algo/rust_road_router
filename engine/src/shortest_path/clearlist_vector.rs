@@ -4,7 +4,7 @@ use std::ops::{Index, IndexMut};
 pub struct ClearlistVector<T> {
     data: Vec<T>,
     clearlist: Vec<usize>,
-    default: T
+    default: T,
 }
 
 impl<T: Clone> ClearlistVector<T> {
@@ -12,7 +12,7 @@ impl<T: Clone> ClearlistVector<T> {
         ClearlistVector {
             data: vec![default.clone(); size],
             clearlist: Vec::new(),
-            default
+            default,
         }
     }
 

@@ -1,11 +1,11 @@
+use self::timestamped_vector::TimestampedVector;
+use super::td_stepped_dijkstra::QueryProgress;
 use super::*;
-use crate::shortest_path::customizable_contraction_hierarchy::CCH;
-use crate::shortest_path::td_stepped_dijkstra::TDSteppedDijkstra;
 use crate::graph::time_dependent::*;
 use crate::graph::RandomLinkAccessGraph;
+use crate::shortest_path::customizable_contraction_hierarchy::CCH;
 use crate::shortest_path::query::customizable_contraction_hierarchy::Server as CCHServer;
-use super::td_stepped_dijkstra::QueryProgress;
-use self::timestamped_vector::TimestampedVector;
+use crate::shortest_path::td_stepped_dijkstra::TDSteppedDijkstra;
 
 use std::collections::LinkedList;
 use std::ops::Range;
@@ -15,7 +15,7 @@ pub struct Server<'a> {
     dijkstra: TDSteppedDijkstra,
     samples: Vec<CCHServer<'a>>,
     cch_graph: &'a CCH,
-    active_edges: TimestampedVector<bool>
+    active_edges: TimestampedVector<bool>,
 }
 
 impl<'a> Server<'a> {
@@ -26,16 +26,22 @@ impl<'a> Server<'a> {
             Range { start: 7, end: 10 },
             Range { start: 11, end: 15 },
             Range { start: 16, end: 19 },
-        ].into_iter().map(|range| {
-            let range = Range { start: range.start * hour, end: range.end * hour };
+        ]
+        .into_iter()
+        .map(|range| {
+            let range = Range {
+                start: range.start * hour,
+                end: range.end * hour,
+            };
             WrappingRange::new(range)
-        }).map(|range| {
+        })
+        .map(|range| {
             (0..graph.num_arcs() as EdgeId)
                 .map(|edge_id| graph.travel_time_function(edge_id).average(range.clone()))
                 .collect::<Vec<Weight>>()
-        }).map(|metric| {
-            CCHServer::new(cch, &FirstOutGraph::new(graph.first_out(), graph.head(), metric))
-        }).collect();
+        })
+        .map(|metric| CCHServer::new(cch, &FirstOutGraph::new(graph.first_out(), graph.head(), metric)))
+        .collect();
 
         Server {
             active_edges: TimestampedVector::new(graph.num_arcs(), false),
@@ -66,7 +72,7 @@ impl<'a> Server<'a> {
             let active_edges = &self.active_edges;
             match self.dijkstra.next_step(|edge_id| active_edges[edge_id as usize], |_| 0) {
                 QueryProgress::Progress(_) => continue,
-                QueryProgress::Done(result) => return result
+                QueryProgress::Done(result) => return result,
             }
         }
     }

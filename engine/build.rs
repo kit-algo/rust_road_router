@@ -1,7 +1,4 @@
-use std::env;
-use std::fs::File;
-use std::io::Write;
-use std::path::Path;
+use std::{env, fs::File, io::Write, path::Path};
 
 fn main() {
     built::write_built_file().expect("Failed to acquire build-time information");

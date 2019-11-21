@@ -1,10 +1,10 @@
 use crate::graph::*;
-use crate::rank_select_map::{RankSelectMap, BitVec};
 use crate::in_range_option::*;
-use std::iter;
-use std::str::FromStr;
+use crate::rank_select_map::{BitVec, RankSelectMap};
 use std::error::Error;
 use std::fmt;
+use std::iter;
+use std::str::FromStr;
 
 use nav_types::WGS84;
 
@@ -30,7 +30,7 @@ impl Error for DirectionParseError {
 pub enum RdfLinkDirection {
     FromRef,
     ToRef,
-    Both
+    Both,
 }
 
 impl Default for RdfLinkDirection {
@@ -47,7 +47,7 @@ impl FromStr for RdfLinkDirection {
             Some('B') => Ok(RdfLinkDirection::Both),
             Some('F') => Ok(RdfLinkDirection::FromRef),
             Some('T') => Ok(RdfLinkDirection::ToRef),
-            _ => Err(DirectionParseError)
+            _ => Err(DirectionParseError),
         }
     }
 }
@@ -56,7 +56,7 @@ impl FromStr for RdfLinkDirection {
 pub struct RdfLink {
     link_id: i64,
     ref_node_id: i64,
-    nonref_node_id: i64
+    nonref_node_id: i64,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -66,7 +66,7 @@ pub struct RdfNavLink {
     travel_direction: RdfLinkDirection,
     speed_category: i32,
     from_ref_speed_limit: Option<i32>,
-    to_ref_speed_limit: Option<i32>
+    to_ref_speed_limit: Option<i32>,
 }
 
 impl RdfNavLink {
@@ -80,18 +80,22 @@ impl RdfNavLink {
             6 => 11.11,
             7 => 5.55,
             8 => 1.38,
-            _ => panic!("unknown speed category")
+            _ => panic!("unknown speed category"),
         };
 
         let limit = match direction {
             RdfLinkDirection::FromRef => self.from_ref_speed_limit,
             RdfLinkDirection::ToRef => self.to_ref_speed_limit,
-            _ => panic!("invalid argument")
+            _ => panic!("invalid argument"),
         };
 
         let limit = f64::from(limit.unwrap_or(999)) / 3.6;
 
-        if limit < link_speed { limit } else { link_speed }
+        if limit < link_speed {
+            limit
+        } else {
+            link_speed
+        }
     }
 }
 
@@ -100,7 +104,7 @@ pub struct RdfNode {
     node_id: i64,
     lat: i64,
     lon: i64,
-    z_coord: Option<i64>
+    z_coord: Option<i64>,
 }
 
 impl RdfNode {
@@ -108,7 +112,8 @@ impl RdfNode {
         WGS84::new(
             (self.lat as f64) / 100_000.,
             (self.lon as f64) / 100_000.,
-            (self.z_coord.unwrap_or(0) as f64) / 100.)
+            (self.z_coord.unwrap_or(0) as f64) / 100.,
+        )
     }
 }
 
@@ -118,7 +123,7 @@ pub struct RdfLinkGeometry {
     seq_num: i64,
     lat: i64,
     lon: i64,
-    z_coord: Option<i64>
+    z_coord: Option<i64>,
 }
 
 impl RdfLinkGeometry {
@@ -126,7 +131,8 @@ impl RdfLinkGeometry {
         WGS84::new(
             (self.lat as f64) / 10_000_000.,
             (self.lon as f64) / 10_000_000.,
-            (self.z_coord.unwrap_or(0) as f64) / 100.)
+            (self.z_coord.unwrap_or(0) as f64) / 100.,
+        )
     }
 }
 
@@ -148,10 +154,7 @@ pub trait RdfDataSource {
 }
 
 pub fn read_graph(source: &dyn RdfDataSource, (min_lat, min_lon): (i64, i64), (max_lat, max_lon): (i64, i64)) -> HereData {
-
-    let included = |node: &RdfNode| {
-        node.lat >= min_lat && node.lat <= max_lat && node.lon >= min_lon && node.lon <= max_lon
-    };
+    let included = |node: &RdfNode| node.lat >= min_lat && node.lat <= max_lat && node.lon >= min_lon && node.lon <= max_lon;
 
     println!("read nodes");
 
@@ -183,12 +186,19 @@ pub fn read_graph(source: &dyn RdfDataSource, (min_lat, min_lon): (i64, i64), (m
     let nav_links = sorted_nav_links;
 
     println!("read links");
-    let links: Vec<_> = source.links().into_iter().filter(|link| filtered_node_ids.get(link.ref_node_id as usize) && filtered_node_ids.get(link.nonref_node_id as usize)).collect();
-    let maximum_node_id = links.iter().flat_map(|link| iter::once(link.ref_node_id).chain(iter::once(link.nonref_node_id)) ).max().unwrap();
+    let links: Vec<_> = source
+        .links()
+        .into_iter()
+        .filter(|link| filtered_node_ids.get(link.ref_node_id as usize) && filtered_node_ids.get(link.nonref_node_id as usize))
+        .collect();
+    let maximum_node_id = links
+        .iter()
+        .flat_map(|link| iter::once(link.ref_node_id).chain(iter::once(link.nonref_node_id)))
+        .max()
+        .unwrap();
 
     // a data structure to do the global to local node ids mapping
     let mut node_id_mapping = BitVec::new(maximum_node_id as usize + 1);
-
 
     println!("build node id mapping");
     // insert all global node ids we encounter in links
@@ -243,7 +253,15 @@ pub fn read_graph(source: &dyn RdfDataSource, (min_lat, min_lon): (i64, i64), (m
     }
 
     println!("sort nodes");
-    let mut nodes: Vec<RdfNode> = vec![RdfNode { node_id: 0, lat: 0, lon: 0, z_coord: None }; n];
+    let mut nodes: Vec<RdfNode> = vec![
+        RdfNode {
+            node_id: 0,
+            lat: 0,
+            lon: 0,
+            z_coord: None
+        };
+        n
+    ];
     for node in input_nodes {
         if let Some(index) = node_id_mapping.get(node.node_id as usize) {
             nodes[index] = node;
@@ -282,14 +300,14 @@ pub fn read_graph(source: &dyn RdfDataSource, (min_lat, min_lon): (i64, i64), (m
                     functional_road_classes[first_out[from_node] as usize] = nav_link.functional_class;
                     here_rank_to_link_id[link_index].0 = InRangeOption::new(Some(first_out[from_node]));
                     first_out[from_node] += 1;
-                },
+                }
                 RdfLinkDirection::ToRef => {
                     head[first_out[to_node] as usize] = from_node as NodeId;
                     weights[first_out[to_node] as usize] = to_weight;
                     functional_road_classes[first_out[to_node] as usize] = nav_link.functional_class;
                     here_rank_to_link_id[link_index].1 = InRangeOption::new(Some(first_out[to_node]));
                     first_out[to_node] += 1;
-                },
+                }
                 RdfLinkDirection::Both => {
                     head[first_out[from_node] as usize] = to_node as NodeId;
                     weights[first_out[from_node] as usize] = from_weight;
@@ -316,12 +334,16 @@ pub fn read_graph(source: &dyn RdfDataSource, (min_lat, min_lon): (i64, i64), (m
     let graph = OwnedGraph::new(first_out, head, weights);
     let lat = nodes.iter().map(|node| ((node.lat as f64) / 100_000.) as f32).collect();
     let lng = nodes.iter().map(|node| ((node.lon as f64) / 100_000.) as f32).collect();
-    HereData { graph, functional_road_classes, lat, lng, link_id_mapping, here_rank_to_link_id }
+    HereData {
+        graph,
+        functional_road_classes,
+        lat,
+        lng,
+        link_id_mapping,
+        here_rank_to_link_id,
+    }
 }
 
 fn calculate_length_in_m(geometries: &[RdfLinkGeometry]) -> f64 {
-    geometries
-        .windows(2)
-        .map(|pair| pair[0].as_wgs84().distance(&pair[1].as_wgs84()))
-        .sum()
+    geometries.windows(2).map(|pair| pair[0].as_wgs84().distance(&pair[1].as_wgs84())).sum()
 }

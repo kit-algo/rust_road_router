@@ -2,14 +2,10 @@ use std::env;
 use std::path::Path;
 
 use bmw_routing_engine::{
-    graph::*,
-    shortest_path::{
-        customizable_contraction_hierarchy::*,
-        node_order::NodeOrder,
-        query::customizable_contraction_hierarchy::Server,
-    },
-    io::Load,
     benchmark::report_time,
+    graph::*,
+    io::Load,
+    shortest_path::{customizable_contraction_hierarchy::*, node_order::NodeOrder, query::customizable_contraction_hierarchy::Server},
 };
 
 fn main() {
@@ -28,7 +24,12 @@ fn main() {
     let cch_order = NodeOrder::from_node_order(cch_order);
 
     let cch = contract(&graph, cch_order.clone());
-    let cch_order = CCHReordering { node_order: cch_order, latitude: &[], longitude: &[] }.reorder_for_seperator_based_customization(cch.separators());
+    let cch_order = CCHReordering {
+        node_order: cch_order,
+        latitude: &[],
+        longitude: &[],
+    }
+    .reorder_for_seperator_based_customization(cch.separators());
     let cch = contract(&graph, cch_order);
 
     let mut server = Server::new(&cch, &graph);

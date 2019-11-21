@@ -6,7 +6,7 @@ pub struct TimestampedVector<T: Clone> {
     // choose something small, as overflows are not a problem
     current: u32,
     timestamps: Vec<u32>,
-    default: T
+    default: T,
 }
 
 impl<T: Clone> TimestampedVector<T> {
@@ -15,7 +15,7 @@ impl<T: Clone> TimestampedVector<T> {
             data: vec![default.clone(); size],
             current: 0,
             timestamps: vec![0; size],
-            default
+            default,
         }
     }
 

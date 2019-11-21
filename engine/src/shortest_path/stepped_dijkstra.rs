@@ -1,5 +1,5 @@
-use super::*;
 use self::timestamped_vector::TimestampedVector;
+use super::*;
 use crate::index_heap::{IndexdMinHeap, Indexing};
 
 #[derive(Debug, Clone)]
@@ -51,7 +51,7 @@ pub struct SteppedDijkstra<Graph: for<'a> LinkIterGraph<'a>> {
     // the current query
     query: Option<Query>,
     // first option: algorithm finished? second option: final result of algorithm
-    result: Option<Option<Weight>>
+    result: Option<Option<Weight>>,
 }
 
 impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
@@ -65,7 +65,7 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
             predecessors: vec![n as NodeId; n],
             closest_node_priority_queue: IndexdMinHeap::new(n),
             query: None,
-            result: None
+            result: None,
         }
     }
 
@@ -81,7 +81,7 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
             predecessors: recycled.predecessors,
             closest_node_priority_queue: recycled.closest_node_priority_queue,
             query: None,
-            result: None
+            result: None,
         }
     }
 
@@ -100,26 +100,34 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
     pub fn next_step(&mut self) -> QueryProgress {
         match self.result {
             Some(result) => QueryProgress::Done(result),
-            None => {
-                self.settle_next_node(|_, dist| { dist }, |_, _, _| true)
-            }
+            None => self.settle_next_node(|_, dist| dist, |_, _, _| true),
         }
     }
 
-    pub fn next_step_with_callbacks(&mut self, potential: impl FnMut(NodeId, Weight) -> Weight, relax_edge: impl FnMut(NodeId, Link, &Self) -> bool) -> QueryProgress {
+    pub fn next_step_with_callbacks(
+        &mut self,
+        potential: impl FnMut(NodeId, Weight) -> Weight,
+        relax_edge: impl FnMut(NodeId, Link, &Self) -> bool,
+    ) -> QueryProgress {
         match self.result {
             Some(result) => QueryProgress::Done(result),
-            None => {
-                self.settle_next_node(potential, relax_edge)
-            }
+            None => self.settle_next_node(potential, relax_edge),
         }
     }
 
-    fn settle_next_node(&mut self, mut potential: impl FnMut(NodeId, Weight) -> Weight, mut relax_edge: impl FnMut(NodeId, Link, &Self) -> bool) -> QueryProgress {
+    fn settle_next_node(
+        &mut self,
+        mut potential: impl FnMut(NodeId, Weight) -> Weight,
+        mut relax_edge: impl FnMut(NodeId, Link, &Self) -> bool,
+    ) -> QueryProgress {
         let to = self.query.as_ref().expect("query was not initialized properly").to;
 
         // Examine the frontier with lower distance nodes first (min-heap)
-        if let Some(State { node, distance: _dist_with_pot }) = self.closest_node_priority_queue.pop() {
+        if let Some(State {
+            node,
+            distance: _dist_with_pot,
+        }) = self.closest_node_priority_queue.pop()
+        {
             let distance = self.distances[node as usize];
 
             // Alternatively we could have continued to find all shortest paths
@@ -130,7 +138,9 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
             // For each node we can reach, see if we can find a way with
             // a lower distance going through this node
             for edge in self.graph.neighbor_iter(node) {
-                if !relax_edge(node, edge, &self) { continue; }
+                if !relax_edge(node, edge, &self) {
+                    continue;
+                }
                 let next_distance = distance + edge.weight;
 
                 // If so, add it to the frontier and continue
@@ -139,13 +149,15 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
                     self.distances.set(edge.node as usize, next_distance);
                     self.predecessors[edge.node as usize] = node;
 
-                    let next = State { distance: potential(edge.node, next_distance), node: edge.node };
+                    let next = State {
+                        distance: potential(edge.node, next_distance),
+                        node: edge.node,
+                    };
                     if self.closest_node_priority_queue.contains_index(next.as_index()) {
                         self.closest_node_priority_queue.decrease_key(next);
                     } else {
                         self.closest_node_priority_queue.push(next);
                     }
-
                 }
             }
 

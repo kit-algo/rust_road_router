@@ -8,7 +8,7 @@ pub struct Server<Graph: for<'a> LinkIterGraph<'a>> {
 impl<Graph: for<'a> LinkIterGraph<'a>> Server<Graph> {
     pub fn new(graph: Graph) -> Server<Graph> {
         Server {
-            dijkstra: SteppedDijkstra::new(graph)
+            dijkstra: SteppedDijkstra::new(graph),
         }
     }
 
@@ -18,7 +18,7 @@ impl<Graph: for<'a> LinkIterGraph<'a>> Server<Graph> {
         loop {
             match self.dijkstra.next_step() {
                 QueryProgress::Progress(_) => continue,
-                QueryProgress::Done(result) => return result
+                QueryProgress::Done(result) => return result,
             }
         }
     }

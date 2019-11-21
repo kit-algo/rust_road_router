@@ -1,7 +1,7 @@
-use super::*;
-use crate::shortest_path::td_stepped_dijkstra::TDSteppedDijkstra;
-use crate::graph::time_dependent::*;
 use super::td_stepped_dijkstra::QueryProgress;
+use super::*;
+use crate::graph::time_dependent::*;
+use crate::shortest_path::td_stepped_dijkstra::TDSteppedDijkstra;
 
 use std::collections::LinkedList;
 
@@ -23,7 +23,7 @@ impl Server {
         loop {
             match self.dijkstra.next_step(|_| true, |_| 0) {
                 QueryProgress::Progress(_) => continue,
-                QueryProgress::Done(result) => return result
+                QueryProgress::Done(result) => return result,
             }
         }
     }
@@ -34,7 +34,10 @@ impl Server {
 
     pub fn path(&self) -> LinkedList<(NodeId, Weight)> {
         let mut path = LinkedList::new();
-        path.push_front((self.dijkstra.query().to, self.dijkstra.tentative_distance(self.dijkstra.query().to) - self.dijkstra.query().departure_time));
+        path.push_front((
+            self.dijkstra.query().to,
+            self.dijkstra.tentative_distance(self.dijkstra.query().to) - self.dijkstra.query().departure_time,
+        ));
 
         while path.front().unwrap().0 != self.dijkstra.query().from {
             let next = self.dijkstra.predecessor(path.front().unwrap().0);

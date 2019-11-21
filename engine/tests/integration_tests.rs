@@ -2,10 +2,7 @@ extern crate bmw_routing_engine;
 
 use bmw_routing_engine::{
     graph::*,
-    shortest_path::query::{
-        dijkstra::Server as DijkServer,
-        bidirectional_dijkstra::Server as BiDijkServer,
-    },
+    shortest_path::query::{bidirectional_dijkstra::Server as BiDijkServer, dijkstra::Server as DijkServer},
 };
 
 fn graph() -> OwnedGraph {
@@ -27,10 +24,7 @@ fn graph() -> OwnedGraph {
     //           10      |               |
     //                   +---------------+
     //
-    OwnedGraph::new(
-        vec![0,      2,  3,        6,    8, 8, 8],
-        vec![2,  1,  3,  1, 3, 4,  0, 4],
-        vec![10, 1,  2,  1, 3, 1,  7, 2])
+    OwnedGraph::new(vec![0, 2, 3, 6, 8, 8, 8], vec![2, 1, 3, 1, 3, 4, 0, 4], vec![10, 1, 2, 1, 3, 1, 7, 2])
 }
 
 #[test]
@@ -57,9 +51,9 @@ fn bidir_dijkstra_correct_distances() {
 
 #[test]
 fn bidir_dijkstra_stopping_crit() {
-    let first_out = vec![0,      3, 4, 5, 6, 6];
-    let head      = vec![1,3,4,  2, 4, 4,];
-    let weight    = vec![4,7,13, 4, 4, 7,];
+    let first_out = vec![0, 3, 4, 5, 6, 6];
+    let head = vec![1, 3, 4, 2, 4, 4];
+    let weight = vec![4, 7, 13, 4, 4, 7];
     let mut server = BiDijkServer::new(OwnedGraph::new(first_out, head, weight));
 
     assert_eq!(server.distance(0, 4), Some(12));

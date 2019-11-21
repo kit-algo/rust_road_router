@@ -1,6 +1,5 @@
-use std::sync::atomic::compiler_fence;
-use std::sync::atomic::Ordering::SeqCst;
 use crate::report::*;
+use std::sync::atomic::{compiler_fence, Ordering::SeqCst};
 use time;
 
 pub fn report_time<Out, F: FnOnce() -> Out>(name: &str, f: F) -> Out {
@@ -23,7 +22,7 @@ pub fn measure<Out, F: FnOnce() -> Out>(f: F) -> (Out, time::Duration) {
 
 #[derive(Debug)]
 pub struct Timer {
-    start: time::Tm
+    start: time::Tm,
 }
 
 impl Default for Timer {

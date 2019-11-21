@@ -1,14 +1,14 @@
 use super::*;
-use crate::as_slice::AsSlice;
 use crate::as_mut_slice::AsMutSlice;
+use crate::as_slice::AsSlice;
 use crate::io::*;
 use std::io::Result;
-use std::path::Path;
 use std::mem::swap;
-
+use std::path::Path;
 
 #[derive(Debug, Clone)]
-pub struct FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> where
+pub struct FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+where
     FirstOutContainer: AsSlice<EdgeId>,
     HeadContainer: AsSlice<NodeId>,
     WeightContainer: AsSlice<Weight>,
@@ -21,14 +21,21 @@ pub struct FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> wher
     weight: WeightContainer,
 }
 
-impl<FirstOutContainer, HeadContainer, WeightContainer> FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> where
+impl<FirstOutContainer, HeadContainer, WeightContainer> FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+where
     FirstOutContainer: AsSlice<EdgeId>,
     HeadContainer: AsSlice<NodeId>,
     WeightContainer: AsSlice<Weight>,
 {
-    pub fn first_out(&self) -> &[EdgeId] { self.first_out.as_slice() }
-    pub fn head(&self) -> &[NodeId] { self.head.as_slice() }
-    pub fn weight(&self) -> &[Weight] { self.weight.as_slice() }
+    pub fn first_out(&self) -> &[EdgeId] {
+        self.first_out.as_slice()
+    }
+    pub fn head(&self) -> &[NodeId] {
+        self.head.as_slice()
+    }
+    pub fn weight(&self) -> &[Weight] {
+        self.weight.as_slice()
+    }
 
     pub fn new(first_out: FirstOutContainer, head: HeadContainer, weight: WeightContainer) -> FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> {
         assert!(first_out.as_slice().len() < <NodeId>::max_value() as usize);
@@ -71,14 +78,15 @@ impl OwnedGraph {
         // append all adjancecy list and split the pairs into two seperate vectors
         let (head, weight) = adjancecy_lists
             .into_iter()
-            .flat_map(|neighbors| neighbors.into_iter().map(|Link { node, weight }| (node, weight) ) )
+            .flat_map(|neighbors| neighbors.into_iter().map(|Link { node, weight }| (node, weight)))
             .unzip();
 
         OwnedGraph::new(first_out, head, weight)
     }
 }
 
-impl<FirstOutContainer, HeadContainer> FirstOutGraph<FirstOutContainer, HeadContainer, Vec<Weight>> where
+impl<FirstOutContainer, HeadContainer> FirstOutGraph<FirstOutContainer, HeadContainer, Vec<Weight>>
+where
     FirstOutContainer: AsSlice<EdgeId>,
     HeadContainer: AsSlice<NodeId>,
 {
@@ -88,7 +96,8 @@ impl<FirstOutContainer, HeadContainer> FirstOutGraph<FirstOutContainer, HeadCont
     }
 }
 
-impl<FirstOutContainer, HeadContainer, WeightContainer> Graph for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> where
+impl<FirstOutContainer, HeadContainer, WeightContainer> Graph for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+where
     FirstOutContainer: AsSlice<EdgeId>,
     HeadContainer: AsSlice<NodeId>,
     WeightContainer: AsSlice<Weight>,
@@ -102,23 +111,26 @@ impl<FirstOutContainer, HeadContainer, WeightContainer> Graph for FirstOutGraph<
     }
 }
 
-impl<'a, FirstOutContainer, HeadContainer, WeightContainer> LinkIterGraph<'a> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> where
+impl<'a, FirstOutContainer, HeadContainer, WeightContainer> LinkIterGraph<'a> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+where
     FirstOutContainer: AsSlice<EdgeId>,
     HeadContainer: AsSlice<NodeId>,
     WeightContainer: AsSlice<Weight>,
 {
-    type Iter = std::iter::Map<std::iter::Zip<std::slice::Iter<'a, NodeId>, std::slice::Iter<'a, Weight>>, fn((&NodeId, &Weight))->Link>;
+    type Iter = std::iter::Map<std::iter::Zip<std::slice::Iter<'a, NodeId>, std::slice::Iter<'a, Weight>>, fn((&NodeId, &Weight)) -> Link>;
 
     #[inline]
     fn neighbor_iter(&'a self, node: NodeId) -> Self::Iter {
         let range = self.neighbor_edge_indices_usize(node);
-        self.head()[range.clone()].iter()
+        self.head()[range.clone()]
+            .iter()
             .zip(self.weight()[range].iter())
-            .map( |(&neighbor, &weight)| Link { node: neighbor, weight } )
+            .map(|(&neighbor, &weight)| Link { node: neighbor, weight })
     }
 }
 
-impl<'a, FirstOutContainer, HeadContainer, WeightContainer> MutWeightLinkIterGraph<'a> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> where
+impl<'a, FirstOutContainer, HeadContainer, WeightContainer> MutWeightLinkIterGraph<'a> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+where
     FirstOutContainer: AsSlice<EdgeId>,
     HeadContainer: AsSlice<NodeId>,
     WeightContainer: AsSlice<Weight> + AsMutSlice<Weight>,
@@ -132,19 +144,26 @@ impl<'a, FirstOutContainer, HeadContainer, WeightContainer> MutWeightLinkIterGra
     }
 }
 
-impl<FirstOutContainer, HeadContainer, WeightContainer> RandomLinkAccessGraph for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> where
+impl<FirstOutContainer, HeadContainer, WeightContainer> RandomLinkAccessGraph for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+where
     FirstOutContainer: AsSlice<EdgeId>,
     HeadContainer: AsSlice<NodeId>,
     WeightContainer: AsSlice<Weight>,
 {
     #[inline]
     fn link(&self, edge_id: EdgeId) -> Link {
-        Link { node: self.head()[edge_id as usize], weight: self.weight()[edge_id as usize] }
+        Link {
+            node: self.head()[edge_id as usize],
+            weight: self.weight()[edge_id as usize],
+        }
     }
 
     fn edge_index(&self, from: NodeId, to: NodeId) -> Option<EdgeId> {
         let first_out = self.first_out()[from as usize] as usize;
-        self.neighbor_iter(from).enumerate().find(|&(_, Link { node, .. })| node == to).map(|(i, _)| (first_out + i) as EdgeId )
+        self.neighbor_iter(from)
+            .enumerate()
+            .find(|&(_, Link { node, .. })| node == to)
+            .map(|(i, _)| (first_out + i) as EdgeId)
     }
 
     #[inline]
@@ -166,10 +185,7 @@ mod tests {
 
     #[test]
     fn test_reversal() {
-        let graph = FirstOutGraph::new(
-            vec![0,      2,  3,        6,    8, 8, 8],
-            vec![2,  1,  3,  1, 3, 4,  0, 4],
-            vec![10, 1,  2,  1, 3, 1,  7, 2]);
+        let graph = FirstOutGraph::new(vec![0, 2, 3, 6, 8, 8, 8], vec![2, 1, 3, 1, 3, 4, 0, 4], vec![10, 1, 2, 1, 3, 1, 7, 2]);
 
         //
         //                  7
@@ -184,10 +200,7 @@ mod tests {
         //           10      |               |
         //                   +---------------+
         //
-        let expected = FirstOutGraph::new(
-            vec![0,  1,     3,   4,     6,     8,8],
-            vec![3,  0, 2,  0,   1, 2,  2, 3],
-            vec![7,  1, 1,  10,  2, 3,  1, 2]);
+        let expected = FirstOutGraph::new(vec![0, 1, 3, 4, 6, 8, 8], vec![3, 0, 2, 0, 1, 2, 2, 3], vec![7, 1, 1, 10, 2, 3, 1, 2]);
         let reversed = graph.reverse();
 
         assert_eq!(reversed.first_out, expected.first_out);

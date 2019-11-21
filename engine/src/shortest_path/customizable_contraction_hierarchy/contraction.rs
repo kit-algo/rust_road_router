@@ -1,18 +1,14 @@
 use super::*;
+use crate::{benchmark::report_time, graph::first_out_graph::degrees_to_first_out, report::*};
 use std::{
-    ops::{Index, IndexMut},
     cmp::Ordering,
-};
-use crate::{
-    graph::first_out_graph::degrees_to_first_out,
-    benchmark::report_time,
-    report::*,
+    ops::{Index, IndexMut},
 };
 
 #[derive(Debug, PartialEq)]
 enum ShortcutResult {
     NewShortcut,
-    Existed
+    Existed,
 }
 
 #[derive(Debug)]
@@ -24,7 +20,7 @@ impl Node {
     fn insert(&mut self, node: NodeId) -> ShortcutResult {
         for &other in &self.edges {
             if node == other {
-                return ShortcutResult::Existed
+                return ShortcutResult::Existed;
             }
         }
 
@@ -40,31 +36,29 @@ impl Node {
 
         loop {
             match (self_iter.peek(), other_iter.peek()) {
-                (Some(&&self_neighbor), Some(&&other_neighbor)) => {
-                    match self_neighbor.cmp(&other_neighbor) {
-                        Ordering::Less => {
-                            new_edges.push(self_neighbor);
-                            self_iter.next();
-                        },
-                        Ordering::Greater => {
-                            new_edges.push(other_neighbor);
-                            other_iter.next();
-                        },
-                        Ordering::Equal => {
-                            new_edges.push(self_neighbor);
-                            self_iter.next();
-                            other_iter.next();
-                        },
+                (Some(&&self_neighbor), Some(&&other_neighbor)) => match self_neighbor.cmp(&other_neighbor) {
+                    Ordering::Less => {
+                        new_edges.push(self_neighbor);
+                        self_iter.next();
+                    }
+                    Ordering::Greater => {
+                        new_edges.push(other_neighbor);
+                        other_iter.next();
+                    }
+                    Ordering::Equal => {
+                        new_edges.push(self_neighbor);
+                        self_iter.next();
+                        other_iter.next();
                     }
                 },
                 (Some(&&neighbor), None) => {
                     new_edges.push(neighbor);
                     self_iter.next();
-                },
+                }
                 (None, Some(&&neighbor)) => {
                     new_edges.push(neighbor);
                     other_iter.next();
-                },
+                }
                 _ => break,
             }
         }
@@ -77,7 +71,7 @@ impl Node {
 pub struct ContractionGraph<'a, Graph: for<'b> LinkIterGraph<'b> + 'a> {
     nodes: Vec<Node>,
     node_order: NodeOrder,
-    original_graph: &'a Graph
+    original_graph: &'a Graph,
 }
 
 impl<'a, Graph: for<'b> LinkIterGraph<'b>> ContractionGraph<'a, Graph> {
@@ -85,16 +79,19 @@ impl<'a, Graph: for<'b> LinkIterGraph<'b>> ContractionGraph<'a, Graph> {
         let n = graph.num_nodes() as NodeId;
 
         // translate node ids to ranks
-        let mut nodes: Vec<Node> = (0..n).map(|node| {
-            let old_node_id = node_order.node(node);
-            let edges = graph.neighbor_iter(old_node_id)
-                .map(|Link { node: neighbor, .. }| {
-                    debug_assert_ne!(old_node_id, neighbor);
-                    node_order.rank(neighbor)
-                })
-                .collect();
-            Node { edges }
-        }).collect();
+        let mut nodes: Vec<Node> = (0..n)
+            .map(|node| {
+                let old_node_id = node_order.node(node);
+                let edges = graph
+                    .neighbor_iter(old_node_id)
+                    .map(|Link { node: neighbor, .. }| {
+                        debug_assert_ne!(old_node_id, neighbor);
+                        node_order.rank(neighbor)
+                    })
+                    .collect();
+                Node { edges }
+            })
+            .collect();
 
         // make graph undirected
         for node_id in 0..n {
@@ -123,7 +120,7 @@ impl<'a, Graph: for<'b> LinkIterGraph<'b>> ContractionGraph<'a, Graph> {
         ContractionGraph {
             nodes,
             node_order,
-            original_graph: graph
+            original_graph: graph,
         }
     }
 
@@ -146,14 +143,13 @@ impl<'a, Graph: for<'b> LinkIterGraph<'b>> ContractionGraph<'a, Graph> {
             report!("num_arcs_inserted", num_shortcut_arcs);
         });
 
-
         ContractedGraph(self)
     }
 
     fn partial_graph(&mut self) -> PartialContractionGraph {
         PartialContractionGraph {
             nodes: &mut self.nodes[..],
-            id_offset: 0
+            id_offset: 0,
         }
     }
 }
@@ -161,13 +157,16 @@ impl<'a, Graph: for<'b> LinkIterGraph<'b>> ContractionGraph<'a, Graph> {
 #[derive(Debug)]
 struct PartialContractionGraph<'a> {
     nodes: &'a mut [Node],
-    id_offset: NodeId
+    id_offset: NodeId,
 }
 
 impl<'a> PartialContractionGraph<'a> {
     fn remove_lowest(self) -> Option<(&'a Node, PartialContractionGraph<'a>)> {
         if let Some((node, other_nodes)) = self.nodes.split_first_mut() {
-            let subgraph = PartialContractionGraph { nodes: other_nodes, id_offset: self.id_offset + 1 };
+            let subgraph = PartialContractionGraph {
+                nodes: other_nodes,
+                id_offset: self.id_offset + 1,
+            };
             Some((node, subgraph))
         } else {
             None
@@ -207,10 +206,7 @@ fn adjancecy_lists_to_first_out_graph(adjancecy_lists: Vec<Node>) -> OwnedGraph 
     };
     debug_assert_eq!(first_out.len(), n + 1);
 
-    let head: Vec<NodeId> = adjancecy_lists
-        .into_iter()
-        .flat_map(|neighbors| neighbors.edges.into_iter())
-        .collect();
+    let head: Vec<NodeId> = adjancecy_lists.into_iter().flat_map(|neighbors| neighbors.edges.into_iter()).collect();
 
     let m = head.len();
     OwnedGraph::new(first_out, head, vec![INFINITY; m])

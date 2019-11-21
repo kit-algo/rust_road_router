@@ -5,10 +5,9 @@ extern crate bmw_routing_engine;
 extern crate serde_json;
 
 use bmw_routing_engine::*;
-use std::path::Path;
-use io::*;
 use graph::*;
-
+use io::*;
+use std::path::Path;
 
 fn main() {
     let mut args = env::args();
@@ -21,7 +20,10 @@ fn main() {
     let lng: Vec<f32> = Vec::load_from(path.join("longitude").to_str().unwrap()).expect("could not read first_out");
     let ch_order: Vec<NodeId> = Vec::load_from(path.join("travel_time_ch/order").to_str().unwrap()).expect("could not read travel_time_ch/order");
 
-    let coords: Vec<serde_json::Value> = ch_order.iter().map(|&node| json!({ "lat": lat[node as usize], "lng": lng[node as usize] })).collect();
+    let coords: Vec<serde_json::Value> = ch_order
+        .iter()
+        .map(|&node| json!({ "lat": lat[node as usize], "lng": lng[node as usize] }))
+        .collect();
     let data = json!({ "coords": coords });
     println!("{}", data);
 }

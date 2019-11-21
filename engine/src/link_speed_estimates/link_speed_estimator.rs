@@ -1,9 +1,9 @@
-use std::iter::{empty, once};
-use std::fmt::Debug;
-use std::mem::replace;
 use super::*;
+use std::fmt::Debug;
+use std::iter::{empty, once};
+use std::mem::replace;
 
-trait State<'a>: Debug  {
+trait State<'a>: Debug {
     fn on_link(self: Box<Self>, link: &'a LinkData) -> (Box<dyn State + 'a>, Box<dyn Iterator<Item = LinkSpeedData> + 'a>);
     fn on_trace(self: Box<Self>, trace: &'a TraceData) -> (Box<dyn State + 'a>, Box<dyn Iterator<Item = LinkSpeedData> + 'a>);
     fn on_done(self: Box<Self>) -> Box<dyn Iterator<Item = LinkSpeedData> + 'a>;
@@ -27,7 +27,7 @@ impl<'a> State<'a> for Init {
 
 #[derive(Debug)]
 struct InitialLink<'a> {
-    link: &'a LinkData
+    link: &'a LinkData,
 }
 impl<'a> State<'a> for InitialLink<'a> {
     fn on_link(self: Box<Self>, _link: &'a LinkData) -> (Box<dyn State + 'a>, Box<dyn Iterator<Item = LinkSpeedData>>) {
@@ -47,14 +47,21 @@ impl<'a> State<'a> for InitialLink<'a> {
 #[derive(Debug)]
 struct InitialLinkWithTrace<'a> {
     link: &'a LinkData,
-    trace: &'a TraceData
+    trace: &'a TraceData,
 }
 impl<'a> State<'a> for InitialLinkWithTrace<'a> {
     fn on_link(self: Box<Self>, link: &'a LinkData) -> (Box<dyn State + 'a>, Box<dyn Iterator<Item = LinkSpeedData>>) {
         assert_ne!(self.link.link_id, link.link_id);
         let mut intermediates = Vec::new();
         intermediates.push(link);
-        (Box::new(IntermediateLinkAfterInitial { initial_link: self.link, trace: self.trace, intermediates }), Box::new(empty()))
+        (
+            Box::new(IntermediateLinkAfterInitial {
+                initial_link: self.link,
+                trace: self.trace,
+                intermediates,
+            }),
+            Box::new(empty()),
+        )
     }
 
     fn on_trace(self: Box<Self>, trace: &'a TraceData) -> (Box<dyn State + 'a>, Box<dyn Iterator<Item = LinkSpeedData>>) {
@@ -68,7 +75,15 @@ impl<'a> State<'a> for InitialLinkWithTrace<'a> {
         debug_assert!(self.trace.timestamp > t_pre, "timestamp underflow");
         let entry_timestamp = self.trace.timestamp - t_pre;
 
-        (Box::new(LinkWithEntryTimestampAndTrace { link: self.link, last_trace: trace, entry_timestamp, quality: delta_fraction }), Box::new(empty()))
+        (
+            Box::new(LinkWithEntryTimestampAndTrace {
+                link: self.link,
+                last_trace: trace,
+                entry_timestamp,
+                quality: delta_fraction,
+            }),
+            Box::new(empty()),
+        )
     }
 
     fn on_done(self: Box<Self>) -> Box<dyn Iterator<Item = LinkSpeedData>> {
@@ -80,7 +95,7 @@ impl<'a> State<'a> for InitialLinkWithTrace<'a> {
 struct IntermediateLinkAfterInitial<'a> {
     initial_link: &'a LinkData,
     trace: &'a TraceData,
-    intermediates: Vec<&'a LinkData>
+    intermediates: Vec<&'a LinkData>,
 }
 impl<'a> State<'a> for IntermediateLinkAfterInitial<'a> {
     fn on_link(mut self: Box<Self>, link: &'a LinkData) -> (Box<dyn State + 'a>, Box<dyn Iterator<Item = LinkSpeedData>>) {
@@ -117,7 +132,12 @@ impl<'a> State<'a> for IntermediateLinkAfterInitial<'a> {
         let link_entered_timestamp = initial_timestamp - time_before_initial;
         let estimate_quality = (f64::from(length_after_initial_trace) / f64::from(total_length) * fraction_after_initial_trace) as f32;
 
-        let output = once(LinkSpeedData { link_id: self.initial_link.link_id, link_entered_timestamp, estimate_quality, velocity: initial_link_velocity as f32  });
+        let output = once(LinkSpeedData {
+            link_id: self.initial_link.link_id,
+            link_entered_timestamp,
+            estimate_quality,
+            velocity: initial_link_velocity as f32,
+        });
 
         let output = output.chain(self.intermediates.into_iter().scan(next_entry, move |state, link| {
             let velocity = f64::from(link.speed_limit) * velocity_factor;
@@ -125,13 +145,26 @@ impl<'a> State<'a> for IntermediateLinkAfterInitial<'a> {
             let link_entered_timestamp = *state;
             *state += traversal_time;
             let estimate_quality = (f64::from(link.length) / f64::from(total_length)) as f32;
-            Some(LinkSpeedData { link_id: link.link_id, link_entered_timestamp, estimate_quality, velocity: velocity as f32 })
+            Some(LinkSpeedData {
+                link_id: link.link_id,
+                link_entered_timestamp,
+                estimate_quality,
+                velocity: velocity as f32,
+            })
         }));
 
         let entry_timestamp = trace.timestamp - (f64::from(length_before_current_trace) * 3.6 / (f64::from(link.speed_limit) * velocity_factor)) as u64;
         let quality = f64::from(length_before_current_trace) / f64::from(total_length) * f64::from(trace.traversed_in_travel_direction_fraction);
 
-        (Box::new(LinkWithEntryTimestampAndTrace { link, last_trace: trace, entry_timestamp, quality }), Box::new(output))
+        (
+            Box::new(LinkWithEntryTimestampAndTrace {
+                link,
+                last_trace: trace,
+                entry_timestamp,
+                quality,
+            }),
+            Box::new(output),
+        )
     }
 
     fn on_done(self: Box<Self>) -> Box<dyn Iterator<Item = LinkSpeedData>> {
@@ -144,13 +177,19 @@ struct LinkWithEntryTimestampAndTrace<'a> {
     link: &'a LinkData,
     entry_timestamp: u64,
     last_trace: &'a TraceData,
-    quality: f64
+    quality: f64,
 }
 impl<'a> State<'a> for LinkWithEntryTimestampAndTrace<'a> {
     fn on_link(self: Box<Self>, link: &'a LinkData) -> (Box<dyn State + 'a>, Box<dyn Iterator<Item = LinkSpeedData>>) {
         let mut intermediates = Vec::new();
         intermediates.push(link);
-        (Box::new(IntermediateLink { last_link_with_trace: self, intermediates }), Box::new(empty()))
+        (
+            Box::new(IntermediateLink {
+                last_link_with_trace: self,
+                intermediates,
+            }),
+            Box::new(empty()),
+        )
     }
 
     fn on_trace(mut self: Box<Self>, trace: &'a TraceData) -> (Box<dyn State + 'a>, Box<dyn Iterator<Item = LinkSpeedData>>) {
@@ -164,14 +203,19 @@ impl<'a> State<'a> for LinkWithEntryTimestampAndTrace<'a> {
         let delta_t = self.last_trace.timestamp - self.entry_timestamp;
         let delta_s = f64::from(self.last_trace.traversed_in_travel_direction_fraction) * f64::from(self.link.length);
         let velocity = delta_s / delta_t as f64;
-        Box::new(once(LinkSpeedData { link_id: self.link.link_id, link_entered_timestamp: self.entry_timestamp, estimate_quality: self.quality as f32, velocity: (velocity * 3.6) as f32  }))
+        Box::new(once(LinkSpeedData {
+            link_id: self.link.link_id,
+            link_entered_timestamp: self.entry_timestamp,
+            estimate_quality: self.quality as f32,
+            velocity: (velocity * 3.6) as f32,
+        }))
     }
 }
 
 #[derive(Debug, Clone)]
 struct IntermediateLink<'a> {
     last_link_with_trace: Box<LinkWithEntryTimestampAndTrace<'a>>,
-    intermediates: Vec<&'a LinkData>
+    intermediates: Vec<&'a LinkData>,
 }
 impl<'a> State<'a> for IntermediateLink<'a> {
     fn on_link(mut self: Box<Self>, link: &'a LinkData) -> (Box<dyn State + 'a>, Box<dyn Iterator<Item = LinkSpeedData>>) {
@@ -205,9 +249,15 @@ impl<'a> State<'a> for IntermediateLink<'a> {
         let next_entry = self.last_link_with_trace.last_trace.timestamp + time_on_link_after_last_trace;
         let delta_t_link = self.last_link_with_trace.last_trace.timestamp - self.last_link_with_trace.entry_timestamp + time_on_link_after_last_trace;
         let link_velocity = f64::from(self.last_link_with_trace.link.length) / delta_t_link as f64;
-        let estimate_quality = ((f64::from(length_after_last_trace) / f64::from(total_length) * fraction_after_last_trace) + self.last_link_with_trace.quality) as f32;
+        let estimate_quality =
+            ((f64::from(length_after_last_trace) / f64::from(total_length) * fraction_after_last_trace) + self.last_link_with_trace.quality) as f32;
 
-        let output = once(LinkSpeedData { link_id: self.last_link_with_trace.link.link_id, link_entered_timestamp: self.last_link_with_trace.entry_timestamp, estimate_quality, velocity: (link_velocity * 3.6) as f32 });
+        let output = once(LinkSpeedData {
+            link_id: self.last_link_with_trace.link.link_id,
+            link_entered_timestamp: self.last_link_with_trace.entry_timestamp,
+            estimate_quality,
+            velocity: (link_velocity * 3.6) as f32,
+        });
 
         let output = output.chain(self.intermediates.into_iter().scan(next_entry, move |state, link| {
             let velocity = f64::from(link.speed_limit) * velocity_factor;
@@ -215,13 +265,26 @@ impl<'a> State<'a> for IntermediateLink<'a> {
             let link_entered_timestamp = *state;
             *state += traversal_time;
             let estimate_quality = (f64::from(link.length) / f64::from(total_length)) as f32;
-            Some(LinkSpeedData { link_id: link.link_id, link_entered_timestamp, estimate_quality, velocity: velocity as f32 })
+            Some(LinkSpeedData {
+                link_id: link.link_id,
+                link_entered_timestamp,
+                estimate_quality,
+                velocity: velocity as f32,
+            })
         }));
 
         let entry_timestamp = trace.timestamp - (f64::from(length_before_current_trace) * 3.6 / (f64::from(link.speed_limit) * velocity_factor)) as u64;
         let quality = f64::from(length_before_current_trace) / f64::from(total_length) * f64::from(trace.traversed_in_travel_direction_fraction);
 
-        (Box::new(LinkWithEntryTimestampAndTrace { link, last_trace: trace, entry_timestamp, quality }), Box::new(output))
+        (
+            Box::new(LinkWithEntryTimestampAndTrace {
+                link,
+                last_trace: trace,
+                entry_timestamp,
+                quality,
+            }),
+            Box::new(output),
+        )
     }
 
     fn on_done(self: Box<Self>) -> Box<dyn Iterator<Item = LinkSpeedData>> {
@@ -240,7 +303,7 @@ impl<'a> LinkSpeedEstimator<'a> {
         LinkSpeedEstimator {
             state: Some(Box::new(Init {})),
             event_iterator: events,
-            output_iterator: Box::new(empty())
+            output_iterator: Box::new(empty()),
         }
     }
 }
@@ -259,22 +322,20 @@ impl<'a> Iterator for LinkSpeedEstimator<'a> {
                         Some(event) => {
                             let (state, iter) = match event {
                                 Event::Link(link) => current_state.unwrap().on_link(link),
-                                Event::Trace(trace) => current_state.unwrap().on_trace(trace)
+                                Event::Trace(trace) => current_state.unwrap().on_trace(trace),
                             };
                             self.state = Some(state);
                             self.output_iterator = iter;
-                        },
-                        None => {
-                            match current_state {
-                                Some(state) => {
-                                    self.output_iterator = state.on_done();
-                                    self.state = None;
-                                },
-                                None => return None
+                        }
+                        None => match current_state {
+                            Some(state) => {
+                                self.output_iterator = state.on_done();
+                                self.state = None;
                             }
+                            None => return None,
                         },
                     }
-                },
+                }
             }
         }
     }

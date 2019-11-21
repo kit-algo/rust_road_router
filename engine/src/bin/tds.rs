@@ -5,12 +5,8 @@ extern crate bmw_routing_engine;
 
 use bmw_routing_engine::{
     graph::time_dependent::*,
-    shortest_path::{
-        customizable_contraction_hierarchy,
-        node_order::NodeOrder,
-        query::time_dependent_sampling::Server,
-    },
     io::Load,
+    shortest_path::{customizable_contraction_hierarchy, node_order::NodeOrder, query::time_dependent_sampling::Server},
 };
 
 fn main() {

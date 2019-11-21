@@ -12,7 +12,7 @@ pub trait Indexing {
 #[derive(Debug)]
 pub struct IndexdMinHeap<T: Ord + Indexing> {
     positions: Vec<usize>,
-    data: Vec<T>
+    data: Vec<T>,
 }
 
 const TREE_ARITY: usize = 4;
@@ -22,7 +22,7 @@ impl<T: Ord + Indexing> IndexdMinHeap<T> {
     pub fn new(max_id: usize) -> IndexdMinHeap<T> {
         IndexdMinHeap {
             positions: vec![INVALID_POSITION; max_id],
-            data: Vec::new()
+            data: Vec::new(),
         }
     }
 
@@ -103,7 +103,8 @@ impl<T: Ord + Indexing> IndexdMinHeap<T> {
                     break;
                 }
 
-                self.positions.swap(self.data.get_unchecked(parent).as_index(), self.data.get_unchecked(position).as_index());
+                self.positions
+                    .swap(self.data.get_unchecked(parent).as_index(), self.data.get_unchecked(position).as_index());
                 self.data.swap(parent, position);
             }
             position = parent;
@@ -170,11 +171,9 @@ impl<T: Ord + Indexing> IndexdMinHeap<T> {
     }
 }
 
-
 // This is an optimization copied straight from the rust stdlib binary heap
 // it allows to avoid always swapping elements pairwise and rather
 // move each element only once.
-
 
 /// Hole represents a hole in a slice i.e. an index without valid value
 /// (because it was moved from or duplicated).
@@ -195,11 +194,7 @@ impl<'a, T> Hole<'a, T> {
     unsafe fn new(data: &'a mut [T], pos: usize) -> Self {
         debug_assert!(pos < data.len());
         let elt = ptr::read(&data[pos]);
-        Hole {
-            data,
-            elt: Some(elt),
-            pos,
-        }
+        Hole { data, elt: Some(elt), pos }
     }
 
     /// Returns a reference to the element removed.

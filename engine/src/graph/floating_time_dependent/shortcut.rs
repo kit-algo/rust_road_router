@@ -1,6 +1,6 @@
 use super::*;
+use std::cmp::{max, min, Ordering};
 use std::sync::atomic::Ordering::Relaxed;
-use std::cmp::{min, max, Ordering};
 
 #[cfg(not(override_tdcch_approx_threshold))]
 pub const APPROX_THRESHOLD: usize = 1000;
@@ -13,7 +13,7 @@ enum TTFCache<D> {
     Approx(D, D),
 }
 
-impl<> TTFCache<Vec<TTFPoint>> {
+impl TTFCache<Vec<TTFPoint>> {
     fn num_points(&self) -> usize {
         use TTFCache::*;
 
@@ -48,7 +48,7 @@ impl From<TTFCache<Vec<TTFPoint>>> for TTFCache<Box<[TTFPoint]>> {
 enum BoundMergingState {
     First,
     Second,
-    Merge
+    Merge,
 }
 
 #[derive(Debug)]
@@ -98,21 +98,23 @@ impl<'a> TTF<'a> {
         use TTF::*;
 
         if let (Exact(first), Exact(second)) = (self, second) {
-            return TTFCache::Exact(first.link(second))
+            return TTFCache::Exact(first.link(second));
         }
 
         let (first_lower, first_upper) = self.bound_plfs();
         let (second_lower, second_upper) = second.bound_plfs();
 
-        TTFCache::Approx(
-            first_lower.link(&second_lower),
-            first_upper.link(&second_upper)
-        )
+        TTFCache::Approx(first_lower.link(&second_lower), first_upper.link(&second_upper))
     }
 
     #[allow(clippy::collapsible_if)]
     #[allow(clippy::cognitive_complexity)]
-    fn merge(&self, other: &TTF, buffers: &mut MergeBuffers, merge_exact: impl Fn(Timestamp, Timestamp, &mut MergeBuffers) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>)) -> (TTFCache<Box<[TTFPoint]>>, Vec<(Timestamp, bool)>) {
+    fn merge(
+        &self,
+        other: &TTF,
+        buffers: &mut MergeBuffers,
+        merge_exact: impl Fn(Timestamp, Timestamp, &mut MergeBuffers) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>),
+    ) -> (TTFCache<Box<[TTFPoint]>>, Vec<(Timestamp, bool)>) {
         use TTF::*;
 
         if let (Exact(self_plf), Exact(other)) = (self, other) {
@@ -138,12 +140,12 @@ impl<'a> TTF<'a> {
                 dominating = true;
                 result.push((Timestamp::zero(), true));
                 bound_merge_state.push((Timestamp::zero(), BoundMergingState::First));
-            },
+            }
             (false, true) => {
                 dominating = true;
                 result.push((Timestamp::zero(), false));
                 bound_merge_state.push((Timestamp::zero(), BoundMergingState::Second));
-            },
+            }
             _ => {
                 // in BOTH cases (especially the broken true true case) everything is unclear and we need to do exact merging
             }
@@ -158,29 +160,113 @@ impl<'a> TTF<'a> {
 
             if dominating {
                 if next_t_self.fuzzy_lt(next_t_other) {
-                    debug_assert!(!self_dominating_iter.peek().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections, &self_lower, &self_upper, &other_lower, &other_upper));
-                    debug_assert!(result.last().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections, &self_lower, &self_upper, &other_lower, &other_upper));
+                    debug_assert!(
+                        !self_dominating_iter.peek().unwrap().1,
+                        "{:?}",
+                        dbg_each!(
+                            &self_dominating_intersections,
+                            &other_dominating_intersections,
+                            &self_lower,
+                            &self_upper,
+                            &other_lower,
+                            &other_upper
+                        )
+                    );
+                    debug_assert!(
+                        result.last().unwrap().1,
+                        "{:?}",
+                        dbg_each!(
+                            &self_dominating_intersections,
+                            &other_dominating_intersections,
+                            &self_lower,
+                            &self_upper,
+                            &other_lower,
+                            &other_upper
+                        )
+                    );
                     dominating = false;
 
                     start_of_segment = next_t_self;
                     self_dominating_iter.next();
                 } else if next_t_other.fuzzy_lt(next_t_self) {
-                    debug_assert!(!other_dominating_iter.peek().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections, &self_lower, &self_upper, &other_lower, &other_upper)); // <--
-                    debug_assert!(!result.last().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections, &self_lower, &self_upper, &other_lower, &other_upper));
+                    debug_assert!(
+                        !other_dominating_iter.peek().unwrap().1,
+                        "{:?}",
+                        dbg_each!(
+                            &self_dominating_intersections,
+                            &other_dominating_intersections,
+                            &self_lower,
+                            &self_upper,
+                            &other_lower,
+                            &other_upper
+                        )
+                    ); // <--
+                    debug_assert!(
+                        !result.last().unwrap().1,
+                        "{:?}",
+                        dbg_each!(
+                            &self_dominating_intersections,
+                            &other_dominating_intersections,
+                            &self_lower,
+                            &self_upper,
+                            &other_lower,
+                            &other_upper
+                        )
+                    );
                     dominating = false;
 
                     start_of_segment = next_t_other;
                     other_dominating_iter.next();
                 } else {
-                    debug_assert_ne!(self_dominating_iter.peek().unwrap().1, other_dominating_iter.peek().unwrap().1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections, &self_lower, &self_upper, &other_lower, &other_upper));
+                    debug_assert_ne!(
+                        self_dominating_iter.peek().unwrap().1,
+                        other_dominating_iter.peek().unwrap().1,
+                        "{:?}",
+                        dbg_each!(
+                            &self_dominating_intersections,
+                            &other_dominating_intersections,
+                            &self_lower,
+                            &self_upper,
+                            &other_lower,
+                            &other_upper
+                        )
+                    );
                     result.push((next_t_self, self_dominating_iter.peek().unwrap().1));
 
-                    debug_assert!(bound_merge_state.last().map(|&(prev_start, _)| prev_start.fuzzy_lt(next_t_self)).unwrap_or(true), "{:?}", dbg_each!(bound_merge_state));
+                    debug_assert!(
+                        bound_merge_state
+                            .last()
+                            .map(|&(prev_start, _)| prev_start.fuzzy_lt(next_t_self))
+                            .unwrap_or(true),
+                        "{:?}",
+                        dbg_each!(bound_merge_state)
+                    );
                     if self_dominating_iter.peek().unwrap().1 {
-                        debug_assert!(bound_merge_state.last().map(|&(_, prev_state)| prev_state != BoundMergingState::First).unwrap_or(true), "{:?}", dbg_each!(bound_merge_state));
+                        debug_assert!(
+                            bound_merge_state
+                                .last()
+                                .map(|&(_, prev_state)| prev_state != BoundMergingState::First)
+                                .unwrap_or(true),
+                            "{:?}",
+                            dbg_each!(bound_merge_state)
+                        );
                         bound_merge_state.push((next_t_self, BoundMergingState::First));
                     } else {
-                        debug_assert!(bound_merge_state.last().map(|&(_, prev_state)| prev_state != BoundMergingState::Second).unwrap_or(true), "{:?}", dbg_each!(next_t_self, next_t_other, bound_merge_state, self_dominating_intersections, other_dominating_intersections, result));
+                        debug_assert!(
+                            bound_merge_state
+                                .last()
+                                .map(|&(_, prev_state)| prev_state != BoundMergingState::Second)
+                                .unwrap_or(true),
+                            "{:?}",
+                            dbg_each!(
+                                next_t_self,
+                                next_t_other,
+                                bound_merge_state,
+                                self_dominating_intersections,
+                                other_dominating_intersections,
+                                result
+                            )
+                        );
                         bound_merge_state.push((next_t_self, BoundMergingState::Second));
                     }
 
@@ -190,14 +276,32 @@ impl<'a> TTF<'a> {
                 }
             } else {
                 if next_t_self.fuzzy_lt(next_t_other) {
-
                     let (_, intersections) = merge_exact(start_of_segment, next_t_self, buffers);
 
-                    if intersections.len() > 1 || result.last().map(|(_, self_better)| *self_better != self_dominating_iter.peek().unwrap().1).unwrap_or(true) {
-                        debug_assert!(bound_merge_state.last().map(|&(prev_start, prev_state)| prev_start.fuzzy_lt(start_of_segment) && prev_state != BoundMergingState::Merge).unwrap_or(true), "{:?}", dbg_each!(bound_merge_state));
+                    if intersections.len() > 1
+                        || result
+                            .last()
+                            .map(|(_, self_better)| *self_better != self_dominating_iter.peek().unwrap().1)
+                            .unwrap_or(true)
+                    {
+                        debug_assert!(
+                            bound_merge_state
+                                .last()
+                                .map(|&(prev_start, prev_state)| prev_start.fuzzy_lt(start_of_segment) && prev_state != BoundMergingState::Merge)
+                                .unwrap_or(true),
+                            "{:?}",
+                            dbg_each!(bound_merge_state)
+                        );
                         bound_merge_state.push((start_of_segment, BoundMergingState::Merge));
                         debug_assert!(start_of_segment.fuzzy_lt(next_t_self), "{:?}", dbg_each!(start_of_segment, next_t_self));
-                        bound_merge_state.push((next_t_self, if self_dominating_iter.peek().unwrap().1 { BoundMergingState::First } else { BoundMergingState::Second }));
+                        bound_merge_state.push((
+                            next_t_self,
+                            if self_dominating_iter.peek().unwrap().1 {
+                                BoundMergingState::First
+                            } else {
+                                BoundMergingState::Second
+                            },
+                        ));
                     }
 
                     let mut iter = intersections.into_iter();
@@ -221,14 +325,32 @@ impl<'a> TTF<'a> {
                     dominating = true;
                     self_dominating_iter.next();
                 } else if next_t_other.fuzzy_lt(next_t_self) {
-
                     let (_, intersections) = merge_exact(start_of_segment, next_t_other, buffers);
 
-                    if intersections.len() > 1 || result.last().map(|(_, self_better)| !*self_better != other_dominating_iter.peek().unwrap().1).unwrap_or(true) {
-                        debug_assert!(bound_merge_state.last().map(|&(prev_start, prev_state)| prev_start.fuzzy_lt(start_of_segment) && prev_state != BoundMergingState::Merge).unwrap_or(true), "{:?}", dbg_each!(bound_merge_state));
+                    if intersections.len() > 1
+                        || result
+                            .last()
+                            .map(|(_, self_better)| !*self_better != other_dominating_iter.peek().unwrap().1)
+                            .unwrap_or(true)
+                    {
+                        debug_assert!(
+                            bound_merge_state
+                                .last()
+                                .map(|&(prev_start, prev_state)| prev_start.fuzzy_lt(start_of_segment) && prev_state != BoundMergingState::Merge)
+                                .unwrap_or(true),
+                            "{:?}",
+                            dbg_each!(bound_merge_state)
+                        );
                         bound_merge_state.push((start_of_segment, BoundMergingState::Merge));
                         debug_assert!(start_of_segment.fuzzy_lt(next_t_other), "{:?}", dbg_each!(start_of_segment, next_t_other));
-                        bound_merge_state.push((next_t_other, if other_dominating_iter.peek().unwrap().1 { BoundMergingState::Second } else { BoundMergingState::First }));
+                        bound_merge_state.push((
+                            next_t_other,
+                            if other_dominating_iter.peek().unwrap().1 {
+                                BoundMergingState::Second
+                            } else {
+                                BoundMergingState::First
+                            },
+                        ));
                     }
 
                     let mut iter = intersections.into_iter();
@@ -261,11 +383,21 @@ impl<'a> TTF<'a> {
         if !dominating {
             let (_, intersections) = merge_exact(start_of_segment, period(), buffers);
 
-            if intersections.len() > 1 ||
-                result.last().map(|(_, self_better)| *self_better != intersections[0].1).unwrap_or(true) ||
-                bound_merge_state.first().map(|&(_, initial_state)| initial_state == BoundMergingState::Merge).unwrap_or(true)
+            if intersections.len() > 1
+                || result.last().map(|(_, self_better)| *self_better != intersections[0].1).unwrap_or(true)
+                || bound_merge_state
+                    .first()
+                    .map(|&(_, initial_state)| initial_state == BoundMergingState::Merge)
+                    .unwrap_or(true)
             {
-                debug_assert!(bound_merge_state.last().map(|&(prev_start, prev_state)| prev_start.fuzzy_lt(start_of_segment) && prev_state != BoundMergingState::Merge).unwrap_or(true), "{:?}", dbg_each!(bound_merge_state));
+                debug_assert!(
+                    bound_merge_state
+                        .last()
+                        .map(|&(prev_start, prev_state)| prev_start.fuzzy_lt(start_of_segment) && prev_state != BoundMergingState::Merge)
+                        .unwrap_or(true),
+                    "{:?}",
+                    dbg_each!(bound_merge_state)
+                );
                 bound_merge_state.push((start_of_segment, BoundMergingState::Merge));
             }
 
@@ -279,8 +411,17 @@ impl<'a> TTF<'a> {
 
         debug_assert!(result.first().unwrap().0 == Timestamp::zero());
         for better in result.windows(2) {
-            debug_assert!(better[0].0 < better[1].0, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections));
-            debug_assert_ne!(better[0].1, better[1].1, "{:?}", dbg_each!(&self_dominating_intersections, &other_dominating_intersections));
+            debug_assert!(
+                better[0].0 < better[1].0,
+                "{:?}",
+                dbg_each!(&self_dominating_intersections, &other_dominating_intersections)
+            );
+            debug_assert_ne!(
+                better[0].1,
+                better[1].1,
+                "{:?}",
+                dbg_each!(&self_dominating_intersections, &other_dominating_intersections)
+            );
         }
 
         buffers.exact_self_buffer.reserve(max(self_lower.len(), self_upper.len()));
@@ -298,30 +439,48 @@ impl<'a> TTF<'a> {
                 BoundMergingState::First => {
                     self_lower.copy_append_to_partial(start_of_segment, end_of_segment, &mut buffers.exact_result_lower);
                     self_upper.copy_append_to_partial(start_of_segment, end_of_segment, &mut buffers.exact_result_upper);
-                },
+                }
                 BoundMergingState::Second => {
                     other_lower.copy_append_to_partial(start_of_segment, end_of_segment, &mut buffers.exact_result_lower);
                     other_upper.copy_append_to_partial(start_of_segment, end_of_segment, &mut buffers.exact_result_upper);
-                },
+                }
                 BoundMergingState::Merge => {
                     buffers.exact_self_buffer.clear();
                     self_lower.copy_range(start_of_segment, end_of_segment, &mut buffers.exact_self_buffer);
                     buffers.exact_other_buffer.clear();
                     other_lower.copy_range(start_of_segment, end_of_segment, &mut buffers.exact_other_buffer);
-                    let (partial_lower, _) = PiecewiseLinearFunction::merge_partials(&buffers.exact_self_buffer, &buffers.exact_other_buffer, start_of_segment, end_of_segment, &mut buffers.buffer);
+                    let (partial_lower, _) = PiecewiseLinearFunction::merge_partials(
+                        &buffers.exact_self_buffer,
+                        &buffers.exact_other_buffer,
+                        start_of_segment,
+                        end_of_segment,
+                        &mut buffers.buffer,
+                    );
                     PiecewiseLinearFunction::append_partials(&mut buffers.exact_result_lower, &partial_lower, start_of_segment);
 
                     buffers.exact_self_buffer.clear();
                     self_upper.copy_range(start_of_segment, end_of_segment, &mut buffers.exact_self_buffer);
                     buffers.exact_other_buffer.clear();
                     other_upper.copy_range(start_of_segment, end_of_segment, &mut buffers.exact_other_buffer);
-                    let (partial_upper, _) = PiecewiseLinearFunction::merge_partials(&buffers.exact_self_buffer, &buffers.exact_other_buffer, start_of_segment, end_of_segment, &mut buffers.buffer);
+                    let (partial_upper, _) = PiecewiseLinearFunction::merge_partials(
+                        &buffers.exact_self_buffer,
+                        &buffers.exact_other_buffer,
+                        start_of_segment,
+                        end_of_segment,
+                        &mut buffers.buffer,
+                    );
                     PiecewiseLinearFunction::append_partials(&mut buffers.exact_result_upper, &partial_upper, start_of_segment);
                 }
             }
         }
 
-        let ret = (TTFCache::Approx(buffers.exact_result_lower[..].to_vec().into_boxed_slice(), buffers.exact_result_upper[..].to_vec().into_boxed_slice()), result);
+        let ret = (
+            TTFCache::Approx(
+                buffers.exact_result_lower[..].to_vec().into_boxed_slice(),
+                buffers.exact_result_upper[..].to_vec().into_boxed_slice(),
+            ),
+            result,
+        );
 
         buffers.exact_self_buffer.clear();
         buffers.exact_other_buffer.clear();
@@ -341,7 +500,7 @@ impl<'a> TTF<'a> {
             Exact(plf) => {
                 let (lower, upper) = plf.bound_ttfs();
                 TTFCache::Approx(lower, upper)
-            },
+            }
             Approx(lower_plf, upper_plf) => TTFCache::Approx(lower_plf.lower_bound_ttf(&mut buffers.buffer), upper_plf.upper_bound_ttf(&mut buffers.buffer)),
         }
     }
@@ -370,7 +529,9 @@ impl Shortcut {
     pub fn new(source: Option<EdgeId>, original_graph: &TDGraph) -> Self {
         match source {
             Some(edge_id) => {
-                if cfg!(feature = "detailed-stats") { PATH_SOURCES_COUNT.fetch_add(1, Relaxed); }
+                if cfg!(feature = "detailed-stats") {
+                    PATH_SOURCES_COUNT.fetch_add(1, Relaxed);
+                }
                 Shortcut {
                     sources: Sources::One(ShortcutSource::OriginalEdge(edge_id).into()),
                     cache: None,
@@ -379,24 +540,37 @@ impl Shortcut {
                     constant: false,
                     required: true,
                 }
+            }
+            None => Shortcut {
+                sources: Sources::None,
+                cache: None,
+                lower_bound: FlWeight::INFINITY,
+                upper_bound: FlWeight::INFINITY,
+                constant: false,
+                required: true,
             },
-            None => Shortcut { sources: Sources::None, cache: None, lower_bound: FlWeight::INFINITY, upper_bound: FlWeight::INFINITY, constant: false, required: true },
         }
     }
 
     pub fn merge(&mut self, linked_ids: (EdgeId, EdgeId), shortcut_graph: &PartialShortcutGraph, buffers: &mut MergeBuffers) {
-        if !self.required { return }
+        if !self.required {
+            return;
+        }
 
         if cfg!(feature = "detailed-stats") {
             IPP_COUNT.fetch_sub(self.cache.as_ref().map(TTFCache::<Box<[TTFPoint]>>::num_points).unwrap_or(0), Relaxed);
             PATH_SOURCES_COUNT.fetch_sub(self.sources.len(), Relaxed);
-            if self.cache.is_some() { ACTIVE_SHORTCUTS.fetch_sub(1, Relaxed); }
+            if self.cache.is_some() {
+                ACTIVE_SHORTCUTS.fetch_sub(1, Relaxed);
+            }
         }
 
         (|| {
             let other_data = ShortcutSource::Shortcut(linked_ids.0, linked_ids.1).into();
 
-            if !(shortcut_graph.get_incoming(linked_ids.0).is_valid_path() && shortcut_graph.get_outgoing(linked_ids.1).is_valid_path()) { return; }
+            if !(shortcut_graph.get_incoming(linked_ids.0).is_valid_path() && shortcut_graph.get_outgoing(linked_ids.1).is_valid_path()) {
+                return;
+            }
 
             let first = shortcut_graph.get_incoming(linked_ids.0);
             let second = shortcut_graph.get_outgoing(linked_ids.1);
@@ -404,18 +578,25 @@ impl Shortcut {
             let other_lower_bound = first.lower_bound + second.lower_bound;
 
             if self.upper_bound.fuzzy_lt(other_lower_bound) {
-                return
+                return;
             }
 
             let first_plf = first.plf(shortcut_graph);
             let second_plf = second.plf(shortcut_graph);
 
             if !self.is_valid_path() {
-                if cfg!(feature = "detailed-stats") { ACTUALLY_LINKED.fetch_add(1, Relaxed); }
+                if cfg!(feature = "detailed-stats") {
+                    ACTUALLY_LINKED.fetch_add(1, Relaxed);
+                }
                 let linked = first_plf.link(&second_plf);
 
                 self.upper_bound = min(self.upper_bound, TTF::from(&linked).static_upper_bound());
-                debug_assert!(!self.upper_bound.fuzzy_lt(self.lower_bound), "lower {:?} upper {:?}", self.lower_bound, self.upper_bound);
+                debug_assert!(
+                    !self.upper_bound.fuzzy_lt(self.lower_bound),
+                    "lower {:?} upper {:?}",
+                    self.lower_bound,
+                    self.upper_bound
+                );
                 self.cache = Some(linked.into());
                 self.sources = Sources::One(other_data);
                 return;
@@ -424,7 +605,9 @@ impl Shortcut {
             let self_plf = self.plf(shortcut_graph);
 
             let linked_ipps = first_plf.link(&second_plf);
-            if cfg!(feature = "detailed-stats") { ACTUALLY_LINKED.fetch_add(1, Relaxed); }
+            if cfg!(feature = "detailed-stats") {
+                ACTUALLY_LINKED.fetch_add(1, Relaxed);
+            }
 
             let linked = TTF::from(&linked_ipps);
             let other_lower_bound = linked.static_lower_bound();
@@ -432,24 +615,37 @@ impl Shortcut {
 
             if !self_plf.static_lower_bound().fuzzy_lt(other_upper_bound) {
                 self.upper_bound = min(self.upper_bound, other_upper_bound);
-                debug_assert!(!self.upper_bound.fuzzy_lt(self.lower_bound), "lower {:?} upper {:?}", self.lower_bound, self.upper_bound);
+                debug_assert!(
+                    !self.upper_bound.fuzzy_lt(self.lower_bound),
+                    "lower {:?} upper {:?}",
+                    self.lower_bound,
+                    self.upper_bound
+                );
                 if cfg!(feature = "tdcch-approx") && linked_ipps.num_points() > APPROX_THRESHOLD {
                     let old = linked_ipps.num_points();
-                    if cfg!(feature = "detailed-stats") { CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed); }
+                    if cfg!(feature = "detailed-stats") {
+                        CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed);
+                    }
                     let linked_ipps = linked.approximate(buffers);
-                    if cfg!(feature = "detailed-stats") { SAVED_BY_APPROX.fetch_add(old as isize - linked_ipps.num_points() as isize, Relaxed); }
+                    if cfg!(feature = "detailed-stats") {
+                        SAVED_BY_APPROX.fetch_add(old as isize - linked_ipps.num_points() as isize, Relaxed);
+                    }
                     self.cache = Some(linked_ipps);
                 } else {
                     self.cache = Some(linked_ipps.into());
                 }
                 self.sources = Sources::One(other_data);
-                if cfg!(feature = "detailed-stats") { UNNECESSARY_LINKED.fetch_add(1, Relaxed); }
+                if cfg!(feature = "detailed-stats") {
+                    UNNECESSARY_LINKED.fetch_add(1, Relaxed);
+                }
                 return;
             } else if self.upper_bound.fuzzy_lt(other_lower_bound) {
                 return;
             }
 
-            if cfg!(feature = "detailed-stats") { ACTUALLY_MERGED.fetch_add(1, Relaxed); }
+            if cfg!(feature = "detailed-stats") {
+                ACTUALLY_MERGED.fetch_add(1, Relaxed);
+            }
             let (mut merged, intersection_data) = self_plf.merge(&linked, buffers, |start, end, buffers| {
                 let mut self_target = buffers.unpacking_target.push_plf();
                 self.exact_ttf_for(start, end, shortcut_graph, &mut self_target, &mut buffers.unpacking_tmp);
@@ -462,37 +658,46 @@ impl Shortcut {
             });
             if cfg!(feature = "tdcch-approx") && merged.num_points() > APPROX_THRESHOLD {
                 let old = merged.num_points();
-                if cfg!(feature = "detailed-stats") { CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed); }
+                if cfg!(feature = "detailed-stats") {
+                    CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed);
+                }
                 merged = TTF::from(&merged).approximate(buffers);
-                if cfg!(feature = "detailed-stats") { SAVED_BY_APPROX.fetch_add(old as isize - merged.num_points() as isize, Relaxed); }
+                if cfg!(feature = "detailed-stats") {
+                    SAVED_BY_APPROX.fetch_add(old as isize - merged.num_points() as isize, Relaxed);
+                }
             }
 
             self.upper_bound = min(self.upper_bound, TTF::from(&merged).static_upper_bound());
-            debug_assert!(!self.upper_bound.fuzzy_lt(self.lower_bound), "lower {:?} upper {:?}", self.lower_bound, self.upper_bound);
+            debug_assert!(
+                !self.upper_bound.fuzzy_lt(self.lower_bound),
+                "lower {:?} upper {:?}",
+                self.lower_bound,
+                self.upper_bound
+            );
             self.cache = Some(merged);
             let mut sources = Sources::None;
             std::mem::swap(&mut sources, &mut self.sources);
             self.sources = Shortcut::combine(sources, intersection_data, other_data);
-        }) ();
+        })();
 
         if cfg!(feature = "detailed-stats") {
             IPP_COUNT.fetch_add(self.cache.as_ref().map(TTFCache::<Box<[TTFPoint]>>::num_points).unwrap_or(0), Relaxed);
             PATH_SOURCES_COUNT.fetch_add(self.sources.len(), Relaxed);
-            if self.cache.is_some() { ACTIVE_SHORTCUTS.fetch_add(1, Relaxed); }
+            if self.cache.is_some() {
+                ACTIVE_SHORTCUTS.fetch_add(1, Relaxed);
+            }
         }
     }
 
     fn plf<'s>(&'s self, shortcut_graph: &'s PartialShortcutGraph) -> TTF<'s> {
         if let Some(cache) = &self.cache {
-            return cache.into()
+            return cache.into();
         }
 
         match self.sources {
-            Sources::One(source) => {
-                match source.into() {
-                    ShortcutSource::OriginalEdge(id) => TTF::Exact(shortcut_graph.original_graph.travel_time_function(id)),
-                    _ => panic!("invalid state of shortcut: ipps must be cached when shortcut not trivial {:?}", self),
-                }
+            Sources::One(source) => match source.into() {
+                ShortcutSource::OriginalEdge(id) => TTF::Exact(shortcut_graph.original_graph.travel_time_function(id)),
+                _ => panic!("invalid state of shortcut: ipps must be cached when shortcut not trivial {:?}", self),
             },
             _ => panic!("invalid state of shortcut: ipps must be cached when shortcut not trivial {:?}", self),
         }
@@ -506,13 +711,15 @@ impl Shortcut {
     }
 
     pub fn finalize_bounds(&mut self, shortcut_graph: &PartialShortcutGraph) {
-        if !self.required { return }
+        if !self.required {
+            return;
+        }
 
         if let Sources::None = self.sources {
             self.required = false;
             self.lower_bound = FlWeight::INFINITY;
             self.upper_bound = FlWeight::INFINITY;
-            return
+            return;
         }
 
         let new_lower_bound = if cfg!(feature = "tdcch-precustomization") {
@@ -526,7 +733,7 @@ impl Shortcut {
             self.sources = Sources::None;
             self.lower_bound = FlWeight::INFINITY;
             self.upper_bound = FlWeight::INFINITY;
-            return
+            return;
         }
 
         debug_assert!(!new_lower_bound.fuzzy_lt(self.lower_bound), "{:?}, {:?}", new_lower_bound, self);
@@ -541,13 +748,13 @@ impl Shortcut {
 
     pub fn invalidate_unneccesary_sources(&mut self, shortcut_graph: &PartialShortcutGraph) {
         match &mut self.sources {
-            Sources::None => {},
+            Sources::None => {}
             Sources::One(source) => {
                 if !ShortcutSource::from(*source).required(shortcut_graph) {
                     *source = ShortcutSource::None.into();
                     self.upper_bound = FlWeight::INFINITY;
                 }
-            },
+            }
             Sources::Multi(sources) => {
                 for (_, source) in &mut sources[..] {
                     if !ShortcutSource::from(*source).required(shortcut_graph) {
@@ -566,7 +773,9 @@ impl Shortcut {
     pub fn clear_plf(&mut self) {
         if cfg!(feature = "detailed-stats") {
             IPP_COUNT.fetch_sub(self.cache.as_ref().map(TTFCache::<Box<[TTFPoint]>>::num_points).unwrap_or(0), Relaxed);
-            if self.cache.is_some() { ACTIVE_SHORTCUTS.fetch_sub(1, Relaxed); }
+            if self.cache.is_some() {
+                ACTIVE_SHORTCUTS.fetch_sub(1, Relaxed);
+            }
         }
         self.cache = None;
     }
@@ -574,9 +783,9 @@ impl Shortcut {
     fn combine(sources: Sources, intersection_data: Vec<(Timestamp, bool)>, other_data: ShortcutSourceData) -> Sources {
         if let [(_, is_self_better)] = &intersection_data[..] {
             if *is_self_better {
-                return sources
+                return sources;
             } else {
-                return Sources::One(other_data)
+                return Sources::One(other_data);
             }
         }
 
@@ -630,22 +839,53 @@ impl Shortcut {
             }
         }
 
-        debug_assert!(new_sources.len() >= 2, "old: {:?}\nintersections: {:?}\nnew: {:?}", sources, debug_intersections, new_sources);
+        debug_assert!(
+            new_sources.len() >= 2,
+            "old: {:?}\nintersections: {:?}\nnew: {:?}",
+            sources,
+            debug_intersections,
+            new_sources
+        );
         debug_assert!(new_sources.first().unwrap().0 == Timestamp::zero());
         for sources in new_sources.windows(2) {
-            debug_assert!(sources[0].0.fuzzy_lt(sources[1].0), "old: {:?}\nintersections: {:?}\nnew: {:?}", sources, debug_intersections, new_sources);
-            debug_assert!(sources[0].0.fuzzy_lt(period()), "old: {:?}\nintersections: {:?}\nnew: {:?}", sources, debug_intersections, new_sources);
+            debug_assert!(
+                sources[0].0.fuzzy_lt(sources[1].0),
+                "old: {:?}\nintersections: {:?}\nnew: {:?}",
+                sources,
+                debug_intersections,
+                new_sources
+            );
+            debug_assert!(
+                sources[0].0.fuzzy_lt(period()),
+                "old: {:?}\nintersections: {:?}\nnew: {:?}",
+                sources,
+                debug_intersections,
+                new_sources
+            );
         }
         Sources::Multi(new_sources.into_boxed_slice())
     }
 
-    pub(super) fn exact_ttf_for(&self, start: Timestamp, end: Timestamp, shortcut_graph: &PartialShortcutGraph, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
+    pub(super) fn exact_ttf_for(
+        &self,
+        start: Timestamp,
+        end: Timestamp,
+        shortcut_graph: &PartialShortcutGraph,
+        target: &mut MutTopPLF,
+        tmp: &mut ReusablePLFStorage,
+    ) {
         debug_assert!(start.fuzzy_lt(end), "{:?} - {:?}", start, end);
 
         if self.constant {
-            target.push(TTFPoint { at: start, val: self.lower_bound });
-            target.push(TTFPoint { at: end, val: self.lower_bound });
-            return
+            target.push(TTFPoint {
+                at: start,
+                val: self.lower_bound,
+            });
+            target.push(TTFPoint {
+                at: end,
+                val: self.lower_bound,
+            });
+            return;
         }
 
         match &self.sources {
@@ -656,7 +896,13 @@ impl Shortcut {
 
                 while c.cur().0.fuzzy_lt(end) {
                     let mut inner_target = tmp.push_plf();
-                    ShortcutSource::from(c.cur().1).exact_ttf_for(max(start, c.cur().0), min(end, c.next().0), shortcut_graph, &mut inner_target, target.storage_mut());
+                    ShortcutSource::from(c.cur().1).exact_ttf_for(
+                        max(start, c.cur().0),
+                        min(end, c.next().0),
+                        shortcut_graph,
+                        &mut inner_target,
+                        target.storage_mut(),
+                    );
                     PiecewiseLinearFunction::append_partials(target, &inner_target, max(start, c.cur().0));
 
                     c.advance();
@@ -665,7 +911,7 @@ impl Shortcut {
                 for points in target.windows(2) {
                     debug_assert!(points[0].at.fuzzy_lt(points[1].at));
                 }
-            },
+            }
         }
     }
 
@@ -686,7 +932,7 @@ impl Shortcut {
 enum Sources {
     None,
     One(ShortcutSourceData),
-    Multi(Box<[(Timestamp, ShortcutSourceData)]>)
+    Multi(Box<[(Timestamp, ShortcutSourceData)]>),
 }
 
 impl Sources {
@@ -750,10 +996,17 @@ impl<'a> SourceCursor<'a> {
             }
         });
 
-
         match pos {
-            Ok(i) => Self { sources, current_index: i, offset },
-            Err(i) => Self { sources, current_index: i - 1, offset }
+            Ok(i) => Self {
+                sources,
+                current_index: i,
+                offset,
+            },
+            Err(i) => Self {
+                sources,
+                current_index: i - 1,
+                offset,
+            },
         }
     }
 

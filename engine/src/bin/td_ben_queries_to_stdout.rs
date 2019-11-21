@@ -1,14 +1,11 @@
 use std::{
     env,
-    path::Path,
     error::Error,
     io::{stdout, Write},
+    path::Path,
 };
 
-use bmw_routing_engine::{
-    io::*,
-    cli::CliErr,
-};
+use bmw_routing_engine::{cli::CliErr, io::*};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args();
@@ -35,7 +32,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let to = Vec::<u32>::load_from(query_dir.join("target_node").to_str().unwrap())?;
 
     for ((from, at), to) in from.into_iter().zip(at.into_iter()).zip(to.into_iter()) {
-        if writeln!(stdout(), "{} {} {}", from, at, to).is_err() { break };
+        if writeln!(stdout(), "{} {} {}", from, at, to).is_err() {
+            break;
+        };
     }
 
     Ok(())

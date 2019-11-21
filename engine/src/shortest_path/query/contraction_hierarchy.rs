@@ -6,7 +6,7 @@ pub struct Server {
     backward_dijkstra: SteppedDijkstra<OwnedGraph>,
     tentative_distance: Weight,
     meeting_node: NodeId,
-    shortcut_middle_nodes: Option<(Vec<NodeId>, Vec<NodeId>)>
+    shortcut_middle_nodes: Option<(Vec<NodeId>, Vec<NodeId>)>,
 }
 
 impl Server {
@@ -16,7 +16,7 @@ impl Server {
             backward_dijkstra: SteppedDijkstra::new(down),
             tentative_distance: INFINITY,
             meeting_node: 0,
-            shortcut_middle_nodes
+            shortcut_middle_nodes,
         }
     }
 
@@ -41,7 +41,7 @@ impl Server {
                             self.tentative_distance = distance + self.backward_dijkstra.tentative_distance(node);
                             self.meeting_node = node;
                         }
-                    },
+                    }
                     QueryProgress::Done(Some(distance)) => {
                         forward_done = true;
                         forward_progress = distance;
@@ -49,8 +49,8 @@ impl Server {
                             self.tentative_distance = distance;
                             self.meeting_node = to;
                         }
-                    },
-                    QueryProgress::Done(None) => forward_done = true
+                    }
+                    QueryProgress::Done(None) => forward_done = true,
                 }
             } else {
                 match self.backward_dijkstra.next_step() {
@@ -60,7 +60,7 @@ impl Server {
                             self.tentative_distance = distance + self.forward_dijkstra.tentative_distance(node);
                             self.meeting_node = node;
                         }
-                    },
+                    }
                     QueryProgress::Done(Some(distance)) => {
                         backward_done = true;
                         backward_progress = distance;
@@ -68,21 +68,20 @@ impl Server {
                             self.tentative_distance = distance;
                             self.meeting_node = from;
                         }
-                    },
-                    QueryProgress::Done(None) => backward_done = true
+                    }
+                    QueryProgress::Done(None) => backward_done = true,
                 }
             }
         }
 
         match self.tentative_distance {
             INFINITY => None,
-            dist => Some(dist)
+            dist => Some(dist),
         }
     }
 
     pub fn is_in_searchspace(&self, node: NodeId) -> bool {
-        self.forward_dijkstra.tentative_distance(node) < INFINITY
-            || self.backward_dijkstra.tentative_distance(node) < INFINITY
+        self.forward_dijkstra.tentative_distance(node) < INFINITY || self.backward_dijkstra.tentative_distance(node) < INFINITY
     }
 
     pub fn path(&self) -> Vec<NodeId> {

@@ -4,8 +4,8 @@ mod piecewise_linear_function;
 use self::piecewise_linear_function::*;
 
 mod geometry;
-use self::geometry::*;
 pub use self::geometry::TTFPoint;
+use self::geometry::*;
 
 mod graph;
 pub use self::graph::Graph as TDGraph;
@@ -17,18 +17,18 @@ mod shortcut_source;
 use self::shortcut_source::*;
 
 pub mod shortcut_graph;
-pub use self::shortcut_graph::ShortcutGraph;
-pub use self::shortcut_graph::PartialShortcutGraph;
 pub use self::shortcut_graph::CustomizedGraph;
+pub use self::shortcut_graph::PartialShortcutGraph;
+pub use self::shortcut_graph::ShortcutGraph;
 pub use self::shortcut_graph::SingleDirBoundsGraph;
 
 #[allow(clippy::float_cmp)]
 mod time {
     use std::{
-        f64::NAN,
-        ops::{Add, Sub, Mul, Div},
-        cmp::Ordering,
         borrow::Borrow,
+        cmp::Ordering,
+        f64::NAN,
+        ops::{Add, Div, Mul, Sub},
     };
 
     // TODO switch to something ULP based?
@@ -183,7 +183,10 @@ mod time {
         }
 
         pub fn split_of_period(self) -> (FlWeight, Timestamp) {
-            (FlWeight::new(self.0.div_euclid(super::period().0)), Timestamp::new(self.0.rem_euclid(super::period().0)))
+            (
+                FlWeight::new(self.0.div_euclid(super::period().0)),
+                Timestamp::new(self.0.rem_euclid(super::period().0)),
+            )
         }
     }
 
@@ -257,16 +260,16 @@ unsafe fn reset_period() {
     TEST_PERIOD_MOCK.with(|period_cell| period_cell.set(None))
 }
 
-#[cfg(test)] use std::panic;
 #[cfg(test)]
-fn run_test_with_periodicity<T>(period: Timestamp, test: T) -> ()
-    where T: FnOnce() -> () + panic::UnwindSafe
+use std::panic;
+#[cfg(test)]
+fn run_test_with_periodicity<T>(period: Timestamp, test: T)
+where
+    T: FnOnce() -> () + panic::UnwindSafe,
 {
     unsafe { set_period(period) };
 
-    let result = panic::catch_unwind(|| {
-        test()
-    });
+    let result = panic::catch_unwind(|| test());
 
     unsafe { reset_period() };
 
@@ -275,7 +278,7 @@ fn run_test_with_periodicity<T>(period: Timestamp, test: T) -> ()
 
 #[cfg(test)]
 pub fn period() -> Timestamp {
-    return TEST_PERIOD_MOCK.with(|period_cell| period_cell.get().expect("period() used but not set"));
+    TEST_PERIOD_MOCK.with(|period_cell| period_cell.get().expect("period() used but not set"))
 }
 
 #[cfg(not(test))]
@@ -284,7 +287,7 @@ pub fn period() -> Timestamp {
     Timestamp::new(86_400.0)
 }
 
-use std::sync::atomic::{AtomicUsize, AtomicIsize};
+use std::sync::atomic::{AtomicIsize, AtomicUsize};
 
 pub static NODES_CUSTOMIZED: AtomicUsize = AtomicUsize::new(0);
 pub static IPP_COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -299,12 +302,15 @@ pub static SAVED_BY_APPROX: AtomicIsize = AtomicIsize::new(0);
 #[derive(Debug)]
 pub struct ReusablePLFStorage {
     data: Vec<TTFPoint>,
-    first_points: Vec<u32>
+    first_points: Vec<u32>,
 }
 
 impl ReusablePLFStorage {
     fn new() -> Self {
-        ReusablePLFStorage { data: Vec::new(), first_points: Vec::new() }
+        ReusablePLFStorage {
+            data: Vec::new(),
+            first_points: Vec::new(),
+        }
     }
 
     fn push_plf(&mut self) -> MutTopPLF {
@@ -314,17 +320,20 @@ impl ReusablePLFStorage {
 
     fn top_plfs(&self) -> (&[TTFPoint], &[TTFPoint]) {
         let num_plfs = self.first_points.len();
-        (&self.data[self.first_points[num_plfs - 2] as usize .. self.first_points[num_plfs - 1] as usize], &self.data[self.first_points[num_plfs - 1] as usize ..])
+        (
+            &self.data[self.first_points[num_plfs - 2] as usize..self.first_points[num_plfs - 1] as usize],
+            &self.data[self.first_points[num_plfs - 1] as usize..],
+        )
     }
 
     fn top_plf(&self) -> &[TTFPoint] {
-        &self.data[self.first_points[self.first_points.len() - 1] as usize ..]
+        &self.data[self.first_points[self.first_points.len() - 1] as usize..]
     }
 }
 
 #[derive(Debug)]
 struct MutTopPLF<'a> {
-    storage: &'a mut ReusablePLFStorage
+    storage: &'a mut ReusablePLFStorage,
 }
 
 impl<'a> MutTopPLF<'a> {

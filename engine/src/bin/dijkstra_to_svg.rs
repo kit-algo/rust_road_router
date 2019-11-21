@@ -4,10 +4,7 @@ use std::path::Path;
 use bmw_routing_engine::{
     graph::*,
     io::Load,
-    shortest_path::{
-        Query,
-        stepped_dijkstra::*,
-    },
+    shortest_path::{stepped_dijkstra::*, Query},
 };
 
 fn main() {
@@ -17,13 +14,31 @@ fn main() {
     let arg = &args.next().expect("No directory arg given");
     let path = Path::new(arg);
 
-    let min_lat = args.next().map(|s| s.parse::<f32>().unwrap_or_else(|_| panic!("could not parse {} as lat coord", s))).unwrap();
-    let min_lon = args.next().map(|s| s.parse::<f32>().unwrap_or_else(|_| panic!("could not parse {} as lon coord", s))).unwrap();
-    let max_lat = args.next().map(|s| s.parse::<f32>().unwrap_or_else(|_| panic!("could not parse {} as lat coord", s))).unwrap();
-    let max_lon = args.next().map(|s| s.parse::<f32>().unwrap_or_else(|_| panic!("could not parse {} as lon coord", s))).unwrap();
+    let min_lat = args
+        .next()
+        .map(|s| s.parse::<f32>().unwrap_or_else(|_| panic!("could not parse {} as lat coord", s)))
+        .unwrap();
+    let min_lon = args
+        .next()
+        .map(|s| s.parse::<f32>().unwrap_or_else(|_| panic!("could not parse {} as lon coord", s)))
+        .unwrap();
+    let max_lat = args
+        .next()
+        .map(|s| s.parse::<f32>().unwrap_or_else(|_| panic!("could not parse {} as lat coord", s)))
+        .unwrap();
+    let max_lon = args
+        .next()
+        .map(|s| s.parse::<f32>().unwrap_or_else(|_| panic!("could not parse {} as lon coord", s)))
+        .unwrap();
 
-    let start_lat = args.next().map(|s| s.parse::<f32>().unwrap_or_else(|_| panic!("could not parse {} as lat coord", s))).unwrap();
-    let start_lon = args.next().map(|s| s.parse::<f32>().unwrap_or_else(|_| panic!("could not parse {} as lon coord", s))).unwrap();
+    let start_lat = args
+        .next()
+        .map(|s| s.parse::<f32>().unwrap_or_else(|_| panic!("could not parse {} as lat coord", s)))
+        .unwrap();
+    let start_lon = args
+        .next()
+        .map(|s| s.parse::<f32>().unwrap_or_else(|_| panic!("could not parse {} as lon coord", s)))
+        .unwrap();
 
     let first_out = Vec::load_from(path.join("first_out").to_str().unwrap()).expect("could not read first_out");
     let head = Vec::load_from(path.join("head").to_str().unwrap()).expect("could not read head");
@@ -31,9 +46,7 @@ fn main() {
     let lat = Vec::<f32>::load_from(path.join("latitude").to_str().unwrap()).expect("could not read latitude");
     let lng = Vec::<f32>::load_from(path.join("longitude").to_str().unwrap()).expect("could not read longitude");
 
-    let in_bounding_box = |node| {
-        lat[node] >= min_lat && lat[node] <= max_lat && lng[node] >= min_lon && lng[node] <= max_lon
-    };
+    let in_bounding_box = |node| lat[node] >= min_lat && lat[node] <= max_lat && lng[node] >= min_lon && lng[node] <= max_lon;
 
     let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
 
@@ -53,10 +66,16 @@ fn main() {
                 start_node = node;
             }
 
-            println!("<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" class=\"node\" />", lng[node], lat[node], lng[node], lat[node]);
+            println!(
+                "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" class=\"node\" />",
+                lng[node], lat[node], lng[node], lat[node]
+            );
             for link in graph.neighbor_iter(node as NodeId) {
                 if in_bounding_box(link.node as usize) {
-                    println!("<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" class=\"arc\" />", lng[node], lat[node], lng[link.node as usize], lat[link.node as usize]);
+                    println!(
+                        "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" class=\"arc\" />",
+                        lng[node], lat[node], lng[link.node as usize], lat[link.node as usize]
+                    );
                 }
             }
         }
@@ -64,20 +83,33 @@ fn main() {
     println!("</g>");
 
     let mut dijkstra = SteppedDijkstra::new(graph.clone());
-    dijkstra.initialize_query(Query { from: start_node as NodeId, to: std::u32::MAX });
+    dijkstra.initialize_query(Query {
+        from: start_node as NodeId,
+        to: std::u32::MAX,
+    });
 
     let mut counter = 0;
     while let QueryProgress::Progress(State { node, .. }) = dijkstra.next_step() {
-        if counter > 500 { break; }
+        if counter > 500 {
+            break;
+        }
         counter += 1;
         if in_bounding_box(node as usize) {
             print!("<g class=\"settled fragment\"");
-            if counter <= 500 { print!(" data-autoslide=\"25\""); }
+            if counter <= 500 {
+                print!(" data-autoslide=\"25\"");
+            }
             println!(">");
-            println!("<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" class=\"node\" />", lng[node as usize], lat[node as usize], lng[node as usize], lat[node as usize]);
+            println!(
+                "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" class=\"node\" />",
+                lng[node as usize], lat[node as usize], lng[node as usize], lat[node as usize]
+            );
             for link in graph.neighbor_iter(node) {
                 if in_bounding_box(link.node as usize) {
-                    println!("<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" class=\"arc\" />", lng[node as usize], lat[node as usize], lng[link.node as usize], lat[link.node as usize]);
+                    println!(
+                        "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" class=\"arc\" />",
+                        lng[node as usize], lat[node as usize], lng[link.node as usize], lat[link.node as usize]
+                    );
                 }
             }
             println!("</g>");

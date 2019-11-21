@@ -1,7 +1,7 @@
-use super::*;
-use std::cmp::{min, max, Ordering};
 use self::debug::debug_merge;
+use super::*;
 use crate::util::*;
+use std::cmp::{max, min, Ordering};
 
 mod cursor;
 use cursor::*;
@@ -49,7 +49,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         debug_assert!(t < period());
 
         if self.ipps.len() == 1 {
-            return self.ipps.first().unwrap().val
+            return self.ipps.first().unwrap().val;
         }
 
         let pos = self.ipps.binary_search_by(|p| {
@@ -65,11 +65,11 @@ impl<'a> PiecewiseLinearFunction<'a> {
         match pos {
             Ok(i) => unsafe { self.ipps.get_unchecked(i).val },
             Err(i) => {
-                let prev = unsafe { self.ipps.get_unchecked(i-1) };
+                let prev = unsafe { self.ipps.get_unchecked(i - 1) };
                 let next = unsafe { self.ipps.get_unchecked(i) };
 
                 interpolate_linear(prev, next, t)
-            },
+            }
         }
     }
 
@@ -126,14 +126,20 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 debug_assert!(switchover_val.fuzzy_eq(f.cur().val), "{:?}", dbg_each!(switchover_val, f.cur()));
             } else {
                 let second_switchover_val = interpolate_linear(&f.prev(), &f.cur(), start);
-                debug_assert!(switchover_val.fuzzy_eq(second_switchover_val), "{:?}", dbg_each!(switchover_val, second_switchover_val, start));
+                debug_assert!(
+                    switchover_val.fuzzy_eq(second_switchover_val),
+                    "{:?}",
+                    dbg_each!(switchover_val, second_switchover_val, start)
+                );
 
                 if target.last() != Some(&f.prev()) {
-                    target.push(TTFPoint { at: start, val: switchover_val });
+                    target.push(TTFPoint {
+                        at: start,
+                        val: switchover_val,
+                    });
                 }
             }
         }
-
 
         while f.cur().at.fuzzy_lt(end) {
             target.push(f.cur());
@@ -149,14 +155,22 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
     pub(super) fn append_partials(first: &mut impl PLFTarget, second: &[TTFPoint], switchover: Timestamp) {
         debug_assert!(second.len() > 1);
-        if let Some(&TTFPoint { at, .. }) = first.split_last().map(|(_, rest)| rest.last()).unwrap_or(None) { debug_assert!(at.fuzzy_lt(switchover)); }
-        if let Some(&TTFPoint { at, .. }) = first.last() { debug_assert!(!at.fuzzy_lt(switchover)); }
-        if let Some(&TTFPoint { at, .. }) = second.first() { debug_assert!(!switchover.fuzzy_lt(at)); }
-        if let Some(&TTFPoint { at, .. }) = second.split_first().map(|(_, rest)| rest.first()).unwrap_or(None) { debug_assert!(switchover.fuzzy_lt(at)); }
+        if let Some(&TTFPoint { at, .. }) = first.split_last().map(|(_, rest)| rest.last()).unwrap_or(None) {
+            debug_assert!(at.fuzzy_lt(switchover));
+        }
+        if let Some(&TTFPoint { at, .. }) = first.last() {
+            debug_assert!(!at.fuzzy_lt(switchover));
+        }
+        if let Some(&TTFPoint { at, .. }) = second.first() {
+            debug_assert!(!switchover.fuzzy_lt(at));
+        }
+        if let Some(&TTFPoint { at, .. }) = second.split_first().map(|(_, rest)| rest.first()).unwrap_or(None) {
+            debug_assert!(switchover.fuzzy_lt(at));
+        }
 
         if first.is_empty() {
             first.extend(second.iter().cloned());
-            return
+            return;
         }
 
         let first_last = first.pop().unwrap();
@@ -171,11 +185,18 @@ impl<'a> PiecewiseLinearFunction<'a> {
             debug_assert!(switchover_val.fuzzy_eq(second[0].val), "{:?}", dbg_each!(switchover_val, second[0].val));
         } else {
             let second_switchover_val = interpolate_linear(&second[0], &second[1], switchover);
-            debug_assert!(switchover_val.fuzzy_eq(second_switchover_val), "{:?}", dbg_each!(first.last(), first_last, second_switchover_val, &second[..=1], switchover));
+            debug_assert!(
+                switchover_val.fuzzy_eq(second_switchover_val),
+                "{:?}",
+                dbg_each!(first.last(), first_last, second_switchover_val, &second[..=1], switchover)
+            );
         }
 
         if first.last() != Some(&second[0]) {
-            first.push(TTFPoint { at: switchover, val: switchover_val });
+            first.push(TTFPoint {
+                at: switchover,
+                val: switchover_val,
+            });
         }
         first.extend(second[1..].iter().cloned());
 
@@ -187,28 +208,41 @@ impl<'a> PiecewiseLinearFunction<'a> {
     pub fn link(&self, other: &Self) -> Vec<TTFPoint> {
         if let [TTFPoint { val, .. }] = &self.ipps {
             if let [TTFPoint { val: other, .. }] = &other.ipps {
-                return vec![TTFPoint { at: Timestamp::zero(), val: val + other }]
+                return vec![TTFPoint {
+                    at: Timestamp::zero(),
+                    val: val + other,
+                }];
             } else {
                 let zero_val = other.evaluate(val.into());
                 let (_, val_offset) = Timestamp::from(val).split_of_period();
-                let mut result = std::iter::once(TTFPoint { at: Timestamp::zero(), val: zero_val + val })
-                    .chain(
-                        other.ipps.iter().filter(|p| p.at > val_offset).map(|p| TTFPoint { at: p.at - FlWeight::from(val_offset), val: p.val + val })
-                    ).chain(
-                        other.ipps.iter().filter(|p| p.at < val_offset).map(|p| TTFPoint { at: p.at + FlWeight::from(period()) - FlWeight::from(val_offset), val: p.val + val })
-                    ).chain(std::iter::once(TTFPoint { at: period(), val: zero_val + val }))
-                    .fold(Vec::with_capacity(other.ipps.len() + 2), |mut acc, p| {
-                        Self::append_point(&mut acc, p);
-                        acc
-                    });
+                let mut result = std::iter::once(TTFPoint {
+                    at: Timestamp::zero(),
+                    val: zero_val + val,
+                })
+                .chain(other.ipps.iter().filter(|p| p.at > val_offset).map(|p| TTFPoint {
+                    at: p.at - FlWeight::from(val_offset),
+                    val: p.val + val,
+                }))
+                .chain(other.ipps.iter().filter(|p| p.at < val_offset).map(|p| TTFPoint {
+                    at: p.at + FlWeight::from(period()) - FlWeight::from(val_offset),
+                    val: p.val + val,
+                }))
+                .chain(std::iter::once(TTFPoint {
+                    at: period(),
+                    val: zero_val + val,
+                }))
+                .fold(Vec::with_capacity(other.ipps.len() + 2), |mut acc, p| {
+                    Self::append_point(&mut acc, p);
+                    acc
+                });
 
                 result.last_mut().unwrap().at = period();
 
-                return result
+                return result;
             }
         }
         if let [TTFPoint { val, .. }] = &other.ipps {
-            return self.ipps.iter().map(|p| TTFPoint { at: p.at, val: p.val + val }).collect()
+            return self.ipps.iter().map(|p| TTFPoint { at: p.at, val: p.val + val }).collect();
         }
 
         let mut result = Vec::with_capacity(self.ipps.len() + other.ipps.len() + 1);
@@ -244,7 +278,9 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 f.advance();
             }
 
-            if !x.fuzzy_lt(period()) { break }
+            if !x.fuzzy_lt(period()) {
+                break;
+            }
             debug_assert!(!x.fuzzy_lt(Timestamp::zero()), "{:?} {:?}", x, y);
 
             x = min(x, period());
@@ -302,9 +338,16 @@ impl<'a> PiecewiseLinearFunction<'a> {
             let point = TTFPoint { at: x, val: y };
             debug_assert!(point.val >= FlWeight::new(0.0), "{:?}", point);
             if let Some(p) = target.last() {
-                if p.at.fuzzy_eq(point.at) && p.val.fuzzy_eq(point.val) { return }
+                if p.at.fuzzy_eq(point.at) && p.val.fuzzy_eq(point.val) {
+                    return;
+                }
             }
-            debug_assert!(target.last().map(|p| p.at.fuzzy_lt(point.at)).unwrap_or(true), "last: {:?}, append: {:?}", target.last(), point);
+            debug_assert!(
+                target.last().map(|p| p.at.fuzzy_lt(point.at)).unwrap_or(true),
+                "last: {:?}, append: {:?}",
+                target.last(),
+                point
+            );
 
             target.push(point);
 
@@ -315,7 +358,10 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
         if let [TTFPoint { val, .. }] = &target[..] {
             let val = *val;
-            target.push(TTFPoint { at: first.last().unwrap().at, val });
+            target.push(TTFPoint {
+                at: first.last().unwrap().at,
+                val,
+            });
         }
 
         debug_assert!(target.len() > 1);
@@ -329,7 +375,13 @@ impl<'a> PiecewiseLinearFunction<'a> {
         debug_assert!(!target[target.len() - 1].at.fuzzy_lt(end));
     }
 
-    pub fn merge_partials(first: &[TTFPoint], second: &[TTFPoint], start: Timestamp, end: Timestamp, buffer: &mut Vec<TTFPoint>) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
+    pub fn merge_partials(
+        first: &[TTFPoint],
+        second: &[TTFPoint],
+        start: Timestamp,
+        end: Timestamp,
+        buffer: &mut Vec<TTFPoint>,
+    ) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
         debug_assert!(start >= Timestamp::zero());
         debug_assert!(end <= period());
 
@@ -341,11 +393,17 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     #[allow(clippy::cognitive_complexity)]
-    fn merge_in_bounds<C: MergeCursor<'a>, FullRange: Bool>(&self, other: &Self, start: Timestamp, end: Timestamp, result: &mut Vec<TTFPoint>) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
+    fn merge_in_bounds<C: MergeCursor<'a>, FullRange: Bool>(
+        &self,
+        other: &Self,
+        start: Timestamp,
+        end: Timestamp,
+        result: &mut Vec<TTFPoint>,
+    ) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
         if self.upper_bound() < other.lower_bound() {
-            return (self.ipps.to_vec().into_boxed_slice(), vec![(start, true)])
+            return (self.ipps.to_vec().into_boxed_slice(), vec![(start, true)]);
         } else if other.upper_bound() < self.lower_bound() {
-            return (other.ipps.to_vec().into_boxed_slice(), vec![(start, false)])
+            return (other.ipps.to_vec().into_boxed_slice(), vec![(start, false)]);
         }
 
         result.reserve(2 * self.ipps.len() + 2 * other.ipps.len() + 2);
@@ -394,9 +452,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
                 f.advance();
                 g.advance();
-
             } else if f.cur().at < g.cur().at {
-
                 let delta = f.cur().val - interpolate_linear(&g.prev(), &g.cur(), f.cur().at);
 
                 if !delta.fuzzy_eq(FlWeight::zero()) && (delta < FlWeight::zero()) != better.last().unwrap().1 {
@@ -404,9 +460,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 }
 
                 f.advance();
-
             } else {
-
                 let delta = g.cur().val - interpolate_linear(&f.prev(), &f.cur(), g.cur().at);
 
                 if !delta.fuzzy_eq(FlWeight::zero()) && (delta > FlWeight::zero()) != better.last().unwrap().1 {
@@ -418,7 +472,10 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
 
         if !needs_merging {
-            return ((if better.last().unwrap().1 { self.ipps } else { other.ipps }).to_vec().into_boxed_slice(), better)
+            return (
+                (if better.last().unwrap().1 { self.ipps } else { other.ipps }).to_vec().into_boxed_slice(),
+                better,
+            );
         }
 
         let mut f = C::new(&self.ipps);
@@ -429,11 +486,16 @@ impl<'a> PiecewiseLinearFunction<'a> {
         g.advance();
 
         while f.cur().at < end || g.cur().at < end {
-
             if intersect(&f.prev(), &f.cur(), &g.prev(), &g.cur()) {
                 let intersection = intersection_point(&f.prev(), &f.cur(), &g.prev(), &g.cur());
                 if start.fuzzy_lt(intersection.at) && intersection.at.fuzzy_lt(end) {
-                    debug_assert_ne!(better.last().unwrap().1, counter_clockwise(&g.prev(), &f.cur(), &g.cur()), "{:?} {:?}", debug_merge(&f, &g, &result, &better), dbg_each!(start, end, intersection));
+                    debug_assert_ne!(
+                        better.last().unwrap().1,
+                        counter_clockwise(&g.prev(), &f.cur(), &g.cur()),
+                        "{:?} {:?}",
+                        debug_merge(&f, &g, &result, &better),
+                        dbg_each!(start, end, intersection)
+                    );
                     better.push((intersection.at, counter_clockwise(&g.prev(), &f.cur(), &g.cur())));
                     Self::append_point(result, intersection);
                 }
@@ -448,7 +510,11 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     }
 
                     if !better.last().unwrap().1 && counter_clockwise(&f.cur(), &f.next(), &g.next()) {
-                        debug_assert!(!counter_clockwise(&g.prev(), &f.prev(), &f.cur()), "{:?}", debug_merge(&f, &g, &result, &better));
+                        debug_assert!(
+                            !counter_clockwise(&g.prev(), &f.prev(), &f.cur()),
+                            "{:?}",
+                            debug_merge(&f, &g, &result, &better)
+                        );
                         better.push((f.cur().at, true));
                     }
 
@@ -456,9 +522,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                         debug_assert!(!clockwise(&g.prev(), &f.prev(), &f.cur()), "{:?}", debug_merge(&f, &g, &result, &better));
                         better.push((f.cur().at, false));
                     }
-
                 } else if f.cur().val < g.cur().val {
-
                     Self::append_point(result, f.cur());
                     debug_assert!(f.cur().val.fuzzy_lt(g.cur().val), "{:?}", debug_merge(&f, &g, &result, &better));
                     debug_assert!(better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
@@ -468,9 +532,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                         let intersection = intersection_point(&f.prev(), &f.cur(), &g.prev(), &g.cur());
                         better.push((intersection.at, true));
                     }
-
                 } else {
-
                     Self::append_point(result, g.cur());
                     debug_assert!(g.cur().val < f.cur().val, "{:?}", debug_merge(&f, &g, &result, &better));
                     debug_assert!(!better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
@@ -480,14 +542,11 @@ impl<'a> PiecewiseLinearFunction<'a> {
                         let intersection = intersection_point(&f.prev(), &f.cur(), &g.prev(), &g.cur());
                         better.push((intersection.at, false));
                     }
-
                 }
 
                 f.advance();
                 g.advance();
-
             } else if f.cur().at < g.cur().at {
-
                 debug_assert!(f.cur().at.fuzzy_lt(g.cur().at), "f {:?} g {:?}", f.cur().at, g.cur().at);
 
                 if counter_clockwise(&g.prev(), &f.cur(), &g.cur()) {
@@ -499,7 +558,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
                         let intersection = intersection_point(&f.prev(), &f.cur(), &g.prev(), &g.cur());
                         better.push((intersection.at, true));
                     }
-
                 } else if colinear_ordered(&g.prev(), &f.cur(), &g.cur()) {
                     if !better.last().unwrap().1 && counter_clockwise(&f.cur(), &f.next(), &g.cur()) {
                         better.push((f.cur().at, true))
@@ -516,9 +574,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 }
 
                 f.advance();
-
             } else {
-
                 debug_assert!(g.cur().at < f.cur().at);
 
                 if counter_clockwise(&f.prev(), &g.cur(), &f.cur()) {
@@ -530,7 +586,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
                         let intersection = intersection_point(&f.prev(), &f.cur(), &g.prev(), &g.cur());
                         better.push((intersection.at, false));
                     }
-
                 } else if colinear_ordered(&f.prev(), &g.cur(), &f.cur()) {
                     if better.last().unwrap().1 && counter_clockwise(&g.cur(), &g.next(), &f.cur()) {
                         better.push((g.cur().at, false))
@@ -548,7 +603,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
                 g.advance();
             }
-        };
+        }
 
         debug_assert!(!f.cur().at.fuzzy_lt(end), "{:?}", debug_merge(&f, &g, &result, &better));
         debug_assert!(!g.cur().at.fuzzy_lt(end), "{:?}", debug_merge(&f, &g, &result, &better));
@@ -556,7 +611,12 @@ impl<'a> PiecewiseLinearFunction<'a> {
         if intersect(&f.prev(), &f.cur(), &g.prev(), &g.cur()) {
             let intersection = intersection_point(&f.prev(), &f.cur(), &g.prev(), &g.cur());
             if start.fuzzy_lt(intersection.at) && intersection.at.fuzzy_lt(end) {
-                debug_assert_ne!(better.last().unwrap().1, counter_clockwise(&g.prev(), &f.cur(), &g.cur()), "{:?}", debug_merge(&f, &g, &result, &better));
+                debug_assert_ne!(
+                    better.last().unwrap().1,
+                    counter_clockwise(&g.prev(), &f.cur(), &g.cur()),
+                    "{:?}",
+                    debug_merge(&f, &g, &result, &better)
+                );
                 better.push((intersection.at, counter_clockwise(&g.prev(), &f.cur(), &g.cur())));
                 Self::append_point(result, intersection);
             }
@@ -581,7 +641,12 @@ impl<'a> PiecewiseLinearFunction<'a> {
             debug_assert!(!end.fuzzy_lt(at));
         }
         if !f.cur().val.fuzzy_eq(g.cur().val) && start == Timestamp::zero() && end == period() {
-            debug_assert_eq!(better.first().map(|(_, better_fn)| better_fn), better.last().map(|(_, better_fn)| better_fn), "{:?}", debug_merge(&f, &g, &result, &better));
+            debug_assert_eq!(
+                better.first().map(|(_, better_fn)| better_fn),
+                better.last().map(|(_, better_fn)| better_fn),
+                "{:?}",
+                debug_merge(&f, &g, &result, &better)
+            );
         }
         debug_assert!(!start.fuzzy_lt(result[0].at));
         debug_assert!(start.fuzzy_lt(result[1].at));
@@ -596,15 +661,22 @@ impl<'a> PiecewiseLinearFunction<'a> {
     fn append_point(points: &mut Vec<TTFPoint>, point: TTFPoint) {
         debug_assert!(point.val >= FlWeight::new(0.0), "{:?}", point);
         if let Some(p) = points.last() {
-            if p.at.fuzzy_eq(point.at) && p.val.fuzzy_eq(point.val) { return }
+            if p.at.fuzzy_eq(point.at) && p.val.fuzzy_eq(point.val) {
+                return;
+            }
         }
-        debug_assert!(points.last().map(|p| p.at.fuzzy_lt(point.at)).unwrap_or(true), "last: {:?}, append: {:?}", points.last(), point);
+        debug_assert!(
+            points.last().map(|p| p.at.fuzzy_lt(point.at)).unwrap_or(true),
+            "last: {:?}, append: {:?}",
+            points.last(),
+            point
+        );
 
         points.push(point)
     }
 
     #[cfg(not(feature = "tdcch-approx-imai-iri"))]
-    pub fn approximate(&self, buffer:  &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
+    pub fn approximate(&self, buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
         buffer.reserve(self.ipps.len());
         self.douglas_peuker(buffer);
         let result = buffer[..].to_vec().into_boxed_slice();
@@ -613,7 +685,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     #[cfg(not(feature = "tdcch-approx-imai-iri"))]
-    pub fn lower_bound_ttf(&self, buffer:  &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
+    pub fn lower_bound_ttf(&self, buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
         buffer.reserve(self.ipps.len());
         self.douglas_peuker_lower(buffer);
 
@@ -628,7 +700,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     #[cfg(not(feature = "tdcch-approx-imai-iri"))]
-    pub fn upper_bound_ttf(&self, buffer:  &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
+    pub fn upper_bound_ttf(&self, buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
         buffer.reserve(self.ipps.len());
         self.douglas_peuker_upper(buffer);
 
@@ -663,22 +735,26 @@ impl<'a> PiecewiseLinearFunction<'a> {
     fn douglas_peuker(&self, result: &mut Vec<TTFPoint>) {
         if self.ipps.len() <= 2 {
             result.extend_from_slice(self.ipps);
-            return
+            return;
         }
 
         let first = self.ipps.first().unwrap();
         let last = self.ipps.last().unwrap();
 
-        let (i, delta) = self.ipps[1..self.ipps.len()-1].iter()
+        let (i, delta) = self.ipps[1..self.ipps.len() - 1]
+            .iter()
             .enumerate()
-            .map(|(i, p)| (i+1, (p.val - interpolate_linear(first, last, p.at)).abs()))
+            .map(|(i, p)| (i + 1, (p.val - interpolate_linear(first, last, p.at)).abs()))
             .max_by_key(|&(_, delta)| delta)
             .unwrap();
 
         if delta > APPROX {
             PiecewiseLinearFunction { ipps: &self.ipps[0..=i] }.douglas_peuker(result);
             result.pop();
-            PiecewiseLinearFunction { ipps: &self.ipps[i..self.ipps.len()] }.douglas_peuker(result);
+            PiecewiseLinearFunction {
+                ipps: &self.ipps[i..self.ipps.len()],
+            }
+            .douglas_peuker(result);
         } else {
             result.push(first.clone());
             result.push(last.clone());
@@ -690,15 +766,16 @@ impl<'a> PiecewiseLinearFunction<'a> {
         if self.ipps.len() <= 2 {
             result_lower.extend_from_slice(self.ipps);
             result_upper.extend_from_slice(self.ipps);
-            return
+            return;
         }
 
         let first = self.ipps.first().unwrap();
         let last = self.ipps.last().unwrap();
 
-        let deltas = self.ipps[1..self.ipps.len()-1].iter()
+        let deltas = self.ipps[1..self.ipps.len() - 1]
+            .iter()
             .enumerate()
-            .map(|(i, p)| (i+1, (p.val - interpolate_linear(first, last, p.at))));
+            .map(|(i, p)| (i + 1, (p.val - interpolate_linear(first, last, p.at))));
 
         let (i_min, min_delta) = deltas.clone().min_by_key(|&(_, delta)| delta).unwrap();
         let (i_max, max_delta) = deltas.max_by_key(|&(_, delta)| delta).unwrap();
@@ -714,14 +791,29 @@ impl<'a> PiecewiseLinearFunction<'a> {
             let prev_min = result_lower.pop().map(|p| p.val).unwrap_or_else(FlWeight::zero);
             let prev_max = result_upper.pop().map(|p| p.val).unwrap_or_else(FlWeight::zero);
             let prev_len = result_lower.len();
-            PiecewiseLinearFunction { ipps: &self.ipps[i..self.ipps.len()] }.douglas_peuker_combined(result_lower, result_upper);
+            PiecewiseLinearFunction {
+                ipps: &self.ipps[i..self.ipps.len()],
+            }
+            .douglas_peuker_combined(result_lower, result_upper);
             result_lower[prev_len].val = min(result_lower[prev_len].val, prev_min);
             result_upper[prev_len].val = max(result_upper[prev_len].val, prev_max);
         } else {
-            result_lower.push(TTFPoint { at: first.at, val: first.val + min(FlWeight::zero(), min_delta) });
-            result_upper.push(TTFPoint { at: first.at, val: first.val + max(FlWeight::zero(), max_delta) });
-            result_lower.push(TTFPoint { at: last.at, val: last.val + min(FlWeight::zero(), min_delta) });
-            result_upper.push(TTFPoint { at: last.at, val: last.val + max(FlWeight::zero(), max_delta) });
+            result_lower.push(TTFPoint {
+                at: first.at,
+                val: first.val + min(FlWeight::zero(), min_delta),
+            });
+            result_upper.push(TTFPoint {
+                at: first.at,
+                val: first.val + max(FlWeight::zero(), max_delta),
+            });
+            result_lower.push(TTFPoint {
+                at: last.at,
+                val: last.val + min(FlWeight::zero(), min_delta),
+            });
+            result_upper.push(TTFPoint {
+                at: last.at,
+                val: last.val + max(FlWeight::zero(), max_delta),
+            });
         }
     }
 
@@ -729,15 +821,16 @@ impl<'a> PiecewiseLinearFunction<'a> {
     fn douglas_peuker_lower(&self, result_lower: &mut Vec<TTFPoint>) {
         if self.ipps.len() <= 2 {
             result_lower.extend_from_slice(self.ipps);
-            return
+            return;
         }
 
         let first = self.ipps.first().unwrap();
         let last = self.ipps.last().unwrap();
 
-        let deltas = self.ipps[1..self.ipps.len()-1].iter()
+        let deltas = self.ipps[1..self.ipps.len() - 1]
+            .iter()
             .enumerate()
-            .map(|(i, p)| (i+1, (p.val - interpolate_linear(first, last, p.at))));
+            .map(|(i, p)| (i + 1, (p.val - interpolate_linear(first, last, p.at))));
 
         let (i_min, min_delta) = deltas.clone().min_by_key(|&(_, delta)| delta).unwrap();
         let (i_max, max_delta) = deltas.max_by_key(|&(_, delta)| delta).unwrap();
@@ -752,11 +845,20 @@ impl<'a> PiecewiseLinearFunction<'a> {
             PiecewiseLinearFunction { ipps: &self.ipps[0..=i] }.douglas_peuker_lower(result_lower);
             let prev_min = result_lower.pop().map(|p| p.val).unwrap_or_else(FlWeight::zero);
             let prev_len = result_lower.len();
-            PiecewiseLinearFunction { ipps: &self.ipps[i..self.ipps.len()] }.douglas_peuker_lower(result_lower);
+            PiecewiseLinearFunction {
+                ipps: &self.ipps[i..self.ipps.len()],
+            }
+            .douglas_peuker_lower(result_lower);
             result_lower[prev_len].val = min(result_lower[prev_len].val, prev_min);
         } else {
-            result_lower.push(TTFPoint { at: first.at, val: first.val + min(FlWeight::zero(), min_delta) });
-            result_lower.push(TTFPoint { at: last.at, val: last.val + min(FlWeight::zero(), min_delta) });
+            result_lower.push(TTFPoint {
+                at: first.at,
+                val: first.val + min(FlWeight::zero(), min_delta),
+            });
+            result_lower.push(TTFPoint {
+                at: last.at,
+                val: last.val + min(FlWeight::zero(), min_delta),
+            });
         }
     }
 
@@ -764,15 +866,16 @@ impl<'a> PiecewiseLinearFunction<'a> {
     fn douglas_peuker_upper(&self, result_upper: &mut Vec<TTFPoint>) {
         if self.ipps.len() <= 2 {
             result_upper.extend_from_slice(self.ipps);
-            return
+            return;
         }
 
         let first = self.ipps.first().unwrap();
         let last = self.ipps.last().unwrap();
 
-        let deltas = self.ipps[1..self.ipps.len()-1].iter()
+        let deltas = self.ipps[1..self.ipps.len() - 1]
+            .iter()
             .enumerate()
-            .map(|(i, p)| (i+1, (p.val - interpolate_linear(first, last, p.at))));
+            .map(|(i, p)| (i + 1, (p.val - interpolate_linear(first, last, p.at))));
 
         let (i_min, min_delta) = deltas.clone().min_by_key(|&(_, delta)| delta).unwrap();
         let (i_max, max_delta) = deltas.max_by_key(|&(_, delta)| delta).unwrap();
@@ -787,11 +890,20 @@ impl<'a> PiecewiseLinearFunction<'a> {
             PiecewiseLinearFunction { ipps: &self.ipps[0..=i] }.douglas_peuker_upper(result_upper);
             let prev_max = result_upper.pop().map(|p| p.val).unwrap_or_else(FlWeight::zero);
             let prev_len = result_upper.len();
-            PiecewiseLinearFunction { ipps: &self.ipps[i..self.ipps.len()] }.douglas_peuker_upper(result_upper);
+            PiecewiseLinearFunction {
+                ipps: &self.ipps[i..self.ipps.len()],
+            }
+            .douglas_peuker_upper(result_upper);
             result_upper[prev_len].val = max(result_upper[prev_len].val, prev_max);
         } else {
-            result_upper.push(TTFPoint { at: first.at, val: first.val + max(FlWeight::zero(), max_delta) });
-            result_upper.push(TTFPoint { at: last.at, val: last.val + max(FlWeight::zero(), max_delta) });
+            result_upper.push(TTFPoint {
+                at: first.at,
+                val: first.val + max(FlWeight::zero(), max_delta),
+            });
+            result_upper.push(TTFPoint {
+                at: last.at,
+                val: last.val + max(FlWeight::zero(), max_delta),
+            });
         }
     }
 
@@ -805,8 +917,8 @@ impl<'a> PiecewiseLinearFunction<'a> {
         let mut lower = Imai::new(self.ipps, 0.0, APPROX.into(), true, true).compute();
 
         for i in (1..lower.len()).rev() {
-            if lower[i-1].val - lower[i].val > lower[i].at - lower[i-1].at {
-                lower[i-1].val = lower[i].val + (lower[i].at - lower[i-1].at)
+            if lower[i - 1].val - lower[i].val > lower[i].at - lower[i - 1].at {
+                lower[i - 1].val = lower[i].val + (lower[i].at - lower[i - 1].at)
             }
         }
 
@@ -823,8 +935,8 @@ impl<'a> PiecewiseLinearFunction<'a> {
         let mut upper = Imai::new(self.ipps, APPROX.into(), 0.0, true, true).compute();
 
         for i in 1..upper.len() {
-            if upper[i-1].val - upper[i].val > upper[i].at - upper[i-1].at {
-                upper[i].val = upper[i-1].val - (upper[i].at - upper[i-1].at)
+            if upper[i - 1].val - upper[i].val > upper[i].at - upper[i - 1].at {
+                upper[i].val = upper[i - 1].val - (upper[i].at - upper[i - 1].at)
             }
         }
 
@@ -844,34 +956,140 @@ mod tests {
     #[test]
     fn test_static_fn_cursor() {
         run_test_with_periodicity(Timestamp::new(10.0), || {
-            let ipps = [TTFPoint { at: Timestamp::zero(), val: FlWeight::new(5.0) }];
+            let ipps = [TTFPoint {
+                at: Timestamp::zero(),
+                val: FlWeight::new(5.0),
+            }];
             let mut cursor = Cursor::new(&ipps);
-            assert_eq!(cursor.cur(), TTFPoint { at: Timestamp::zero(), val: FlWeight::new(5.0) });
-            assert_eq!(cursor.next(), TTFPoint { at: period(), val: FlWeight::new(5.0) });
-            assert_eq!(cursor.prev(), TTFPoint { at: Timestamp::zero() - FlWeight::from(period()), val: FlWeight::new(5.0) });
+            assert_eq!(
+                cursor.cur(),
+                TTFPoint {
+                    at: Timestamp::zero(),
+                    val: FlWeight::new(5.0)
+                }
+            );
+            assert_eq!(
+                cursor.next(),
+                TTFPoint {
+                    at: period(),
+                    val: FlWeight::new(5.0)
+                }
+            );
+            assert_eq!(
+                cursor.prev(),
+                TTFPoint {
+                    at: Timestamp::zero() - FlWeight::from(period()),
+                    val: FlWeight::new(5.0)
+                }
+            );
             cursor.advance();
-            assert_eq!(cursor.cur(), TTFPoint { at: period(), val: FlWeight::new(5.0) });
-            assert_eq!(cursor.next(), TTFPoint { at: Timestamp::new(20.0), val: FlWeight::new(5.0) });
-            assert_eq!(cursor.prev(), TTFPoint { at: Timestamp::zero(), val: FlWeight::new(5.0) });
+            assert_eq!(
+                cursor.cur(),
+                TTFPoint {
+                    at: period(),
+                    val: FlWeight::new(5.0)
+                }
+            );
+            assert_eq!(
+                cursor.next(),
+                TTFPoint {
+                    at: Timestamp::new(20.0),
+                    val: FlWeight::new(5.0)
+                }
+            );
+            assert_eq!(
+                cursor.prev(),
+                TTFPoint {
+                    at: Timestamp::zero(),
+                    val: FlWeight::new(5.0)
+                }
+            );
         });
     }
 
     #[test]
     fn test_dyn_fn_cursor() {
         run_test_with_periodicity(Timestamp::new(10.0), || {
-            let ipps = [TTFPoint { at: Timestamp::zero(), val: FlWeight::new(5.0) }, TTFPoint { at: Timestamp::new(5.0), val: FlWeight::new(7.0) }, TTFPoint { at: period(), val: FlWeight::new(5.0) }];
+            let ipps = [
+                TTFPoint {
+                    at: Timestamp::zero(),
+                    val: FlWeight::new(5.0),
+                },
+                TTFPoint {
+                    at: Timestamp::new(5.0),
+                    val: FlWeight::new(7.0),
+                },
+                TTFPoint {
+                    at: period(),
+                    val: FlWeight::new(5.0),
+                },
+            ];
             let mut cursor = Cursor::new(&ipps);
-            assert_eq!(cursor.cur(), TTFPoint { at: Timestamp::zero(), val: FlWeight::new(5.0) });
-            assert_eq!(cursor.next(), TTFPoint { at: Timestamp::new(5.0), val: FlWeight::new(7.0) });
-            assert_eq!(cursor.prev(), TTFPoint { at: Timestamp::new(-5.0), val: FlWeight::new(7.0) });
+            assert_eq!(
+                cursor.cur(),
+                TTFPoint {
+                    at: Timestamp::zero(),
+                    val: FlWeight::new(5.0)
+                }
+            );
+            assert_eq!(
+                cursor.next(),
+                TTFPoint {
+                    at: Timestamp::new(5.0),
+                    val: FlWeight::new(7.0)
+                }
+            );
+            assert_eq!(
+                cursor.prev(),
+                TTFPoint {
+                    at: Timestamp::new(-5.0),
+                    val: FlWeight::new(7.0)
+                }
+            );
             cursor.advance();
-            assert_eq!(cursor.cur(), TTFPoint { at: Timestamp::new(5.0), val: FlWeight::new(7.0) });
-            assert_eq!(cursor.next(), TTFPoint { at: period(), val: FlWeight::new(5.0) });
-            assert_eq!(cursor.prev(), TTFPoint { at: Timestamp::zero(), val: FlWeight::new(5.0) });
+            assert_eq!(
+                cursor.cur(),
+                TTFPoint {
+                    at: Timestamp::new(5.0),
+                    val: FlWeight::new(7.0)
+                }
+            );
+            assert_eq!(
+                cursor.next(),
+                TTFPoint {
+                    at: period(),
+                    val: FlWeight::new(5.0)
+                }
+            );
+            assert_eq!(
+                cursor.prev(),
+                TTFPoint {
+                    at: Timestamp::zero(),
+                    val: FlWeight::new(5.0)
+                }
+            );
             cursor.advance();
-            assert_eq!(cursor.cur(), TTFPoint { at: period(), val: FlWeight::new(5.0) });
-            assert_eq!(cursor.next(), TTFPoint { at: Timestamp::new(15.0), val: FlWeight::new(7.0) });
-            assert_eq!(cursor.prev(), TTFPoint { at: Timestamp::new(5.0), val: FlWeight::new(7.0) });
+            assert_eq!(
+                cursor.cur(),
+                TTFPoint {
+                    at: period(),
+                    val: FlWeight::new(5.0)
+                }
+            );
+            assert_eq!(
+                cursor.next(),
+                TTFPoint {
+                    at: Timestamp::new(15.0),
+                    val: FlWeight::new(7.0)
+                }
+            );
+            assert_eq!(
+                cursor.prev(),
+                TTFPoint {
+                    at: Timestamp::new(5.0),
+                    val: FlWeight::new(7.0)
+                }
+            );
         });
     }
 
@@ -879,14 +1097,34 @@ mod tests {
     fn test_linking_with_period_crossing() {
         run_test_with_periodicity(Timestamp::new(100.0), || {
             let ipps1 = [
-                TTFPoint { at: Timestamp::zero(), val: FlWeight::new(105.0) },
-                TTFPoint { at: Timestamp::new(50.0), val: FlWeight::new(95.0) },
-                TTFPoint { at: period(), val: FlWeight::new(105.0) }];
+                TTFPoint {
+                    at: Timestamp::zero(),
+                    val: FlWeight::new(105.0),
+                },
+                TTFPoint {
+                    at: Timestamp::new(50.0),
+                    val: FlWeight::new(95.0),
+                },
+                TTFPoint {
+                    at: period(),
+                    val: FlWeight::new(105.0),
+                },
+            ];
 
             let ipps2 = [
-                TTFPoint { at: Timestamp::zero(), val: FlWeight::new(10.0) },
-                TTFPoint { at: Timestamp::new(60.0), val: FlWeight::new(15.0) },
-                TTFPoint { at: period(), val: FlWeight::new(10.0) }];
+                TTFPoint {
+                    at: Timestamp::zero(),
+                    val: FlWeight::new(10.0),
+                },
+                TTFPoint {
+                    at: Timestamp::new(60.0),
+                    val: FlWeight::new(15.0),
+                },
+                TTFPoint {
+                    at: period(),
+                    val: FlWeight::new(10.0),
+                },
+            ];
 
             let linked = PiecewiseLinearFunction::new(&ipps1).link(&PiecewiseLinearFunction::new(&ipps2));
             assert_eq!(5, linked.len())
@@ -896,12 +1134,25 @@ mod tests {
     #[test]
     fn test_linking_with_period_crossing_and_first_static() {
         run_test_with_periodicity(Timestamp::new(100.0), || {
-            let ipps1 = [TTFPoint { at: Timestamp::zero(), val: FlWeight::new(110.0) }];
+            let ipps1 = [TTFPoint {
+                at: Timestamp::zero(),
+                val: FlWeight::new(110.0),
+            }];
 
             let ipps2 = [
-                TTFPoint { at: Timestamp::zero(), val: FlWeight::new(10.0) },
-                TTFPoint { at: Timestamp::new(60.0), val: FlWeight::new(15.0) },
-                TTFPoint { at: period(), val: FlWeight::new(10.0) }];
+                TTFPoint {
+                    at: Timestamp::zero(),
+                    val: FlWeight::new(10.0),
+                },
+                TTFPoint {
+                    at: Timestamp::new(60.0),
+                    val: FlWeight::new(15.0),
+                },
+                TTFPoint {
+                    at: period(),
+                    val: FlWeight::new(10.0),
+                },
+            ];
 
             let linked = PiecewiseLinearFunction::new(&ipps1).link(&PiecewiseLinearFunction::new(&ipps2));
             assert_eq!(4, linked.len())
@@ -911,12 +1162,25 @@ mod tests {
     #[test]
     fn test_copy_range_for_constant_plf() {
         run_test_with_periodicity(Timestamp::new(100.0), || {
-            let ipps = [TTFPoint { at: Timestamp::zero(), val: FlWeight::new(10.0) }];
+            let ipps = [TTFPoint {
+                at: Timestamp::zero(),
+                val: FlWeight::new(10.0),
+            }];
             let mut result = Vec::new();
             PiecewiseLinearFunction::new(&ipps).copy_range(Timestamp::new(40.0), Timestamp::new(50.0), &mut result);
             assert_eq!(
                 result,
-                vec![TTFPoint { at: Timestamp::zero(), val: FlWeight::new(10.0) }, TTFPoint { at: Timestamp::new(100.0), val: FlWeight::new(10.0) }]);
+                vec![
+                    TTFPoint {
+                        at: Timestamp::zero(),
+                        val: FlWeight::new(10.0)
+                    },
+                    TTFPoint {
+                        at: Timestamp::new(100.0),
+                        val: FlWeight::new(10.0)
+                    }
+                ]
+            );
         });
     }
 }
@@ -924,10 +1188,10 @@ mod tests {
 mod debug {
     use super::*;
 
-    use std::fs::File;
-    use std::io::{Write, Error};
-    use std::process::{Command, Stdio};
     use std::env;
+    use std::fs::File;
+    use std::io::{Error, Write};
+    use std::process::{Command, Stdio};
 
     pub(super) fn debug_merge<'a, C: MergeCursor<'a>>(f: &C, g: &C, merged: &[TTFPoint], better: &[(Timestamp, bool)]) {
         if let Ok(mut file) = File::create(format!("debug-{}-{}.py", f64::from(f.cur().at), f64::from(g.cur().at))) {
@@ -944,7 +1208,9 @@ mod debug {
     }
 
     fn write_python<'a, C: MergeCursor<'a>, O: Write>(output: &mut O, f: &C, g: &C, merged: &[TTFPoint], better: &[(Timestamp, bool)]) -> Result<(), Error> {
-        writeln!(output, "
+        writeln!(
+            output,
+            "
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -968,8 +1234,18 @@ def plot_coords(coords, *args, **kwargs):
         }
         writeln!(output, "], 'gx-', label='g', linewidth=1, markersize=5)")?;
 
-        writeln!(output, "plot_coords([({}, {})], 'rs', markersize=10)", f64::from(f.cur().at), f64::from(f.cur().val))?;
-        writeln!(output, "plot_coords([({}, {})], 'gs', markersize=10)", f64::from(g.cur().at), f64::from(g.cur().val))?;
+        writeln!(
+            output,
+            "plot_coords([({}, {})], 'rs', markersize=10)",
+            f64::from(f.cur().at),
+            f64::from(f.cur().val)
+        )?;
+        writeln!(
+            output,
+            "plot_coords([({}, {})], 'gs', markersize=10)",
+            f64::from(g.cur().at),
+            f64::from(g.cur().val)
+        )?;
 
         if !merged.is_empty() {
             write!(output, "plot_coords([")?;
@@ -986,7 +1262,14 @@ def plot_coords(coords, *args, **kwargs):
         let min_val = min(g.ipps().iter().map(|p| p.val).min().unwrap(), min_val);
 
         for &(t, f_better) in better {
-            writeln!(output, "plt.vlines({}, {}, {}, '{}', linewidth=1)", f64::from(t), f64::from(min_val), f64::from(max_val), if f_better { 'r' } else { 'g' })?;
+            writeln!(
+                output,
+                "plt.vlines({}, {}, {}, '{}', linewidth=1)",
+                f64::from(t),
+                f64::from(min_val),
+                f64::from(max_val),
+                if f_better { 'r' } else { 'g' }
+            )?;
         }
 
         writeln!(output, "plt.legend()")?;

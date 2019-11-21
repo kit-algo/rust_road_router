@@ -31,7 +31,7 @@ impl<T: Sentinel + Debug> InRangeOption<T> {
             Some(value) => {
                 assert_ne!(value, T::SENTINEL, "InRangeOption::new: Got sentinel as a value");
                 InRangeOption(value)
-            },
+            }
             None => InRangeOption(T::SENTINEL),
         }
     }

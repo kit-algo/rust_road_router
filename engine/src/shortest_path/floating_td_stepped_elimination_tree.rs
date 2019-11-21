@@ -1,8 +1,8 @@
-use crate::graph::floating_time_dependent::*;
-use std::cmp::min;
 use super::*;
-use crate::in_range_option::InRangeOption;
 use crate::graph::floating_time_dependent::SingleDirBoundsGraph;
+use crate::graph::floating_time_dependent::*;
+use crate::in_range_option::InRangeOption;
+use std::cmp::min;
 
 #[derive(Debug, Clone)]
 pub enum QueryProgress {
@@ -14,7 +14,7 @@ pub enum QueryProgress {
 pub struct Label {
     pub lower_bound: FlWeight,
     pub parent: NodeId,
-    pub shortcut_id: EdgeId
+    pub shortcut_id: EdgeId,
 }
 
 #[derive(Debug, Clone)]
@@ -30,7 +30,7 @@ pub struct FloatingTDSteppedEliminationTree<'a, 'b> {
     distances: Vec<NodeData>,
     elimination_tree: &'b [InRangeOption<NodeId>],
     next: Option<NodeId>,
-    origin: Option<NodeId>
+    origin: Option<NodeId>,
 }
 
 impl<'a, 'b> FloatingTDSteppedEliminationTree<'a, 'b> {
@@ -39,10 +39,17 @@ impl<'a, 'b> FloatingTDSteppedEliminationTree<'a, 'b> {
 
         FloatingTDSteppedEliminationTree {
             graph,
-            distances: vec![NodeData { labels: Vec::new(), lower_bound: FlWeight::INFINITY, upper_bound: FlWeight::INFINITY }; n],
+            distances: vec![
+                NodeData {
+                    labels: Vec::new(),
+                    lower_bound: FlWeight::INFINITY,
+                    upper_bound: FlWeight::INFINITY
+                };
+                n
+            ],
             elimination_tree,
             next: None,
-            origin: None
+            origin: None,
         }
     }
 
@@ -80,7 +87,7 @@ impl<'a, 'b> FloatingTDSteppedEliminationTree<'a, 'b> {
                 let next = Label {
                     parent: node,
                     lower_bound: shortcut_lower_bound + current_state_lower_bound,
-                    shortcut_id
+                    shortcut_id,
                 };
                 let next_upper_bound = shortcut_upper_bound + current_state_upper_bound;
 

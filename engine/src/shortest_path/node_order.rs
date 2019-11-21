@@ -8,7 +8,7 @@ pub struct NodeOrder {
     // NodeIds ordered by their ranks - that is ascending in importance
     node_order: Vec<NodeId>,
     // The rank of each node - 0 is the lowest importance, n-1 the highest
-    ranks: Vec<Rank>
+    ranks: Vec<Rank>,
 }
 
 impl NodeOrder {

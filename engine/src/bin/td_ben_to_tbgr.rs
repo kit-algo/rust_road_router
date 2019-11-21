@@ -1,15 +1,6 @@
-use std::{
-    env,
-    path::Path,
-    error::Error,
-    fs::File,
-    io::prelude::*,
-};
+use std::{env, error::Error, fs::File, io::prelude::*, path::Path};
 
-use bmw_routing_engine::{
-    io::*,
-    cli::CliErr,
-};
+use bmw_routing_engine::{cli::CliErr, io::*};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args();
@@ -33,7 +24,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     output.write_all(&(ipp_departure_time.len() as u32).to_ne_bytes())?;
     output.write_all(&period.to_ne_bytes())?;
 
-    for node in &first_out[..first_out.len()-1] {
+    for node in &first_out[..first_out.len() - 1] {
         output.write_all(&node.to_ne_bytes())?;
     }
 

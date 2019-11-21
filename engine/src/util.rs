@@ -16,7 +16,7 @@ impl Bool for False {
     const VALUE: bool = false;
 }
 
-#[derive(PartialEq,PartialOrd)]
+#[derive(PartialEq, PartialOrd)]
 pub struct NonNan(f32);
 
 impl NonNan {
@@ -39,12 +39,17 @@ impl Ord for NonNan {
 
 pub trait TapOps: Sized {
     fn tap<R, F>(self, f: F) -> Self
-        where F: FnOnce(&mut Self) -> R;
+    where
+        F: FnOnce(&mut Self) -> R;
 }
 
-impl<T> TapOps for T where T: Sized {
+impl<T> TapOps for T
+where
+    T: Sized,
+{
     fn tap<R, F>(mut self, f: F) -> Self
-        where F: FnOnce(&mut Self) -> R
+    where
+        F: FnOnce(&mut Self) -> R,
     {
         let _ = f(&mut self);
         self

@@ -1,17 +1,12 @@
-use std::{
-    path::Path,
-    env,
-};
+use std::{env, path::Path};
 
-#[macro_use] extern crate bmw_routing_engine;
+#[macro_use]
+extern crate bmw_routing_engine;
 use bmw_routing_engine::{
     graph::*,
-    shortest_path::{
-        customizable_contraction_hierarchy::*,
-        node_order::NodeOrder,
-    },
     io::*,
     report::*,
+    shortest_path::{customizable_contraction_hierarchy::*, node_order::NodeOrder},
 };
 
 fn main() {
@@ -37,7 +32,6 @@ fn main() {
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
 
-
     let cch_folder = path.join("cch");
 
     let cch_order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm"));
@@ -48,14 +42,26 @@ fn main() {
     let latitude = Vec::<f32>::load_from(path.join("latitude").to_str().unwrap()).expect("could not read latitude");
     let longitude = Vec::<f32>::load_from(path.join("longitude").to_str().unwrap()).expect("could not read longitude");
 
-    let cch_order = CCHReordering { node_order: cch_order, latitude: &latitude, longitude: &longitude }.reorder(cch.separators());
+    let cch_order = CCHReordering {
+        node_order: cch_order,
+        latitude: &latitude,
+        longitude: &longitude,
+    }
+    .reorder(cch.separators());
 
     let cch_build_ctxt = algo_runs_ctxt.push_collection_item();
     let cch = contract(&graph, cch_order.clone());
     drop(cch_build_ctxt);
 
-    let cch_order = CCHReordering { node_order: cch_order, latitude: &latitude, longitude: &longitude }.reorder_for_seperator_based_customization(cch.separators());
-    if !cch_folder.exists() { std::fs::create_dir(&cch_folder).expect("could not create cch folder"); }
+    let cch_order = CCHReordering {
+        node_order: cch_order,
+        latitude: &latitude,
+        longitude: &longitude,
+    }
+    .reorder_for_seperator_based_customization(cch.separators());
+    if !cch_folder.exists() {
+        std::fs::create_dir(&cch_folder).expect("could not create cch folder");
+    }
     cch_order.deconstruct_to(cch_folder.to_str().unwrap()).expect("could not save cch order");
 
     let cch_build_ctxt = algo_runs_ctxt.push_collection_item();

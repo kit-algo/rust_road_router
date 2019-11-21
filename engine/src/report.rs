@@ -1,9 +1,6 @@
-use std::{
-    cell::RefCell,
-    mem::swap,
-};
-use serde_json::{Value, Map};
 use crate::built_info;
+use serde_json::{Map, Value};
+use std::{cell::RefCell, mem::swap};
 
 pub use serde_json::json;
 
@@ -43,10 +40,10 @@ impl Reporter {
                 swap(&mut tmp, object);
                 self.context_stack.push(ContextStackItem::Object(tmp));
                 self.context_stack.push(ContextStackItem::Key(key));
-            },
+            }
             CurrentReportingContext::Collection(_) => {
                 panic!("Cannot create object at key in collection");
-            },
+            }
         }
     }
 
@@ -58,10 +55,10 @@ impl Reporter {
                 self.context_stack.push(ContextStackItem::Object(tmp));
                 self.context_stack.push(ContextStackItem::Key(key));
                 self.current = CurrentReportingContext::Collection(Vec::new());
-            },
+            }
             CurrentReportingContext::Collection(_) => {
                 panic!("Cannot create collection at key in collection");
-            },
+            }
         }
     }
 
@@ -69,13 +66,13 @@ impl Reporter {
         match &mut self.current {
             CurrentReportingContext::Object(_) => {
                 panic!("Cannot create collection item in object");
-            },
+            }
             CurrentReportingContext::Collection(collection) => {
                 let mut tmp = Vec::new();
                 swap(&mut tmp, collection);
                 self.context_stack.push(ContextStackItem::Collection(tmp));
                 self.current = CurrentReportingContext::Object(Map::new());
-            },
+            }
         }
     }
 
@@ -84,10 +81,10 @@ impl Reporter {
             CurrentReportingContext::Object(object) => {
                 let prev = object.insert(key, val);
                 assert_eq!(prev, None);
-            },
+            }
             CurrentReportingContext::Collection(_) => {
                 panic!("Cannot report value on collection");
-            },
+            }
         }
     }
 
@@ -103,12 +100,8 @@ impl Reporter {
                     swap(&mut self.current, &mut prev_current);
 
                     let prev = match prev_current {
-                        CurrentReportingContext::Object(cur_object) => {
-                            object.insert(key, Value::Object(cur_object))
-                        },
-                        CurrentReportingContext::Collection(collection) => {
-                            object.insert(key, Value::Array(collection))
-                        },
+                        CurrentReportingContext::Object(cur_object) => object.insert(key, Value::Object(cur_object)),
+                        CurrentReportingContext::Collection(collection) => object.insert(key, Value::Array(collection)),
                     };
                     assert_eq!(prev, None);
 
@@ -116,7 +109,7 @@ impl Reporter {
                 } else {
                     panic!("Inconsistent context stack");
                 }
-            },
+            }
             ContextStackItem::Collection(mut collection) => {
                 let mut prev_current = CurrentReportingContext::Object(Default::default());
                 swap(&mut self.current, &mut prev_current);
@@ -124,19 +117,18 @@ impl Reporter {
                 match prev_current {
                     CurrentReportingContext::Object(cur_object) => {
                         collection.push(Value::Object(cur_object));
-                    },
+                    }
                     CurrentReportingContext::Collection(_) => {
                         panic!("Cannot insert collection into collection");
-                    },
+                    }
                 };
 
                 self.current = CurrentReportingContext::Collection(collection);
-            },
+            }
             ContextStackItem::Object(_) => {
                 panic!("Inconsistent context stack");
             }
         }
-
     }
 }
 

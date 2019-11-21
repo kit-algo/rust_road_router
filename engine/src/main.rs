@@ -1,21 +1,13 @@
-use std::{
-    env,
-    path::Path,
-    sync::Arc,
-};
+use std::{env, path::Path, sync::Arc};
 
 use bmw_routing_engine::{
-    graph::{*, first_out_graph::OwnedGraph as Graph},
+    benchmark::report_time,
+    graph::{first_out_graph::OwnedGraph as Graph, *},
+    io::Load,
     shortest_path::{
         contraction_hierarchy,
-        query::{
-            dijkstra::Server as DijkServer,
-            bidirectional_dijkstra::Server as BiDijkServer,
-            contraction_hierarchy::Server as CHServer,
-        }
+        query::{bidirectional_dijkstra::Server as BiDijkServer, contraction_hierarchy::Server as CHServer, dijkstra::Server as DijkServer},
     },
-    io::Load,
-    benchmark::report_time,
 };
 
 fn main() {
@@ -64,7 +56,10 @@ fn main() {
             assert_eq!(ch_server.distance(from, to), ground_truth);
         });
         report_time("own CH", || {
-            assert_eq!(ch_server_with_own_ch.distance(inverted_order[from as usize], inverted_order[to as usize]), ground_truth);
+            assert_eq!(
+                ch_server_with_own_ch.distance(inverted_order[from as usize], inverted_order[to as usize]),
+                ground_truth
+            );
         });
     }
 }

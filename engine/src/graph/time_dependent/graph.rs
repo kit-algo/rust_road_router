@@ -13,19 +13,28 @@ pub struct Graph {
 }
 
 impl Graph {
-    pub fn new(first_out: Vec<EdgeId>,
-               head: Vec<NodeId>,
-               first_ipp_of_arc: Vec<IPPIndex>,
-               ipp_departure_time: Vec<Timestamp>,
-               ipp_travel_time: Vec<Weight>) -> Graph {
-        Graph { first_out, head, first_ipp_of_arc, ipp_departure_time, ipp_travel_time }
+    pub fn new(
+        first_out: Vec<EdgeId>,
+        head: Vec<NodeId>,
+        first_ipp_of_arc: Vec<IPPIndex>,
+        ipp_departure_time: Vec<Timestamp>,
+        ipp_travel_time: Vec<Weight>,
+    ) -> Graph {
+        Graph {
+            first_out,
+            head,
+            first_ipp_of_arc,
+            ipp_departure_time,
+            ipp_travel_time,
+        }
     }
 
     pub fn travel_time_function(&self, edge_id: EdgeId) -> PiecewiseLinearFunction {
         let edge_id = edge_id as usize;
         PiecewiseLinearFunction::new(
-            &self.ipp_departure_time[self.first_ipp_of_arc[edge_id] as usize .. self.first_ipp_of_arc[edge_id + 1] as usize],
-            &self.ipp_travel_time[self.first_ipp_of_arc[edge_id] as usize .. self.first_ipp_of_arc[edge_id + 1] as usize])
+            &self.ipp_departure_time[self.first_ipp_of_arc[edge_id] as usize..self.first_ipp_of_arc[edge_id + 1] as usize],
+            &self.ipp_travel_time[self.first_ipp_of_arc[edge_id] as usize..self.first_ipp_of_arc[edge_id + 1] as usize],
+        )
     }
 
     pub fn neighbor_and_edge_id_iter(&self, node: NodeId) -> impl Iterator<Item = (&NodeId, EdgeId)> {
@@ -53,7 +62,7 @@ impl GraphTrait for Graph {
 }
 
 impl<'a> LinkIterGraph<'a> for Graph {
-    type Iter = std::iter::Map<std::slice::Iter<'a, NodeId>, fn(&NodeId)->Link>;
+    type Iter = std::iter::Map<std::slice::Iter<'a, NodeId>, fn(&NodeId) -> Link>;
 
     fn neighbor_iter(&'a self, node: NodeId) -> Self::Iter {
         let range = self.neighbor_edge_indices_usize(node);
@@ -63,12 +72,18 @@ impl<'a> LinkIterGraph<'a> for Graph {
 
 impl RandomLinkAccessGraph for Graph {
     fn link(&self, edge_id: EdgeId) -> Link {
-        Link { node: self.head[edge_id as usize], weight: 0 }
+        Link {
+            node: self.head[edge_id as usize],
+            weight: 0,
+        }
     }
 
     fn edge_index(&self, from: NodeId, to: NodeId) -> Option<EdgeId> {
         let first_out = self.first_out[from as usize] as usize;
-        self.neighbor_iter(from).enumerate().find(|&(_, Link { node, .. })| node == to).map(|(i, _)| (first_out + i) as EdgeId )
+        self.neighbor_iter(from)
+            .enumerate()
+            .find(|&(_, Link { node, .. })| node == to)
+            .map(|(i, _)| (first_out + i) as EdgeId)
     }
 
     fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {

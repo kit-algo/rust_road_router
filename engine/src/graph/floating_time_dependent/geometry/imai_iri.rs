@@ -17,11 +17,19 @@ impl ImaiVertex {
         ImaiVertex {
             upper_coord: TTFPoint {
                 at: p.at,
-                val: if upper_absolute { p.val + FlWeight::new(upper_bound) } else { (1. + upper_bound) * p.val }
+                val: if upper_absolute {
+                    p.val + FlWeight::new(upper_bound)
+                } else {
+                    (1. + upper_bound) * p.val
+                },
             },
             lower_coord: TTFPoint {
                 at: p.at,
-                val: if lower_absolute { p.val - FlWeight::new(lower_bound) } else { (1. - lower_bound) * p.val }
+                val: if lower_absolute {
+                    p.val - FlWeight::new(lower_bound)
+                } else {
+                    (1. - lower_bound) * p.val
+                },
             },
             succ_upper: INVALID_INDEX,
             succ_lower: INVALID_INDEX,
@@ -68,7 +76,10 @@ impl Imai {
         //     .chain(once(ImaiVertex::new(last, EPSILON / 2.0, EPSILON / 2.0, true, true)))
         //     .collect();
 
-        let tunnel = points.iter().map(|p| ImaiVertex::new(p, upper_bound, lower_bound, lower_absolute, upper_absolute)).collect();
+        let tunnel = points
+            .iter()
+            .map(|p| ImaiVertex::new(p, upper_bound, lower_bound, lower_absolute, upper_absolute))
+            .collect();
 
         Imai {
             tunnel,
@@ -82,7 +93,10 @@ impl Imai {
             l_lower: INVALID_INDEX,
             i: INVALID_INDEX,
             j: INVALID_INDEX,
-            upper_bound, lower_bound, upper_absolute, lower_absolute,
+            upper_bound,
+            lower_bound,
+            upper_absolute,
+            lower_absolute,
         }
     }
 
@@ -103,18 +117,34 @@ impl Imai {
             /*
              * checking whether CH+ and CH- intersect or not
              */
-            if angle_upper_lt(&self.tunnel[self.i].upper_coord, &self.tunnel[self.l_upper].upper_coord, &self.tunnel[self.r_lower].lower_coord) {
+            if angle_upper_lt(
+                &self.tunnel[self.i].upper_coord,
+                &self.tunnel[self.l_upper].upper_coord,
+                &self.tunnel[self.r_lower].lower_coord,
+            ) {
                 self.intersection_upper(&mut approximated_points);
-            } else if angle_lower_lt(&self.tunnel[self.i].lower_coord, &self.tunnel[self.l_lower].lower_coord, &self.tunnel[self.r_upper].upper_coord) {
+            } else if angle_lower_lt(
+                &self.tunnel[self.i].lower_coord,
+                &self.tunnel[self.l_lower].lower_coord,
+                &self.tunnel[self.r_upper].upper_coord,
+            ) {
                 self.intersection_lower(&mut approximated_points);
             } else {
                 /*
                  * Updating two separating lines and the supporting points
                  */
-                if angle_upper_lt(&self.tunnel[self.i].upper_coord, &self.tunnel[self.l_lower].lower_coord, &self.tunnel[self.r_upper].upper_coord) {
+                if angle_upper_lt(
+                    &self.tunnel[self.i].upper_coord,
+                    &self.tunnel[self.l_lower].lower_coord,
+                    &self.tunnel[self.r_upper].upper_coord,
+                ) {
                     self.update_lines_upper();
                 }
-                if angle_lower_lt(&self.tunnel[self.i].lower_coord, &self.tunnel[self.l_upper].upper_coord, &self.tunnel[self.r_lower].lower_coord) {
+                if angle_lower_lt(
+                    &self.tunnel[self.i].lower_coord,
+                    &self.tunnel[self.l_upper].upper_coord,
+                    &self.tunnel[self.r_lower].lower_coord,
+                ) {
                     self.update_lines_lower();
                 }
             }
@@ -123,17 +153,21 @@ impl Imai {
         /*
          * Computing the last two points
          */
-        let penult_coord = intersection_point(&self.tunnel[self.l_lower].lower_coord,
-                                              &self.tunnel[self.r_upper].upper_coord,
-                                              &self.tunnel[self.p_lower].lower_coord,
-                                              &self.tunnel[self.p_upper].upper_coord);
+        let penult_coord = intersection_point(
+            &self.tunnel[self.l_lower].lower_coord,
+            &self.tunnel[self.r_upper].upper_coord,
+            &self.tunnel[self.p_lower].lower_coord,
+            &self.tunnel[self.p_upper].upper_coord,
+        );
         approximated_points.push(penult_coord);
         self.j += 1;
 
-        let last_coord = intersection_point(&self.tunnel[self.l_lower].lower_coord,
-                                            &self.tunnel[self.r_upper].upper_coord,
-                                            &self.tunnel[self.n-1].lower_coord,
-                                            &self.tunnel[self.n-1].upper_coord);
+        let last_coord = intersection_point(
+            &self.tunnel[self.l_lower].lower_coord,
+            &self.tunnel[self.r_upper].upper_coord,
+            &self.tunnel[self.n - 1].lower_coord,
+            &self.tunnel[self.n - 1].upper_coord,
+        );
 
         if last_coord.at > approximated_points.last().unwrap().at {
             approximated_points.push(last_coord);
@@ -141,7 +175,10 @@ impl Imai {
         self.j += 1;
 
         if approximated_points.last().unwrap().at < period() {
-            approximated_points.push(TTFPoint { at: period(), val: approximated_points.first().unwrap().val });
+            approximated_points.push(TTFPoint {
+                at: period(),
+                val: approximated_points.first().unwrap().val,
+            });
         }
 
         if approximated_points.last().unwrap().val != approximated_points.first().unwrap().val {
@@ -173,9 +210,14 @@ impl Imai {
     fn update_ch_lower(&mut self) {
         let mut k = self.i - 1;
 
-        while self.tunnel[k].pred_lower != INVALID_INDEX &&
-              !self.tunnel[k].lower_coord.at.fuzzy_eq(self.tunnel[self.p_lower].lower_coord.at) &&
-              angle_lower_gt(&self.tunnel[self.i].lower_coord, &self.tunnel[k].lower_coord, &self.tunnel[self.tunnel[k].pred_lower].lower_coord) {
+        while self.tunnel[k].pred_lower != INVALID_INDEX
+            && !self.tunnel[k].lower_coord.at.fuzzy_eq(self.tunnel[self.p_lower].lower_coord.at)
+            && angle_lower_gt(
+                &self.tunnel[self.i].lower_coord,
+                &self.tunnel[k].lower_coord,
+                &self.tunnel[self.tunnel[k].pred_lower].lower_coord,
+            )
+        {
             k = self.tunnel[k].pred_lower;
         }
 
@@ -186,9 +228,14 @@ impl Imai {
     fn update_ch_upper(&mut self) {
         let mut k = self.i - 1;
 
-        while self.tunnel[k].pred_upper != INVALID_INDEX &&
-              !self.tunnel[k].upper_coord.at.fuzzy_eq(self.tunnel[self.p_upper].upper_coord.at) &&
-              angle_upper_gt(&self.tunnel[self.i].upper_coord, &self.tunnel[k].upper_coord, &self.tunnel[self.tunnel[k].pred_upper].upper_coord) {
+        while self.tunnel[k].pred_upper != INVALID_INDEX
+            && !self.tunnel[k].upper_coord.at.fuzzy_eq(self.tunnel[self.p_upper].upper_coord.at)
+            && angle_upper_gt(
+                &self.tunnel[self.i].upper_coord,
+                &self.tunnel[k].upper_coord,
+                &self.tunnel[self.tunnel[k].pred_upper].upper_coord,
+            )
+        {
             k = self.tunnel[k].pred_upper;
         }
 
@@ -198,39 +245,49 @@ impl Imai {
 
     fn update_lines_lower(&mut self) {
         self.r_lower = self.i;
-        while self.tunnel[self.l_upper].succ_upper != INVALID_INDEX &&
-              angle_lower_lt(&self.tunnel[self.i].lower_coord,
-                             &self.tunnel[self.l_upper].upper_coord,
-                             &self.tunnel[self.tunnel[self.l_upper].succ_upper].upper_coord) {
+        while self.tunnel[self.l_upper].succ_upper != INVALID_INDEX
+            && angle_lower_lt(
+                &self.tunnel[self.i].lower_coord,
+                &self.tunnel[self.l_upper].upper_coord,
+                &self.tunnel[self.tunnel[self.l_upper].succ_upper].upper_coord,
+            )
+        {
             self.l_upper = self.tunnel[self.l_upper].succ_upper;
         }
     }
 
     fn update_lines_upper(&mut self) {
         self.r_upper = self.i;
-        while self.tunnel[self.l_lower].succ_lower != INVALID_INDEX &&
-              angle_upper_lt(&self.tunnel[self.i].upper_coord,
-                             &self.tunnel[self.l_lower].lower_coord,
-                             &self.tunnel[self.tunnel[self.l_lower].succ_lower].lower_coord) {
+        while self.tunnel[self.l_lower].succ_lower != INVALID_INDEX
+            && angle_upper_lt(
+                &self.tunnel[self.i].upper_coord,
+                &self.tunnel[self.l_lower].lower_coord,
+                &self.tunnel[self.tunnel[self.l_lower].succ_lower].lower_coord,
+            )
+        {
             self.l_lower = self.tunnel[self.l_lower].succ_lower;
         }
     }
 
     fn intersection_lower(&mut self, approximated_points: &mut Vec<TTFPoint>) {
-        let coord = intersection_point(&self.tunnel[self.l_lower].lower_coord,
-                                       &self.tunnel[self.r_upper].upper_coord,
-                                       &self.tunnel[self.p_lower].lower_coord,
-                                       &self.tunnel[self.p_upper].upper_coord);
+        let coord = intersection_point(
+            &self.tunnel[self.l_lower].lower_coord,
+            &self.tunnel[self.r_upper].upper_coord,
+            &self.tunnel[self.p_lower].lower_coord,
+            &self.tunnel[self.p_upper].upper_coord,
+        );
         approximated_points.push(coord);
 
-        debug_assert!(self.j == 0 || approximated_points[self.j-1].at <= approximated_points[self.j].at);
+        debug_assert!(self.j == 0 || approximated_points[self.j - 1].at <= approximated_points[self.j].at);
         self.j += 1;
         self.p_upper = self.r_upper;
 
-        let mut p_lower_vertex_coord = intersection_point(&self.tunnel[self.l_lower].lower_coord,
-                                                   &self.tunnel[self.r_upper].upper_coord,
-                                                   &self.tunnel[self.i-1].lower_coord,
-                                                   &self.tunnel[self.i].lower_coord);
+        let mut p_lower_vertex_coord = intersection_point(
+            &self.tunnel[self.l_lower].lower_coord,
+            &self.tunnel[self.r_upper].upper_coord,
+            &self.tunnel[self.i - 1].lower_coord,
+            &self.tunnel[self.i].lower_coord,
+        );
 
         // this is appearently negating the effect of the ImaiVertex constructor... might be possible to otimize that away
         if self.lower_absolute {
@@ -238,23 +295,32 @@ impl Imai {
         } else {
             p_lower_vertex_coord.val = (1. / (1. - self.lower_bound)) * p_lower_vertex_coord.val;
         }
-        let mut p_lower_vertex = ImaiVertex::new(&p_lower_vertex_coord, self.upper_bound, self.lower_bound, self.upper_absolute, self.lower_absolute);
+        let mut p_lower_vertex = ImaiVertex::new(
+            &p_lower_vertex_coord,
+            self.upper_bound,
+            self.lower_bound,
+            self.upper_absolute,
+            self.lower_absolute,
+        );
         p_lower_vertex.succ_lower = self.i;
         self.tunnel.push(p_lower_vertex);
 
         debug_assert!(self.tunnel.last().unwrap().lower_coord.val < FlWeight::INFINITY);
         debug_assert!(self.tunnel.last().unwrap().lower_coord.val > FlWeight::new(-f64::from(INFINITY)));
 
-        self.p_lower = self.tunnel.len()-1;
-        self.tunnel[self.i].pred_lower = self.tunnel.len()-1;
+        self.p_lower = self.tunnel.len() - 1;
+        self.tunnel[self.i].pred_lower = self.tunnel.len() - 1;
         self.r_lower = self.i;
         self.r_upper = self.i;
         self.l_lower = self.p_lower;
         self.l_upper = self.p_upper;
-        while self.tunnel[self.l_upper].succ_upper != INVALID_INDEX &&
-              angle_upper_lt(&self.tunnel[self.l_upper].upper_coord,
-                             &self.tunnel[self.r_lower].lower_coord,
-                             &self.tunnel[self.tunnel[self.l_upper].succ_upper].upper_coord) {
+        while self.tunnel[self.l_upper].succ_upper != INVALID_INDEX
+            && angle_upper_lt(
+                &self.tunnel[self.l_upper].upper_coord,
+                &self.tunnel[self.r_lower].lower_coord,
+                &self.tunnel[self.tunnel[self.l_upper].succ_upper].upper_coord,
+            )
+        {
             self.l_upper = self.tunnel[self.l_upper].succ_upper;
         }
 
@@ -263,19 +329,23 @@ impl Imai {
     }
 
     fn intersection_upper(&mut self, approximated_points: &mut Vec<TTFPoint>) {
-        let coord = intersection_point(&self.tunnel[self.l_upper].upper_coord,
-                                       &self.tunnel[self.r_lower].lower_coord,
-                                       &self.tunnel[self.p_upper].upper_coord,
-                                       &self.tunnel[self.p_lower].lower_coord);
+        let coord = intersection_point(
+            &self.tunnel[self.l_upper].upper_coord,
+            &self.tunnel[self.r_lower].lower_coord,
+            &self.tunnel[self.p_upper].upper_coord,
+            &self.tunnel[self.p_lower].lower_coord,
+        );
         approximated_points.push(coord);
         debug_assert!(self.j == 0 || approximated_points[self.j - 1].at <= approximated_points[self.j].at);
         self.j += 1;
         self.p_lower = self.r_lower;
 
-        let mut p_upper_vertex_coord = intersection_point(&self.tunnel[self.l_upper].upper_coord,
-                                                   &self.tunnel[self.r_lower].lower_coord,
-                                                   &self.tunnel[self.i-1].upper_coord,
-                                                   &self.tunnel[self.i].upper_coord);
+        let mut p_upper_vertex_coord = intersection_point(
+            &self.tunnel[self.l_upper].upper_coord,
+            &self.tunnel[self.r_lower].lower_coord,
+            &self.tunnel[self.i - 1].upper_coord,
+            &self.tunnel[self.i].upper_coord,
+        );
 
         // this is appearently negating the effect of the ImaiVertex constructor... might be possible to otimize that away
         if self.upper_absolute {
@@ -283,7 +353,13 @@ impl Imai {
         } else {
             p_upper_vertex_coord.val = (1. / (1. + self.upper_bound)) * p_upper_vertex_coord.val;
         }
-        let mut p_upper_vertex = ImaiVertex::new(&p_upper_vertex_coord, self.upper_bound, self.lower_bound, self.upper_absolute, self.lower_absolute);
+        let mut p_upper_vertex = ImaiVertex::new(
+            &p_upper_vertex_coord,
+            self.upper_bound,
+            self.lower_bound,
+            self.upper_absolute,
+            self.lower_absolute,
+        );
         p_upper_vertex.succ_upper = self.i;
         self.tunnel.push(p_upper_vertex);
 
@@ -297,10 +373,13 @@ impl Imai {
         self.l_upper = self.p_upper;
         self.l_lower = self.p_lower;
 
-        while self.tunnel[self.l_lower].succ_lower != INVALID_INDEX &&
-              angle_lower_lt(&self.tunnel[self.l_lower].lower_coord,
-                             &self.tunnel[self.r_upper].upper_coord,
-                             &self.tunnel[self.tunnel[self.l_lower].succ_lower].lower_coord) {
+        while self.tunnel[self.l_lower].succ_lower != INVALID_INDEX
+            && angle_lower_lt(
+                &self.tunnel[self.l_lower].lower_coord,
+                &self.tunnel[self.r_upper].upper_coord,
+                &self.tunnel[self.tunnel[self.l_lower].succ_lower].lower_coord,
+            )
+        {
             self.l_lower = self.tunnel[self.l_lower].succ_lower;
         }
 

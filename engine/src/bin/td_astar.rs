@@ -1,20 +1,14 @@
-use std::{
-    path::Path,
-    env,
-};
+use std::{env, path::Path};
 
 use bmw_routing_engine::{
+    benchmark::*,
     graph::time_dependent::*,
+    io::*,
     shortest_path::{
         customizable_contraction_hierarchy::*,
         node_order::NodeOrder,
-        query::{
-            td_dijkstra::Server as DijkServer,
-            td_astar::Server
-        },
+        query::{td_astar::Server, td_dijkstra::Server as DijkServer},
     },
-    io::*,
-    benchmark::*,
 };
 
 use time::Duration;
@@ -40,7 +34,7 @@ fn main() {
     let mut added = 0;
 
     for i in 0..head.len() {
-        let range = first_ipp_of_arc[i] as usize .. first_ipp_of_arc[i+1] as usize;
+        let range = first_ipp_of_arc[i] as usize..first_ipp_of_arc[i + 1] as usize;
         assert_ne!(range.start, range.end);
 
         first_ipp_of_arc[i] += added;
@@ -68,7 +62,12 @@ fn main() {
     let cch_order = NodeOrder::from_node_order(cch_order);
 
     let cch = contract(&graph, cch_order.clone());
-    let cch_order = CCHReordering { node_order: cch_order, latitude: &[], longitude: &[] }.reorder_for_seperator_based_customization(cch.separators());
+    let cch_order = CCHReordering {
+        node_order: cch_order,
+        latitude: &[],
+        longitude: &[],
+    }
+    .reorder_for_seperator_based_customization(cch.separators());
     let cch = contract(&graph, cch_order);
 
     let mut td_dijk_server = DijkServer::new(graph.clone());
@@ -97,15 +96,11 @@ fn main() {
         let mut astar_time = Duration::zero();
 
         for ((from, to), at) in from.into_iter().zip(to.into_iter()).zip(at.into_iter()).take(num_queries) {
-            let (ground_truth, time) = measure(|| {
-                td_dijk_server.distance(from, to, at).map(|dist| dist + at)
-            });
+            let (ground_truth, time) = measure(|| td_dijk_server.distance(from, to, at).map(|dist| dist + at));
 
             dijkstra_time = dijkstra_time + time;
 
-            let (ea, time) = measure(|| {
-                server.distance(from, to, at).map(|dist| dist + at)
-            });
+            let (ea, time) = measure(|| server.distance(from, to, at).map(|dist| dist + at));
 
             astar_time = astar_time + time;
 

@@ -2,11 +2,11 @@ use std;
 use std::ops::Range;
 
 pub mod first_out_graph;
+pub mod floating_time_dependent;
 pub mod link_id_to_tail_mapper;
 pub mod time_dependent;
-pub mod floating_time_dependent;
 
-pub use self::first_out_graph::{OwnedGraph, FirstOutGraph};
+pub use self::first_out_graph::{FirstOutGraph, OwnedGraph};
 
 pub type NodeId = u32;
 pub type EdgeId = u32;
@@ -16,7 +16,7 @@ pub const INFINITY: Weight = std::u32::MAX / 2;
 #[derive(Debug, Copy, Clone)]
 pub struct Link {
     pub node: NodeId,
-    pub weight: Weight
+    pub weight: Weight,
 }
 
 pub trait Graph {
@@ -31,7 +31,7 @@ pub trait LinkIterGraph<'a>: Graph {
 
     fn reverse(&'a self) -> OwnedGraph {
         // vector of adjacency lists for the reverse graph
-        let mut reversed: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new() ).collect();
+        let mut reversed: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new()).collect();
 
         // iterate over all edges and insert them in the reversed structure
         for node in 0..(self.num_nodes() as NodeId) {
@@ -44,8 +44,8 @@ pub trait LinkIterGraph<'a>: Graph {
     }
 
     fn ch_split(&'a self, node_ranks: &[u32]) -> (OwnedGraph, OwnedGraph) {
-        let mut up: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new() ).collect();
-        let mut down: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new() ).collect();
+        let mut up: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new()).collect();
+        let mut down: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new()).collect();
 
         // iterate over all edges and insert them in the reversed structure
         for node in 0..(self.num_nodes() as NodeId) {
@@ -89,6 +89,9 @@ pub trait RandomLinkAccessGraph {
 
     fn neighbor_edge_indices_usize(&self, node: NodeId) -> Range<usize> {
         let range = self.neighbor_edge_indices(node);
-        Range { start: range.start as usize, end: range.end as usize }
+        Range {
+            start: range.start as usize,
+            end: range.end as usize,
+        }
     }
 }

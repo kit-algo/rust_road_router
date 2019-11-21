@@ -1,11 +1,11 @@
 // this module contains a data structure to efficiently map a large noncensecutive
 // global id space into a smaller consecutive id space from 0 to n where the order is preserved
 
-use std::mem::size_of;
 use std::cmp::min;
+use std::mem::size_of;
 use std::ops::Deref;
 
-use std::alloc::{Global, Alloc, Layout};
+use std::alloc::{Alloc, Global, Layout};
 
 use crate::io::*;
 
@@ -26,7 +26,7 @@ const STORAGE_BITS: usize = size_of::<u64>() * 8;
 #[derive(Debug)]
 pub struct BitVec {
     data: Vec<u64>,
-    size: usize
+    size: usize,
 }
 
 impl BitVec {
@@ -34,7 +34,9 @@ impl BitVec {
         // ceiling to the right number of u64s
         let num_ints = (size + STORAGE_BITS - 1) / STORAGE_BITS;
         let data = unsafe {
-            let pointer = Global.alloc_zeroed(Layout::from_size_align(num_ints * size_of::<usize>(), CACHE_LINE_WIDTH).unwrap()).unwrap();
+            let pointer = Global
+                .alloc_zeroed(Layout::from_size_align(num_ints * size_of::<usize>(), CACHE_LINE_WIDTH).unwrap())
+                .unwrap();
             // TODO: freeing will supply a different alignment (the one of u64)
             // appearently this is not a problem, but it could be some day
             // so we probably should also do the dropping ourselves
@@ -88,7 +90,7 @@ impl BitVec {
         }
     }
 
-    pub fn count_ones(& self) -> usize {
+    pub fn count_ones(&self) -> usize {
         self.data.iter().map(|v| v.count_ones() as usize).sum()
     }
 }
@@ -122,10 +124,7 @@ impl FastClearBitVec {
         // ceiling to the right number of u64s
         let num_ints = (size + STORAGE_BITS - 1) / STORAGE_BITS;
         let data = vec![0; num_ints];
-        FastClearBitVec {
-            data,
-            to_clear: Vec::new(),
-        }
+        FastClearBitVec { data, to_clear: Vec::new() }
     }
 
     pub fn get(&self, index: usize) -> bool {
@@ -253,7 +252,7 @@ const GROUPED_LOCALS: usize = 256;
 #[derive(Debug)]
 pub struct InvertableRankSelectMap {
     map: RankSelectMap,
-    blocks: Vec<usize>
+    blocks: Vec<usize>,
 }
 
 impl InvertableRankSelectMap {
@@ -276,7 +275,7 @@ impl InvertableRankSelectMap {
     pub fn inverse(&self, value: usize) -> usize {
         debug_assert!(value < self.map.len());
         let group = value / GROUPED_LOCALS;
-        let block_index = match self.map.prefix_sum[self.blocks[group]..=self.blocks[group+1]].binary_search(&value) {
+        let block_index = match self.map.prefix_sum[self.blocks[group]..=self.blocks[group + 1]].binary_search(&value) {
             Ok(block_index) => block_index,
             Err(block_index) => block_index - 1,
         } + self.blocks[group];
@@ -433,7 +432,7 @@ mod tests {
     #[test]
     fn test_with_bigger_map() {
         let mut bits = BitVec::new(1 << 16);
-        for i in 0..(1<<16) {
+        for i in 0..(1 << 16) {
             if i % 7 == 3 {
                 bits.set(i);
             }
@@ -441,7 +440,7 @@ mod tests {
         let map = InvertableRankSelectMap::new(RankSelectMap::new(bits));
 
         let mut counter = 0;
-        for i in 0..(1<<16) {
+        for i in 0..(1 << 16) {
             if i % 7 == 3 {
                 assert_eq!(map.at(i), counter);
                 assert_eq!(map.inverse(counter), i);

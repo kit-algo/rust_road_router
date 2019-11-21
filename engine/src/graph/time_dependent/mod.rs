@@ -32,16 +32,16 @@ unsafe fn reset_period() {
     TEST_PERIOD_MOCK.with(|period_cell| period_cell.set(None))
 }
 
-#[cfg(test)] use std::panic;
 #[cfg(test)]
-fn run_test_with_periodicity<T>(period: Timestamp, test: T) -> ()
-    where T: FnOnce() -> () + panic::UnwindSafe
+use std::panic;
+#[cfg(test)]
+fn run_test_with_periodicity<T>(period: Timestamp, test: T)
+where
+    T: FnOnce() -> () + panic::UnwindSafe,
 {
     unsafe { set_period(period) };
 
-    let result = panic::catch_unwind(|| {
-        test()
-    });
+    let result = panic::catch_unwind(|| test());
 
     unsafe { reset_period() };
 
@@ -50,7 +50,7 @@ fn run_test_with_periodicity<T>(period: Timestamp, test: T) -> ()
 
 #[cfg(test)]
 pub fn period() -> Timestamp {
-    return TEST_PERIOD_MOCK.with(|period_cell| period_cell.get().expect("period() used but not set"));
+    TEST_PERIOD_MOCK.with(|period_cell| period_cell.get().expect("period() used but not set"))
 }
 
 #[cfg(not(test))]

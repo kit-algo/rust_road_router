@@ -28,13 +28,17 @@ impl ATIpp {
 
 #[derive(Debug)]
 pub struct Point {
-    pub x: i64, pub y: i64
+    pub x: i64,
+    pub y: i64,
 }
 
 impl Sub for ATIpp {
     type Output = Point;
 
     fn sub(self, other: Self) -> Self::Output {
-        Point { x: i64::from(self.at) - i64::from(other.at), y: i64::from(self.val) - i64::from(other.val) }
+        Point {
+            x: i64::from(self.at) - i64::from(other.at),
+            y: i64::from(self.val) - i64::from(other.val),
+        }
     }
 }
