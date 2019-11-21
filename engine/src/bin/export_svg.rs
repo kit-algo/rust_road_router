@@ -1,57 +1,25 @@
-use std::env;
-use std::path::Path;
+use bmw_routing_engine::{cli::CliErr, graph::*, io::*};
+use std::{env, error::Error, path::Path};
 
-use bmw_routing_engine::{graph::*, io::Load};
-
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args();
     args.next();
 
-    let arg = &args.next().expect("No directory arg given");
+    let arg = &args.next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 
-    let min_lat = args
-        .next()
-        .map(|s| {
-            s.parse::<f32>()
-                .unwrap_or_else(|_| panic!("could not parse {} as lat coord", s))
-        })
-        .unwrap();
-    let min_lon = args
-        .next()
-        .map(|s| {
-            s.parse::<f32>()
-                .unwrap_or_else(|_| panic!("could not parse {} as lon coord", s))
-        })
-        .unwrap();
-    let max_lat = args
-        .next()
-        .map(|s| {
-            s.parse::<f32>()
-                .unwrap_or_else(|_| panic!("could not parse {} as lat coord", s))
-        })
-        .unwrap();
-    let max_lon = args
-        .next()
-        .map(|s| {
-            s.parse::<f32>()
-                .unwrap_or_else(|_| panic!("could not parse {} as lon coord", s))
-        })
-        .unwrap();
+    let min_lat = args.next().ok_or(CliErr("No min_lat arg given"))?.parse::<f32>()?;
+    let min_lon = args.next().ok_or(CliErr("No min_lon arg given"))?.parse::<f32>()?;
+    let max_lat = args.next().ok_or(CliErr("No max_lat arg given"))?.parse::<f32>()?;
+    let max_lon = args.next().ok_or(CliErr("No max_lon arg given"))?.parse::<f32>()?;
 
-    let first_out =
-        Vec::load_from(path.join("first_out").to_str().unwrap()).expect("could not read first_out");
-    let head = Vec::load_from(path.join("head").to_str().unwrap()).expect("could not read head");
-    let travel_time = Vec::load_from(path.join("travel_time").to_str().unwrap())
-        .expect("could not read travel_time");
-    let lat = Vec::<f32>::load_from(path.join("latitude").to_str().unwrap())
-        .expect("could not read latitude");
-    let lng = Vec::<f32>::load_from(path.join("longitude").to_str().unwrap())
-        .expect("could not read longitude");
+    let first_out = Vec::load_from(path.join("first_out").to_str().unwrap())?;
+    let head = Vec::load_from(path.join("head").to_str().unwrap())?;
+    let travel_time = Vec::load_from(path.join("travel_time").to_str().unwrap())?;
+    let lat = Vec::<f32>::load_from(path.join("latitude").to_str().unwrap())?;
+    let lng = Vec::<f32>::load_from(path.join("longitude").to_str().unwrap())?;
 
-    let in_bounding_box = |node| {
-        lat[node] >= min_lat && lat[node] <= max_lat && lng[node] >= min_lon && lng[node] <= max_lon
-    };
+    let in_bounding_box = |node| lat[node] >= min_lat && lat[node] <= max_lat && lng[node] >= min_lon && lng[node] <= max_lon;
 
     let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
 
@@ -77,4 +45,6 @@ fn main() {
 
     println!("</g>");
     println!("</svg>");
+
+    Ok(())
 }

@@ -1,7 +1,8 @@
-use std::{env, path::Path};
+use std::{env, error::Error, path::Path};
 
 use bmw_routing_engine::{
     benchmark::*,
+    cli::CliErr,
     graph::time_dependent::*,
     io::*,
     shortest_path::{
@@ -13,18 +14,18 @@ use bmw_routing_engine::{
 
 use time::Duration;
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args();
     args.next();
 
-    let arg = &args.next().expect("No directory arg given");
+    let arg = &args.next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 
-    let first_out = Vec::load_from(path.join("first_out").to_str().unwrap()).expect("could not read first_out");
-    let head = Vec::load_from(path.join("head").to_str().unwrap()).expect("could not read head");
-    let mut first_ipp_of_arc = Vec::load_from(path.join("first_ipp_of_arc").to_str().unwrap()).expect("could not read first_ipp_of_arc");
-    let ipp_departure_time = Vec::<u32>::load_from(path.join("ipp_departure_time").to_str().unwrap()).expect("could not read ipp_departure_time");
-    let ipp_travel_time = Vec::load_from(path.join("ipp_travel_time").to_str().unwrap()).expect("could not read ipp_travel_time");
+    let first_out = Vec::load_from(path.join("first_out").to_str().unwrap())?;
+    let head = Vec::load_from(path.join("head").to_str().unwrap())?;
+    let mut first_ipp_of_arc = Vec::load_from(path.join("first_ipp_of_arc").to_str().unwrap())?;
+    let ipp_departure_time = Vec::<u32>::load_from(path.join("ipp_departure_time").to_str().unwrap())?;
+    let ipp_travel_time = Vec::load_from(path.join("ipp_travel_time").to_str().unwrap())?;
 
     eprintln!("nodes: {}, arcs: {}, ipps: {}", first_out.len() - 1, head.len(), ipp_departure_time.len());
 
@@ -58,7 +59,7 @@ fn main() {
     first_ipp_of_arc[head.len()] += added;
 
     let graph = TDGraph::new(first_out, head, first_ipp_of_arc, new_ipp_departure_time, new_ipp_travel_time);
-    let cch_order = Vec::load_from(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm");
+    let cch_order = Vec::load_from(path.join("cch_perm").to_str().unwrap())?;
     let cch_order = NodeOrder::from_node_order(cch_order);
 
     let cch = contract(&graph, cch_order.clone());
@@ -86,9 +87,9 @@ fn main() {
     }
 
     if let Some(path) = query_dir {
-        let from = Vec::load_from(path.join("source_node").to_str().unwrap()).expect("could not read source node");
-        let at = Vec::<u32>::load_from(path.join("source_time").to_str().unwrap()).expect("could not read source time");
-        let to = Vec::load_from(path.join("target_node").to_str().unwrap()).expect("could not read target node");
+        let from = Vec::load_from(path.join("source_node").to_str().unwrap())?;
+        let at = Vec::<u32>::load_from(path.join("source_time").to_str().unwrap())?;
+        let to = Vec::load_from(path.join("target_node").to_str().unwrap())?;
 
         let num_queries = 50;
 
@@ -109,4 +110,6 @@ fn main() {
         eprintln!("Dijkstra {}", dijkstra_time / (num_queries as i32));
         eprintln!("A* {}", astar_time / (num_queries as i32));
     }
+
+    Ok(())
 }

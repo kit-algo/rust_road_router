@@ -1,9 +1,10 @@
-use std::{env, path::Path};
+use std::{env, error::Error, path::Path};
 
 #[macro_use]
 extern crate bmw_routing_engine;
 use bmw_routing_engine::{
     benchmark::*,
+    cli::CliErr,
     graph::{
         floating_time_dependent::{shortcut_graph::CustomizedGraphReconstrctor, *},
         *,
@@ -20,7 +21,7 @@ use bmw_routing_engine::{
 use rand::prelude::*;
 use time::Duration;
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     // let _reporter = enable_reporting();
 
     report!("program", "tdcch");
@@ -36,14 +37,14 @@ fn main() {
     let mut args = env::args();
     args.next();
 
-    let arg = &args.next().expect("No directory arg given");
+    let arg = &args.next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 
-    let first_out = Vec::load_from(path.join("first_out").to_str().unwrap()).expect("could not read first_out");
-    let head = Vec::load_from(path.join("head").to_str().unwrap()).expect("could not read head");
-    let first_ipp_of_arc = Vec::load_from(path.join("first_ipp_of_arc").to_str().unwrap()).expect("could not read first_ipp_of_arc");
-    let ipp_departure_time = Vec::<u32>::load_from(path.join("ipp_departure_time").to_str().unwrap()).expect("could not read ipp_departure_time");
-    let ipp_travel_time = Vec::<u32>::load_from(path.join("ipp_travel_time").to_str().unwrap()).expect("could not read ipp_travel_time");
+    let first_out = Vec::load_from(path.join("first_out").to_str().unwrap())?;
+    let head = Vec::load_from(path.join("head").to_str().unwrap())?;
+    let first_ipp_of_arc = Vec::load_from(path.join("first_ipp_of_arc").to_str().unwrap())?;
+    let ipp_departure_time = Vec::<u32>::load_from(path.join("ipp_departure_time").to_str().unwrap())?;
+    let ipp_travel_time = Vec::<u32>::load_from(path.join("ipp_travel_time").to_str().unwrap())?;
 
     report!("unprocessed_graph", { "num_nodes": first_out.len() - 1, "num_arcs": head.len(), "num_ipps": ipp_departure_time.len() });
 
@@ -54,13 +55,12 @@ fn main() {
     let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
 
     let cch_folder = path.join("cch");
-    let node_order = NodeOrder::reconstruct_from(cch_folder.to_str().unwrap()).expect("could not read node order");
+    let node_order = NodeOrder::reconstruct_from(cch_folder.to_str().unwrap())?;
     let cch = CCHReconstrctor {
         original_graph: &graph,
         node_order,
     }
-    .reconstruct_from(cch_folder.to_str().unwrap())
-    .expect("could not read cch");
+    .reconstruct_from(cch_folder.to_str().unwrap())?;
 
     let customized_folder = path.join("customized");
 
@@ -69,8 +69,7 @@ fn main() {
         first_out: cch.first_out(),
         head: cch.head(),
     }
-    .reconstruct_from(customized_folder.to_str().unwrap())
-    .expect("could not read customized");
+    .reconstruct_from(customized_folder.to_str().unwrap())?;
 
     let mut td_dijk_server = DijkServer::new(graph.clone());
     let mut server = Server::new(&cch, &td_cch_graph);
@@ -145,9 +144,9 @@ fn main() {
     }
 
     if let Some(path) = query_dir {
-        let from = Vec::load_from(path.join("source_node").to_str().unwrap()).expect("could not read source node");
-        let at = Vec::<u32>::load_from(path.join("source_time").to_str().unwrap()).expect("could not read source time");
-        let to = Vec::load_from(path.join("target_node").to_str().unwrap()).expect("could not read target node");
+        let from = Vec::load_from(path.join("source_node").to_str().unwrap())?;
+        let at = Vec::<u32>::load_from(path.join("source_time").to_str().unwrap())?;
+        let to = Vec::load_from(path.join("target_node").to_str().unwrap())?;
 
         let num_queries = 50;
 
@@ -207,4 +206,6 @@ fn main() {
         eprintln!("Dijkstra {}", dijkstra_time / (num_queries as i32));
         eprintln!("TDCCH {}", tdcch_time / (num_queries as i32));
     }
+
+    Ok(())
 }

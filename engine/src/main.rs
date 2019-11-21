@@ -1,7 +1,8 @@
-use std::{env, path::Path, sync::Arc};
+use std::{env, error::Error, path::Path, sync::Arc};
 
 use bmw_routing_engine::{
     benchmark::report_time,
+    cli::CliErr,
     graph::{first_out_graph::OwnedGraph as Graph, *},
     io::Load,
     shortest_path::{
@@ -10,29 +11,29 @@ use bmw_routing_engine::{
     },
 };
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args();
     args.next();
 
-    let arg = &args.next().expect("No directory arg given");
+    let arg = &args.next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 
-    let first_out = Arc::new(Vec::load_from(path.join("first_out").to_str().unwrap()).expect("could not read first_out"));
-    let head = Arc::new(Vec::load_from(path.join("head").to_str().unwrap()).expect("could not read head"));
-    let travel_time = Arc::new(Vec::load_from(path.join("travel_time").to_str().unwrap()).expect("could not read travel_time"));
+    let first_out = Arc::new(Vec::load_from(path.join("first_out").to_str().unwrap())?);
+    let head = Arc::new(Vec::load_from(path.join("head").to_str().unwrap())?);
+    let travel_time = Arc::new(Vec::load_from(path.join("travel_time").to_str().unwrap())?);
 
-    let from = Vec::load_from(path.join("test/source").to_str().unwrap()).expect("could not read source");
-    let to = Vec::load_from(path.join("test/target").to_str().unwrap()).expect("could not read target");
-    let ground_truth = Vec::load_from(path.join("test/travel_time_length").to_str().unwrap()).expect("could not read travel_time_length");
+    let from = Vec::load_from(path.join("test/source").to_str().unwrap())?;
+    let to = Vec::load_from(path.join("test/target").to_str().unwrap())?;
+    let ground_truth = Vec::load_from(path.join("test/travel_time_length").to_str().unwrap())?;
 
     let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
     let mut simple_server = DijkServer::new(graph.clone());
     let mut bi_dir_server = BiDijkServer::new(graph.clone());
 
-    let ch_first_out = Vec::load_from(path.join("travel_time_ch/first_out").to_str().unwrap()).expect("could not read travel_time_ch/first_out");
-    let ch_head = Vec::load_from(path.join("travel_time_ch/head").to_str().unwrap()).expect("could not read travel_time_ch/head");
-    let ch_weight = Vec::load_from(path.join("travel_time_ch/weight").to_str().unwrap()).expect("could not read travel_time_ch/weight");
-    let ch_order = Vec::load_from(path.join("travel_time_ch/order").to_str().unwrap()).expect("could not read travel_time_ch/order");
+    let ch_first_out = Vec::load_from(path.join("travel_time_ch/first_out").to_str().unwrap())?;
+    let ch_head = Vec::load_from(path.join("travel_time_ch/head").to_str().unwrap())?;
+    let ch_weight = Vec::load_from(path.join("travel_time_ch/weight").to_str().unwrap())?;
+    let ch_order = Vec::load_from(path.join("travel_time_ch/order").to_str().unwrap())?;
     let mut inverted_order = vec![0; ch_order.len()];
     for (i, &node) in ch_order.iter().enumerate() {
         inverted_order[node as usize] = i as u32;
@@ -62,4 +63,6 @@ fn main() {
             );
         });
     }
+
+    Ok(())
 }

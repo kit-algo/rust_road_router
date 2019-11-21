@@ -4,7 +4,7 @@ use std::{env, error::Error, path::Path};
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args();
     args.next();
-    let arg = &args.next().ok_or_else(|| Box::new(CliErr("No directory arg given")))?;
+    let arg = &args.next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 
     let mut first_out = Vec::<u32>::load_from(path.join("customized/incoming_first_source").to_str().unwrap())?;

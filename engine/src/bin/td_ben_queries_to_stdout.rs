@@ -10,7 +10,7 @@ use bmw_routing_engine::{cli::CliErr, io::*};
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args();
     args.next();
-    let arg = &args.next().ok_or_else(|| Box::new(CliErr("No directory arg given")))?;
+    let arg = &args.next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 
     let mut query_dir = None;
@@ -25,7 +25,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    let query_dir = query_dir.ok_or_else(|| Box::new(CliErr("No queries found")))?;
+    let query_dir = query_dir.ok_or(CliErr("No queries found"))?;
 
     let from = Vec::<u32>::load_from(query_dir.join("source_node").to_str().unwrap())?;
     let at = Vec::<u32>::load_from(query_dir.join("source_time").to_str().unwrap())?;

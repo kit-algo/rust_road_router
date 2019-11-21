@@ -19,7 +19,7 @@ use time::Duration;
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args();
     args.next();
-    let arg = &args.next().ok_or_else(|| Box::new(CliErr("No graph directory arg given")))?;
+    let arg = &args.next().ok_or(CliErr("No graph directory arg given"))?;
     let path = Path::new(arg);
 
     let first_out = Vec::<NodeId>::load_from(path.join("first_out").to_str().unwrap())?;
@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     drop(graph);
     let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
 
-    let arg = &args.next().ok_or_else(|| Box::new(CliErr("No live data directory arg given")))?;
+    let arg = &args.next().ok_or(CliErr("No live data directory arg given"))?;
     let live_dir = Path::new(arg);
 
     let mut total = 0;
@@ -90,7 +90,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     dbg!(total, found, too_fast);
 
-    let cch_order = Vec::load_from(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm");
+    let cch_order = Vec::load_from(path.join("cch_perm").to_str().unwrap())?;
     let cch_order = NodeOrder::from_node_order(cch_order);
 
     let cch = contract(&graph, cch_order.clone());

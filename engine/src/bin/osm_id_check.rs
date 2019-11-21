@@ -7,7 +7,7 @@ use glob::glob;
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args();
     args.next();
-    let arg = &args.next().ok_or_else(|| Box::new(CliErr("No graph directory arg given")))?;
+    let arg = &args.next().ok_or(CliErr("No graph directory arg given"))?;
     let path = Path::new(arg);
 
     let first_out = Vec::<NodeId>::load_from(path.join("first_out").to_str().unwrap())?;
@@ -25,7 +25,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let id_map = RankSelectMap::new(osm_ids_present);
     let graph = FirstOutGraph::new(&first_out[..], &head[..], &head[..]);
 
-    let arg = &args.next().ok_or_else(|| Box::new(CliErr("No live data directory arg given")))?;
+    let arg = &args.next().ok_or(CliErr("No live data directory arg given"))?;
     let live_dir = Path::new(arg);
 
     let mut total_count = 0;

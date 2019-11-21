@@ -1,15 +1,16 @@
-use std::{env, path::Path};
+use std::{env, error::Error, path::Path};
 
 #[macro_use]
 extern crate bmw_routing_engine;
 use bmw_routing_engine::{
+    cli::CliErr,
     graph::{floating_time_dependent::*, *},
     io::*,
     report::*,
     shortest_path::{customizable_contraction_hierarchy::*, node_order::NodeOrder},
 };
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting();
 
     report!("program", "tdcch");
@@ -20,14 +21,14 @@ fn main() {
     let mut args = env::args();
     args.next();
 
-    let arg = &args.next().expect("No directory arg given");
+    let arg = &args.next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 
-    let first_out = Vec::load_from(path.join("first_out").to_str().unwrap()).expect("could not read first_out");
-    let head = Vec::load_from(path.join("head").to_str().unwrap()).expect("could not read head");
-    let first_ipp_of_arc = Vec::load_from(path.join("first_ipp_of_arc").to_str().unwrap()).expect("could not read first_ipp_of_arc");
-    let ipp_departure_time = Vec::<u32>::load_from(path.join("ipp_departure_time").to_str().unwrap()).expect("could not read ipp_departure_time");
-    let ipp_travel_time = Vec::<u32>::load_from(path.join("ipp_travel_time").to_str().unwrap()).expect("could not read ipp_travel_time");
+    let first_out = Vec::load_from(path.join("first_out").to_str().unwrap())?;
+    let head = Vec::load_from(path.join("head").to_str().unwrap())?;
+    let first_ipp_of_arc = Vec::load_from(path.join("first_ipp_of_arc").to_str().unwrap())?;
+    let ipp_departure_time = Vec::<u32>::load_from(path.join("ipp_departure_time").to_str().unwrap())?;
+    let ipp_travel_time = Vec::<u32>::load_from(path.join("ipp_travel_time").to_str().unwrap())?;
 
     report!("unprocessed_graph", { "num_nodes": first_out.len() - 1, "num_arcs": head.len(), "num_ipps": ipp_departure_time.len() });
 
@@ -38,22 +39,21 @@ fn main() {
     let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
 
     let cch_folder = path.join("cch");
-    let node_order = NodeOrder::reconstruct_from(cch_folder.to_str().unwrap()).expect("could not read node order");
+    let node_order = NodeOrder::reconstruct_from(cch_folder.to_str().unwrap())?;
     let cch = CCHReconstrctor {
         original_graph: &graph,
         node_order,
     }
-    .reconstruct_from(cch_folder.to_str().unwrap())
-    .expect("could not read cch");
+    .reconstruct_from(cch_folder.to_str().unwrap())?;
 
     let customized_folder = path.join("customized");
 
     let _cch_customization_ctxt = algo_runs_ctxt.push_collection_item();
     let td_cch_graph: CustomizedGraph = ftd_cch::customize(&cch, &graph).into();
     if !customized_folder.exists() {
-        std::fs::create_dir(&customized_folder).expect("could not create cch folder");
+        std::fs::create_dir(&customized_folder)?;
     }
-    td_cch_graph
-        .deconstruct_to(customized_folder.to_str().unwrap())
-        .expect("could not save customized");
+    td_cch_graph.deconstruct_to(customized_folder.to_str().unwrap())?;
+
+    Ok(())
 }

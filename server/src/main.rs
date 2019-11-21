@@ -7,6 +7,7 @@ extern crate serde_derive;
 
 use std::{
     env,
+    error::Error,
     iter::once,
     path::{Path, PathBuf},
     sync::mpsc::{self, Sender},
@@ -21,6 +22,7 @@ use kdtree::kdtree::{Kdtree, KdtreePointTrait};
 
 use bmw_routing_engine::{
     benchmark::report_time,
+    cli::CliErr,
     graph::{link_id_to_tail_mapper::*, *},
     import::here::link_id_mapper::*,
     io::*,
@@ -123,7 +125,7 @@ fn here_query(query_params: Form<HereQuery>, state: State<Mutex<Sender<Request>>
 #[derive(Debug)]
 struct SerializedWeight(Weight);
 
-use serde::de::{Deserialize, Deserializer, Error};
+use serde::de::{Deserialize, Deserializer};
 use serde_json::Value;
 
 impl<'de> Deserialize<'de> for SerializedWeight {
@@ -131,6 +133,8 @@ impl<'de> Deserialize<'de> for SerializedWeight {
     where
         D: Deserializer<'de>,
     {
+        use serde::de::Error;
+
         let v = Value::deserialize(deserializer)?;
         match v {
             Value::Null => Ok(SerializedWeight(INFINITY)),
@@ -158,41 +162,42 @@ fn customize(updates: Json<Vec<(u64, bool, SerializedWeight)>>, state: State<Mut
     tx_query.send(Request::Customize(updates.0)).expect("routing engine crashed or hung up");
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     let (tx_query, rx_query) = mpsc::channel::<Request>();
 
+    let mut args = env::args();
+    args.next();
+
+    let arg = &args.next().ok_or(CliErr("No directory arg given"))?;
+    let path = Path::new(arg);
+
+    let first_out = Vec::load_from(path.join("first_out").to_str().unwrap())?;
+    let head = Vec::load_from(path.join("head").to_str().unwrap())?;
+    let travel_time = Vec::load_from(path.join("travel_time").to_str().unwrap())?;
+
+    let lat = Vec::load_from(path.join("latitude").to_str().unwrap())?;
+    let lng = Vec::load_from(path.join("longitude").to_str().unwrap())?;
+
+    let mut coords: Vec<NodeCoord> = lat
+        .iter()
+        .zip(lng.iter())
+        .enumerate()
+        .map(|(node_id, (&lat, &lng))| NodeCoord {
+            node_id: node_id as NodeId,
+            coords: [f64::from(lat), f64::from(lng)],
+        })
+        .collect();
+    let tree = report_time("build kd tree", || Kdtree::new(&mut coords));
+
+    let link_id_mapping = BitVec::load_from(path.join("link_id_mapping").to_str().unwrap())?;
+    let link_id_mapping = InvertableRankSelectMap::new(RankSelectMap::new(link_id_mapping));
+    let here_rank_to_link_id = Vec::load_from(path.join("here_rank_to_link_id").to_str().unwrap())?;
+    let cch_order = Vec::load_from(path.join("cch_perm").to_str().unwrap())?;
+
     thread::spawn(move || {
-        let mut args = env::args();
-        args.next();
-
-        let arg = &args.next().expect("No directory arg given");
-        let path = Path::new(arg);
-
-        let first_out = Vec::load_from(path.join("first_out").to_str().unwrap()).expect("could not read first_out");
-        let head = Vec::load_from(path.join("head").to_str().unwrap()).expect("could not read head");
-        let travel_time = Vec::load_from(path.join("travel_time").to_str().unwrap()).expect("could not read travel_time");
-
-        let lat = Vec::load_from(path.join("latitude").to_str().unwrap()).expect("could not read latitude");
-        let lng = Vec::load_from(path.join("longitude").to_str().unwrap()).expect("could not read longitude");
-
-        let mut coords: Vec<NodeCoord> = lat
-            .iter()
-            .zip(lng.iter())
-            .enumerate()
-            .map(|(node_id, (&lat, &lng))| NodeCoord {
-                node_id: node_id as NodeId,
-                coords: [f64::from(lat), f64::from(lng)],
-            })
-            .collect();
-        let tree = report_time("build kd tree", || Kdtree::new(&mut coords));
-
-        let link_id_mapping = BitVec::load_from(path.join("link_id_mapping").to_str().unwrap()).expect("could not read link_id_mapping");
-        let link_id_mapping = InvertableRankSelectMap::new(RankSelectMap::new(link_id_mapping));
-        let here_rank_to_link_id = Vec::load_from(path.join("here_rank_to_link_id").to_str().unwrap()).expect("could not read here_rank_to_link_id");
         let id_mapper = LinkIdMapper::new(link_id_mapping, here_rank_to_link_id, head.len());
 
         let graph = FirstOutGraph::new(&first_out[..], &head[..], travel_time.clone());
-        let cch_order = Vec::load_from(path.join("cch_perm").to_str().unwrap()).expect("could not read cch_perm");
 
         let link_id_to_tail_mapper = LinkIdToTailMapper::new(&graph);
 
@@ -314,4 +319,6 @@ fn main() {
         .mount("/", routes![index, files, query, here_query, customize])
         .manage(Mutex::new(tx_query))
         .launch();
+
+    Ok(())
 }

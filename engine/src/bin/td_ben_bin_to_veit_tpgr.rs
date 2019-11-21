@@ -5,7 +5,7 @@ use bmw_routing_engine::{cli::CliErr, io::*};
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args();
     args.next();
-    let arg = &args.next().ok_or_else(|| Box::new(CliErr("No directory arg given")))?;
+    let arg = &args.next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 
     let period = f64::from(Vec::<u32>::load_from(path.join("period").to_str().unwrap())?[0]);
@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arc_count = head.len();
     let ipp_count = ipp_travel_time.len();
 
-    let output = &args.next().ok_or_else(|| Box::new(CliErr("No output file given")))?;
+    let output = &args.next().ok_or(CliErr("No output file given"))?;
     let mut output = File::create(output)?;
     writeln!(output, "{} {} {} 864000", node_count, arc_count, ipp_count)?;
 
