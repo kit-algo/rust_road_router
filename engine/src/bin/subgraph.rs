@@ -59,11 +59,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    new_first_out.write_to(out_path.join("first_out").to_str().unwrap())?;
-    new_head.write_to(out_path.join("head").to_str().unwrap())?;
-    new_travel_time.write_to(out_path.join("travel_time").to_str().unwrap())?;
-    new_lat.write_to(out_path.join("latitude").to_str().unwrap())?;
-    new_lng.write_to(out_path.join("longitude").to_str().unwrap())?;
+    new_first_out.write_to(&out_path.join("first_out"))?;
+    new_head.write_to(&out_path.join("head"))?;
+    new_travel_time.write_to(&out_path.join("travel_time"))?;
+    new_lat.write_to(&out_path.join("latitude"))?;
+    new_lng.write_to(&out_path.join("longitude"))?;
 
     Ok(())
 }

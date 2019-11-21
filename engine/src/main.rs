@@ -18,22 +18,22 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &args.next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 
-    let first_out = Arc::new(Vec::load_from(path.join("first_out").to_str().unwrap())?);
-    let head = Arc::new(Vec::load_from(path.join("head").to_str().unwrap())?);
-    let travel_time = Arc::new(Vec::load_from(path.join("travel_time").to_str().unwrap())?);
+    let first_out = Arc::new(Vec::load_from(path.join("first_out"))?);
+    let head = Arc::new(Vec::load_from(path.join("head"))?);
+    let travel_time = Arc::new(Vec::load_from(path.join("travel_time"))?);
 
-    let from = Vec::load_from(path.join("test/source").to_str().unwrap())?;
-    let to = Vec::load_from(path.join("test/target").to_str().unwrap())?;
-    let ground_truth = Vec::load_from(path.join("test/travel_time_length").to_str().unwrap())?;
+    let from = Vec::load_from(path.join("test/source"))?;
+    let to = Vec::load_from(path.join("test/target"))?;
+    let ground_truth = Vec::load_from(path.join("test/travel_time_length"))?;
 
     let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
     let mut simple_server = DijkServer::new(graph.clone());
     let mut bi_dir_server = BiDijkServer::new(graph.clone());
 
-    let ch_first_out = Vec::load_from(path.join("travel_time_ch/first_out").to_str().unwrap())?;
-    let ch_head = Vec::load_from(path.join("travel_time_ch/head").to_str().unwrap())?;
-    let ch_weight = Vec::load_from(path.join("travel_time_ch/weight").to_str().unwrap())?;
-    let ch_order = Vec::load_from(path.join("travel_time_ch/order").to_str().unwrap())?;
+    let ch_first_out = Vec::load_from(path.join("travel_time_ch/first_out"))?;
+    let ch_head = Vec::load_from(path.join("travel_time_ch/head"))?;
+    let ch_weight = Vec::load_from(path.join("travel_time_ch/weight"))?;
+    let ch_order = Vec::load_from(path.join("travel_time_ch/order"))?;
     let mut inverted_order = vec![0; ch_order.len()];
     for (i, &node) in ch_order.iter().enumerate() {
         inverted_order[node as usize] = i as u32;

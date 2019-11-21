@@ -21,13 +21,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let source = CSVSource::new(Path::new(in_dir));
     let data = read_graph(&source, (min_lat, min_lon), (max_lat, max_lon));
     data.graph.write_to_dir(out_dir)?;
-    data.functional_road_classes
-        .write_to(Path::new(out_dir).join("functional_road_classes").to_str().unwrap())?;
-    data.lat.write_to(Path::new(out_dir).join("latitude").to_str().unwrap())?;
-    data.lng.write_to(Path::new(out_dir).join("longitude").to_str().unwrap())?;
-    data.link_id_mapping.write_to(Path::new(out_dir).join("link_id_mapping").to_str().unwrap())?;
-    data.here_rank_to_link_id
-        .write_to(Path::new(out_dir).join("here_rank_to_link_id").to_str().unwrap())?;
+    let out_dir = Path::new(out_dir);
+
+    data.functional_road_classes.write_to(&out_dir.join("functional_road_classes"))?;
+    data.lat.write_to(&out_dir.join("latitude"))?;
+    data.lng.write_to(&out_dir.join("longitude"))?;
+    data.link_id_mapping.write_to(&out_dir.join("link_id_mapping"))?;
+    data.here_rank_to_link_id.write_to(&out_dir.join("here_rank_to_link_id"))?;
 
     Ok(())
 }

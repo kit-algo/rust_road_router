@@ -53,7 +53,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     if !customized_folder.exists() {
         std::fs::create_dir(&customized_folder)?;
     }
-    td_cch_graph.deconstruct_to(customized_folder.to_str().unwrap())?;
+    td_cch_graph.deconstruct_to(&customized_folder)?;
 
     Ok(())
 }

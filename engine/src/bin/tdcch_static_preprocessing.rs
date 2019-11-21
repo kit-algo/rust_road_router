@@ -63,13 +63,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     if !cch_folder.exists() {
         std::fs::create_dir(&cch_folder)?;
     }
-    cch_order.deconstruct_to(cch_folder.to_str().unwrap())?;
+    cch_order.deconstruct_to(&cch_folder)?;
 
     let cch_build_ctxt = algo_runs_ctxt.push_collection_item();
     let cch = contract(&graph, cch_order);
     drop(cch_build_ctxt);
 
-    cch.deconstruct_to(cch_folder.to_str().unwrap())?;
+    cch.deconstruct_to(&cch_folder)?;
 
     Ok(())
 }

@@ -54,9 +54,9 @@ where
 
     pub fn write_to_dir(&self, dir: &str) -> Result<()> {
         let path = Path::new(dir);
-        let res1 = self.first_out().write_to(path.join("first_out").to_str().unwrap());
-        let res2 = self.head().write_to(path.join("head").to_str().unwrap());
-        let res3 = self.weight().write_to(path.join("weights").to_str().unwrap());
+        let res1 = self.first_out().write_to(&path.join("first_out"));
+        let res2 = self.head().write_to(&path.join("head"));
+        let res3 = self.weight().write_to(&path.join("weights"));
         res1.and(res2).and(res3)
     }
 

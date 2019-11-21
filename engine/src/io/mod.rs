@@ -43,8 +43,8 @@ impl<T: Copy> DataBytesMut for Vec<T> {
 }
 
 pub trait Store: DataBytes {
-    fn write_to(&self, filename: &str) -> Result<()> {
-        File::create(filename)?.write_all(self.data_bytes())
+    fn write_to(&self, path: &dyn AsRef<Path>) -> Result<()> {
+        File::create(path)?.write_all(self.data_bytes())
     }
 }
 
@@ -54,9 +54,9 @@ impl<T> Store for [T] where [T]: DataBytes {}
 pub trait Load: DataBytesMut + Sized {
     fn new_with_bytes(num_bytes: usize) -> Self;
 
-    fn load_from<P: AsRef<Path>>(filename: P) -> Result<Self> {
-        let metadata = metadata(filename.as_ref())?;
-        let mut file = File::open(filename)?;
+    fn load_from<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let metadata = metadata(path.as_ref())?;
+        let mut file = File::open(path)?;
 
         let mut object = Self::new_with_bytes(metadata.len() as usize);
         assert_eq!(metadata.len() as usize, object.data_bytes_mut().len());
@@ -77,10 +77,10 @@ impl<T: Default + Copy> Load for Vec<T> {
 pub trait Deconstruct: Sized {
     fn store_each(&self, store_callback: &dyn Fn(&str, &dyn Store) -> Result<()>) -> Result<()>;
 
-    fn deconstruct_to(&self, dir: &str) -> Result<()> {
+    fn deconstruct_to<D: AsRef<OsStr>>(&self, dir: &D) -> Result<()> {
         let path = Path::new(dir);
 
-        self.store_each(&|name, object: &dyn Store| object.write_to(path.join(name).to_str().unwrap()))
+        self.store_each(&|name, object: &dyn Store| object.write_to(&path.join(name)))
     }
 }
 
@@ -90,8 +90,8 @@ pub struct Loader<'a> {
 }
 
 impl<'a> Loader<'a> {
-    pub fn load<T: Load, P: AsRef<Path>>(&self, filename: P) -> Result<T> {
-        T::load_from(self.path.join(filename))
+    pub fn load<T: Load, P: AsRef<Path>>(&self, path: P) -> Result<T> {
+        T::load_from(self.path.join(path))
     }
 }
 
