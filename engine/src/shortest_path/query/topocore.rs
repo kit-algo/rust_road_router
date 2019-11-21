@@ -91,12 +91,12 @@ impl<'a> Server<'a> {
         let backward_elimination_tree = &self.backward_elimination_tree;
         let forward_elimination_tree = &self.forward_elimination_tree;
 
-        while let QueryProgress::Progress(State { node, distance }) = backward_dijkstra.next_step_with_callbacks(|_, distance| distance, |tail, link, dijk| !in_core(tail) || dijk.queue().contains_index(link.node as usize)) {
+        while let QueryProgress::Progress(State { node, distance: _dist }) = backward_dijkstra.next_step_with_callbacks(|_, distance| distance, |tail, link, dijk| !in_core(tail) || dijk.queue().contains_index(link.node as usize)) {
             if in_core(node) { settled_core_nodes += 1 } else { settled_non_core_nodes += 1 }
             #[cfg(feature = "chpot_visualize")] {
                 let node = self.order.node(node);
                 println!("var marker = L.marker([{}, {}], {{ icon: redIcon }}).addTo(map);", lat[node as usize], lng[node as usize]);
-                println!("marker.bindPopup(\"id: {}<br>distance: {}\");", node, distance);
+                println!("marker.bindPopup(\"id: {}<br>distance: {}\");", node, _dist);
             };
         }
 
