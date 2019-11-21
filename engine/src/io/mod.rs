@@ -1,4 +1,5 @@
 use std::{
+    ffi::OsStr,
     fs::{metadata, File},
     io::{prelude::*, Result},
     mem,
@@ -94,20 +95,20 @@ impl<'a> Loader<'a> {
     }
 }
 
-pub trait Reconstruct: Sized {
-    fn reconstruct_with(loader: Loader) -> Result<Self>;
-
-    fn reconstruct_from(dir: &str) -> Result<Self> {
-        let path = Path::new(dir);
-        Self::reconstruct_with(Loader { path })
-    }
-}
-
 pub trait ReconstructPrepared<T: Sized>: Sized {
     fn reconstruct_with(self, loader: Loader) -> Result<T>;
 
-    fn reconstruct_from(self, dir: &str) -> Result<T> {
+    fn reconstruct_from<D: AsRef<OsStr>>(self, dir: &D) -> Result<T> {
         let path = Path::new(dir);
         self.reconstruct_with(Loader { path })
+    }
+}
+
+pub trait Reconstruct: Sized {
+    fn reconstruct_with(loader: Loader) -> Result<Self>;
+
+    fn reconstruct_from<D: AsRef<OsStr>>(dir: &D) -> Result<Self> {
+        let path = Path::new(dir);
+        Self::reconstruct_with(Loader { path })
     }
 }

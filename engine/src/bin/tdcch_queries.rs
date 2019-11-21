@@ -55,12 +55,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
 
     let cch_folder = path.join("cch");
-    let node_order = NodeOrder::reconstruct_from(cch_folder.to_str().unwrap())?;
+    let node_order = NodeOrder::reconstruct_from(&cch_folder)?;
     let cch = CCHReconstrctor {
         original_graph: &graph,
         node_order,
     }
-    .reconstruct_from(cch_folder.to_str().unwrap())?;
+    .reconstruct_from(&cch_folder)?;
 
     let customized_folder = path.join("customized");
 
@@ -69,7 +69,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         first_out: cch.first_out(),
         head: cch.head(),
     }
-    .reconstruct_from(customized_folder.to_str().unwrap())?;
+    .reconstruct_from(&customized_folder)?;
 
     let mut td_dijk_server = DijkServer::new(graph.clone());
     let mut server = Server::new(&cch, &td_cch_graph);
