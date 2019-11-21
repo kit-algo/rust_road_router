@@ -31,11 +31,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &args.next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 
-    let first_out = Vec::load_from(path.join("first_out").to_str().unwrap())?;
-    let head = Vec::load_from(path.join("head").to_str().unwrap())?;
-    let first_ipp_of_arc = Vec::load_from(path.join("first_ipp_of_arc").to_str().unwrap())?;
-    let ipp_departure_time = Vec::<u32>::load_from(path.join("ipp_departure_time").to_str().unwrap())?;
-    let ipp_travel_time = Vec::<u32>::load_from(path.join("ipp_travel_time").to_str().unwrap())?;
+    let first_out = Vec::load_from(path.join("first_out"))?;
+    let head = Vec::load_from(path.join("head"))?;
+    let first_ipp_of_arc = Vec::load_from(path.join("first_ipp_of_arc"))?;
+    let ipp_departure_time = Vec::<u32>::load_from(path.join("ipp_departure_time"))?;
+    let ipp_travel_time = Vec::<u32>::load_from(path.join("ipp_travel_time"))?;
 
     report!("unprocessed_graph", { "num_nodes": first_out.len() - 1, "num_arcs": head.len(), "num_ipps": ipp_departure_time.len() });
 
@@ -77,10 +77,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     if let Some(path) = query_dir {
-        let from = Vec::load_from(path.join("source_node").to_str().unwrap())?;
-        let at = Vec::<u32>::load_from(path.join("source_time").to_str().unwrap())?;
-        let to = Vec::load_from(path.join("target_node").to_str().unwrap())?;
-        let rank = Vec::<u32>::load_from(path.join("dij_rank").to_str().unwrap())?;
+        let from = Vec::load_from(path.join("source_node"))?;
+        let at = Vec::<u32>::load_from(path.join("source_time"))?;
+        let to = Vec::load_from(path.join("target_node"))?;
+        let rank = Vec::<u32>::load_from(path.join("dij_rank"))?;
 
         for (((from, to), at), rank) in from.into_iter().zip(to.into_iter()).zip(at.into_iter()).zip(rank.into_iter()) {
             let at = Timestamp::new(f64::from(at) / 1000.0);

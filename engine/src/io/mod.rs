@@ -53,8 +53,8 @@ impl<T> Store for [T] where [T]: DataBytes {}
 pub trait Load: DataBytesMut + Sized {
     fn new_with_bytes(num_bytes: usize) -> Self;
 
-    fn load_from(filename: &str) -> Result<Self> {
-        let metadata = metadata(filename)?;
+    fn load_from<P: AsRef<Path>>(filename: P) -> Result<Self> {
+        let metadata = metadata(filename.as_ref())?;
         let mut file = File::open(filename)?;
 
         let mut object = Self::new_with_bytes(metadata.len() as usize);
@@ -89,8 +89,8 @@ pub struct Loader<'a> {
 }
 
 impl<'a> Loader<'a> {
-    pub fn load<T: Load>(&self, filename: &str) -> Result<T> {
-        T::load_from(self.path.join(filename).to_str().unwrap())
+    pub fn load<T: Load, P: AsRef<Path>>(&self, filename: P) -> Result<T> {
+        T::load_from(self.path.join(filename))
     }
 }
 

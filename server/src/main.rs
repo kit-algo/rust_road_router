@@ -171,12 +171,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &args.next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 
-    let first_out = Vec::load_from(path.join("first_out").to_str().unwrap())?;
-    let head = Vec::load_from(path.join("head").to_str().unwrap())?;
-    let travel_time = Vec::load_from(path.join("travel_time").to_str().unwrap())?;
+    let first_out = Vec::load_from(path.join("first_out"))?;
+    let head = Vec::load_from(path.join("head"))?;
+    let travel_time = Vec::load_from(path.join("travel_time"))?;
 
-    let lat = Vec::load_from(path.join("latitude").to_str().unwrap())?;
-    let lng = Vec::load_from(path.join("longitude").to_str().unwrap())?;
+    let lat = Vec::load_from(path.join("latitude"))?;
+    let lng = Vec::load_from(path.join("longitude"))?;
 
     let mut coords: Vec<NodeCoord> = lat
         .iter()
@@ -189,10 +189,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         .collect();
     let tree = report_time("build kd tree", || Kdtree::new(&mut coords));
 
-    let link_id_mapping = BitVec::load_from(path.join("link_id_mapping").to_str().unwrap())?;
+    let link_id_mapping = BitVec::load_from(path.join("link_id_mapping"))?;
     let link_id_mapping = InvertableRankSelectMap::new(RankSelectMap::new(link_id_mapping));
-    let here_rank_to_link_id = Vec::load_from(path.join("here_rank_to_link_id").to_str().unwrap())?;
-    let cch_order = Vec::load_from(path.join("cch_perm").to_str().unwrap())?;
+    let here_rank_to_link_id = Vec::load_from(path.join("here_rank_to_link_id"))?;
+    let cch_order = Vec::load_from(path.join("cch_perm"))?;
 
     thread::spawn(move || {
         let id_mapper = LinkIdMapper::new(link_id_mapping, here_rank_to_link_id, head.len());

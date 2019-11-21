@@ -23,21 +23,21 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &args.next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 
-    let first_out = Vec::load_from(path.join("first_out").to_str().unwrap())?;
-    let head = Vec::load_from(path.join("head").to_str().unwrap())?;
-    let travel_time = Vec::load_from(path.join("travel_time").to_str().unwrap())?;
+    let first_out = Vec::load_from(path.join("first_out"))?;
+    let head = Vec::load_from(path.join("head"))?;
+    let travel_time = Vec::load_from(path.join("travel_time"))?;
     #[cfg(feature = "chpot_visualize")]
-    let lat = Vec::<f32>::load_from(path.join("latitude").to_str().unwrap())?;
+    let lat = Vec::<f32>::load_from(path.join("latitude"))?;
     #[cfg(feature = "chpot_visualize")]
-    let lng = Vec::<f32>::load_from(path.join("longitude").to_str().unwrap())?;
+    let lng = Vec::<f32>::load_from(path.join("longitude"))?;
 
-    let from = Vec::load_from(path.join("test/source").to_str().unwrap())?;
-    let to = Vec::load_from(path.join("test/target").to_str().unwrap())?;
-    let ground_truth = Vec::load_from(path.join("test/travel_time_length").to_str().unwrap())?;
+    let from = Vec::load_from(path.join("test/source"))?;
+    let to = Vec::load_from(path.join("test/target"))?;
+    let ground_truth = Vec::load_from(path.join("test/travel_time_length"))?;
 
     let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
 
-    let cch_order = Vec::load_from(path.join("cch_perm").to_str().unwrap())?;
+    let cch_order = Vec::load_from(path.join("cch_perm"))?;
     let cch_order = NodeOrder::from_node_order(cch_order);
 
     let cch = contract(&graph, cch_order.clone());

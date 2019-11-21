@@ -13,11 +13,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let max_lat = args.next().ok_or(CliErr("No max_lat arg given"))?.parse::<f32>()?;
     let max_lon = args.next().ok_or(CliErr("No max_lon arg given"))?.parse::<f32>()?;
 
-    let first_out = Vec::load_from(path.join("first_out").to_str().unwrap())?;
-    let head = Vec::load_from(path.join("head").to_str().unwrap())?;
-    let travel_time = Vec::load_from(path.join("travel_time").to_str().unwrap())?;
-    let lat = Vec::<f32>::load_from(path.join("latitude").to_str().unwrap())?;
-    let lng = Vec::<f32>::load_from(path.join("longitude").to_str().unwrap())?;
+    let first_out = Vec::load_from(path.join("first_out"))?;
+    let head = Vec::load_from(path.join("head"))?;
+    let travel_time = Vec::load_from(path.join("travel_time"))?;
+    let lat = Vec::<f32>::load_from(path.join("latitude"))?;
+    let lng = Vec::<f32>::load_from(path.join("longitude"))?;
 
     let in_bounding_box = |node| lat[node] >= min_lat && lat[node] <= max_lat && lng[node] >= min_lon && lng[node] <= max_lon;
 

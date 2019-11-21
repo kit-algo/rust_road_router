@@ -10,9 +10,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &args.next().ok_or(CliErr("No graph directory arg given"))?;
     let path = Path::new(arg);
 
-    let first_out = Vec::<NodeId>::load_from(path.join("first_out").to_str().unwrap())?;
-    let head = Vec::<EdgeId>::load_from(path.join("head").to_str().unwrap())?;
-    let osm_node_ids = Vec::<u64>::load_from(path.join("osm_node_ids").to_str().unwrap())?;
+    let first_out = Vec::<NodeId>::load_from(path.join("first_out"))?;
+    let head = Vec::<EdgeId>::load_from(path.join("head"))?;
+    let osm_node_ids = Vec::<u64>::load_from(path.join("osm_node_ids"))?;
 
     for ids in osm_node_ids.windows(2) {
         assert!(ids[0] < ids[1]);

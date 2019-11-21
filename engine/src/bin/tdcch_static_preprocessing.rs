@@ -23,8 +23,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &args.next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 
-    let first_out = Vec::load_from(path.join("first_out").to_str().unwrap())?;
-    let head = Vec::load_from(path.join("head").to_str().unwrap())?;
+    let first_out = Vec::load_from(path.join("first_out"))?;
+    let head = Vec::load_from(path.join("head"))?;
     let weight = vec![0; head.len()];
 
     let graph = OwnedGraph::new(first_out, head, weight);
@@ -35,13 +35,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let cch_folder = path.join("cch");
 
-    let cch_order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm").to_str().unwrap())?);
+    let cch_order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm"))?);
     let cch_build_ctxt = algo_runs_ctxt.push_collection_item();
     let cch = contract(&graph, cch_order.clone());
     drop(cch_build_ctxt);
 
-    let latitude = Vec::<f32>::load_from(path.join("latitude").to_str().unwrap())?;
-    let longitude = Vec::<f32>::load_from(path.join("longitude").to_str().unwrap())?;
+    let latitude = Vec::<f32>::load_from(path.join("latitude"))?;
+    let longitude = Vec::<f32>::load_from(path.join("longitude"))?;
 
     let cch_order = CCHReordering {
         node_order: cch_order,

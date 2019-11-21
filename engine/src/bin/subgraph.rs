@@ -16,11 +16,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &args.next().ok_or(CliErr("No output directory arg given"))?;
     let out_path = Path::new(arg);
 
-    let first_out = Vec::load_from(path.join("first_out").to_str().unwrap())?;
-    let head = Vec::load_from(path.join("head").to_str().unwrap())?;
-    let travel_time = Vec::load_from(path.join("travel_time").to_str().unwrap())?;
-    let lat = Vec::<f32>::load_from(path.join("latitude").to_str().unwrap())?;
-    let lng = Vec::<f32>::load_from(path.join("longitude").to_str().unwrap())?;
+    let first_out = Vec::load_from(path.join("first_out"))?;
+    let head = Vec::load_from(path.join("head"))?;
+    let travel_time = Vec::load_from(path.join("travel_time"))?;
+    let lat = Vec::<f32>::load_from(path.join("latitude"))?;
+    let lng = Vec::<f32>::load_from(path.join("longitude"))?;
 
     let mut new_first_out = Vec::<u32>::new();
     let mut new_head = Vec::<u32>::new();

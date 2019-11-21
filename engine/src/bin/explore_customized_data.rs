@@ -7,8 +7,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &args.next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 
-    let mut first_out = Vec::<u32>::load_from(path.join("customized/incoming_first_source").to_str().unwrap())?;
-    let mut other_first_out = Vec::<u32>::load_from(path.join("customized/outgoing_first_source").to_str().unwrap())?;
+    let mut first_out = Vec::<u32>::load_from(path.join("customized/incoming_first_source"))?;
+    let mut other_first_out = Vec::<u32>::load_from(path.join("customized/outgoing_first_source"))?;
     let first_last = first_out.pop().unwrap();
     for idx in &mut other_first_out {
         *idx += first_last;

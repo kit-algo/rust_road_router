@@ -27,9 +27,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let query_dir = query_dir.ok_or(CliErr("No queries found"))?;
 
-    let from = Vec::<u32>::load_from(query_dir.join("source_node").to_str().unwrap())?;
-    let at = Vec::<u32>::load_from(query_dir.join("source_time").to_str().unwrap())?;
-    let to = Vec::<u32>::load_from(query_dir.join("target_node").to_str().unwrap())?;
+    let from = Vec::<u32>::load_from(query_dir.join("source_node"))?;
+    let at = Vec::<u32>::load_from(query_dir.join("source_time"))?;
+    let to = Vec::<u32>::load_from(query_dir.join("target_node"))?;
 
     for ((from, at), to) in from.into_iter().zip(at.into_iter()).zip(to.into_iter()) {
         if writeln!(stdout(), "{} {} {}", from, at, to).is_err() {

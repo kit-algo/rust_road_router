@@ -22,16 +22,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &args.next().ok_or(CliErr("No graph directory arg given"))?;
     let path = Path::new(arg);
 
-    let first_out = Vec::<NodeId>::load_from(path.join("first_out").to_str().unwrap())?;
-    let head = Vec::<EdgeId>::load_from(path.join("head").to_str().unwrap())?;
-    let mut travel_time = Vec::<EdgeId>::load_from(path.join("travel_time").to_str().unwrap())?;
+    let first_out = Vec::<NodeId>::load_from(path.join("first_out"))?;
+    let head = Vec::<EdgeId>::load_from(path.join("head"))?;
+    let mut travel_time = Vec::<EdgeId>::load_from(path.join("travel_time"))?;
     #[cfg(feature = "chpot_visualize")]
-    let lat = Vec::<f32>::load_from(path.join("latitude").to_str().unwrap())?;
+    let lat = Vec::<f32>::load_from(path.join("latitude"))?;
     #[cfg(feature = "chpot_visualize")]
-    let lng = Vec::<f32>::load_from(path.join("longitude").to_str().unwrap())?;
+    let lng = Vec::<f32>::load_from(path.join("longitude"))?;
     let mut live_travel_time = travel_time.clone();
-    let geo_distance = Vec::<EdgeId>::load_from(path.join("geo_distance").to_str().unwrap())?;
-    let osm_node_ids = Vec::<u64>::load_from(path.join("osm_node_ids").to_str().unwrap())?;
+    let geo_distance = Vec::<EdgeId>::load_from(path.join("geo_distance"))?;
+    let osm_node_ids = Vec::<u64>::load_from(path.join("osm_node_ids"))?;
 
     for ids in osm_node_ids.windows(2) {
         assert!(ids[0] < ids[1]);
@@ -90,7 +90,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     dbg!(total, found, too_fast);
 
-    let cch_order = Vec::load_from(path.join("cch_perm").to_str().unwrap())?;
+    let cch_order = Vec::load_from(path.join("cch_perm"))?;
     let cch_order = NodeOrder::from_node_order(cch_order);
 
     let cch = contract(&graph, cch_order.clone());
