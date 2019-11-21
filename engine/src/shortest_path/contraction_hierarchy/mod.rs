@@ -1,3 +1,4 @@
+use crate::shortest_path::stepped_dijkstra::Trash;
 use super::*;
 
 #[derive(Debug, PartialEq)]
@@ -88,24 +89,12 @@ impl ContractionGraph {
     }
 
     fn contract(&mut self) {
-        let mut graph = self.partial_graph();
-
-        while let Some((node, mut subgraph)) = graph.remove_lowest() {
-            for &(Link { node: from, weight: from_weight }, _) in &node.incoming {
-                for &(Link { node: to, weight: to_weight }, _) in &node.outgoing {
-                    if subgraph.shortcut_required(from, to, from_weight + to_weight) {
-                        let node_id = subgraph.id_offset - 1;
-                        subgraph.insert_or_decrease(from, to, from_weight + to_weight, node_id);
-                    }
-                }
-            }
-
-            graph = subgraph;
-        }
+        self.contract_partially(self.nodes.len())
     }
 
     fn contract_partially(&mut self, mut contraction_count: usize) {
         let mut graph = self.partial_graph();
+        let mut recycled = (SteppedDijkstra::new(ForwardWrapper { graph: &graph }).recycle(), SteppedDijkstra::new(BackwardWrapper { graph: &graph }).recycle());
 
         while let Some((node, mut subgraph)) = graph.remove_lowest() {
             if contraction_count == 0 {
@@ -115,7 +104,9 @@ impl ContractionGraph {
             }
             for &(Link { node: from, weight: from_weight }, _) in &node.incoming {
                 for &(Link { node: to, weight: to_weight }, _) in &node.outgoing {
-                    if subgraph.shortcut_required(from, to, from_weight + to_weight) {
+                    let (shortcut_required, new_recycled) = subgraph.shortcut_required(from, to, from_weight + to_weight, recycled);
+                    recycled = new_recycled;
+                    if shortcut_required {
                         let node_id = subgraph.id_offset - 1;
                         subgraph.insert_or_decrease(from, to, from_weight + to_weight, node_id);
                     }
@@ -186,22 +177,23 @@ impl<'a> PartialContractionGraph<'a> {
         out_result
     }
 
-    fn shortcut_required(&self, from: NodeId, to: NodeId, shortcut_weight: Weight) -> bool {
-        if from == to { return false }
+    fn shortcut_required(&self, from: NodeId, to: NodeId, shortcut_weight: Weight, recycled: (Trash, Trash)) -> (bool, (Trash, Trash)) {
+        if from == to { return (false, recycled) }
 
         let mut server = crate::shortest_path::query::bidirectional_dijkstra::Server {
-            forward_dijkstra: SteppedDijkstra::new(ForwardWrapper { graph: &self }),
-            backward_dijkstra: SteppedDijkstra::new(BackwardWrapper { graph: &self }),
+            forward_dijkstra: SteppedDijkstra::from_recycled(ForwardWrapper { graph: &self }, recycled.0),
+            backward_dijkstra: SteppedDijkstra::from_recycled(BackwardWrapper { graph: &self }, recycled.1),
             tentative_distance: INFINITY,
-            maximum_distance: shortcut_weight,
             meeting_node: 0
         };
 
-        match server.distance(from - self.id_offset, to - self.id_offset) {
+        let res = match server.distance_with_cap(from - self.id_offset, to - self.id_offset, shortcut_weight) {
             Some(length) if length < shortcut_weight => false,
             Some(_) => true,
             None => true,
-        }
+        };
+
+        (res, (server.forward_dijkstra.recycle(), server.backward_dijkstra.recycle()))
     }
 }
 

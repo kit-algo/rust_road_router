@@ -36,6 +36,13 @@ impl Indexing for State {
 }
 
 #[derive(Debug)]
+pub struct Trash {
+    distances: TimestampedVector<Weight>,
+    predecessors: Vec<NodeId>,
+    closest_node_priority_queue: IndexdMinHeap<State>,
+}
+
+#[derive(Debug)]
 pub struct SteppedDijkstra<Graph: for<'a> LinkIterGraph<'a>> {
     graph: Graph,
     distances: TimestampedVector<Weight>,
@@ -57,6 +64,22 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
             distances: TimestampedVector::new(n, INFINITY),
             predecessors: vec![n as NodeId; n],
             closest_node_priority_queue: IndexdMinHeap::new(n),
+            query: None,
+            result: None
+        }
+    }
+
+    pub fn from_recycled(graph: Graph, recycled: Trash) -> SteppedDijkstra<Graph> {
+        let n = graph.num_nodes();
+        assert!(recycled.distances.len() >= n);
+        assert!(recycled.predecessors.len() >= n);
+
+        SteppedDijkstra {
+            graph,
+            // initialize tentative distances to INFINITY
+            distances: recycled.distances,
+            predecessors: recycled.predecessors,
+            closest_node_priority_queue: recycled.closest_node_priority_queue,
             query: None,
             result: None
         }
@@ -151,5 +174,13 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
 
     pub fn queue(&self) -> &IndexdMinHeap<State> {
         &self.closest_node_priority_queue
+    }
+
+    pub fn recycle(self) -> Trash {
+        Trash {
+            distances: self.distances,
+            predecessors: self.predecessors,
+            closest_node_priority_queue: self.closest_node_priority_queue,
+        }
     }
 }

@@ -34,6 +34,10 @@ impl<T: Clone> TimestampedVector<T> {
         self.data[index] = value;
         self.timestamps[index] = self.current;
     }
+
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
 }
 
 impl<T: Clone> Index<usize> for TimestampedVector<T> {
