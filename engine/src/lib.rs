@@ -18,18 +18,17 @@ macro_rules! dbg_each {
 pub mod report;
 pub mod benchmark;
 pub mod cli;
+pub mod datastr;
 pub mod export;
 pub mod graph;
 pub mod import;
 pub mod io;
 pub mod link_speed_estimates;
-pub mod rank_select_map;
 pub mod shortest_path;
 
 mod as_mut_slice;
 mod as_slice;
 mod in_range_option;
-mod index_heap;
 mod math;
 mod sorted_search_slice_ext;
 mod util;

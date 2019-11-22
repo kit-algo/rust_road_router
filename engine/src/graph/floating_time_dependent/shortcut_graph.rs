@@ -1,8 +1,8 @@
 use super::*;
+use crate::datastr::clearlist_vector::ClearlistVector;
+use crate::datastr::rank_select_map::*;
 use crate::graph::first_out_graph::degrees_to_first_out;
 use crate::io::*;
-use crate::rank_select_map::*;
-use crate::shortest_path::clearlist_vector::ClearlistVector;
 use crate::util::*;
 use std::cmp::min;
 use std::mem::swap;

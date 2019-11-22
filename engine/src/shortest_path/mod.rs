@@ -1,12 +1,10 @@
 use crate::graph::*;
 
-pub mod clearlist_vector;
 mod floating_td_stepped_dijkstra;
 mod floating_td_stepped_elimination_tree;
 pub mod stepped_dijkstra;
 mod stepped_elimination_tree;
 mod td_stepped_dijkstra;
-pub mod timestamped_vector;
 
 use self::stepped_dijkstra::{QueryProgress, State, SteppedDijkstra};
 

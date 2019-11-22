@@ -1,9 +1,9 @@
 use bmw_routing_engine::{
     benchmark::*,
     cli::CliErr,
+    datastr::rank_select_map::*,
     graph::*,
     io::*,
-    rank_select_map::*,
     shortest_path::{
         customizable_contraction_hierarchy::*, node_order::NodeOrder, query::customizable_contraction_hierarchy::Server, query::topocore::Server as TopoServer,
         topocore::*,

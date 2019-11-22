@@ -1,11 +1,11 @@
 use super::stepped_elimination_tree::SteppedEliminationTree;
 use super::td_stepped_dijkstra::QueryProgress;
 use super::*;
+use crate::datastr::timestamped_vector::TimestampedVector;
 use crate::graph::time_dependent::*;
 use crate::in_range_option::InRangeOption;
 use crate::shortest_path::customizable_contraction_hierarchy::*;
 use crate::shortest_path::td_stepped_dijkstra::TDSteppedDijkstra;
-use crate::shortest_path::timestamped_vector::TimestampedVector;
 
 #[derive(Debug)]
 pub struct Server<'a> {

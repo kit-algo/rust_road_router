@@ -1,9 +1,9 @@
 use super::stepped_elimination_tree::SteppedEliminationTree;
 use super::*;
+use crate::datastr::timestamped_vector::TimestampedVector;
 use crate::in_range_option::InRangeOption;
 use crate::shortest_path::customizable_contraction_hierarchy::*;
 use crate::shortest_path::node_order::NodeOrder;
-use crate::shortest_path::timestamped_vector::TimestampedVector;
 
 #[derive(Debug)]
 pub struct Server<'a> {

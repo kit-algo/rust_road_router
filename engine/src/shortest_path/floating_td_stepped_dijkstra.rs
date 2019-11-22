@@ -1,7 +1,6 @@
-use self::timestamped_vector::TimestampedVector;
 use super::*;
+use crate::datastr::{index_heap::*, timestamped_vector::*};
 use crate::graph::floating_time_dependent::*;
-use crate::index_heap::{IndexdMinHeap, Indexing};
 
 #[derive(Debug, Clone)]
 pub enum QueryProgress {
