@@ -1,8 +1,8 @@
 use super::stepped_dijkstra::QueryProgress;
 use super::*;
+use crate::algo::customizable_contraction_hierarchy::CCH;
 use crate::as_slice::AsSlice;
 use crate::datastr::timestamped_vector::TimestampedVector;
-use crate::shortest_path::customizable_contraction_hierarchy::CCH;
 use crate::util::in_range_option::InRangeOption;
 
 #[derive(Debug)]

@@ -1,10 +1,10 @@
 use std::{env, error::Error, path::Path};
 
 use bmw_routing_engine::{
+    algo::{customizable_contraction_hierarchy, query::time_dependent_sampling::Server},
     cli::CliErr,
     datastr::{graph::time_dependent::*, node_order::NodeOrder},
     io::Load,
-    shortest_path::{customizable_contraction_hierarchy, query::time_dependent_sampling::Server},
 };
 
 fn main() -> Result<(), Box<dyn Error>> {

@@ -1,14 +1,14 @@
 use std::{env, error::Error, path::Path};
 
 use bmw_routing_engine::{
+    algo::{
+        customizable_contraction_hierarchy::*,
+        query::{td_astar::Server, td_dijkstra::Server as DijkServer},
+    },
     cli::CliErr,
     datastr::{graph::time_dependent::*, node_order::NodeOrder},
     io::*,
     report::benchmark::*,
-    shortest_path::{
-        customizable_contraction_hierarchy::*,
-        query::{td_astar::Server, td_dijkstra::Server as DijkServer},
-    },
 };
 
 use time::Duration;

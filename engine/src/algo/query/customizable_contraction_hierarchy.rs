@@ -1,6 +1,6 @@
 use super::stepped_elimination_tree::SteppedEliminationTree;
 use super::*;
-use crate::shortest_path::customizable_contraction_hierarchy::*;
+use crate::algo::customizable_contraction_hierarchy::*;
 
 #[derive(Debug)]
 pub struct Server<'a> {

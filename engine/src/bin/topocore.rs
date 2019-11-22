@@ -3,16 +3,16 @@ use std::{env, error::Error, path::Path};
 use time::Duration;
 
 use bmw_routing_engine::{
-    cli::CliErr,
-    datastr::{graph::*, node_order::*},
-    io::Load,
-    report::benchmark::*,
-    shortest_path::{
+    algo::{
         customizable_contraction_hierarchy::*,
         query::topocore::Server as TopoServer,
         // query::dijkstra::Server as DijkServer,
         topocore::preprocess,
     },
+    cli::CliErr,
+    datastr::{graph::*, node_order::*},
+    io::Load,
+    report::benchmark::*,
 };
 
 fn main() -> Result<(), Box<dyn Error>> {

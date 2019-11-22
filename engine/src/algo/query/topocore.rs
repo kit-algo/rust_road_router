@@ -1,8 +1,8 @@
 use super::stepped_elimination_tree::SteppedEliminationTree;
 use super::*;
+use crate::algo::customizable_contraction_hierarchy::*;
 use crate::datastr::node_order::NodeOrder;
 use crate::datastr::timestamped_vector::TimestampedVector;
-use crate::shortest_path::customizable_contraction_hierarchy::*;
 use crate::util::in_range_option::InRangeOption;
 
 #[derive(Debug)]
@@ -22,7 +22,7 @@ pub struct Server<'a> {
 }
 
 impl<'a> Server<'a> {
-    pub fn new<Graph>(topocore: crate::shortest_path::topocore::Topocore, cch: &'a CCH, lower_bound: &Graph) -> Server<'a>
+    pub fn new<Graph>(topocore: crate::algo::topocore::Topocore, cch: &'a CCH, lower_bound: &Graph) -> Server<'a>
     where
         Graph: for<'b> LinkIterGraph<'b> + RandomLinkAccessGraph + Sync,
     {

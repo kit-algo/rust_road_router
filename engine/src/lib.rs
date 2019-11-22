@@ -16,13 +16,13 @@ macro_rules! dbg_each {
 
 #[macro_use]
 pub mod report;
+pub mod algo;
 pub mod cli;
 pub mod datastr;
 pub mod export;
 pub mod import;
 pub mod io;
 pub mod link_speed_estimates;
-pub mod shortest_path;
 
 mod as_mut_slice;
 mod as_slice;

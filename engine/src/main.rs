@@ -1,14 +1,14 @@
 use std::{env, error::Error, path::Path, sync::Arc};
 
 use bmw_routing_engine::{
+    algo::{
+        contraction_hierarchy,
+        query::{bidirectional_dijkstra::Server as BiDijkServer, contraction_hierarchy::Server as CHServer, dijkstra::Server as DijkServer},
+    },
     cli::CliErr,
     datastr::graph::{first_out_graph::OwnedGraph as Graph, *},
     io::Load,
     report::benchmark::report_time,
-    shortest_path::{
-        contraction_hierarchy,
-        query::{bidirectional_dijkstra::Server as BiDijkServer, contraction_hierarchy::Server as CHServer, dijkstra::Server as DijkServer},
-    },
 };
 
 fn main() -> Result<(), Box<dyn Error>> {

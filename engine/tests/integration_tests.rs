@@ -1,8 +1,8 @@
 extern crate bmw_routing_engine;
 
 use bmw_routing_engine::{
+    algo::query::{bidirectional_dijkstra::Server as BiDijkServer, dijkstra::Server as DijkServer},
     datastr::graph::*,
-    shortest_path::query::{bidirectional_dijkstra::Server as BiDijkServer, dijkstra::Server as DijkServer},
 };
 
 fn graph() -> OwnedGraph {

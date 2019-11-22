@@ -1,5 +1,5 @@
 use super::*;
-use crate::shortest_path::stepped_dijkstra::Trash;
+use crate::algo::stepped_dijkstra::Trash;
 
 #[derive(Debug, PartialEq)]
 enum ShortcutResult {
@@ -221,7 +221,7 @@ impl<'a> PartialContractionGraph<'a> {
             return (false, recycled);
         }
 
-        let mut server = crate::shortest_path::query::bidirectional_dijkstra::Server {
+        let mut server = crate::algo::query::bidirectional_dijkstra::Server {
             forward_dijkstra: SteppedDijkstra::from_recycled(ForwardWrapper { graph: &self }, recycled.0),
             backward_dijkstra: SteppedDijkstra::from_recycled(BackwardWrapper { graph: &self }, recycled.1),
             tentative_distance: INFINITY,

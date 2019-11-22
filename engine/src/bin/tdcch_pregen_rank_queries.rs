@@ -3,6 +3,7 @@ use std::{env, error::Error, path::Path};
 #[macro_use]
 extern crate bmw_routing_engine;
 use bmw_routing_engine::{
+    algo::{customizable_contraction_hierarchy::*, query::floating_td_customizable_contraction_hierarchy::Server},
     cli::CliErr,
     datastr::{
         graph::{
@@ -13,7 +14,6 @@ use bmw_routing_engine::{
     },
     io::*,
     report::*,
-    shortest_path::{customizable_contraction_hierarchy::*, query::floating_td_customizable_contraction_hierarchy::Server},
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
