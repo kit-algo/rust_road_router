@@ -2,7 +2,7 @@ use std::{env, error::Error, path::Path};
 
 use bmw_routing_engine::{
     cli::CliErr,
-    graph::*,
+    datastr::graph::*,
     io::Load,
     shortest_path::{stepped_dijkstra::*, Query},
 };

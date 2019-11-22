@@ -1,4 +1,8 @@
-use bmw_routing_engine::{cli::CliErr, datastr::rank_select_map::*, graph::*, io::*};
+use bmw_routing_engine::{
+    cli::CliErr,
+    datastr::{graph::*, rank_select_map::*},
+    io::*,
+};
 use std::{env, error::Error, fs::File, path::Path};
 
 use csv::ReaderBuilder;

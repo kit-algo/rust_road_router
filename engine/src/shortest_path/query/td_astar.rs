@@ -1,8 +1,8 @@
 use super::stepped_elimination_tree::SteppedEliminationTree;
 use super::td_stepped_dijkstra::QueryProgress;
 use super::*;
+use crate::datastr::graph::time_dependent::*;
 use crate::datastr::timestamped_vector::TimestampedVector;
-use crate::graph::time_dependent::*;
 use crate::shortest_path::customizable_contraction_hierarchy::*;
 use crate::shortest_path::td_stepped_dijkstra::TDSteppedDijkstra;
 use crate::util::in_range_option::InRangeOption;

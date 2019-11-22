@@ -5,10 +5,12 @@ extern crate bmw_routing_engine;
 use bmw_routing_engine::{
     benchmark::*,
     cli::CliErr,
-    datastr::node_order::NodeOrder,
-    graph::{
-        floating_time_dependent::{shortcut_graph::CustomizedGraphReconstrctor, *},
-        *,
+    datastr::{
+        graph::{
+            floating_time_dependent::{shortcut_graph::CustomizedGraphReconstrctor, *},
+            *,
+        },
+        node_order::NodeOrder,
     },
     io::*,
     report::*,

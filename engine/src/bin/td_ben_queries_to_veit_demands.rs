@@ -1,6 +1,6 @@
 use std::{env, error::Error, fs::File, io::prelude::*, path::Path};
 
-use bmw_routing_engine::{cli::CliErr, graph::INFINITY, io::*};
+use bmw_routing_engine::{cli::CliErr, datastr::graph::INFINITY, io::*};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args();

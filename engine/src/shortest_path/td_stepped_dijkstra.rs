@@ -1,6 +1,6 @@
 use super::*;
+use crate::datastr::graph::time_dependent::TDGraph;
 use crate::datastr::{index_heap::*, timestamped_vector::*};
-use crate::graph::time_dependent::TDGraph;
 
 #[derive(Debug, Clone)]
 pub enum QueryProgress {

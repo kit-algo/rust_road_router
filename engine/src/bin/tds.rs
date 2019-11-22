@@ -2,8 +2,7 @@ use std::{env, error::Error, path::Path};
 
 use bmw_routing_engine::{
     cli::CliErr,
-    datastr::node_order::NodeOrder,
-    graph::time_dependent::*,
+    datastr::{graph::time_dependent::*, node_order::NodeOrder},
     io::Load,
     shortest_path::{customizable_contraction_hierarchy, query::time_dependent_sampling::Server},
 };

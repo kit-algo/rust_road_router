@@ -1,6 +1,6 @@
 use super::floating_td_stepped_dijkstra::{QueryProgress, State};
 use super::*;
-use crate::graph::floating_time_dependent::*;
+use crate::datastr::graph::floating_time_dependent::*;
 use crate::report::*;
 use crate::shortest_path::floating_td_stepped_dijkstra::FloatingTDSteppedDijkstra;
 

@@ -1,6 +1,6 @@
 use super::*;
-use crate::graph::time_dependent::period as int_period;
-use crate::graph::Graph as GraphTrait;
+use crate::datastr::graph::time_dependent::period as int_period;
+use crate::datastr::graph::Graph as GraphTrait;
 
 type IPPIndex = u32;
 

@@ -1,5 +1,5 @@
-use crate::graph::time_dependent::period;
-use crate::graph::time_dependent::*;
+use crate::datastr::graph::time_dependent::period;
+use crate::datastr::graph::time_dependent::*;
 use std::ops::Range;
 
 #[derive(Debug)]

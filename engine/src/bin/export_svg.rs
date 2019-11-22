@@ -1,4 +1,4 @@
-use bmw_routing_engine::{cli::CliErr, graph::*, io::*};
+use bmw_routing_engine::{cli::CliErr, datastr::graph::*, io::*};
 use std::{env, error::Error, path::Path};
 
 fn main() -> Result<(), Box<dyn Error>> {

@@ -1,5 +1,5 @@
 use super::*;
-use crate::graph::Graph as GraphTrait;
+use crate::datastr::graph::Graph as GraphTrait;
 
 type IPPIndex = u32;
 

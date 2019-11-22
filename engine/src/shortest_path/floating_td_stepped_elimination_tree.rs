@@ -1,6 +1,6 @@
 use super::*;
-use crate::graph::floating_time_dependent::SingleDirBoundsGraph;
-use crate::graph::floating_time_dependent::*;
+use crate::datastr::graph::floating_time_dependent::SingleDirBoundsGraph;
+use crate::datastr::graph::floating_time_dependent::*;
 use crate::util::in_range_option::InRangeOption;
 use std::cmp::min;
 

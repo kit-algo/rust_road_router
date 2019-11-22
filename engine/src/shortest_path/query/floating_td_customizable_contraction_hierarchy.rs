@@ -8,9 +8,9 @@ use super::*;
 #[cfg(feature = "tdcch-query-detailed-timing")]
 use crate::benchmark::Timer;
 use crate::datastr::clearlist_vector::ClearlistVector;
+use crate::datastr::graph::floating_time_dependent::*;
 use crate::datastr::index_heap::{IndexdMinHeap, Indexing};
 use crate::datastr::rank_select_map::{BitVec, FastClearBitVec};
-use crate::graph::floating_time_dependent::*;
 use crate::shortest_path::customizable_contraction_hierarchy::CCH;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Ord, PartialOrd)]

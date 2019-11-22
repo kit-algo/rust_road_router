@@ -5,8 +5,7 @@ use time::Duration;
 use bmw_routing_engine::{
     benchmark::*,
     cli::CliErr,
-    datastr::node_order::*,
-    graph::*,
+    datastr::{graph::*, node_order::*},
     io::Load,
     shortest_path::{
         customizable_contraction_hierarchy::*,

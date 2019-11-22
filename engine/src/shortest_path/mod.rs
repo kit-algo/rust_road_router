@@ -1,4 +1,4 @@
-use crate::graph::*;
+use crate::datastr::graph::*;
 
 mod floating_td_stepped_dijkstra;
 mod floating_td_stepped_elimination_tree;
@@ -30,5 +30,5 @@ pub struct TDQuery {
 pub struct FlTDQuery {
     from: NodeId,
     to: NodeId,
-    departure_time: crate::graph::floating_time_dependent::Timestamp,
+    departure_time: crate::datastr::graph::floating_time_dependent::Timestamp,
 }

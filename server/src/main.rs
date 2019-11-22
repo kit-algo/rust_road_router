@@ -23,9 +23,11 @@ use kdtree::kdtree::{Kdtree, KdtreePointTrait};
 use bmw_routing_engine::{
     benchmark::report_time,
     cli::CliErr,
-    datastr::node_order::NodeOrder,
-    datastr::rank_select_map::*,
-    graph::{link_id_to_tail_mapper::*, *},
+    datastr::{
+        graph::{link_id_to_tail_mapper::*, *},
+        node_order::NodeOrder,
+        rank_select_map::*,
+    },
     import::here::link_id_mapper::*,
     io::*,
     shortest_path::{customizable_contraction_hierarchy, query::customizable_contraction_hierarchy::Server},

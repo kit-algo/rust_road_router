@@ -3,8 +3,7 @@ use std::{env, error::Error, path::Path};
 use bmw_routing_engine::{
     benchmark::*,
     cli::CliErr,
-    datastr::node_order::NodeOrder,
-    graph::time_dependent::*,
+    datastr::{graph::time_dependent::*, node_order::NodeOrder},
     io::*,
     shortest_path::{
         customizable_contraction_hierarchy::*,

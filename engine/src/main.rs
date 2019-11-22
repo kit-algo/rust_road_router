@@ -3,7 +3,7 @@ use std::{env, error::Error, path::Path, sync::Arc};
 use bmw_routing_engine::{
     benchmark::report_time,
     cli::CliErr,
-    graph::{first_out_graph::OwnedGraph as Graph, *},
+    datastr::graph::{first_out_graph::OwnedGraph as Graph, *},
     io::Load,
     shortest_path::{
         contraction_hierarchy,

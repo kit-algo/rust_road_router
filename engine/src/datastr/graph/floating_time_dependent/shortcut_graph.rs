@@ -1,7 +1,7 @@
 use super::*;
 use crate::datastr::clearlist_vector::ClearlistVector;
+use crate::datastr::graph::first_out_graph::degrees_to_first_out;
 use crate::datastr::rank_select_map::*;
-use crate::graph::first_out_graph::degrees_to_first_out;
 use crate::io::*;
 use crate::util::*;
 use std::cmp::min;

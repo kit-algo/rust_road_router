@@ -20,7 +20,6 @@ pub mod benchmark;
 pub mod cli;
 pub mod datastr;
 pub mod export;
-pub mod graph;
 pub mod import;
 pub mod io;
 pub mod link_speed_estimates;

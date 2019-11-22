@@ -1,5 +1,5 @@
+use crate::datastr::graph::*;
 use crate::datastr::rank_select_map::{BitVec, RankSelectMap};
-use crate::graph::*;
 use crate::util::in_range_option::*;
 use std::error::Error;
 use std::fmt;

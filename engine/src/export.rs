@@ -1,4 +1,4 @@
-use crate::graph::*;
+use crate::datastr::graph::*;
 use std::fs::File;
 use std::io::{Result, Write};
 

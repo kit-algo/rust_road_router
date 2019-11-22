@@ -1,5 +1,5 @@
 use super::*;
-use crate::{benchmark::report_time, graph::first_out_graph::degrees_to_first_out, report::*};
+use crate::{benchmark::report_time, datastr::graph::first_out_graph::degrees_to_first_out, report::*};
 use std::{
     cmp::Ordering,
     ops::{Index, IndexMut},
