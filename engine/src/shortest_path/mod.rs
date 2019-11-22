@@ -10,7 +10,6 @@ use self::stepped_dijkstra::{QueryProgress, State, SteppedDijkstra};
 
 pub mod contraction_hierarchy;
 pub mod customizable_contraction_hierarchy;
-pub mod node_order;
 pub mod query;
 pub mod topocore;
 

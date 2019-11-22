@@ -3,9 +3,10 @@ use std::{env, error::Error, path::Path};
 use bmw_routing_engine::{
     benchmark::report_time,
     cli::CliErr,
+    datastr::node_order::NodeOrder,
     graph::*,
     io::Load,
-    shortest_path::{customizable_contraction_hierarchy::*, node_order::NodeOrder, query::customizable_contraction_hierarchy::Server},
+    shortest_path::{customizable_contraction_hierarchy::*, query::customizable_contraction_hierarchy::Server},
 };
 
 fn main() -> Result<(), Box<dyn Error>> {

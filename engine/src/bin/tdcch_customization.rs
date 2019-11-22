@@ -4,10 +4,11 @@ use std::{env, error::Error, path::Path};
 extern crate bmw_routing_engine;
 use bmw_routing_engine::{
     cli::CliErr,
+    datastr::node_order::NodeOrder,
     graph::{floating_time_dependent::*, *},
     io::*,
     report::*,
-    shortest_path::{customizable_contraction_hierarchy::*, node_order::NodeOrder},
+    shortest_path::customizable_contraction_hierarchy::*,
 };
 
 fn main() -> Result<(), Box<dyn Error>> {

@@ -1,4 +1,4 @@
-use super::*;
+use crate::graph::*;
 use crate::io::*;
 
 pub type Rank = NodeId;

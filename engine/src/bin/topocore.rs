@@ -5,11 +5,11 @@ use time::Duration;
 use bmw_routing_engine::{
     benchmark::*,
     cli::CliErr,
+    datastr::node_order::*,
     graph::*,
     io::Load,
     shortest_path::{
         customizable_contraction_hierarchy::*,
-        node_order::*,
         query::topocore::Server as TopoServer,
         // query::dijkstra::Server as DijkServer,
         topocore::preprocess,

@@ -3,11 +3,11 @@ use std::{env, error::Error, path::Path};
 use bmw_routing_engine::{
     benchmark::*,
     cli::CliErr,
+    datastr::node_order::NodeOrder,
     graph::time_dependent::*,
     io::*,
     shortest_path::{
         customizable_contraction_hierarchy::*,
-        node_order::NodeOrder,
         query::{td_astar::Server, td_dijkstra::Server as DijkServer},
     },
 };

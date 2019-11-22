@@ -1,7 +1,7 @@
 use super::*;
+use crate::datastr::node_order::NodeOrder;
 use crate::datastr::rank_select_map::*;
 use crate::in_range_option::InRangeOption;
-use crate::shortest_path::node_order::NodeOrder;
 use crate::util::TapOps;
 use std::cmp::{max, min};
 

@@ -2,13 +2,7 @@ use std::{env, error::Error, path::Path};
 
 #[macro_use]
 extern crate bmw_routing_engine;
-use bmw_routing_engine::{
-    cli::CliErr,
-    graph::*,
-    io::*,
-    report::*,
-    shortest_path::{customizable_contraction_hierarchy::*, node_order::NodeOrder},
-};
+use bmw_routing_engine::{cli::CliErr, datastr::node_order::NodeOrder, graph::*, io::*, report::*, shortest_path::customizable_contraction_hierarchy::*};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting();

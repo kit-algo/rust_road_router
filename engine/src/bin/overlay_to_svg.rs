@@ -1,11 +1,6 @@
 use std::{env, error::Error, path::Path};
 
-use bmw_routing_engine::{
-    cli::CliErr,
-    graph::*,
-    io::Load,
-    shortest_path::{contraction_hierarchy, node_order::*},
-};
+use bmw_routing_engine::{cli::CliErr, datastr::node_order::*, graph::*, io::Load, shortest_path::contraction_hierarchy};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args();
