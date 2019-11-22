@@ -1,8 +1,6 @@
-use super::td_stepped_dijkstra::QueryProgress;
 use super::*;
-use crate::algo::customizable_contraction_hierarchy::CCH;
-use crate::algo::query::customizable_contraction_hierarchy::Server as CCHServer;
-use crate::algo::td_stepped_dijkstra::TDSteppedDijkstra;
+use crate::algo::customizable_contraction_hierarchy::{query::Server as CCHServer, CCH};
+use crate::algo::dijkstra::td_stepped_dijkstra::{QueryProgress, TDSteppedDijkstra};
 use crate::datastr::graph::time_dependent::*;
 use crate::datastr::graph::RandomLinkAccessGraph;
 use crate::datastr::timestamped_vector::TimestampedVector;

@@ -1,6 +1,6 @@
-use super::stepped_elimination_tree::SteppedEliminationTree;
 use super::*;
-use crate::algo::customizable_contraction_hierarchy::*;
+pub mod stepped_elimination_tree;
+use stepped_elimination_tree::SteppedEliminationTree;
 
 #[derive(Debug)]
 pub struct Server<'a> {

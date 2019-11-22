@@ -1,5 +1,9 @@
 use bmw_routing_engine::{
-    algo::{customizable_contraction_hierarchy::*, query::customizable_contraction_hierarchy::Server, query::topocore::Server as TopoServer, topocore::*},
+    algo::{
+        ch_potentials::query::Server as TopoServer,
+        customizable_contraction_hierarchy::{query::Server, *},
+        topocore::*,
+    },
     cli::CliErr,
     datastr::{graph::*, node_order::NodeOrder, rank_select_map::*},
     io::*,

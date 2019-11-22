@@ -16,6 +16,7 @@ mod separator_decomposition;
 use separator_decomposition::*;
 mod reorder;
 pub use reorder::*;
+pub mod query;
 
 pub fn contract<Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph>(graph: &Graph, node_order: NodeOrder) -> CCH {
     CCH::new(ContractionGraph::new(graph, node_order).contract())

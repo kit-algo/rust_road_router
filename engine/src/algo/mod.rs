@@ -1,16 +1,13 @@
 use crate::datastr::graph::*;
 
-mod floating_td_stepped_dijkstra;
-mod floating_td_stepped_elimination_tree;
-pub mod stepped_dijkstra;
-mod stepped_elimination_tree;
-mod td_stepped_dijkstra;
+use self::dijkstra::stepped_dijkstra::{QueryProgress, State, SteppedDijkstra};
 
-use self::stepped_dijkstra::{QueryProgress, State, SteppedDijkstra};
-
+pub mod catchup;
+pub mod ch_potentials;
 pub mod contraction_hierarchy;
 pub mod customizable_contraction_hierarchy;
-pub mod query;
+pub mod dijkstra;
+pub mod time_dependent_sampling;
 pub mod topocore;
 
 #[derive(Debug, Clone, Copy)]

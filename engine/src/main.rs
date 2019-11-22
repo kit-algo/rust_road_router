@@ -2,8 +2,8 @@ use std::{env, error::Error, path::Path, sync::Arc};
 
 use bmw_routing_engine::{
     algo::{
-        contraction_hierarchy,
-        query::{bidirectional_dijkstra::Server as BiDijkServer, contraction_hierarchy::Server as CHServer, dijkstra::Server as DijkServer},
+        contraction_hierarchy::{self, query::Server as CHServer},
+        dijkstra::query::{bidirectional_dijkstra::Server as BiDijkServer, dijkstra::Server as DijkServer},
     },
     cli::CliErr,
     datastr::graph::{first_out_graph::OwnedGraph as Graph, *},

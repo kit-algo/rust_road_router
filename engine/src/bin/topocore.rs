@@ -4,8 +4,8 @@ use time::Duration;
 
 use bmw_routing_engine::{
     algo::{
+        ch_potentials::query::Server as TopoServer,
         customizable_contraction_hierarchy::*,
-        query::topocore::Server as TopoServer,
         // query::dijkstra::Server as DijkServer,
         topocore::preprocess,
     },

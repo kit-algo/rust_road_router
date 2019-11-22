@@ -1,4 +1,3 @@
-use super::stepped_dijkstra::QueryProgress;
 use super::*;
 use crate::algo::customizable_contraction_hierarchy::CCH;
 use crate::as_slice::AsSlice;

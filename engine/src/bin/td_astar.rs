@@ -1,10 +1,7 @@
 use std::{env, error::Error, path::Path};
 
 use bmw_routing_engine::{
-    algo::{
-        customizable_contraction_hierarchy::*,
-        query::{td_astar::Server, td_dijkstra::Server as DijkServer},
-    },
+    algo::{ch_potentials::td_astar::Server, customizable_contraction_hierarchy::*, dijkstra::query::td_dijkstra::Server as DijkServer},
     cli::CliErr,
     datastr::{graph::time_dependent::*, node_order::NodeOrder},
     io::*,

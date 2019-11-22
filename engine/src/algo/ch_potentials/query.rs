@@ -1,6 +1,5 @@
-use super::stepped_elimination_tree::SteppedEliminationTree;
 use super::*;
-use crate::algo::customizable_contraction_hierarchy::*;
+use crate::algo::customizable_contraction_hierarchy::{query::stepped_elimination_tree::SteppedEliminationTree, *};
 use crate::datastr::node_order::NodeOrder;
 use crate::datastr::timestamped_vector::TimestampedVector;
 use crate::util::in_range_option::InRangeOption;

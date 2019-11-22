@@ -1,6 +1,5 @@
-use super::floating_td_stepped_dijkstra::{QueryProgress, State};
 use super::*;
-use crate::algo::floating_td_stepped_dijkstra::FloatingTDSteppedDijkstra;
+use crate::algo::dijkstra::floating_td_stepped_dijkstra::{FloatingTDSteppedDijkstra, QueryProgress, State};
 use crate::datastr::graph::floating_time_dependent::*;
 use crate::report::*;
 

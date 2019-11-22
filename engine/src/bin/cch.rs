@@ -1,7 +1,7 @@
 use std::{env, error::Error, path::Path};
 
 use bmw_routing_engine::{
-    algo::{customizable_contraction_hierarchy::*, query::customizable_contraction_hierarchy::Server},
+    algo::customizable_contraction_hierarchy::{query::Server, *},
     cli::CliErr,
     datastr::{graph::*, node_order::NodeOrder},
     io::Load,

@@ -1,9 +1,10 @@
+use super::*;
 use crate::report::*;
 use crate::util::*;
 use std::cmp::*;
 
-use super::floating_td_stepped_elimination_tree::{QueryProgress, *};
-use super::*;
+mod floating_td_stepped_elimination_tree;
+use floating_td_stepped_elimination_tree::{QueryProgress, *};
 
 use crate::algo::customizable_contraction_hierarchy::CCH;
 #[cfg(feature = "tdcch-query-detailed-timing")]

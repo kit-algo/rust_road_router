@@ -1,7 +1,7 @@
 use std::{env, error::Error, path::Path};
 
 use bmw_routing_engine::{
-    algo::{stepped_dijkstra::*, Query},
+    algo::{dijkstra::stepped_dijkstra::*, Query},
     cli::CliErr,
     datastr::graph::*,
     io::Load,

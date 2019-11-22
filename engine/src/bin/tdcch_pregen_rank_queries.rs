@@ -3,7 +3,7 @@ use std::{env, error::Error, path::Path};
 #[macro_use]
 extern crate bmw_routing_engine;
 use bmw_routing_engine::{
-    algo::{customizable_contraction_hierarchy::*, query::floating_td_customizable_contraction_hierarchy::Server},
+    algo::{catchup::Server, customizable_contraction_hierarchy::*},
     cli::CliErr,
     datastr::{
         graph::{
