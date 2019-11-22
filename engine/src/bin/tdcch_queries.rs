@@ -3,7 +3,6 @@ use std::{env, error::Error, path::Path};
 #[macro_use]
 extern crate bmw_routing_engine;
 use bmw_routing_engine::{
-    benchmark::*,
     cli::CliErr,
     datastr::{
         graph::{

@@ -3,10 +3,10 @@ use std::{env, error::Error, path::Path};
 use time::Duration;
 
 use bmw_routing_engine::{
-    benchmark::*,
     cli::CliErr,
     datastr::{graph::*, node_order::*},
     io::Load,
+    report::benchmark::*,
     shortest_path::{
         customizable_contraction_hierarchy::*,
         query::topocore::Server as TopoServer,

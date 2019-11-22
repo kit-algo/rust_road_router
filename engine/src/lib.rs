@@ -16,7 +16,6 @@ macro_rules! dbg_each {
 
 #[macro_use]
 pub mod report;
-pub mod benchmark;
 pub mod cli;
 pub mod datastr;
 pub mod export;

@@ -1,4 +1,4 @@
-use crate::report::*;
+use super::*;
 use std::sync::atomic::{compiler_fence, Ordering::SeqCst};
 use time;
 

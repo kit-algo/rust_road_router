@@ -21,7 +21,6 @@ use rocket_contrib::json::Json;
 use kdtree::kdtree::{Kdtree, KdtreePointTrait};
 
 use bmw_routing_engine::{
-    benchmark::report_time,
     cli::CliErr,
     datastr::{
         graph::{link_id_to_tail_mapper::*, *},
@@ -30,6 +29,7 @@ use bmw_routing_engine::{
     },
     import::here::link_id_mapper::*,
     io::*,
+    report::report_time,
     shortest_path::{customizable_contraction_hierarchy, query::customizable_contraction_hierarchy::Server},
 };
 

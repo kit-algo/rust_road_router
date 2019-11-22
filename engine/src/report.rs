@@ -237,3 +237,6 @@ pub fn enable_reporting() -> ReportingGuard {
 
     ReportingGuard(())
 }
+
+pub mod benchmark;
+pub use benchmark::*;

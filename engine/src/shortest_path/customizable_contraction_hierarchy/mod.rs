@@ -1,8 +1,8 @@
 use super::*;
 use crate::{
-    benchmark::*,
     datastr::{graph::first_out_graph::degrees_to_first_out, node_order::NodeOrder},
     io::*,
+    report::benchmark::*,
     util::in_range_option::InRangeOption,
 };
 use std::ops::Range;
