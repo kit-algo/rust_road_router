@@ -1,7 +1,7 @@
 use super::*;
 use crate::graph::floating_time_dependent::SingleDirBoundsGraph;
 use crate::graph::floating_time_dependent::*;
-use crate::in_range_option::InRangeOption;
+use crate::util::in_range_option::InRangeOption;
 use std::cmp::min;
 
 #[derive(Debug, Clone)]

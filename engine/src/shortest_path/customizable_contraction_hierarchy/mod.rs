@@ -1,5 +1,5 @@
 use super::*;
-use crate::{benchmark::*, datastr::node_order::NodeOrder, graph::first_out_graph::degrees_to_first_out, in_range_option::InRangeOption, io::*};
+use crate::{benchmark::*, datastr::node_order::NodeOrder, graph::first_out_graph::degrees_to_first_out, io::*, util::in_range_option::InRangeOption};
 use std::ops::Range;
 
 mod contraction;

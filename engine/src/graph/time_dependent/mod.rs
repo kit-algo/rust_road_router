@@ -12,6 +12,9 @@ pub use self::graph::Graph as TDGraph;
 mod geometry;
 use self::geometry::*;
 
+mod math;
+mod sorted_search_slice_ext;
+
 pub type Timestamp = Weight;
 
 #[cfg(test)]

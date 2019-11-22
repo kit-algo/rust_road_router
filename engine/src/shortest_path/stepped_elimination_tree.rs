@@ -2,8 +2,8 @@ use super::stepped_dijkstra::QueryProgress;
 use super::*;
 use crate::as_slice::AsSlice;
 use crate::datastr::timestamped_vector::TimestampedVector;
-use crate::in_range_option::InRangeOption;
 use crate::shortest_path::customizable_contraction_hierarchy::CCH;
+use crate::util::in_range_option::InRangeOption;
 
 #[derive(Debug)]
 pub struct SteppedEliminationTree<'b, Graph: for<'a> LinkIterGraph<'a>> {

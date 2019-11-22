@@ -28,9 +28,6 @@ pub mod shortest_path;
 
 mod as_mut_slice;
 mod as_slice;
-mod in_range_option;
-mod math;
-mod sorted_search_slice_ext;
 mod util;
 
 // Use of a mod or pub mod is not actually necessary.

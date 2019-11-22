@@ -1,5 +1,7 @@
 use std::cmp::Ordering;
 
+pub mod in_range_option;
+
 pub trait Bool {
     const VALUE: bool;
 }

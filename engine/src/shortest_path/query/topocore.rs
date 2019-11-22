@@ -2,8 +2,8 @@ use super::stepped_elimination_tree::SteppedEliminationTree;
 use super::*;
 use crate::datastr::node_order::NodeOrder;
 use crate::datastr::timestamped_vector::TimestampedVector;
-use crate::in_range_option::InRangeOption;
 use crate::shortest_path::customizable_contraction_hierarchy::*;
+use crate::util::in_range_option::InRangeOption;
 
 #[derive(Debug)]
 pub struct Server<'a> {
