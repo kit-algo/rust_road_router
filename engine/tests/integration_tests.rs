@@ -1,7 +1,7 @@
 extern crate bmw_routing_engine;
 
 use bmw_routing_engine::{
-    algo::query::{bidirectional_dijkstra::Server as BiDijkServer, dijkstra::Server as DijkServer},
+    algo::dijkstra::query::{bidirectional_dijkstra::Server as BiDijkServer, dijkstra::Server as DijkServer},
     datastr::graph::*,
 };
 
