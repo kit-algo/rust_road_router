@@ -3,7 +3,7 @@ use std::{env, error::Error, path::Path};
 #[macro_use]
 extern crate bmw_routing_engine;
 use bmw_routing_engine::{
-    algo::{catchup::Server, customizable_contraction_hierarchy::*},
+    algo::{catchup::Server, customizable_contraction_hierarchy::*, *},
     cli::CliErr,
     datastr::{
         graph::{
@@ -88,18 +88,17 @@ fn main() -> Result<(), Box<dyn Error>> {
             let at = Timestamp::new(f64::from(at) / 1000.0);
 
             let _tdcch_query_ctxt = algo_runs_ctxt.push_collection_item();
-            let (ea, time) = measure(|| server.distance(from, to, at).map(|dist| dist + at));
+            let (result, time) = measure(|| server.query(TDQuery { from, to, departure: at }));
 
             report!("from", from);
             report!("to", to);
             report!("rank", rank);
             report!("departure_time", f64::from(at));
             report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-            if let Some(ea) = ea {
-                report!("earliest_arrival", f64::from(ea));
-            }
-            if ea.is_some() {
-                let (path, unpacking_duration) = measure(|| server.path());
+            if let Some(mut result) = result {
+                report!("earliest_arrival", f64::from(result.distance() + at));
+
+                let (path, unpacking_duration) = measure(|| result.path());
                 report!("num_nodes_on_shortest_path", path.len());
                 report!(
                     "unpacking_running_time_ms",

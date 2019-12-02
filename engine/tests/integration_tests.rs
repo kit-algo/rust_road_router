@@ -1,7 +1,10 @@
 extern crate bmw_routing_engine;
 
 use bmw_routing_engine::{
-    algo::dijkstra::query::{bidirectional_dijkstra::Server as BiDijkServer, dijkstra::Server as DijkServer},
+    algo::{
+        dijkstra::query::{bidirectional_dijkstra::Server as BiDijkServer, dijkstra::Server as DijkServer},
+        *,
+    },
     datastr::graph::*,
 };
 
@@ -31,22 +34,22 @@ fn graph() -> OwnedGraph {
 fn simple_dijkstra_correct_distances() {
     let mut server = DijkServer::new(graph());
 
-    assert_eq!(server.distance(0, 1), Some(1));
-    assert_eq!(server.distance(0, 3), Some(3));
-    assert_eq!(server.distance(3, 0), Some(7));
-    assert_eq!(server.distance(0, 4), Some(5));
-    assert_eq!(server.distance(4, 0), None);
+    assert_eq!(server.query(Query { from: 0, to: 1 }).map(|res| res.distance()), Some(1));
+    assert_eq!(server.query(Query { from: 0, to: 3 }).map(|res| res.distance()), Some(3));
+    assert_eq!(server.query(Query { from: 3, to: 0 }).map(|res| res.distance()), Some(7));
+    assert_eq!(server.query(Query { from: 0, to: 4 }).map(|res| res.distance()), Some(5));
+    assert_eq!(server.query(Query { from: 4, to: 0 }).map(|res| res.distance()), None);
 }
 
 #[test]
 fn bidir_dijkstra_correct_distances() {
     let mut server = BiDijkServer::new(graph());
 
-    assert_eq!(server.distance(0, 1), Some(1));
-    assert_eq!(server.distance(0, 3), Some(3));
-    assert_eq!(server.distance(3, 0), Some(7));
-    assert_eq!(server.distance(0, 4), Some(5));
-    assert_eq!(server.distance(4, 0), None);
+    assert_eq!(server.query(Query { from: 0, to: 1 }).map(|res| res.distance()), Some(1));
+    assert_eq!(server.query(Query { from: 0, to: 3 }).map(|res| res.distance()), Some(3));
+    assert_eq!(server.query(Query { from: 3, to: 0 }).map(|res| res.distance()), Some(7));
+    assert_eq!(server.query(Query { from: 0, to: 4 }).map(|res| res.distance()), Some(5));
+    assert_eq!(server.query(Query { from: 4, to: 0 }).map(|res| res.distance()), None);
 }
 
 #[test]
@@ -56,5 +59,5 @@ fn bidir_dijkstra_stopping_crit() {
     let weight = vec![4, 7, 13, 4, 4, 7];
     let mut server = BiDijkServer::new(OwnedGraph::new(first_out, head, weight));
 
-    assert_eq!(server.distance(0, 4), Some(12));
+    assert_eq!(server.query(Query { from: 0, to: 4 }).map(|res| res.distance()), Some(12));
 }

@@ -17,15 +17,42 @@ pub struct Query {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct TDQuery {
-    from: NodeId,
-    to: NodeId,
-    departure_time: Weight,
+pub struct TDQuery<T: Copy> {
+    pub from: NodeId,
+    pub to: NodeId,
+    pub departure: T,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct FlTDQuery {
-    from: NodeId,
-    to: NodeId,
-    departure_time: crate::datastr::graph::floating_time_dependent::Timestamp,
+#[derive(Debug)]
+pub struct QueryResult<P, W> {
+    distance: W,
+    path_server: P,
+}
+
+impl<'s, P, W: Copy> QueryResult<P, W>
+where
+    P: PathServer<'s>,
+{
+    pub fn distance(&self) -> W {
+        self.distance
+    }
+
+    pub fn path(&'s mut self) -> Vec<P::NodeInfo> {
+        self.path_server.path()
+    }
+}
+
+pub trait QueryServer<'s> {
+    type P: PathServer<'s>;
+    fn query(&'s mut self, query: Query) -> Option<QueryResult<Self::P, Weight>>;
+}
+
+pub trait TDQueryServer<'s, T: Copy, W> {
+    type P: PathServer<'s>;
+    fn query(&'s mut self, query: TDQuery<T>) -> Option<QueryResult<Self::P, W>>;
+}
+
+pub trait PathServer<'s> {
+    type NodeInfo;
+    fn path(&'s mut self) -> Vec<Self::NodeInfo>;
 }

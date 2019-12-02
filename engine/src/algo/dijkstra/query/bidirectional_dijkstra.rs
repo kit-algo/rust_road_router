@@ -22,7 +22,7 @@ impl<G: for<'a> LinkIterGraph<'a>> Server<G, OwnedGraph> {
 }
 
 impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>> Server<G, H> {
-    pub fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
+    fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
         self.distance_with_cap(from, to, INFINITY)
     }
 
@@ -74,11 +74,7 @@ impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>> Server<G, H> {
         }
     }
 
-    pub fn is_in_searchspace(&self, node: NodeId) -> bool {
-        self.forward_dijkstra.tentative_distance(node) < INFINITY || self.backward_dijkstra.tentative_distance(node) < INFINITY
-    }
-
-    pub fn path(&self) -> Vec<NodeId> {
+    fn path(&self) -> Vec<NodeId> {
         let mut path = Vec::new();
         path.push(self.meeting_node);
 
@@ -95,5 +91,26 @@ impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>> Server<G, H> {
         }
 
         path
+    }
+}
+
+pub struct PathServerWrapper<'s, G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>>(&'s Server<G, H>);
+
+impl<'s, G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>> PathServer<'s> for PathServerWrapper<'s, G, H> {
+    type NodeInfo = NodeId;
+
+    fn path(&'s mut self) -> Vec<Self::NodeInfo> {
+        Server::path(self.0)
+    }
+}
+
+impl<'s, G: 's + for<'a> LinkIterGraph<'a>, H: 's + for<'a> LinkIterGraph<'a>> QueryServer<'s> for Server<G, H> {
+    type P = PathServerWrapper<'s, G, H>;
+
+    fn query(&'s mut self, query: Query) -> Option<QueryResult<Self::P, Weight>> {
+        self.distance(query.from, query.to).map(move |distance| QueryResult {
+            distance,
+            path_server: PathServerWrapper(self),
+        })
     }
 }

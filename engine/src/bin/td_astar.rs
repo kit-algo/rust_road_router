@@ -1,7 +1,7 @@
 use std::{env, error::Error, path::Path};
 
 use bmw_routing_engine::{
-    algo::{ch_potentials::td_astar::Server, customizable_contraction_hierarchy::*, dijkstra::query::td_dijkstra::Server as DijkServer},
+    algo::{ch_potentials::td_astar::Server, customizable_contraction_hierarchy::*, dijkstra::query::td_dijkstra::Server as DijkServer, *},
     cli::CliErr,
     datastr::{graph::time_dependent::*, node_order::NodeOrder},
     io::*,
@@ -93,7 +93,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut astar_time = Duration::zero();
 
         for ((from, to), at) in from.into_iter().zip(to.into_iter()).zip(at.into_iter()).take(num_queries) {
-            let (ground_truth, time) = measure(|| td_dijk_server.distance(from, to, at).map(|dist| dist + at));
+            let (ground_truth, time) = measure(|| td_dijk_server.query(TDQuery { from, to, departure: at }).map(|res| res.distance() + at));
 
             dijkstra_time = dijkstra_time + time;
 

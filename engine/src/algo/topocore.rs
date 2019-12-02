@@ -515,7 +515,7 @@ fn biconnected<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> Vec<Vec<(Node
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    // use super::*;
 
     // #[test]
     // fn test_minimal_chain() {

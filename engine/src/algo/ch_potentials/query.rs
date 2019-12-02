@@ -18,10 +18,21 @@ pub struct Server<'a> {
     potentials: TimestampedVector<InRangeOption<Weight>>,
     forward_elimination_tree: SteppedEliminationTree<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], Vec<Weight>>>,
     backward_elimination_tree: SteppedEliminationTree<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], Vec<Weight>>>,
+
+    #[cfg(feature = "chpot_visualize")]
+    lat: &[f32],
+    #[cfg(feature = "chpot_visualize")]
+    lng: &[f32],
 }
 
 impl<'a> Server<'a> {
-    pub fn new<Graph>(topocore: crate::algo::topocore::Topocore, cch: &'a CCH, lower_bound: &Graph) -> Server<'a>
+    pub fn new<Graph>(
+        topocore: crate::algo::topocore::Topocore,
+        cch: &'a CCH,
+        lower_bound: &Graph,
+        #[cfg(feature = "chpot_visualize")] lat: &[f32],
+        #[cfg(feature = "chpot_visualize")] lng: &[f32],
+    ) -> Server<'a>
     where
         Graph: for<'b> LinkIterGraph<'b> + RandomLinkAccessGraph + Sync,
     {
@@ -40,25 +51,24 @@ impl<'a> Server<'a> {
             forward_elimination_tree,
             backward_elimination_tree,
             potentials: TimestampedVector::new(cch.num_nodes(), InRangeOption::new(None)),
+
+            #[cfg(feature = "chpot_visualize")]
+            lat,
+            #[cfg(feature = "chpot_visualize")]
+            lng,
         }
     }
 
-    pub fn distance(
-        &mut self,
-        from: NodeId,
-        to: NodeId,
-        #[cfg(feature = "chpot_visualize")] lat: &[f32],
-        #[cfg(feature = "chpot_visualize")] lng: &[f32],
-    ) -> Option<Weight> {
+    fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
         #[cfg(feature = "chpot_visualize")]
         {
             println!(
                 "L.marker([{}, {}], {{ title: \"from\", icon: blackIcon }}).addTo(map);",
-                lat[from as usize], lng[from as usize]
+                self.lat[from as usize], self.lng[from as usize]
             );
             println!(
                 "L.marker([{}, {}], {{ title: \"from\", icon: blackIcon }}).addTo(map);",
-                lat[to as usize], lng[to as usize]
+                self.lat[to as usize], self.lng[to as usize]
             );
         };
 
@@ -112,7 +122,7 @@ impl<'a> Server<'a> {
                 let node = self.order.node(node);
                 println!(
                     "var marker = L.marker([{}, {}], {{ icon: redIcon }}).addTo(map);",
-                    lat[node as usize], lng[node as usize]
+                    self.lat[node as usize], self.lng[node as usize]
                 );
                 println!("marker.bindPopup(\"id: {}<br>distance: {}\");", node, _dist);
             };
@@ -141,7 +151,10 @@ impl<'a> Server<'a> {
             #[cfg(feature = "chpot_visualize")]
             {
                 let node_id = self.order.node(node) as usize;
-                println!("var marker = L.marker([{}, {}], {{ icon: blueIcon }}).addTo(map);", lat[node_id], lng[node_id]);
+                println!(
+                    "var marker = L.marker([{}, {}], {{ icon: blueIcon }}).addTo(map);",
+                    self.lat[node_id], self.lng[node_id]
+                );
                 println!(
                     "marker.bindPopup(\"id: {}<br>distance: {}<br>potential: {}\");",
                     node_id,
@@ -205,11 +218,7 @@ impl<'a> Server<'a> {
         potentials[node as usize].value().unwrap()
     }
 
-    pub fn is_in_searchspace(&self, node: NodeId) -> bool {
-        self.forward_dijkstra.tentative_distance(node) < INFINITY || self.backward_dijkstra.tentative_distance(node) < INFINITY
-    }
-
-    pub fn path(&self) -> Vec<NodeId> {
+    fn path(&self) -> Vec<NodeId> {
         let mut path = Vec::new();
         path.push(self.meeting_node);
 
@@ -239,5 +248,26 @@ impl<'a> Server<'a> {
         dbg!(non_core_nodes);
 
         path
+    }
+}
+
+pub struct PathServerWrapper<'s, 'a>(&'s Server<'a>);
+
+impl<'s, 'a> PathServer<'s> for PathServerWrapper<'s, 'a> {
+    type NodeInfo = NodeId;
+
+    fn path(&'s mut self) -> Vec<Self::NodeInfo> {
+        Server::path(self.0)
+    }
+}
+
+impl<'s, 'a: 's> QueryServer<'s> for Server<'a> {
+    type P = PathServerWrapper<'s, 'a>;
+
+    fn query(&'s mut self, query: Query) -> Option<QueryResult<Self::P, Weight>> {
+        self.distance(query.from, query.to).map(move |distance| QueryResult {
+            distance,
+            path_server: PathServerWrapper(self),
+        })
     }
 }

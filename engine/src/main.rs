@@ -4,6 +4,7 @@ use bmw_routing_engine::{
     algo::{
         contraction_hierarchy::{self, query::Server as CHServer},
         dijkstra::query::{bidirectional_dijkstra::Server as BiDijkServer, dijkstra::Server as DijkServer},
+        *,
     },
     cli::CliErr,
     datastr::graph::{first_out_graph::OwnedGraph as Graph, *},
@@ -48,17 +49,22 @@ fn main() -> Result<(), Box<dyn Error>> {
         };
 
         report_time("simple dijkstra", || {
-            assert_eq!(simple_server.distance(from, to), ground_truth);
+            assert_eq!(simple_server.query(Query { from, to }).map(|res| res.distance()), ground_truth);
         });
         report_time("bidir dijkstra", || {
-            assert_eq!(bi_dir_server.distance(from, to), ground_truth);
+            assert_eq!(bi_dir_server.query(Query { from, to }).map(|res| res.distance()), ground_truth);
         });
         report_time("CH", || {
-            assert_eq!(ch_server.distance(from, to), ground_truth);
+            assert_eq!(ch_server.query(Query { from, to }).map(|res| res.distance()), ground_truth);
         });
         report_time("own CH", || {
             assert_eq!(
-                ch_server_with_own_ch.distance(inverted_order[from as usize], inverted_order[to as usize]),
+                ch_server_with_own_ch
+                    .query(Query {
+                        from: inverted_order[from as usize],
+                        to: inverted_order[to as usize]
+                    })
+                    .map(|res| res.distance()),
                 ground_truth
             );
         });

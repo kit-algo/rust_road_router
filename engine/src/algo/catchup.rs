@@ -72,7 +72,7 @@ impl<'a> Server<'a> {
 
     #[allow(clippy::collapsible_if)]
     #[allow(clippy::cognitive_complexity)]
-    pub fn distance(&mut self, from_node: NodeId, to_node: NodeId, departure_time: Timestamp) -> Option<FlWeight> {
+    fn distance(&mut self, from_node: NodeId, to_node: NodeId, departure_time: Timestamp) -> Option<FlWeight> {
         report!("algo", "Floating TDCCH Query");
 
         #[cfg(feature = "tdcch-query-detailed-timing")]
@@ -415,7 +415,7 @@ impl<'a> Server<'a> {
         }
     }
 
-    pub fn path(&self) -> Vec<(NodeId, Timestamp)> {
+    fn path(&self) -> Vec<(NodeId, Timestamp)> {
         let mut path = Vec::new();
         path.push((self.to, self.distances[self.to as usize]));
 
@@ -457,5 +457,26 @@ impl<'a> Server<'a> {
         }
 
         path
+    }
+}
+
+pub struct PathServerWrapper<'s, 'a>(&'s Server<'a>);
+
+impl<'s, 'a> PathServer<'s> for PathServerWrapper<'s, 'a> {
+    type NodeInfo = (NodeId, Timestamp);
+
+    fn path(&'s mut self) -> Vec<Self::NodeInfo> {
+        Server::path(self.0)
+    }
+}
+
+impl<'s, 'a: 's> TDQueryServer<'s, Timestamp, FlWeight> for Server<'a> {
+    type P = PathServerWrapper<'s, 'a>;
+
+    fn query(&'s mut self, query: TDQuery<Timestamp>) -> Option<QueryResult<Self::P, FlWeight>> {
+        self.distance(query.from, query.to, query.departure).map(move |distance| QueryResult {
+            distance,
+            path_server: PathServerWrapper(self),
+        })
     }
 }

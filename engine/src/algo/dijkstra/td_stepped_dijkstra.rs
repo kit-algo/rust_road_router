@@ -1,5 +1,5 @@
 use super::*;
-use crate::datastr::graph::time_dependent::TDGraph;
+use crate::datastr::graph::time_dependent::*;
 use crate::datastr::{index_heap::*, timestamped_vector::*};
 
 #[derive(Debug, Clone)]
@@ -27,7 +27,7 @@ pub struct TDSteppedDijkstra {
     predecessors: Vec<NodeId>,
     closest_node_priority_queue: IndexdMinHeap<State>,
     // the current query
-    query: Option<TDQuery>,
+    query: Option<TDQuery<Timestamp>>,
     // first option: algorithm finished? second option: final result of algorithm
     result: Option<Option<Weight>>,
 }
@@ -47,7 +47,7 @@ impl TDSteppedDijkstra {
         }
     }
 
-    pub fn initialize_query(&mut self, query: TDQuery) {
+    pub fn initialize_query(&mut self, query: TDQuery<Timestamp>) {
         let from = query.from;
         // initialize
         self.query = Some(query);
@@ -56,9 +56,9 @@ impl TDSteppedDijkstra {
         self.distances.reset();
 
         // Starte with origin
-        self.distances.set(from as usize, query.departure_time);
+        self.distances.set(from as usize, query.departure);
         self.closest_node_priority_queue.push(State {
-            distance: query.departure_time,
+            distance: query.departure,
             node: from,
         });
     }
@@ -79,7 +79,7 @@ impl TDSteppedDijkstra {
 
             // Alternatively we could have continued to find all shortest paths
             if node == to {
-                let result = Some(distance - self.query().departure_time);
+                let result = Some(distance - self.query().departure);
                 self.result = Some(result);
                 return QueryProgress::Done(result);
             }
@@ -109,7 +109,7 @@ impl TDSteppedDijkstra {
             }
 
             QueryProgress::Progress(State {
-                distance: distance - self.query().departure_time,
+                distance: distance - self.query().departure,
                 node,
             })
         } else {
@@ -126,7 +126,7 @@ impl TDSteppedDijkstra {
         self.predecessors[node as usize]
     }
 
-    pub fn query(&self) -> &TDQuery {
+    pub fn query(&self) -> &TDQuery<Timestamp> {
         self.query.as_ref().expect("query was not initialized properly")
     }
 

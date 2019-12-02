@@ -21,7 +21,10 @@ use rocket_contrib::json::Json;
 use kdtree::kdtree::{Kdtree, KdtreePointTrait};
 
 use bmw_routing_engine::{
-    algo::customizable_contraction_hierarchy::{self, query::Server},
+    algo::{
+        customizable_contraction_hierarchy::{self, query::Server},
+        *,
+    },
     cli::CliErr,
     datastr::{
         graph::{link_id_to_tail_mapper::*, *},
@@ -234,8 +237,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                         let mut server = server.lock().unwrap();
                         let result = report_time("cch query", || {
-                            server.distance(from, to).map(|distance| {
-                                let path = server.path().iter().map(|&node| coords(node)).collect();
+                            server.query(Query { from, to }).as_mut().map(|result| {
+                                let distance = result.distance();
+                                let path = result.path().iter().map(|&node| coords(node)).collect();
                                 GeoResponse { distance, path }
                             })
                         });
@@ -265,8 +269,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                         let mut server = server.lock().unwrap();
                         let result = report_time("cch query", || {
-                            server.distance(from, to).map(|distance| {
-                                let path = server.path();
+                            server.query(Query { from, to }).as_mut().map(|result| {
+                                let distance = result.distance()
+                                    + (from_link_fraction * from_link.weight as f32) as u32
+                                    + (to_link_fraction * to_link.weight as f32) as u32;
+
+                                let path = result.path();
                                 let path_iter = path.iter();
                                 let mut second_node_iter = path_iter.clone();
                                 second_node_iter.next();
@@ -284,8 +292,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     .chain(once((to_link_id, to_direction)))
                                     .collect();
 
-                                let distance =
-                                    distance + (from_link_fraction * from_link.weight as f32) as u32 + (to_link_fraction * to_link.weight as f32) as u32;
                                 HereResponse { distance, path }
                             })
                         });

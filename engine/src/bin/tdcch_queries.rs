@@ -3,7 +3,7 @@ use std::{env, error::Error, path::Path};
 #[macro_use]
 extern crate bmw_routing_engine;
 use bmw_routing_engine::{
-    algo::{catchup::Server, customizable_contraction_hierarchy::*, dijkstra::query::floating_td_dijkstra::Server as DijkServer},
+    algo::{catchup::Server, customizable_contraction_hierarchy::*, dijkstra::query::floating_td_dijkstra::Server as DijkServer, *},
     cli::CliErr,
     datastr::{
         graph::{
@@ -81,7 +81,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let at = Timestamp::new(rng.gen_range(0.0, f64::from(period())));
         td_dijk_server.ranks(from, at, |to, ea_ground_truth, rank| {
             let _tdcch_query_ctxt = algo_runs_ctxt.push_collection_item();
-            let (ea, duration) = measure(|| server.distance(from, to, at).map(|dist| dist + at));
+            let (result, duration) = measure(|| server.query(TDQuery { from, to, departure: at }));
 
             report!("from", from);
             report!("to", to);
@@ -89,24 +89,23 @@ fn main() -> Result<(), Box<dyn Error>> {
             report!("rank", rank);
             report!("ground_truth", f64::from(ea_ground_truth));
             report!("running_time_ms", duration.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-            if let Some(ea) = ea {
-                report!("earliest_arrival", f64::from(ea));
-            }
+            let ea = if let Some(ref result) = result {
+                report!("earliest_arrival", f64::from(result.distance() + at));
+                result.distance() + at
+            } else {
+                Timestamp::NEVER
+            };
 
-            if !ea.unwrap_or(Timestamp::NEVER).fuzzy_eq(ea_ground_truth) {
-                eprintln!(
-                    "TDCCH ❌ Rel Err for rank {}: {}",
-                    rank,
-                    f64::from((ea.unwrap_or(Timestamp::NEVER) - at) / (ea_ground_truth - at)) - 1.0
-                );
+            if !ea.fuzzy_eq(ea_ground_truth) {
+                eprintln!("TDCCH ❌ Rel Err for rank {}: {}", rank, f64::from((ea - at) / (ea_ground_truth - at)) - 1.0);
             }
             if cfg!(feature = "tdcch-approx") {
-                assert!(!ea.unwrap_or(Timestamp::NEVER).fuzzy_lt(ea_ground_truth), "{} {} {:?}", from, to, at);
+                assert!(!ea.fuzzy_lt(ea_ground_truth), "{} {} {:?}", from, to, at);
             } else {
-                assert!(ea_ground_truth.fuzzy_eq(ea.unwrap_or(Timestamp::NEVER)), "{} {} {:?}", from, to, at);
+                assert!(ea_ground_truth.fuzzy_eq(ea), "{} {} {:?}", from, to, at);
             }
-            if !cfg!(feature = "tdcch-approx") || ea.is_some() {
-                let (path, unpacking_duration) = measure(|| server.path());
+            if let Some(mut result) = result {
+                let (path, unpacking_duration) = measure(|| result.path());
                 report!(
                     "unpacking_running_time_ms",
                     unpacking_duration.to_std().unwrap().as_nanos() as f64 / 1_000_000.0
@@ -155,7 +154,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let at = Timestamp::new(f64::from(at) / 1000.0);
 
             let dijkstra_query_ctxt = algo_runs_ctxt.push_collection_item();
-            let (ground_truth, time) = measure(|| td_dijk_server.distance(from, to, at).map(|dist| dist + at));
+            let (ground_truth, time) = measure(|| td_dijk_server.query(TDQuery { from, to, departure: at }).map(|res| res.distance() + at));
             report!("from", from);
             report!("to", to);
             report!("departure_time", f64::from(at));
@@ -168,7 +167,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             dijkstra_time = dijkstra_time + time;
 
             let _tdcch_query_ctxt = algo_runs_ctxt.push_collection_item();
-            let (ea, time) = measure(|| server.distance(from, to, at).map(|dist| dist + at));
+            let (result, time) = measure(|| server.query(TDQuery { from, to, departure: at }));
             tdcch_time = tdcch_time + time;
 
             report!("from", from);
@@ -178,27 +177,24 @@ fn main() -> Result<(), Box<dyn Error>> {
             if let Some(ground_truth) = ground_truth {
                 report!("ground_truth", f64::from(ground_truth));
             }
-            if let Some(ea) = ea {
-                report!("earliest_arrival", f64::from(ea));
-            }
+            let ea = if let Some(result) = result {
+                report!("earliest_arrival", f64::from(result.distance() + at));
+                result.distance() + at
+            } else {
+                Timestamp::NEVER
+            };
 
-            if !ea.unwrap_or(Timestamp::NEVER).fuzzy_eq(ground_truth.unwrap_or(Timestamp::NEVER)) {
+            if !ea.fuzzy_eq(ground_truth.unwrap_or(Timestamp::NEVER)) {
                 eprintln!(
                     "TDCCH ❌ Rel Err {}",
-                    f64::from((ea.unwrap_or(Timestamp::NEVER) - at) / (ground_truth.unwrap_or(Timestamp::NEVER) - at)) - 1.0
+                    f64::from((ea - at) / (ground_truth.unwrap_or(Timestamp::NEVER) - at)) - 1.0
                 );
             }
 
             if cfg!(feature = "tdcch-approx") {
-                assert!(
-                    !ea.unwrap_or(Timestamp::NEVER).fuzzy_lt(ground_truth.unwrap_or(Timestamp::NEVER)),
-                    "{} {} {:?}",
-                    from,
-                    to,
-                    at
-                );
+                assert!(!ea.fuzzy_lt(ground_truth.unwrap_or(Timestamp::NEVER)), "{} {} {:?}", from, to, at);
             } else {
-                assert!(ea.unwrap_or(Timestamp::NEVER).fuzzy_eq(ground_truth.unwrap_or(Timestamp::NEVER)));
+                assert!(ea.fuzzy_eq(ground_truth.unwrap_or(Timestamp::NEVER)));
             }
         }
         eprintln!("Dijkstra {}", dijkstra_time / (num_queries as i32));

@@ -29,7 +29,7 @@ impl<'a> Server<'a> {
         }
     }
 
-    pub fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
+    fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
         let from = self.cch_graph.node_order().rank(from);
         let to = self.cch_graph.node_order().rank(to);
 
@@ -56,7 +56,7 @@ impl<'a> Server<'a> {
         }
     }
 
-    pub fn path(&mut self) -> Vec<NodeId> {
+    fn path(&mut self) -> Vec<NodeId> {
         self.forward
             .unpack_path(self.meeting_node, true, self.cch_graph, self.backward.graph().weight());
         self.backward
@@ -76,5 +76,26 @@ impl<'a> Server<'a> {
         }
 
         path
+    }
+}
+
+pub struct PathServerWrapper<'s, 'a>(&'s mut Server<'a>);
+
+impl<'s, 'a> PathServer<'s> for PathServerWrapper<'s, 'a> {
+    type NodeInfo = NodeId;
+
+    fn path(&mut self) -> Vec<Self::NodeInfo> {
+        Server::path(self.0)
+    }
+}
+
+impl<'s, 'a: 's> QueryServer<'s> for Server<'a> {
+    type P = PathServerWrapper<'s, 'a>;
+
+    fn query(&'s mut self, query: Query) -> Option<QueryResult<Self::P, Weight>> {
+        self.distance(query.from, query.to).map(move |distance| QueryResult {
+            distance,
+            path_server: PathServerWrapper(self),
+        })
     }
 }

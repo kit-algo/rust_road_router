@@ -20,7 +20,7 @@ impl Server {
         }
     }
 
-    pub fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
+    fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
         // initialize
         self.tentative_distance = INFINITY;
 
@@ -80,11 +80,7 @@ impl Server {
         }
     }
 
-    pub fn is_in_searchspace(&self, node: NodeId) -> bool {
-        self.forward_dijkstra.tentative_distance(node) < INFINITY || self.backward_dijkstra.tentative_distance(node) < INFINITY
-    }
-
-    pub fn path(&self) -> Vec<NodeId> {
+    fn path(&self) -> Vec<NodeId> {
         use std::collections::LinkedList;
 
         let &(ref forward_middle_nodes, ref backward_middle_nodes) = self.shortcut_middle_nodes.as_ref().unwrap();
@@ -129,5 +125,26 @@ impl Server {
         forwad_path.pop_back();
         forwad_path.append(&mut backward_path);
         forwad_path.into_iter().collect()
+    }
+}
+
+pub struct PathServerWrapper<'s>(&'s Server);
+
+impl<'s> PathServer<'s> for PathServerWrapper<'s> {
+    type NodeInfo = NodeId;
+
+    fn path(&'s mut self) -> Vec<Self::NodeInfo> {
+        Server::path(self.0)
+    }
+}
+
+impl<'s> QueryServer<'s> for Server {
+    type P = PathServerWrapper<'s>;
+
+    fn query(&'s mut self, query: Query) -> Option<QueryResult<Self::P, Weight>> {
+        self.distance(query.from, query.to).map(move |distance| QueryResult {
+            distance,
+            path_server: PathServerWrapper(self),
+        })
     }
 }

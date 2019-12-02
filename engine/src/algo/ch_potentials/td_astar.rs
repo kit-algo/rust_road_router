@@ -52,14 +52,14 @@ impl Server<'_> {
         potentials[node as usize].value().unwrap()
     }
 
-    pub fn distance(&mut self, from: NodeId, to: NodeId, departure_time: Timestamp) -> Option<Weight> {
+    pub fn distance(&mut self, from: NodeId, to: NodeId, departure: Timestamp) -> Option<Weight> {
         self.potentials.reset();
         self.backward.initialize_query(self.cch.node_order().rank(to));
         while self.backward.next().is_some() {
             self.backward.next_step();
         }
 
-        self.dijkstra.initialize_query(TDQuery { from, to, departure_time });
+        self.dijkstra.initialize_query(TDQuery { from, to, departure });
 
         let dijkstra = &mut self.dijkstra;
         let potentials = &mut self.potentials;

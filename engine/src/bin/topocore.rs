@@ -8,6 +8,7 @@ use bmw_routing_engine::{
         customizable_contraction_hierarchy::*,
         // query::dijkstra::Server as DijkServer,
         topocore::preprocess,
+        *,
     },
     cli::CliErr,
     datastr::{graph::*, node_order::*},
@@ -51,7 +52,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     // let mut simple_server = DijkServer::new(graph);
 
     let topocore = report_time("topocore preprocessing", || preprocess(&graph));
-    let mut topocore = TopoServer::new(topocore, &cch, &graph);
+    let mut topocore = {
+        #[cfg(feature = "chpot_visualize")]
+        {
+            TopoServer::new(topocore, &cch, &graph, &lat, &lng)
+        }
+        #[cfg(not(feature = "chpot_visualize"))]
+        {
+            TopoServer::new(topocore, &cch, &graph)
+        }
+    };
 
     let mut total_query_time = Duration::zero();
 
@@ -63,22 +73,16 @@ fn main() -> Result<(), Box<dyn Error>> {
             val => Some(val),
         };
 
-        let (res, time) = measure(|| {
+        let (mut res, time) = measure(|| {
             // simple_server.distance(from, to)
-            #[cfg(feature = "chpot_visualize")]
-            {
-                topocore.distance(from, to, &lat, &lng)
-            }
-            #[cfg(not(feature = "chpot_visualize"))]
-            {
-                topocore.distance(from, to)
-            }
+            topocore.query(Query { from, to })
         });
-        topocore.path();
-        if res != ground_truth {
-            eprintln!("topo {:?} ground_truth {:?} ({} - {})", res, ground_truth, from, to);
+        let dist = res.as_ref().map(|res| res.distance());
+        res.as_mut().map(|res| res.path());
+        if dist != ground_truth {
+            eprintln!("topo {:?} ground_truth {:?} ({} - {})", dist, ground_truth, from, to);
         }
-        // assert_eq!(res, ground_truth, "{} - {}", from, to);
+        // assert_eq!(dist, ground_truth, "{} - {}", from, to);
 
         total_query_time = total_query_time + time;
     }

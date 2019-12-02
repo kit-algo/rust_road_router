@@ -6,7 +6,7 @@ use crate::report::*;
 #[derive(Debug)]
 pub struct Server {
     dijkstra: FloatingTDSteppedDijkstra,
-    query: Option<FlTDQuery>,
+    query: Option<TDQuery<Timestamp>>,
 }
 
 impl Server {
@@ -33,16 +33,16 @@ impl Server {
         }
     }
 
-    pub fn distance(&mut self, from: NodeId, to: NodeId, departure_time: Timestamp) -> Option<FlWeight> {
+    fn distance(&mut self, from: NodeId, to: NodeId, departure: Timestamp) -> Option<FlWeight> {
         report!("algo", "Floating TD-Dijkstra");
-        self.query = Some(FlTDQuery { from, to, departure_time });
-        self.dijkstra.initialize_query(from, departure_time);
+        self.query = Some(TDQuery { from, to, departure });
+        self.dijkstra.initialize_query(from, departure);
 
         loop {
             match self.dijkstra.next_step(|_| true) {
                 QueryProgress::Progress(State { distance, node }) => {
                     if node == to {
-                        return Some(distance - departure_time);
+                        return Some(distance - departure);
                     }
                 }
                 QueryProgress::Done() => return None,
@@ -50,11 +50,7 @@ impl Server {
         }
     }
 
-    pub fn is_in_searchspace(&self, node: NodeId) -> bool {
-        self.dijkstra.tentative_distance(node) < Timestamp::NEVER
-    }
-
-    pub fn path(&self) -> Vec<(NodeId, Timestamp)> {
+    fn path(&self) -> Vec<(NodeId, Timestamp)> {
         let mut path = Vec::new();
         path.push((self.query.unwrap().to, self.dijkstra.tentative_distance(self.query.unwrap().to)));
 
@@ -66,5 +62,26 @@ impl Server {
 
         path.reverse();
         path
+    }
+}
+
+pub struct PathServerWrapper<'s>(&'s Server);
+
+impl<'s> PathServer<'s> for PathServerWrapper<'s> {
+    type NodeInfo = (NodeId, Timestamp);
+
+    fn path(&'s mut self) -> Vec<Self::NodeInfo> {
+        Server::path(self.0)
+    }
+}
+
+impl<'s> TDQueryServer<'s, Timestamp, FlWeight> for Server {
+    type P = PathServerWrapper<'s>;
+
+    fn query(&'s mut self, query: TDQuery<Timestamp>) -> Option<QueryResult<Self::P, FlWeight>> {
+        self.distance(query.from, query.to, query.departure).map(move |distance| QueryResult {
+            distance,
+            path_server: PathServerWrapper(self),
+        })
     }
 }

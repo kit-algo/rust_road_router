@@ -3,6 +3,7 @@ use bmw_routing_engine::{
         ch_potentials::query::Server as TopoServer,
         customizable_contraction_hierarchy::{query::Server, *},
         topocore::*,
+        *,
     },
     cli::CliErr,
     datastr::{graph::*, node_order::NodeOrder, rank_select_map::*},
@@ -111,7 +112,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut cch_live_server = Server::new(&cch, &live_graph);
 
     let topocore = report_time("topocore preprocessing", || preprocess(&live_graph));
-    let mut topocore = TopoServer::new(topocore, &cch, &graph);
+    let mut topocore = {
+        #[cfg(feature = "chpot_visualize")]
+        {
+            TopoServer::new(topocore, &cch, &graph, &lat, &lng)
+        }
+        #[cfg(not(feature = "chpot_visualize"))]
+        {
+            TopoServer::new(topocore, &cch, &graph)
+        }
+    };
 
     let mut query_count = 0;
     let mut live_count = 0;
@@ -124,7 +134,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         dbg!(i);
         let from: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
         let to: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
-        let ground_truth = cch_live_server.distance(from, to);
+        let ground_truth = cch_live_server.query(Query { from, to }).map(|res| res.distance());
         // let ground_truth = cch_static_server.distance(from, to);
 
         if ground_truth.is_none() {
@@ -133,18 +143,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         query_count += 1;
 
-        let lower_bound = cch_static_server.distance(from, to);
-        let (res, time) = measure(|| {
-            #[cfg(feature = "chpot_visualize")]
-            {
-                topocore.distance(from, to, &lat, &lng)
-            }
-            #[cfg(not(feature = "chpot_visualize"))]
-            {
-                topocore.distance(from, to)
-            }
-        });
-        topocore.path();
+        let lower_bound = cch_static_server.query(Query { from, to }).map(|res| res.distance());
+        let (mut res, time) = measure(|| topocore.query(Query { from, to }));
+        let dist = res.as_ref().map(|res| res.distance());
+        res.as_mut().map(|res| res.path());
         let live = lower_bound != ground_truth;
         eprintln!("live: {:?}", live);
         if live {
@@ -152,9 +154,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             live_query_time = live_query_time + time;
             live_count += 1;
         }
-        if res != ground_truth {
-            eprintln!("topo {:?} ground_truth {:?} ({} - {})", res, ground_truth, from, to);
-            assert!(ground_truth < res);
+        if dist != ground_truth {
+            eprintln!("topo {:?} ground_truth {:?} ({} - {})", dist, ground_truth, from, to);
+            assert!(ground_truth < dist);
         }
 
         total_query_time = total_query_time + time;

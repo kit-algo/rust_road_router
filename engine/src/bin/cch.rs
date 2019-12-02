@@ -1,7 +1,10 @@
 use std::{env, error::Error, path::Path};
 
 use bmw_routing_engine::{
-    algo::customizable_contraction_hierarchy::{query::Server, *},
+    algo::{
+        customizable_contraction_hierarchy::{query::Server, *},
+        *,
+    },
     cli::CliErr,
     datastr::{graph::*, node_order::NodeOrder},
     io::Load,
@@ -48,8 +51,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                 val => Some(val),
             };
 
-            assert_eq!(server.distance(from, to), ground_truth);
-            server.path();
+            let mut result = server.query(Query { from, to });
+            assert_eq!(result.as_ref().map(|res| res.distance()), ground_truth);
+            result.as_mut().map(|res| res.path());
         }
     });
 
