@@ -25,14 +25,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     let head = Vec::load_from(path.join("head"))?;
     let travel_time = Vec::load_from(path.join("travel_time"))?;
     let order = Vec::load_from(path.join("ch_order"))?;
-    let node_order = NodeOrder::from_node_order(order.clone());
+    let node_order = NodeOrder::from_node_order(order);
     let lat = Vec::<f32>::load_from(path.join("latitude"))?;
     let lng = Vec::<f32>::load_from(path.join("longitude"))?;
 
     let in_bounding_box = |node| lat[node] >= min_lat && lat[node] <= max_lat && lng[node] >= min_lon && lng[node] <= max_lon;
 
     let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
-    let (up, down) = contraction_hierarchy::overlay(&graph, order, contraction_count);
+    let (up, down) = contraction_hierarchy::overlay(&graph, node_order.clone(), contraction_count);
 
     println!("<svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" viewBox=\"{} {} {} {}\" style=\"transform: scale(1,-1);\" preserveAspectRatio=\"none\">", min_lon, min_lat, max_lon - min_lon, max_lat - min_lat);
     println!("<g>");

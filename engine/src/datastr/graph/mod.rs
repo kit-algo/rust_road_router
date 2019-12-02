@@ -1,3 +1,4 @@
+use crate::datastr::node_order::NodeOrder;
 use std;
 use std::ops::Range;
 
@@ -43,14 +44,14 @@ pub trait LinkIterGraph<'a>: Graph {
         OwnedGraph::from_adjancecy_lists(reversed)
     }
 
-    fn ch_split(&'a self, node_ranks: &[u32]) -> (OwnedGraph, OwnedGraph) {
+    fn ch_split(&'a self, order: &NodeOrder) -> (OwnedGraph, OwnedGraph) {
         let mut up: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new()).collect();
         let mut down: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new()).collect();
 
         // iterate over all edges and insert them in the reversed structure
         for node in 0..(self.num_nodes() as NodeId) {
             for Link { node: neighbor, weight } in self.neighbor_iter(node) {
-                if node_ranks[node as usize] < node_ranks[neighbor as usize] {
+                if order.rank(node) < order.rank(neighbor) {
                     up[node as usize].push(Link { node: neighbor, weight });
                 } else {
                     down[neighbor as usize].push(Link { node, weight });

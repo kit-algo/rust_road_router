@@ -7,7 +7,7 @@ use bmw_routing_engine::{
         *,
     },
     cli::CliErr,
-    datastr::graph::{first_out_graph::OwnedGraph as Graph, *},
+    datastr::{graph::*, node_order::NodeOrder},
     io::Load,
     report::benchmark::report_time,
 };
@@ -34,13 +34,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let ch_first_out = Vec::load_from(path.join("travel_time_ch/first_out"))?;
     let ch_head = Vec::load_from(path.join("travel_time_ch/head"))?;
     let ch_weight = Vec::load_from(path.join("travel_time_ch/weight"))?;
-    let ch_order = Vec::load_from(path.join("travel_time_ch/order"))?;
-    let mut inverted_order = vec![0; ch_order.len()];
-    for (i, &node) in ch_order.iter().enumerate() {
-        inverted_order[node as usize] = i as u32;
-    }
-    let mut ch_server = CHServer::new((Graph::new(ch_first_out, ch_head, ch_weight).ch_split(&inverted_order), None));
-    let mut ch_server_with_own_ch = CHServer::new(contraction_hierarchy::contract(&graph, ch_order));
+    let ch_order = NodeOrder::from_node_order(Vec::load_from(path.join("travel_time_ch/order"))?);
+    let mut ch_server = CHServer::new(
+        (OwnedGraph::new(ch_first_out, ch_head, ch_weight).ch_split(&ch_order), None),
+        NodeOrder::identity(graph.num_nodes()),
+    );
+    let mut ch_server_with_own_ch = CHServer::new(contraction_hierarchy::contract(&graph, ch_order.clone()), ch_order);
 
     for ((&from, &to), &ground_truth) in from.iter().zip(to.iter()).zip(ground_truth.iter()).take(100) {
         let ground_truth = match ground_truth {
@@ -58,15 +57,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             assert_eq!(ch_server.query(Query { from, to }).map(|res| res.distance()), ground_truth);
         });
         report_time("own CH", || {
-            assert_eq!(
-                ch_server_with_own_ch
-                    .query(Query {
-                        from: inverted_order[from as usize],
-                        to: inverted_order[to as usize]
-                    })
-                    .map(|res| res.distance()),
-                ground_truth
-            );
+            assert_eq!(ch_server_with_own_ch.query(Query { from, to }).map(|res| res.distance()), ground_truth);
         });
     }
 

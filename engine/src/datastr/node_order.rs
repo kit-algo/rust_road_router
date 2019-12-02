@@ -12,6 +12,13 @@ pub struct NodeOrder {
 }
 
 impl NodeOrder {
+    pub fn identity(n: usize) -> NodeOrder {
+        NodeOrder {
+            node_order: (0..n as u32).collect(),
+            ranks: (0..n as u32).collect(),
+        }
+    }
+
     pub fn from_node_order(node_order: Vec<NodeId>) -> NodeOrder {
         let n = node_order.len();
         assert!(n < <NodeId>::max_value() as usize);

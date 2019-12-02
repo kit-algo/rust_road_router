@@ -7,20 +7,25 @@ pub struct Server {
     tentative_distance: Weight,
     meeting_node: NodeId,
     shortcut_middle_nodes: Option<(Vec<NodeId>, Vec<NodeId>)>,
+    order: NodeOrder,
 }
 
 impl Server {
-    pub fn new(((up, down), shortcut_middle_nodes): ((OwnedGraph, OwnedGraph), Option<(Vec<NodeId>, Vec<NodeId>)>)) -> Server {
+    pub fn new(((up, down), shortcut_middle_nodes): ((OwnedGraph, OwnedGraph), Option<(Vec<NodeId>, Vec<NodeId>)>), order: NodeOrder) -> Server {
         Server {
             forward_dijkstra: SteppedDijkstra::new(up),
             backward_dijkstra: SteppedDijkstra::new(down),
             tentative_distance: INFINITY,
             meeting_node: 0,
             shortcut_middle_nodes,
+            order,
         }
     }
 
     fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
+        let from = self.order.rank(from);
+        let to = self.order.rank(to);
+
         // initialize
         self.tentative_distance = INFINITY;
 
@@ -124,6 +129,11 @@ impl Server {
 
         forwad_path.pop_back();
         forwad_path.append(&mut backward_path);
+
+        for node in &mut forwad_path {
+            *node = self.order.node(*node);
+        }
+
         forwad_path.into_iter().collect()
     }
 }

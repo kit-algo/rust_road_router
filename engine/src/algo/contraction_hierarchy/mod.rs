@@ -1,5 +1,6 @@
 use super::*;
 use crate::algo::dijkstra::stepped_dijkstra::Trash;
+use crate::datastr::node_order::NodeOrder;
 
 pub mod query;
 
@@ -63,26 +64,22 @@ impl Node {
 #[derive(Debug)]
 struct ContractionGraph {
     nodes: Vec<Node>,
-    node_order: Vec<NodeId>,
+    order: NodeOrder,
 }
 
 impl ContractionGraph {
-    fn new<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, node_order: Vec<NodeId>) -> ContractionGraph {
+    fn new<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, order: NodeOrder) -> ContractionGraph {
         let n = graph.num_nodes();
-        let mut node_ranks = vec![0; n];
-        for (i, &node) in node_order.iter().enumerate() {
-            node_ranks[node as usize] = i as u32;
-        }
 
         let nodes = {
             let outs = (0..n).map(|node| {
                 graph
-                    .neighbor_iter(node_order[node])
-                    .filter(|&Link { node: head, .. }| head != node_order[node])
+                    .neighbor_iter(order.node(node as NodeId))
+                    .filter(|&Link { node: head, .. }| head != order.node(node as NodeId))
                     .map(|Link { node, weight }| {
                         (
                             Link {
-                                node: node_ranks[node as usize],
+                                node: order.rank(node),
                                 weight,
                             },
                             n as NodeId,
@@ -93,12 +90,12 @@ impl ContractionGraph {
             let reversed = graph.reverse();
             let ins = (0..n).map(|node| {
                 reversed
-                    .neighbor_iter(node_order[node])
-                    .filter(|&Link { node: head, .. }| head != node_order[node])
+                    .neighbor_iter(order.node(node as NodeId))
+                    .filter(|&Link { node: head, .. }| head != order.node(node as NodeId))
                     .map(|Link { node, weight }| {
                         (
                             Link {
-                                node: node_ranks[node as usize],
+                                node: order.rank(node),
                                 weight,
                             },
                             n as NodeId,
@@ -109,7 +106,7 @@ impl ContractionGraph {
             outs.zip(ins).map(|(outgoing, incoming)| Node { outgoing, incoming }).collect()
         };
 
-        ContractionGraph { nodes, node_order }
+        ContractionGraph { nodes, order }
     }
 
     fn contract(&mut self) {
@@ -240,14 +237,14 @@ impl<'a> PartialContractionGraph<'a> {
     }
 }
 
-pub fn overlay<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, node_order: Vec<NodeId>, contraction_count: usize) -> (OwnedGraph, OwnedGraph) {
-    let mut graph = ContractionGraph::new(graph, node_order);
+pub fn overlay<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, order: NodeOrder, contraction_count: usize) -> (OwnedGraph, OwnedGraph) {
+    let mut graph = ContractionGraph::new(graph, order);
     graph.contract_partially(contraction_count);
     graph.into_first_out_graphs().0
 }
 
-pub fn contract<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, node_order: Vec<NodeId>) -> ((OwnedGraph, OwnedGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
-    let mut graph = ContractionGraph::new(graph, node_order);
+pub fn contract<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, order: NodeOrder) -> ((OwnedGraph, OwnedGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
+    let mut graph = ContractionGraph::new(graph, order);
     graph.contract();
     graph.into_first_out_graphs()
 }

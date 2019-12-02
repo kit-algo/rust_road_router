@@ -75,6 +75,10 @@ impl<'a> Server<'a> {
             path.push(self.backward.predecessor(*path.last().unwrap()));
         }
 
+        for node in &mut path {
+            *node = self.cch_graph.node_order().node(*node);
+        }
+
         path
     }
 }
