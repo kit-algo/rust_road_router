@@ -1,4 +1,14 @@
 //! Utilities for structured reporting of experimental results.
+//!
+//! Experimental take on an API using RAII to report experimental results within context
+//! somewhat isomorph to the callgraph and output everything as JSON.
+//!
+//! So far not really successful.
+//! While it worked quite well for the CATCHUp experiments, the API is not really robust.
+//! Keeping the ContextGuards around pollutes the algorithm code and is a bit error prone.
+//! When used in a multithreaded environment, weird stuff will happen.
+//! Not really ready for productive use.
+//! JSON output is nice though.
 
 use crate::built_info;
 use serde_json::{Map, Value};

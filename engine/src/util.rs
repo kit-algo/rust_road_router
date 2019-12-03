@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 
 pub mod in_range_option;
 
+/// Poor mans const generic bools, while waiting for actual support.
 pub trait Bool {
     const VALUE: bool;
 }
@@ -18,6 +19,7 @@ impl Bool for False {
     const VALUE: bool = false;
 }
 
+/// Yes rust, I know floats are dangerous but I have to sort them anyway.
 #[derive(PartialEq, PartialOrd)]
 pub struct NonNan(f32);
 
@@ -39,16 +41,13 @@ impl Ord for NonNan {
     }
 }
 
+/// Util function to chain unchainable function calls.
+///
+/// ```
+/// # use bmw_routing_engine::util::TapOps;
+/// assert_eq!(vec![2,7,4].tap(|slf| slf.sort()).tap(|slf| slf.pop()), vec![2,4]);
+/// ```
 pub trait TapOps: Sized {
-    fn tap<R, F>(self, f: F) -> Self
-    where
-        F: FnOnce(&mut Self) -> R;
-}
-
-impl<T> TapOps for T
-where
-    T: Sized,
-{
     fn tap<R, F>(mut self, f: F) -> Self
     where
         F: FnOnce(&mut Self) -> R,
@@ -57,3 +56,5 @@ where
         self
     }
 }
+
+impl<T> TapOps for T where T: Sized {}

@@ -1,8 +1,15 @@
 use std::{env, fs::File, io::Write, path::Path};
 
 fn main() {
+    // write build time info
     built::write_built_file().expect("Failed to acquire build-time information");
+    // unconditionally rerun this build script so build time info is always up to date
+    println!("cargo:rerun-if-changed=foobaz");
 
+    // the following lines allow overriding certain CATCHUp params through env vars.
+    // If the env var is set, we enable a certain feature.
+    // The module where the parameter is used either defines the param with a default value
+    // or includes the file created here.
     let out_dir = env::var("OUT_DIR").unwrap();
 
     if let Ok(val) = env::var("TDCCH_APPROX_THRESHOLD") {
@@ -20,6 +27,4 @@ fn main() {
         println!("cargo:rustc-cfg=override_tdcch_approx");
     }
     println!("cargo:rerun-if-env-changed=TDCCH_APPROX");
-
-    println!("cargo:rerun-if-changed=foobaz");
 }

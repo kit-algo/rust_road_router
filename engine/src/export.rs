@@ -4,6 +4,7 @@ use crate::datastr::graph::*;
 use std::fs::File;
 use std::io::{Result, Write};
 
+/// Export graph in DIMACs .gr format.
 pub fn write_graph_to_gr<G: for<'a> LinkIterGraph<'a>>(graph: &G, filename: &str) -> Result<()> {
     let mut file = File::create(filename)?;
     writeln!(&mut file, "p sp {} {}", graph.num_nodes(), graph.num_arcs())?;
@@ -17,6 +18,7 @@ pub fn write_graph_to_gr<G: for<'a> LinkIterGraph<'a>>(graph: &G, filename: &str
     Ok(())
 }
 
+/// Export geocoordinates in DIMACs .co format.
 pub fn write_coords_to_co(lat: &[f32], lng: &[f32], filename: &str) -> Result<()> {
     assert_eq!(lat.len(), lng.len());
     let mut file = File::create(filename)?;

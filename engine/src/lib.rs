@@ -23,13 +23,14 @@ pub mod export;
 pub mod import;
 pub mod io;
 pub mod link_speed_estimates;
+pub mod util;
 
 mod as_mut_slice;
 mod as_slice;
-mod util;
 
 /// Build time information for experiments.
-pub mod built_info {
+#[allow(dead_code)]
+mod built_info {
     // The file has been placed there by the build script.
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
