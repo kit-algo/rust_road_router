@@ -4,6 +4,23 @@ use crate::datastr::node_order::NodeOrder;
 
 pub mod query;
 
+pub struct ContractionHierarchy {
+    forward: OwnedGraph,
+    backward: OwnedGraph,
+    middle_nodes: Option<(Vec<NodeId>, Vec<NodeId>)>,
+}
+
+impl ContractionHierarchy {
+    pub fn from_contracted_graph(graph: OwnedGraph, order: &NodeOrder) -> ContractionHierarchy {
+        let (forward, backward) = graph.ch_split(order);
+        ContractionHierarchy {
+            forward,
+            backward,
+            middle_nodes: None,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 enum ShortcutResult {
     NewShortcut,
@@ -155,8 +172,8 @@ impl ContractionGraph {
         }
     }
 
-    fn into_first_out_graphs(self) -> ((OwnedGraph, OwnedGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
-        let (outgoing, incoming): (Vec<(Vec<Link>, Vec<NodeId>)>, Vec<(Vec<Link>, Vec<NodeId>)>) = self
+    fn into_first_out_graphs(self) -> ContractionHierarchy {
+        let (outgoing, incoming): (Vec<_>, Vec<_>) = self
             .nodes
             .into_iter()
             .map(|node| (node.outgoing.into_iter().unzip(), node.incoming.into_iter().unzip()))
@@ -167,13 +184,11 @@ impl ContractionGraph {
         let forward_shortcut_middles = forward_shortcut_middles.into_iter().flat_map(|data| data.into_iter()).collect();
         let backward_shortcut_middles = backward_shortcut_middles.into_iter().flat_map(|data| data.into_iter()).collect();
 
-        // currently we stick to the reordered graph and also translate the query node ids.
-        // TODO make more explicit
-
-        (
-            (OwnedGraph::from_adjancecy_lists(outgoing), OwnedGraph::from_adjancecy_lists(incoming)),
-            Some((forward_shortcut_middles, backward_shortcut_middles)),
-        )
+        ContractionHierarchy {
+            forward: OwnedGraph::from_adjancecy_lists(outgoing),
+            backward: OwnedGraph::from_adjancecy_lists(incoming),
+            middle_nodes: Some((forward_shortcut_middles, backward_shortcut_middles)),
+        }
     }
 }
 
@@ -240,10 +255,11 @@ impl<'a> PartialContractionGraph<'a> {
 pub fn overlay<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, order: NodeOrder, contraction_count: usize) -> (OwnedGraph, OwnedGraph) {
     let mut graph = ContractionGraph::new(graph, order);
     graph.contract_partially(contraction_count);
-    graph.into_first_out_graphs().0
+    let ch = graph.into_first_out_graphs();
+    (ch.forward, ch.backward)
 }
 
-pub fn contract<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, order: NodeOrder) -> ((OwnedGraph, OwnedGraph), Option<(Vec<NodeId>, Vec<NodeId>)>) {
+pub fn contract<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, order: NodeOrder) -> ContractionHierarchy {
     let mut graph = ContractionGraph::new(graph, order);
     graph.contract();
     graph.into_first_out_graphs()

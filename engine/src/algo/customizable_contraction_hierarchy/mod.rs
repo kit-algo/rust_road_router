@@ -5,7 +5,7 @@ use crate::{
     report::benchmark::*,
     util::in_range_option::InRangeOption,
 };
-use std::ops::Range;
+use std::{cmp::Ordering, ops::Range};
 
 mod contraction;
 use contraction::*;
@@ -198,18 +198,18 @@ impl CCH {
             }),
         ) = (current_iter.peek(), other_iter.peek())
         {
-            if lower_from_first < lower_from_second {
-                current_iter.next();
-            } else if lower_from_second < lower_from_first {
-                other_iter.next();
-            } else {
-                if downward[edge_from_first_id as usize] + upward[edge_from_second_id as usize] == weight {
-                    return Some((lower_from_first, downward[edge_from_first_id as usize], upward[edge_from_second_id as usize]));
-                }
+            match lower_from_first.cmp(&lower_from_second) {
+                Ordering::Less => current_iter.next(),
+                Ordering::Greater => other_iter.next(),
+                Ordering::Equal => {
+                    if downward[edge_from_first_id as usize] + upward[edge_from_second_id as usize] == weight {
+                        return Some((lower_from_first, downward[edge_from_first_id as usize], upward[edge_from_second_id as usize]));
+                    }
 
-                current_iter.next();
-                other_iter.next();
-            }
+                    current_iter.next();
+                    other_iter.next()
+                }
+            };
         }
 
         None

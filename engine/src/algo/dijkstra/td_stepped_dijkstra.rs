@@ -29,6 +29,7 @@ pub struct TDSteppedDijkstra {
     // the current query
     query: Option<TDQuery<Timestamp>>,
     // first option: algorithm finished? second option: final result of algorithm
+    #[allow(clippy::option_option)]
     result: Option<Option<Weight>>,
 }
 

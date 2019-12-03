@@ -11,13 +11,13 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn new(((up, down), shortcut_middle_nodes): ((OwnedGraph, OwnedGraph), Option<(Vec<NodeId>, Vec<NodeId>)>), order: NodeOrder) -> Server {
+    pub fn new(ch: ContractionHierarchy, order: NodeOrder) -> Server {
         Server {
-            forward_dijkstra: SteppedDijkstra::new(up),
-            backward_dijkstra: SteppedDijkstra::new(down),
+            forward_dijkstra: SteppedDijkstra::new(ch.forward),
+            backward_dijkstra: SteppedDijkstra::new(ch.backward),
             tentative_distance: INFINITY,
             meeting_node: 0,
-            shortcut_middle_nodes,
+            shortcut_middle_nodes: ch.middle_nodes,
             order,
         }
     }

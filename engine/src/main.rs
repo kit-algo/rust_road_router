@@ -2,7 +2,7 @@ use std::{env, error::Error, path::Path, sync::Arc};
 
 use bmw_routing_engine::{
     algo::{
-        contraction_hierarchy::{self, query::Server as CHServer},
+        contraction_hierarchy::{self, query::Server as CHServer, ContractionHierarchy},
         dijkstra::query::{bidirectional_dijkstra::Server as BiDijkServer, dijkstra::Server as DijkServer},
         *,
     },
@@ -36,7 +36,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let ch_weight = Vec::load_from(path.join("travel_time_ch/weight"))?;
     let ch_order = NodeOrder::from_node_order(Vec::load_from(path.join("travel_time_ch/order"))?);
     let mut ch_server = CHServer::new(
-        (OwnedGraph::new(ch_first_out, ch_head, ch_weight).ch_split(&ch_order), None),
+        ContractionHierarchy::from_contracted_graph(OwnedGraph::new(ch_first_out, ch_head, ch_weight), &ch_order),
         NodeOrder::identity(graph.num_nodes()),
     );
     let mut ch_server_with_own_ch = CHServer::new(contraction_hierarchy::contract(&graph, ch_order.clone()), ch_order);

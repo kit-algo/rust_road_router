@@ -109,6 +109,7 @@ impl<'a> TTF<'a> {
 
     #[allow(clippy::collapsible_if)]
     #[allow(clippy::cognitive_complexity)]
+    #[allow(clippy::type_complexity)]
     fn merge(
         &self,
         other: &TTF,

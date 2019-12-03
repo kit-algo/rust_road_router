@@ -153,6 +153,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
+    #[allow(clippy::cognitive_complexity)]
     pub(super) fn append_partials(first: &mut impl PLFTarget, second: &[TTFPoint], switchover: Timestamp) {
         debug_assert!(second.len() > 1);
         if let Some(&TTFPoint { at, .. }) = first.split_last().map(|(_, rest)| rest.last()).unwrap_or(None) {

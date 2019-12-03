@@ -38,6 +38,10 @@ impl<T: Clone> TimestampedVector<T> {
     pub fn len(&self) -> usize {
         self.data.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 impl<T: Clone> Index<usize> for TimestampedVector<T> {

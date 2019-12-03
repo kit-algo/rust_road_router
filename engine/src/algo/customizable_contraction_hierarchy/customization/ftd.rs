@@ -1,7 +1,10 @@
 use super::*;
 use crate::report::*;
 use floating_time_dependent::*;
-use std::{cmp::min, sync::atomic::Ordering};
+use std::{
+    cmp::{min, Ordering as Ord},
+    sync::atomic::Ordering,
+};
 
 scoped_thread_local!(static MERGE_BUFFERS: RefCell<MergeBuffers>);
 scoped_thread_local!(static UPWARD_WORKSPACE: RefCell<Vec<(FlWeight, FlWeight)>>);
@@ -381,16 +384,16 @@ where
                             debug_assert_eq!(cch.edge_id_to_tail(*edge_from_cur_id), *lower_from_current);
                             debug_assert_eq!(cch.edge_id_to_tail(*edge_from_oth_id), *lower_from_other);
 
-                            if lower_from_current < lower_from_other {
-                                current_iter.next();
-                            } else if lower_from_other < lower_from_current {
-                                other_iter.next();
-                            } else {
-                                triangles.push((*edge_from_cur_id, *edge_from_oth_id));
+                            match lower_from_current.cmp(&lower_from_other) {
+                                Ord::Less => current_iter.next(),
+                                Ord::Greater => other_iter.next(),
+                                Ord::Equal => {
+                                    triangles.push((*edge_from_cur_id, *edge_from_oth_id));
 
-                                current_iter.next();
-                                other_iter.next();
-                            }
+                                    current_iter.next();
+                                    other_iter.next()
+                                }
+                            };
                         }
                         if cfg!(feature = "tdcch-triangle-sorting") {
                             triangles.sort_by_key(|&(down, up)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);

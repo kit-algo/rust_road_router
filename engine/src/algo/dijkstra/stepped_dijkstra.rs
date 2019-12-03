@@ -50,6 +50,7 @@ pub struct SteppedDijkstra<Graph: for<'a> LinkIterGraph<'a>> {
     // the current query
     query: Option<Query>,
     // first option: algorithm finished? second option: final result of algorithm
+    #[allow(clippy::option_option)]
     result: Option<Option<Weight>>,
 }
 
