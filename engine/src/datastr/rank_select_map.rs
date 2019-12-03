@@ -1,5 +1,4 @@
-// this module contains a data structure to efficiently map a large noncensecutive
-// global id space into a smaller consecutive id space from 0 to n where the order is preserved
+//! Data structure to efficiently map a large noncensecutive global id space into a smaller consecutive id space from 0 to n where the order is preserved
 
 use std::cmp::min;
 use std::mem::size_of;
@@ -9,20 +8,18 @@ use std::alloc::{Alloc, Global, Layout};
 
 use crate::io::*;
 
-// the number of bytes in one L1 cache line
-// hardcoded for now, no idea, if we can retreave it during compilation
-// if calculated at compile time we must ensure its >= 8
+/// the number of bytes in one L1 cache line
+/// hardcoded for now, no idea, if we can retreave it during compilation
+/// if calculated at compile time we must ensure its >= 8, otherwise the alignment of the 64bit vec will be broken.
 const CACHE_LINE_WIDTH: usize = 64; // bytes
 
-// number of bits (not bytes) in one 64 bit uint
+/// number of bits (not bytes) in one 64 bit uint
 const STORAGE_BITS: usize = size_of::<u64>() * 8;
 
-// this is a little helper data structure
-// what we need is a vector of bits with a few extras
-// - we need access to the ints containing the actualy bits, then do popcount on them
-// - the memory needs to be aligned to the cache line width
-// -> create a thin wrapper around a Vec<u64>, where we do the first allocation ourselves, and have operations to set individual bits
-
+/// Bitvector or rather Bitarray (size can't be changed after creation) with a few extras:
+/// - we need access to the ints containing the actualy bits, then do popcount on them
+/// - the memory needs to be aligned to the cache line width
+/// -> create a thin wrapper around a Vec<u64>, where we do the first allocation ourselves, and have operations to set individual bits
 #[derive(Debug)]
 pub struct BitVec {
     data: Vec<u64>,
@@ -30,6 +27,7 @@ pub struct BitVec {
 }
 
 impl BitVec {
+    /// Create a new `BitVec` with at least the specified number of bits
     pub fn new(size: usize) -> BitVec {
         // ceiling to the right number of u64s
         let num_ints = (size + STORAGE_BITS - 1) / STORAGE_BITS;
@@ -47,49 +45,58 @@ impl BitVec {
         BitVec { data, size }
     }
 
+    /// Get individual bit value of position `index`.
     pub fn get(&self, index: usize) -> bool {
         assert!(index < self.size, "index: {} size: {}", index, self.size);
         // shifting a 1 bit to the right place and masking
         self.data[index / STORAGE_BITS] & (1 << (index % STORAGE_BITS)) != 0
     }
 
+    /// Set individual bit value of position `index` to 1.
     pub fn set(&mut self, index: usize) {
         assert!(index < self.size, "index: {} size: {}", index, self.size);
         // shifting a 1 bit to the right place and then eighter set through | or negate and unset with &
         self.data[index / STORAGE_BITS] |= 1 << (index % STORAGE_BITS);
     }
 
+    /// Set individual bit value of position `index` to 0.
     pub fn unset(&mut self, index: usize) {
         assert!(index < self.size, "index: {} size: {}", index, self.size);
         // shifting a 1 bit to the right place and then eighter set through | or negate and unset with &
         self.data[index / STORAGE_BITS] &= !(1 << (index % STORAGE_BITS));
     }
 
+    /// Set all bits in the same 64bit int as the supplied index to zero.
     pub fn unset_all_around(&mut self, index: usize) {
         assert!(index < self.size, "index: {} size: {}", index, self.size);
         self.data[index / STORAGE_BITS] = 0;
     }
 
+    /// Number of bits in the `BitVec`
     pub fn len(&self) -> usize {
         self.size
     }
 
+    /// Are there no bits in this `BitVec`? Would be slightly pointless though.
     pub fn is_empty(&self) -> bool {
         self.size == 0
     }
 
+    /// Zero all bits.
     pub fn clear(&mut self) {
         for val in &mut self.data {
             *val = 0;
         }
     }
 
+    /// Set all bits to 1.
     pub fn set_all(&mut self) {
         for val in &mut self.data {
             *val = !0;
         }
     }
 
+    /// The total number of bits set to 1.
     pub fn count_ones(&self) -> usize {
         self.data.iter().map(|v| v.count_ones() as usize).sum()
     }
@@ -113,6 +120,8 @@ impl Load for BitVec {
     }
 }
 
+/// A Bitarray with a clearlist for fast resetting.
+/// Effective, when few bits (compared to the total number) will be set in each round before reset.
 #[derive(Debug)]
 pub struct FastClearBitVec {
     data: Vec<u64>,
@@ -120,6 +129,7 @@ pub struct FastClearBitVec {
 }
 
 impl FastClearBitVec {
+    /// Create a new `FastClearBitVec` with at least the specified number of bits
     pub fn new(size: usize) -> FastClearBitVec {
         // ceiling to the right number of u64s
         let num_ints = (size + STORAGE_BITS - 1) / STORAGE_BITS;
@@ -127,11 +137,13 @@ impl FastClearBitVec {
         FastClearBitVec { data, to_clear: Vec::new() }
     }
 
+    /// Get an individual bit.
     pub fn get(&self, index: usize) -> bool {
         // shifting a 1 bit to the right place and masking
         self.data[index / STORAGE_BITS] & (1 << (index % STORAGE_BITS)) != 0
     }
 
+    /// Set an individual bit to 1.
     pub fn set(&mut self, index: usize) {
         if self.data[index / STORAGE_BITS] == 0 {
             self.to_clear.push(index / STORAGE_BITS);
@@ -140,6 +152,7 @@ impl FastClearBitVec {
         self.data[index / STORAGE_BITS] |= 1 << (index % STORAGE_BITS);
     }
 
+    /// Reset all bits to 0.
     pub fn clear(&mut self) {
         for &idx in &self.to_clear {
             self.data[idx] = 0;
@@ -148,17 +161,16 @@ impl FastClearBitVec {
     }
 }
 
-// the actual map data structure.
-// made up of the bitvec with one bit for each global id
-// and an vec containing prefix sums of the number of elements
-// for each global id in our id space we set the corresponding bit in the bitvector
-// the local id is then the number of bits set in the bitvector before the id itself
-// the prefix sum array is there so we do not need to always count everything before
-// but just the ones in the current cache line, since everything before is
-// already counted in the prefix sum. Conveniently couting ones in the ids cache line
-// is super fast. Since updates require us to update the prefixes we use the data structure
-// in two phases, first insert, and then after compile access
-
+/// the actual map data structure.
+/// made up of the bitvec with one bit for each global id
+/// and an vec containing prefix sums of the number of elements
+/// for each global id in our id space we set the corresponding bit in the bitvector
+/// the local id is then the number of bits set in the bitvector before the id itself
+/// the prefix sum array is there so we do not need to always count everything before
+/// but just the ones in the current cache line, since everything before is
+/// already counted in the prefix sum. Conveniently couting ones in the ids cache line
+/// is super fast. Since updates require us to update the prefixes we use the data structure
+/// in two phases, first insert, and then after compile access.
 #[derive(Debug)]
 pub struct RankSelectMap {
     contained_keys_flags: BitVec,
@@ -169,6 +181,7 @@ const BITS_PER_PREFIX: usize = CACHE_LINE_WIDTH * 8;
 const INTS_PER_PREFIX: usize = BITS_PER_PREFIX / STORAGE_BITS;
 
 impl RankSelectMap {
+    /// Create a new `RankSelectMap` from a `BitVec`
     pub fn new(bit_vec: BitVec) -> RankSelectMap {
         let max_index = bit_vec.len();
         let mut this = RankSelectMap {
@@ -181,6 +194,7 @@ impl RankSelectMap {
         this
     }
 
+    /// Total number of entries in the map.
     pub fn len(&self) -> usize {
         match self.prefix_sum.last() {
             Some(&len) => len,
@@ -188,6 +202,7 @@ impl RankSelectMap {
         }
     }
 
+    /// True if there are no entries in the map.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -209,11 +224,15 @@ impl RankSelectMap {
         self.contained_keys_flags.data[range].iter().map(|num| num.count_ones() as usize).sum()
     }
 
+    /// Get the local id for global id `key`.
+    /// Will panic of `key` is not in the map.
     pub fn at(&self, key: usize) -> usize {
         assert!(self.contained_keys_flags.get(key));
         self.prefix_sum[key / BITS_PER_PREFIX] + self.bit_count_partial_range(key)
     }
 
+    /// Get the local id for global id `key` or the next lower id if key is not in the map.
+    /// Will underflow when there is no lower next entry.
     pub fn at_or_next_lower(&self, key: usize) -> usize {
         let value = self.prefix_sum[key / BITS_PER_PREFIX] + self.bit_count_partial_range(key);
         if self.contained_keys_flags.get(key) {
@@ -223,6 +242,7 @@ impl RankSelectMap {
         }
     }
 
+    /// Get the local id for global id `key` if it exists.
     pub fn get(&self, key: usize) -> Option<usize> {
         if key < self.contained_keys_flags.size && self.contained_keys_flags.get(key) {
             Some(self.prefix_sum[key / BITS_PER_PREFIX] + self.bit_count_partial_range(key))
@@ -249,6 +269,8 @@ impl DataBytes for RankSelectMap {
 
 const GROUPED_LOCALS: usize = 256;
 
+/// Wrapper around `RankSelectMap` if the reverse mapping (local to global) is required.
+/// Implements `Deref` to `RankSelectMap`, so the original map is still ergonomically accessible
 #[derive(Debug)]
 pub struct InvertableRankSelectMap {
     map: RankSelectMap,
@@ -256,6 +278,7 @@ pub struct InvertableRankSelectMap {
 }
 
 impl InvertableRankSelectMap {
+    /// Create wrapper around `RankSelectMap` for inversion.
     pub fn new(map: RankSelectMap) -> InvertableRankSelectMap {
         let num_groups = 1 + (map.len() + GROUPED_LOCALS - 1) / GROUPED_LOCALS;
         let mut blocks = vec![0; num_groups];
@@ -272,6 +295,7 @@ impl InvertableRankSelectMap {
         InvertableRankSelectMap { map, blocks }
     }
 
+    /// Get global id for local one.
     pub fn inverse(&self, value: usize) -> usize {
         debug_assert!(value < self.map.len());
         let group = value / GROUPED_LOCALS;
