@@ -1,3 +1,5 @@
+//! Algorithms to guess link speeds from GPS trace data.
+
 mod event_iterator;
 mod link_speed_estimator;
 

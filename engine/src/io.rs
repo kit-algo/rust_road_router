@@ -1,3 +1,5 @@
+//! Utilities for reading and writing data structures from and to disk.
+//!
 //! This module contains a few traits and blanket implementations
 //! for (de)serializing and writing/reading data to/from the disc.
 //! To use it you should import the `Load` and `Store` traits and use the

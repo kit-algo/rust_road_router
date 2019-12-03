@@ -1,4 +1,4 @@
-//! Utility module for command line interfaces
+//! Utility module for command line interfaces.
 
 use std::{error::Error, fmt, fmt::Display};
 

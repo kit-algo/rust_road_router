@@ -1,3 +1,5 @@
+//! Utilities for structured reporting of experimental results.
+
 use crate::built_info;
 use serde_json::{Map, Value};
 use std::{cell::RefCell, mem::swap};

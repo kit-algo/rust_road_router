@@ -1,3 +1,5 @@
+//! Building blocks for fast routing algorithms.
+
 use crate::datastr::graph::*;
 
 use self::dijkstra::stepped_dijkstra::{QueryProgress, State, SteppedDijkstra};

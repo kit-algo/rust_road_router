@@ -1,3 +1,5 @@
+//! Data structures used by algorithms.
+
 pub mod clearlist_vector;
 pub mod graph;
 pub mod index_heap;
