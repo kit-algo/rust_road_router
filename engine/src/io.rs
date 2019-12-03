@@ -111,9 +111,14 @@ impl<T: Default + Copy> Load for Vec<T> {
     }
 }
 
+/// A trait to allow serializing more complex objects
+/// which need more than a single file.
 pub trait Deconstruct: Sized {
+    /// Will be called indirectly and should call the `store_callback` for each file that should be written to disk.
+    /// The first param of the callback is a name to identify the file, the second param the data to be stored.
     fn store_each(&self, store_callback: &dyn Fn(&str, &dyn Store) -> Result<()>) -> Result<()>;
 
+    /// Call with a directory arg to store this object in this directory.
     fn deconstruct_to<D: AsRef<OsStr>>(&self, dir: &D) -> Result<()> {
         let path = Path::new(dir);
 
@@ -121,29 +126,45 @@ pub trait Deconstruct: Sized {
     }
 }
 
+/// Helper struct for loading multiple objects back from disk.
+/// Basically used as a callback for each object to load.
 #[derive(Debug)]
 pub struct Loader<'a> {
     path: &'a Path,
 }
 
 impl<'a> Loader<'a> {
+    /// Call this method for each file that should be loaded back from disk.
+    /// The path param should be the same name that was used with the `store_each` callback.
+    /// Will return the deserialized data.
     pub fn load<T: Load, P: AsRef<Path>>(&self, path: P) -> Result<T> {
         T::load_from(self.path.join(path))
     }
 }
 
+/// A trait to allow deserializing more complex objects of a different type `T` (similar to `Reconstruct`).
+/// This can be used to prepare some data in an object of the type implementing this trait and then loading
+/// the rest of the data from the disk to create the `T` object.
 pub trait ReconstructPrepared<T: Sized>: Sized {
+    /// Will be called indirectly and should use the loader passed along to load all the necessary objects back.
+    /// Will consume the current object.
+    /// Should return the full deserialized object of type `T`.
     fn reconstruct_with(self, loader: Loader) -> Result<T>;
 
+    /// Call with a directory arg to reconstruct an object from this directory.
     fn reconstruct_from<D: AsRef<OsStr>>(self, dir: &D) -> Result<T> {
         let path = Path::new(dir);
         self.reconstruct_with(Loader { path })
     }
 }
 
+/// A trait to allow deserializing more complex objects which need more than a single file.
 pub trait Reconstruct: Sized {
+    /// Will be called indirectly and should use the loader passed along to load all the necessary objects back.
+    /// Should return the full deserialized object.
     fn reconstruct_with(loader: Loader) -> Result<Self>;
 
+    /// Call with a directory arg to reconstruct an object from this directory.
     fn reconstruct_from<D: AsRef<OsStr>>(dir: &D) -> Result<Self> {
         let path = Path::new(dir);
         Self::reconstruct_with(Loader { path })
