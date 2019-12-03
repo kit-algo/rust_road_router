@@ -215,3 +215,25 @@ impl CCH {
         None
     }
 }
+
+#[derive(Debug)]
+pub struct Customized<'c> {
+    cch: &'c CCH,
+    upward: Vec<Weight>,
+    downward: Vec<Weight>,
+}
+
+impl<'c> Customized<'c> {
+    #[allow(clippy::type_complexity)]
+    pub fn into_ch_graphs(
+        self,
+    ) -> (
+        FirstOutGraph<&'c [EdgeId], &'c [NodeId], Vec<Weight>>,
+        FirstOutGraph<&'c [EdgeId], &'c [NodeId], Vec<Weight>>,
+    ) {
+        (
+            FirstOutGraph::new(&self.cch.first_out[..], &self.cch.head[..], self.upward),
+            FirstOutGraph::new(&self.cch.first_out[..], &self.cch.head[..], self.downward),
+        )
+    }
+}

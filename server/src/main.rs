@@ -22,7 +22,7 @@ use kdtree::kdtree::{Kdtree, KdtreePointTrait};
 
 use bmw_routing_engine::{
     algo::{
-        customizable_contraction_hierarchy::{self, query::Server},
+        customizable_contraction_hierarchy::{self, customize as cch_customize, query::Server},
         *,
     },
     cli::CliErr,
@@ -209,7 +209,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let cch = customizable_contraction_hierarchy::contract(&graph, NodeOrder::from_node_order(cch_order));
 
-        let server = Arc::new(Mutex::new(Server::new(&cch, &graph)));
+        let server = Arc::new(Mutex::new(Server::new(cch_customize(&cch, &graph))));
 
         let coords = |node: NodeId| -> (f32, f32) { (lat[node as usize], lng[node as usize]) };
 
@@ -316,7 +316,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     travel_time[link_idx as usize] = weight.0
                                 }
                             }
-                            *server.lock().unwrap() = Server::new(&cch, &FirstOutGraph::new(&first_out[..], &head[..], travel_time));
+                            let customized = cch_customize(&cch, &FirstOutGraph::new(&first_out[..], &head[..], travel_time));
+                            server.lock().unwrap().update(customized);
                         });
                     }
                 }

@@ -36,7 +36,8 @@ impl<'a> Server<'a> {
     where
         Graph: for<'b> LinkIterGraph<'b> + RandomLinkAccessGraph + Sync,
     {
-        let (forward_up_graph, backward_up_graph) = customize(cch, lower_bound);
+        let customized = customize(cch, lower_bound);
+        let (forward_up_graph, backward_up_graph) = customized.into_ch_graphs();
         let forward_elimination_tree = SteppedEliminationTree::new(forward_up_graph, cch.elimination_tree());
         let backward_elimination_tree = SteppedEliminationTree::new(backward_up_graph, cch.elimination_tree());
 

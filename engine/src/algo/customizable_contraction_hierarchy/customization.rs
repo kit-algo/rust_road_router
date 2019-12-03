@@ -9,13 +9,7 @@ pub mod ftd;
 scoped_thread_local!(static UPWARD_WORKSPACE: RefCell<Vec<Weight>>);
 scoped_thread_local!(static DOWNWARD_WORKSPACE: RefCell<Vec<Weight>>);
 
-pub fn customize<'c, Graph>(
-    cch: &'c CCH,
-    metric: &Graph,
-) -> (
-    FirstOutGraph<&'c [EdgeId], &'c [NodeId], Vec<Weight>>,
-    FirstOutGraph<&'c [EdgeId], &'c [NodeId], Vec<Weight>>,
-)
+pub fn customize<'c, Graph>(cch: &'c CCH, metric: &Graph) -> Customized<'c>
 where
     Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph + Sync,
 {
@@ -112,7 +106,9 @@ where
         });
     });
 
-    let upward = FirstOutGraph::new(&cch.first_out[..], &cch.head[..], upward_weights);
-    let downward = FirstOutGraph::new(&cch.first_out[..], &cch.head[..], downward_weights);
-    (upward, downward)
+    Customized {
+        cch,
+        upward: upward_weights,
+        downward: downward_weights,
+    }
 }

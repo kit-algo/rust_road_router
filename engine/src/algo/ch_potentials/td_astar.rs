@@ -20,7 +20,8 @@ impl Server<'_> {
             .map(|edge_id| graph.travel_time_function(edge_id).lower_bound())
             .collect::<Vec<Weight>>();
 
-        let (upward, downward) = customize(cch, &FirstOutGraph::new(graph.first_out(), graph.head(), metric));
+        let customized = customize(cch, &FirstOutGraph::new(graph.first_out(), graph.head(), metric));
+        let (upward, downward) = customized.into_ch_graphs();
         let backward = SteppedEliminationTree::new(downward, cch.elimination_tree());
 
         Server {

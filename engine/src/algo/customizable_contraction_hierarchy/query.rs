@@ -12,21 +12,24 @@ pub struct Server<'a> {
 }
 
 impl<'a> Server<'a> {
-    pub fn new<Graph>(cch_graph: &'a CCH, metric: &Graph) -> Server<'a>
-    where
-        Graph: for<'b> LinkIterGraph<'b> + RandomLinkAccessGraph + Sync,
-    {
-        let (upward, downward) = customize(cch_graph, metric);
-        let forward = SteppedEliminationTree::new(upward, cch_graph.elimination_tree());
-        let backward = SteppedEliminationTree::new(downward, cch_graph.elimination_tree());
+    pub fn new(customized: Customized<'a>) -> Server<'a> {
+        let cch = customized.cch;
+        let (forward, backward) = customized.into_ch_graphs();
+        let forward = SteppedEliminationTree::new(forward, cch.elimination_tree());
+        let backward = SteppedEliminationTree::new(backward, cch.elimination_tree());
 
         Server {
             forward,
             backward,
-            cch_graph,
+            cch_graph: cch,
             tentative_distance: INFINITY,
             meeting_node: 0,
         }
+    }
+
+    pub fn update(&mut self, mut customized: Customized<'a>) {
+        self.forward.graph_mut().swap_weights(&mut customized.upward);
+        self.backward.graph_mut().swap_weights(&mut customized.downward);
     }
 
     fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {

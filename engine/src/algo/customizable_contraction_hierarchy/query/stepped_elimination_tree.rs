@@ -94,6 +94,10 @@ impl<'b, Graph: for<'a> LinkIterGraph<'a>> SteppedEliminationTree<'b, Graph> {
     pub fn graph(&self) -> &Graph {
         &self.graph
     }
+
+    pub fn graph_mut(&mut self) -> &mut Graph {
+        &mut self.graph
+    }
 }
 
 impl<'b, FirstOutContainer, HeadContainer, WeightContainer> SteppedEliminationTree<'b, FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>>

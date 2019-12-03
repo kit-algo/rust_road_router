@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     .reorder_for_seperator_based_customization(cch.separators());
     let cch = contract(&graph, cch_order);
 
-    let mut server = Server::new(&cch, &graph);
+    let mut server = Server::new(customize(&cch, &graph));
 
     let from = Vec::load_from(path.join("test/source"))?;
     let to = Vec::load_from(path.join("test/target"))?;

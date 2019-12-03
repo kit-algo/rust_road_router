@@ -108,8 +108,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     drop(live_graph);
     let live_graph = FirstOutGraph::new(&first_out[..], &head[..], &live_travel_time[..]);
 
-    let mut cch_static_server = Server::new(&cch, &graph);
-    let mut cch_live_server = Server::new(&cch, &live_graph);
+    let mut cch_static_server = Server::new(customize(&cch, &graph));
+    let mut cch_live_server = Server::new(customize(&cch, &live_graph));
 
     let topocore = report_time("topocore preprocessing", || preprocess(&live_graph));
     let mut topocore = {

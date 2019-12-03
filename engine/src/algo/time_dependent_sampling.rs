@@ -1,5 +1,5 @@
 use super::*;
-use crate::algo::customizable_contraction_hierarchy::{query::Server as CCHServer, CCH};
+use crate::algo::customizable_contraction_hierarchy::{customize, query::Server as CCHServer, CCH};
 use crate::algo::dijkstra::td_stepped_dijkstra::{QueryProgress, TDSteppedDijkstra};
 use crate::datastr::graph::time_dependent::*;
 use crate::datastr::graph::RandomLinkAccessGraph;
@@ -37,7 +37,7 @@ impl<'a> Server<'a> {
                 .map(|edge_id| graph.travel_time_function(edge_id).average(range.clone()))
                 .collect::<Vec<Weight>>()
         })
-        .map(|metric| CCHServer::new(cch, &FirstOutGraph::new(graph.first_out(), graph.head(), metric)))
+        .map(|metric| CCHServer::new(customize(cch, &FirstOutGraph::new(graph.first_out(), graph.head(), metric))))
         .collect();
 
         Server {
