@@ -3,6 +3,9 @@ use crate::io::*;
 
 pub type Rank = NodeId;
 
+/// A type for node orders which allows efficiently retrieving both the rank in the order of a node
+/// and the node for a given rank. Mostly useful, because this type makes it always clear
+/// in which direction the mapping goes.
 #[derive(Debug, Clone)]
 pub struct NodeOrder {
     // NodeIds ordered by their ranks - that is ascending in importance
@@ -12,6 +15,7 @@ pub struct NodeOrder {
 }
 
 impl NodeOrder {
+    /// Create a `NodeOrder` where the id is equal to the rank
     pub fn identity(n: usize) -> NodeOrder {
         NodeOrder {
             node_order: (0..n as u32).collect(),
@@ -19,6 +23,7 @@ impl NodeOrder {
         }
     }
 
+    /// Create a `NodeOrder` from a order vector, that is a vector containing the node ids ordered by their rank.
     pub fn from_node_order(node_order: Vec<NodeId>) -> NodeOrder {
         let n = node_order.len();
         assert!(n < <NodeId>::max_value() as usize);
@@ -33,6 +38,7 @@ impl NodeOrder {
         NodeOrder { node_order, ranks }
     }
 
+    /// Create a `NodeOrder` from a rank vector, that is a vector where `rank[id]` contains the rank for node `id`
     pub fn from_ranks(ranks: Vec<Rank>) -> NodeOrder {
         let n = ranks.len();
         assert!(n < <NodeId>::max_value() as usize);
@@ -47,26 +53,32 @@ impl NodeOrder {
         NodeOrder { node_order, ranks }
     }
 
+    /// Get node order (rank -> node) as a slice
     pub fn order(&self) -> &[NodeId] {
         &self.node_order
     }
 
+    /// Get node ranks (node -> rank) as a slice
     pub fn ranks(&self) -> &[NodeId] {
         &self.ranks
     }
 
+    /// Get rank for a given node
     pub fn rank(&self, node: NodeId) -> Rank {
         self.ranks[node as usize]
     }
 
+    /// Get node for a given rank
     pub fn node(&self, rank: Rank) -> NodeId {
         self.node_order[rank as usize]
     }
 
+    /// Number of nodes in the order
     pub fn len(&self) -> usize {
         self.node_order.len()
     }
 
+    /// Are there no nodes in the order?
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
