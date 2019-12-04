@@ -52,6 +52,13 @@ impl<T: Copy> DataBytes for [T] {
     }
 }
 
+impl<T: Copy> DataBytes for &[T] {
+    fn data_bytes(&self) -> &[u8] {
+        let num_bytes = self.len() * mem::size_of::<T>();
+        unsafe { slice::from_raw_parts(self.as_ptr() as *const u8, num_bytes) }
+    }
+}
+
 impl<T: Copy> DataBytes for Vec<T> {
     fn data_bytes(&self) -> &[u8] {
         &self[..].data_bytes()

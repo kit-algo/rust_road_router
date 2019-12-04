@@ -1,11 +1,17 @@
+//! Goto static graph representation for route planning algorithms.
+//!
+//!
+
 use super::*;
 use crate::as_mut_slice::AsMutSlice;
 use crate::as_slice::AsSlice;
 use crate::io::*;
-use std::io::Result;
 use std::mem::swap;
-use std::path::Path;
 
+/// Container struct for the three collections of a graph.
+/// Genric over the types of the three data collections.
+/// Anything that can be dereferenced to a slice works.
+/// Both owned (`Vec<T>`, `Box<[T]>`) and shared (`Rc<[T]>`, `Arc<[T])>`) or borrowed (slices) data is possible.
 #[derive(Debug, Clone)]
 pub struct FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
 where
@@ -27,16 +33,20 @@ where
     HeadContainer: AsSlice<NodeId>,
     WeightContainer: AsSlice<Weight>,
 {
+    /// Borrow a slice of the first_out data
     pub fn first_out(&self) -> &[EdgeId] {
         self.first_out.as_slice()
     }
+    /// Borrow a slice of the head data
     pub fn head(&self) -> &[NodeId] {
         self.head.as_slice()
     }
+    /// Borrow a slice of the weight data
     pub fn weight(&self) -> &[Weight] {
         self.weight.as_slice()
     }
 
+    /// Create a new `FirstOutGraph` from the three containers.
     pub fn new(first_out: FirstOutContainer, head: HeadContainer, weight: WeightContainer) -> FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> {
         assert!(first_out.as_slice().len() < <NodeId>::max_value() as usize);
         assert!(head.as_slice().len() < <EdgeId>::max_value() as usize);
@@ -47,21 +57,29 @@ where
         FirstOutGraph { first_out, head, weight }
     }
 
+    /// Get the number of outgoing arcs for a node
     pub fn degree(&self, node: NodeId) -> usize {
         let range = self.neighbor_edge_indices_usize(node);
         range.end - range.start
     }
 
-    pub fn write_to_dir(&self, dir: &str) -> Result<()> {
-        let path = Path::new(dir);
-        let res1 = self.first_out().write_to(&path.join("first_out"));
-        let res2 = self.head().write_to(&path.join("head"));
-        let res3 = self.weight().write_to(&path.join("weights"));
-        res1.and(res2).and(res3)
-    }
-
+    /// Decompose the graph into its three seperate data containers
     pub fn decompose(self) -> (FirstOutContainer, HeadContainer, WeightContainer) {
         (self.first_out, self.head, self.weight)
+    }
+}
+
+impl<FirstOutContainer, HeadContainer, WeightContainer> Deconstruct for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+where
+    FirstOutContainer: AsSlice<EdgeId>,
+    HeadContainer: AsSlice<NodeId>,
+    WeightContainer: AsSlice<Weight>,
+{
+    fn store_each(&self, store: &dyn Fn(&str, &dyn Store) -> std::io::Result<()>) -> std::io::Result<()> {
+        store("first_out", &self.first_out())?;
+        store("head", &self.head())?;
+        store("weights", &self.weight())?;
+        Ok(())
     }
 }
 
@@ -173,6 +191,7 @@ where
     }
 }
 
+/// Build a first_out array from an iterator of degrees
 pub fn degrees_to_first_out<I: Iterator<Item = EdgeId>>(degrees: I) -> impl Iterator<Item = EdgeId> {
     std::iter::once(0).chain(degrees.scan(0, |state, degree| {
         *state += degree as EdgeId;

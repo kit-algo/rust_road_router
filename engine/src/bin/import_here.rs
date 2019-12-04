@@ -3,7 +3,7 @@ use std::{env, error::Error, path::Path, str::FromStr};
 use bmw_routing_engine::{
     cli::CliErr,
     import::here::{csv_source::CSVSource, read_graph},
-    io::Store,
+    io::*,
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let source = CSVSource::new(Path::new(in_dir));
     let data = read_graph(&source, (min_lat, min_lon), (max_lat, max_lon));
-    data.graph.write_to_dir(out_dir)?;
+    data.graph.deconstruct_to(out_dir)?;
     let out_dir = Path::new(out_dir);
 
     data.functional_road_classes.write_to(&out_dir.join("functional_road_classes"))?;
