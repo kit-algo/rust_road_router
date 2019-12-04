@@ -1,3 +1,5 @@
+//! Working with node orders.
+
 use crate::datastr::graph::*;
 use crate::io::*;
 

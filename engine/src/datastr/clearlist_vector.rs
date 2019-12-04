@@ -1,5 +1,11 @@
+//! A fast resettable vector.
+
 use std::ops::{Index, IndexMut};
 
+/// A fast resettable vector based on a clearlist.
+/// Resetting is efficient when few entries where modified.
+/// The elements can be modified through the index traits.
+/// Other modifications are not permitted.
 #[derive(Debug)]
 pub struct ClearlistVector<T> {
     data: Vec<T>,
@@ -8,6 +14,7 @@ pub struct ClearlistVector<T> {
 }
 
 impl<T: Clone> ClearlistVector<T> {
+    /// Create a new `ClearlistVector` with size elements of the given default.
     pub fn new(size: usize, default: T) -> ClearlistVector<T> {
         ClearlistVector {
             data: vec![default.clone(); size],
@@ -16,6 +23,7 @@ impl<T: Clone> ClearlistVector<T> {
         }
     }
 
+    /// Reset all elements to the default value
     pub fn reset(&mut self) {
         for &idx in &self.clearlist {
             self.data[idx] = self.default.clone();
