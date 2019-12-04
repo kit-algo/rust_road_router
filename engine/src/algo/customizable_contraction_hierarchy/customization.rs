@@ -9,6 +9,7 @@ pub mod ftd;
 scoped_thread_local!(static UPWARD_WORKSPACE: RefCell<Vec<Weight>>);
 scoped_thread_local!(static DOWNWARD_WORKSPACE: RefCell<Vec<Weight>>);
 
+/// GOTCHA: When the original graph has parallel edges, the respecting phase may not necessarily use the best.
 pub fn customize<'c, Graph>(cch: &'c CCH, metric: &Graph) -> Customized<'c>
 where
     Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph + Sync,

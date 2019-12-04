@@ -1,4 +1,4 @@
-//! Working with node orders.
+//! A struct to work with node orders.
 
 use crate::datastr::graph::*;
 use crate::io::*;

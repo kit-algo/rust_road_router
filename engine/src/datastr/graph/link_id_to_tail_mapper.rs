@@ -1,7 +1,12 @@
+//!
+
 use super::*;
 use crate::as_slice::AsSlice;
 use crate::datastr::rank_select_map::*;
 
+/// A compact data strcuture to efficiently get the tail node of a given link.
+/// Only good for very specific trade-offs.
+/// Usually, there is enough space to just keep a vector of tail nodes for each edge.
 #[derive(Debug)]
 pub struct LinkIdToTailMapper {
     link_id_to_tail: RankSelectMap,
@@ -9,6 +14,9 @@ pub struct LinkIdToTailMapper {
 }
 
 impl LinkIdToTailMapper {
+    /// Create a new mapper from a graph reference.
+    // We should probably keep that reference around, so the graph can't be mutated
+    // afterwords as this might invalidate this map.
     pub fn new<FOC, HC, WC>(graph: &FirstOutGraph<FOC, HC, WC>) -> LinkIdToTailMapper
     where
         FOC: AsSlice<EdgeId>,
@@ -46,6 +54,7 @@ impl LinkIdToTailMapper {
         mapper
     }
 
+    /// Get the tail node id for a given edge id
     pub fn link_id_to_tail(&self, link_id: EdgeId) -> NodeId {
         let num_deg_zeros_below = match self.deg_zero_nodes_indices.binary_search(&link_id) {
             Ok(ref mut index) => {
