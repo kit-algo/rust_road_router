@@ -1,4 +1,4 @@
-//!
+//! Compact data strcuture to efficiently get the tail node of a given link
 
 use super::*;
 use crate::as_slice::AsSlice;

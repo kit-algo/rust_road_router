@@ -1,3 +1,10 @@
+//! Imai Iri approximation algorithm for piecewise linear functions
+//!
+//! Taken more or less straight from the TD-CRP code which in turn seems to haven taken it from
+//! Veith-Batz and his T-CH which in turn seems to have gotton it from Sabine Neubauers student thesis.
+//! I translated the code to rust and blindly catched a few out of bounds bugs (thanks rust), but it remains basically a blackbox.
+//! Beware, here be dragons!
+
 use super::*;
 
 pub const INVALID_INDEX: usize = std::usize::MAX;

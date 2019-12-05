@@ -12,12 +12,15 @@ pub mod dijkstra;
 pub mod time_dependent_sampling;
 pub mod topocore;
 
+/// Simply a source-target pair
 #[derive(Debug, Clone, Copy)]
 pub struct Query {
     pub from: NodeId,
     pub to: NodeId,
 }
 
+/// A source-target pair with a departure time.
+/// Genric over the timestamp type, so we can support both integer and float weights
 #[derive(Debug, Clone, Copy)]
 pub struct TDQuery<T: Copy> {
     pub from: NodeId,
@@ -25,6 +28,10 @@ pub struct TDQuery<T: Copy> {
     pub departure: T,
 }
 
+/// Generic container for query results.
+/// Since queries usually modify the state of the internal algorithm data structures,
+/// it is usually impossible to retrieve a path for an older query result once a new query was performed.
+/// This type use rusts lifetimes to enforce this behaviour through the method signatures.
 #[derive(Debug)]
 pub struct QueryResult<P, W> {
     distance: W,
@@ -55,6 +62,6 @@ pub trait TDQueryServer<'s, T: Copy, W> {
 }
 
 pub trait PathServer<'s> {
-    type NodeInfo;
+    type NodeInfo: 'static;
     fn path(&'s mut self) -> Vec<Self::NodeInfo>;
 }

@@ -1,6 +1,12 @@
 //! Goto static graph representation for route planning algorithms.
 //!
-//!
+//! Nodes and edges can be identified by a unique id, going from `0` to `n-1` and `m-1` respectively, where `n` is the number of nodes and `m` the number of directed arcs.
+//! We store the graph as an adjacency array using three collections: `first_out`, `head` and `weight`.
+//! `head` and `weight` have each `m` elements.
+//! `first_out` has `n+1` elements.
+//! The first element of `first_out` is always 0 and the last one `m`.
+//! `first_out[x]` contains the id of the first edge that is an outgoing edge of node `x`.
+//! Thus, `head[first_out[x]..first_out[x+1]]` contains all neighbors of `x`.
 
 use super::*;
 use crate::as_mut_slice::AsMutSlice;
