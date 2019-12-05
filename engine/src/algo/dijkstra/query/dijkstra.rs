@@ -40,10 +40,10 @@ impl<Graph: for<'a> LinkIterGraph<'a>> Server<Graph> {
 
 pub struct PathServerWrapper<'s, G: for<'a> LinkIterGraph<'a>>(&'s Server<G>);
 
-impl<'s, G: for<'a> LinkIterGraph<'a>> PathServer<'s> for PathServerWrapper<'s, G> {
+impl<'s, G: for<'a> LinkIterGraph<'a>> PathServer for PathServerWrapper<'s, G> {
     type NodeInfo = NodeId;
 
-    fn path(&'s mut self) -> Vec<Self::NodeInfo> {
+    fn path(&mut self) -> Vec<Self::NodeInfo> {
         Server::path(self.0)
     }
 }
@@ -52,9 +52,7 @@ impl<'s, G: 's + for<'a> LinkIterGraph<'a>> QueryServer<'s> for Server<G> {
     type P = PathServerWrapper<'s, G>;
 
     fn query(&'s mut self, query: Query) -> Option<QueryResult<Self::P, Weight>> {
-        self.distance(query.from, query.to).map(move |distance| QueryResult {
-            distance,
-            path_server: PathServerWrapper(self),
-        })
+        self.distance(query.from, query.to)
+            .map(move |distance| QueryResult::new(distance, PathServerWrapper(self)))
     }
 }
