@@ -1,31 +1,15 @@
+//! Time-dependent Dijkstra with float based weights
+
 use super::*;
 use crate::datastr::graph::floating_time_dependent::*;
 use crate::datastr::{index_heap::*, timestamped_vector::*};
-
-#[derive(Debug, Clone)]
-pub enum QueryProgress {
-    Progress(State),
-    Done(),
-}
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Ord, PartialOrd)]
-pub struct State {
-    pub distance: Timestamp,
-    pub node: NodeId,
-}
-
-impl Indexing for State {
-    fn as_index(&self) -> usize {
-        self.node as usize
-    }
-}
 
 #[derive(Debug)]
 pub struct FloatingTDSteppedDijkstra {
     graph: TDGraph,
     distances: TimestampedVector<Timestamp>,
     predecessors: Vec<NodeId>,
-    closest_node_priority_queue: IndexdMinHeap<State>,
+    closest_node_priority_queue: IndexdMinHeap<State<Timestamp>>,
 }
 
 impl FloatingTDSteppedDijkstra {
@@ -51,7 +35,7 @@ impl FloatingTDSteppedDijkstra {
         self.closest_node_priority_queue.push(State { distance: at, node: from });
     }
 
-    pub fn next_step<F: Fn(EdgeId) -> bool>(&mut self, check_edge: F) -> QueryProgress {
+    pub fn next_step<F: Fn(EdgeId) -> bool>(&mut self, check_edge: F) -> QueryProgress<Timestamp> {
         // Examine the frontier with lower distance nodes first (min-heap)
         if let Some(State { distance, node }) = self.closest_node_priority_queue.pop() {
             // For each node we can reach, see if we can find a way with
@@ -76,9 +60,9 @@ impl FloatingTDSteppedDijkstra {
                 }
             }
 
-            QueryProgress::Progress(State { distance, node })
+            QueryProgress::Settled(State { distance, node })
         } else {
-            QueryProgress::Done()
+            QueryProgress::Done(None)
         }
     }
 

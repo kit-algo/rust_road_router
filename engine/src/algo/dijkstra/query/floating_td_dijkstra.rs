@@ -1,5 +1,5 @@
 use super::*;
-use crate::algo::dijkstra::floating_td_stepped_dijkstra::{FloatingTDSteppedDijkstra, QueryProgress, State};
+use crate::algo::dijkstra::floating_td_stepped_dijkstra::FloatingTDSteppedDijkstra;
 use crate::datastr::graph::floating_time_dependent::*;
 use crate::report::*;
 
@@ -24,7 +24,7 @@ impl Server {
         self.dijkstra.initialize_query(from, departure_time);
 
         let mut i: usize = 0;
-        while let QueryProgress::Progress(State { distance, node }) = self.dijkstra.next_step(|_| true) {
+        while let QueryProgress::Settled(State { distance, node }) = self.dijkstra.next_step(|_| true) {
             i += 1;
             if (i & (i - 1)) == 0 {
                 // power of two
@@ -40,12 +40,12 @@ impl Server {
 
         loop {
             match self.dijkstra.next_step(|_| true) {
-                QueryProgress::Progress(State { distance, node }) => {
+                QueryProgress::Settled(State { distance, node }) => {
                     if node == to {
                         return Some(distance - departure);
                     }
                 }
-                QueryProgress::Done() => return None,
+                QueryProgress::Done(_) => return None,
             }
         }
     }

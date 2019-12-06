@@ -1,44 +1,13 @@
+//! Basic variant of dijkstras algorithm
+
 use super::*;
 use crate::datastr::{index_heap::*, timestamped_vector::*};
-
-#[derive(Debug, Clone)]
-pub enum QueryProgress {
-    Progress(State),
-    Done(Option<Weight>),
-}
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub struct State {
-    pub distance: Weight,
-    pub node: NodeId,
-}
-
-impl std::cmp::PartialOrd for State {
-    #[inline]
-    fn partial_cmp(&self, rhs: &Self) -> Option<std::cmp::Ordering> {
-        self.distance.partial_cmp(&rhs.distance)
-    }
-}
-
-impl std::cmp::Ord for State {
-    #[inline]
-    fn cmp(&self, rhs: &Self) -> std::cmp::Ordering {
-        self.distance.cmp(&rhs.distance)
-    }
-}
-
-impl Indexing for State {
-    #[inline]
-    fn as_index(&self) -> usize {
-        self.node as usize
-    }
-}
 
 #[derive(Debug)]
 pub struct Trash {
     distances: TimestampedVector<Weight>,
     predecessors: Vec<NodeId>,
-    closest_node_priority_queue: IndexdMinHeap<State>,
+    closest_node_priority_queue: IndexdMinHeap<State<Weight>>,
 }
 
 #[derive(Debug)]
@@ -46,7 +15,7 @@ pub struct SteppedDijkstra<Graph: for<'a> LinkIterGraph<'a>> {
     graph: Graph,
     distances: TimestampedVector<Weight>,
     predecessors: Vec<NodeId>,
-    closest_node_priority_queue: IndexdMinHeap<State>,
+    closest_node_priority_queue: IndexdMinHeap<State<Weight>>,
     // the current query
     query: Option<Query>,
     // first option: algorithm finished? second option: final result of algorithm
@@ -69,6 +38,9 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
         }
     }
 
+    /// For CH preprocessing we reuse the distance array and the queue to reduce allocations.
+    /// This method creates an algo struct from recycled data.
+    /// The counterpart is the `recycle` method.
     pub fn from_recycled(graph: Graph, recycled: Trash) -> SteppedDijkstra<Graph> {
         let n = graph.num_nodes();
         assert!(recycled.distances.len() >= n);
@@ -97,7 +69,7 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
         self.closest_node_priority_queue.push(State { distance: 0, node: from });
     }
 
-    pub fn next_step(&mut self) -> QueryProgress {
+    pub fn next_step(&mut self) -> QueryProgress<Weight> {
         match self.result {
             Some(result) => QueryProgress::Done(result),
             None => self.settle_next_node(|_, dist| dist, |_, _, _| true),
@@ -108,7 +80,7 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
         &mut self,
         potential: impl FnMut(NodeId, Weight) -> Weight,
         relax_edge: impl FnMut(NodeId, Link, &Self) -> bool,
-    ) -> QueryProgress {
+    ) -> QueryProgress<Weight> {
         match self.result {
             Some(result) => QueryProgress::Done(result),
             None => self.settle_next_node(potential, relax_edge),
@@ -119,7 +91,7 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
         &mut self,
         mut potential: impl FnMut(NodeId, Weight) -> Weight,
         mut relax_edge: impl FnMut(NodeId, Link, &Self) -> bool,
-    ) -> QueryProgress {
+    ) -> QueryProgress<Weight> {
         let to = self.query.as_ref().expect("query was not initialized properly").to;
 
         // Examine the frontier with lower distance nodes first (min-heap)
@@ -161,7 +133,7 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
                 }
             }
 
-            QueryProgress::Progress(State { distance, node })
+            QueryProgress::Settled(State { distance, node })
         } else {
             self.result = Some(None);
             QueryProgress::Done(None)
@@ -184,10 +156,13 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
         &self.graph
     }
 
-    pub fn queue(&self) -> &IndexdMinHeap<State> {
+    pub fn queue(&self) -> &IndexdMinHeap<State<Weight>> {
         &self.closest_node_priority_queue
     }
 
+    /// For CH preprocessing we reuse the distance array and the queue to reduce allocations.
+    /// This method decomposes this algo struct for later reuse.
+    /// The counterpart is `from_recycled`
     pub fn recycle(self) -> Trash {
         Trash {
             distances: self.distances,

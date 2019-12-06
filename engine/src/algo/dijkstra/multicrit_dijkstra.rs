@@ -1,6 +1,8 @@
-use std::fmt::Debug;
-use std::collections::BinaryHeap;
+//! Genric Multi-criteria Dijkstra based on traits
+
 use super::*;
+use std::collections::BinaryHeap;
+use std::fmt::Debug;
 
 use std::cmp::Ordering;
 pub trait Label: Ord + Debug + Clone {
@@ -52,15 +54,20 @@ impl<Graph: MCDGraph> MultiCritDijkstra<Graph> {
         self.queue.push(zero);
 
         while let Some(label) = self.queue.pop() {
-            if !self.labels[label.node() as usize].iter().any(|other_label| label.pareto_cmp(other_label) == Some(Ordering::Greater)) {
+            if !self.labels[label.node() as usize]
+                .iter()
+                .any(|other_label| label.pareto_cmp(other_label) == Some(Ordering::Greater))
+            {
                 let label_index = self.labels[label.node() as usize].len();
 
                 for link in self.graph.neighbor_iter(label.node()) {
-                    if link.head() != label.parent().0 { // Hopping reduction - don't relax back to parent
+                    if link.head() != label.parent().0 {
+                        // Hopping reduction - don't relax back to parent
                         let new_label = link.relax(&label, label_index);
 
                         if !self.labels[query.to as usize].iter().any(|other_label| new_label.pareto_cmp(other_label) == Some(Ordering::Greater)) && // Target Pruning - forget label if dominate by label at target
-                            !self.labels[new_label.node() as usize].iter().any(|other_label| new_label.pareto_cmp(other_label) == Some(Ordering::Greater)) {
+                            !self.labels[new_label.node() as usize].iter().any(|other_label| new_label.pareto_cmp(other_label) == Some(Ordering::Greater))
+                        {
                             self.queue.push(new_label);
                         }
                     }

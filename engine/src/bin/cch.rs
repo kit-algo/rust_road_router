@@ -26,13 +26,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let cch_order = Vec::load_from(path.join("cch_perm"))?;
     let cch_order = NodeOrder::from_node_order(cch_order);
 
-    let cch = contract(&graph, cch_order.clone());
+    let cch = contract(&graph, cch_order);
     let cch_order = CCHReordering {
-        node_order: cch_order,
+        cch: &cch,
         latitude: &[],
         longitude: &[],
     }
-    .reorder_for_seperator_based_customization(cch.separators());
+    .reorder_for_seperator_based_customization();
     let cch = contract(&graph, cch_order);
 
     let mut server = Server::new(customize(&cch, &graph));

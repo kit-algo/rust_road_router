@@ -1,9 +1,17 @@
+//! Experimental prototype implementation of Contraction Hierarchies in rust.
+//!
+//! Not tuned for performance yet.
+//! No node ordering implemented yet, depends on getting a precalculated order.
+
 use super::*;
 use crate::algo::dijkstra::stepped_dijkstra::Trash;
 use crate::datastr::node_order::NodeOrder;
 
 pub mod query;
 
+/// Struct for a Contraction Hierarchy, that is the completely preprocessed
+/// graph augmented by shortcuts and split in an upwards and downward part,
+/// optionally with unpacking info.
 pub struct ContractionHierarchy {
     forward: OwnedGraph,
     backward: OwnedGraph,
@@ -11,6 +19,7 @@ pub struct ContractionHierarchy {
 }
 
 impl ContractionHierarchy {
+    /// Create CH struct from augmented graph and node order.
     pub fn from_contracted_graph(graph: OwnedGraph, order: &NodeOrder) -> ContractionHierarchy {
         let (forward, backward) = graph.ch_split(order);
         ContractionHierarchy {
@@ -28,6 +37,8 @@ enum ShortcutResult {
     ShorterExisting,
 }
 
+/// Struct for nodes during contraction.
+/// Allows adding, removing or updating edges.
 #[derive(Debug)]
 struct Node {
     outgoing: Vec<(Link, NodeId)>,
@@ -67,17 +78,21 @@ impl Node {
         ShortcutResult::NewShortcut
     }
 
+    // remove links to a specific other node
     fn remove_outgoing(&mut self, to: NodeId) {
         let pos = self.outgoing.iter().position(|&(Link { node, .. }, _)| to == node).unwrap();
         self.outgoing.swap_remove(pos);
     }
 
+    // remove links from a specific other node
     fn remove_incmoing(&mut self, from: NodeId) {
         let pos = self.incoming.iter().position(|&(Link { node, .. }, _)| from == node).unwrap();
         self.incoming.swap_remove(pos);
     }
 }
 
+/// Intermediate graph representation for during the preprocessing.
+/// During contraction, we need a dynamic graph, so we use a `Vec` of nodes instead of the typical adjacency array structure.
 #[derive(Debug)]
 struct ContractionGraph {
     nodes: Vec<Node>,
@@ -85,9 +100,14 @@ struct ContractionGraph {
 }
 
 impl ContractionGraph {
+    // Create a ContractionGraph from a regular graph and an order.
     fn new<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, order: NodeOrder) -> ContractionGraph {
         let n = graph.num_nodes();
 
+        // We need to:
+        // - filter out loops
+        // - translate the node ids
+        // - create the struct we use during preprocessing
         let nodes = {
             let outs = (0..n).map(|node| {
                 graph
@@ -126,45 +146,55 @@ impl ContractionGraph {
         ContractionGraph { nodes, order }
     }
 
+    // contract all nodes - full preprocessing
     fn contract(&mut self) {
         self.contract_partially(self.nodes.len())
     }
 
+    // contract a fixed number of nodes
     fn contract_partially(&mut self, mut contraction_count: usize) {
+        // We utilize split borrows to make node contraction work well with rusts borrowing rules.
+        // The graph representation already contains the node in order of increasing rank.
+        // We iteratively split of the lowest ranked node.
+        // This is the one that will be contracted next.
+        // Contraction does not require mutation of the current node,
+        // but we need to insert shortcuts between nodes of higher rank.
+
+        // we start with the complete graph
         let mut graph = self.partial_graph();
+        // witness search servers with recycling for reduced allocations
         let mut recycled = (
             SteppedDijkstra::new(ForwardWrapper { graph: &graph }).recycle(),
             SteppedDijkstra::new(BackwardWrapper { graph: &graph }).recycle(),
         );
 
+        // split of the lowest node, the one that will be contracted
         while let Some((node, mut subgraph)) = graph.remove_lowest() {
             if contraction_count == 0 {
                 break;
             } else {
                 contraction_count -= 1;
             }
-            for &(
-                Link {
-                    node: from,
-                    weight: from_weight,
-                },
-                _,
-            ) in &node.incoming
-            {
-                for &(Link { node: to, weight: to_weight }, _) in &node.outgoing {
-                    let (shortcut_required, new_recycled) = subgraph.shortcut_required(from, to, from_weight + to_weight, recycled);
+            // for all pairs of neighbors
+            for &(Link { node: from, weight: from_wght }, _) in &node.incoming {
+                for &(Link { node: to, weight: to_wght }, _) in &node.outgoing {
+                    // do witness search to check if we need the shortcut
+                    let (shortcut_required, new_recycled) = subgraph.shortcut_required(from, to, from_wght + to_wght, recycled);
                     recycled = new_recycled;
                     if shortcut_required {
-                        let node_id = subgraph.id_offset - 1;
-                        subgraph.insert_or_decrease(from, to, from_weight + to_weight, node_id);
+                        let middle_node_id = subgraph.id_offset - 1;
+                        // insert shortcut
+                        subgraph.insert_or_decrease(from, to, from_wght + to_wght, middle_node_id);
                     }
                 }
             }
 
+            // set graph to subgraph, so we continue with the next node in the next iteration
             graph = subgraph;
         }
     }
 
+    // create partial graph with all nodes
     fn partial_graph(&mut self) -> PartialContractionGraph {
         PartialContractionGraph {
             nodes: &mut self.nodes[..],
@@ -172,6 +202,7 @@ impl ContractionGraph {
         }
     }
 
+    // build up CH struct after contraction
     fn into_first_out_graphs(self) -> ContractionHierarchy {
         let (outgoing, incoming): (Vec<_>, Vec<_>) = self
             .nodes
@@ -192,13 +223,18 @@ impl ContractionGraph {
     }
 }
 
+// a struct to keep track of the partial graphs during contraction
 #[derive(Debug)]
 struct PartialContractionGraph<'a> {
+    // the nodes in the partial graph
     nodes: &'a mut [Node],
+    // slice indices always start at zero, but we need to index by node id,
+    // so we remember the number of nodes already contracted
     id_offset: NodeId,
 }
 
 impl<'a> PartialContractionGraph<'a> {
+    // split of the lowest node and remove any edges from higher ranked nodes to this one
     fn remove_lowest(self) -> Option<(&'a Node, PartialContractionGraph<'a>)> {
         if let Some((node, other_nodes)) = self.nodes.split_first_mut() {
             let mut subgraph = PartialContractionGraph {
@@ -231,10 +267,12 @@ impl<'a> PartialContractionGraph<'a> {
     }
 
     fn shortcut_required(&self, from: NodeId, to: NodeId, shortcut_weight: Weight, recycled: (Trash, Trash)) -> (bool, (Trash, Trash)) {
+        // no loop shortcuts ever required
         if from == to {
             return (false, recycled);
         }
 
+        // create server from recycled stuff
         let mut server = crate::algo::dijkstra::query::bidirectional_dijkstra::Server {
             forward_dijkstra: SteppedDijkstra::from_recycled(ForwardWrapper { graph: &self }, recycled.0),
             backward_dijkstra: SteppedDijkstra::from_recycled(BackwardWrapper { graph: &self }, recycled.1),
@@ -242,6 +280,7 @@ impl<'a> PartialContractionGraph<'a> {
             meeting_node: 0,
         };
 
+        // witness search is a bidirection dijkstra capped to the length of the path over the contracted node
         let res = match server.distance_with_cap(from - self.id_offset, to - self.id_offset, shortcut_weight) {
             Some(length) if length < shortcut_weight => false,
             Some(_) => true,
@@ -252,6 +291,7 @@ impl<'a> PartialContractionGraph<'a> {
     }
 }
 
+/// Create an overlay graph by contracting a fixed number of nodes
 pub fn overlay<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, order: NodeOrder, contraction_count: usize) -> (OwnedGraph, OwnedGraph) {
     let mut graph = ContractionGraph::new(graph, order);
     graph.contract_partially(contraction_count);
@@ -259,11 +299,14 @@ pub fn overlay<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, order: NodeOrder
     (ch.forward, ch.backward)
 }
 
+/// Perform CH Preprocessing
 pub fn contract<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, order: NodeOrder) -> ContractionHierarchy {
     let mut graph = ContractionGraph::new(graph, order);
     graph.contract();
     graph.into_first_out_graphs()
 }
+
+// Utilities for witness search
 
 #[derive(Debug)]
 struct ForwardWrapper<'a> {

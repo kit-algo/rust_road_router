@@ -1,3 +1,9 @@
+//! Algorithms for first phase of CCH preprocessing.
+//!
+//! This is an implementation of the FAST (FAst and Simple Triangulation algorithm).
+//! It is heavily based on a linear time chordality check.
+//! This implementation is not guaranteed to run in linear time, but is practically faster than the linear version.
+
 use super::*;
 use crate::{datastr::graph::first_out_graph::degrees_to_first_out, report::benchmark::report_time, report::*};
 use std::{
@@ -11,12 +17,14 @@ enum ShortcutResult {
     Existed,
 }
 
+// During contraction, nodes are represented as Vecs of neighbor nodes.
 #[derive(Debug)]
 struct Node {
     edges: Vec<NodeId>,
 }
 
 impl Node {
+    // inserts a node into the neighborhood unless it already exists
     fn insert(&mut self, node: NodeId) -> ShortcutResult {
         for &other in &self.edges {
             if node == other {
@@ -28,9 +36,12 @@ impl Node {
         ShortcutResult::NewShortcut
     }
 
+    // Merges the neighborhood of another node into this node.
+    // Efficient because neighborhoods are stored sorted.
     fn merge_neighbors(&mut self, others: &[NodeId]) {
         let mut new_edges = Vec::with_capacity(self.edges.len() + others.len());
 
+        // Neighborhoods are kept sorted, so we do a coordinated linear sweep and push into `new_edges`
         let mut self_iter = self.edges.iter().peekable();
         let mut other_iter = others.iter().peekable();
 
@@ -75,6 +86,7 @@ pub struct ContractionGraph<'a, Graph: for<'b> LinkIterGraph<'b> + 'a> {
 }
 
 impl<'a, Graph: for<'b> LinkIterGraph<'b>> ContractionGraph<'a, Graph> {
+    /// Preprocessing preparation
     pub fn new(graph: &'a Graph, node_order: NodeOrder) -> ContractionGraph<'a, Graph> {
         let n = graph.num_nodes() as NodeId;
 
@@ -104,8 +116,10 @@ impl<'a, Graph: for<'b> LinkIterGraph<'b>> ContractionGraph<'a, Graph> {
             for &neighbor in &node.edges {
                 debug_assert_ne!(node_id, neighbor);
                 if neighbor < node_id {
+                    // insert checks for duplicates, so we have no loops
                     nodes_before[neighbor as usize].insert(node_id);
                 } else {
+                    // insert checks for duplicates, so we have no loops
                     nodes_after[(neighbor - 1 - node_id) as usize].insert(node_id);
                 }
             }
@@ -124,15 +138,28 @@ impl<'a, Graph: for<'b> LinkIterGraph<'b>> ContractionGraph<'a, Graph> {
         }
     }
 
+    /// Main preprocessing work - chordal completion
     pub fn contract(mut self) -> ContractedGraph<'a, Graph> {
         report!("algo", "CCH Contraction");
         report_time("CCH Contraction", || {
             let mut num_shortcut_arcs = 0;
+            // We utilize split borrows to make node contraction work well with rusts borrowing rules.
+            // The graph representation already contains the node in order of increasing rank.
+            // We iteratively split of the lowest ranked node.
+            // This is the one that will be contracted next.
+            // Contraction does not require mutation of the current node,
+            // but we need to modify the neighborhood of nodes of higher rank.
+
+            // we start with the complete graph
             let mut graph = self.partial_graph();
 
+            // split of the lowest node, the one that will be contracted
             while let Some((node, mut subgraph)) = graph.remove_lowest() {
+                // find the lowest ranked neighbor - since the neighbors are sorted ascending, this is always the first
                 if let Some((&lowest_neighbor, other_neighbors)) = node.edges.split_first() {
                     let prev_deg = subgraph[lowest_neighbor as usize].edges.len();
+                    // merge the remaining neighborhood into the neighborhood of the lowest ranked neighbors.
+                    // Thats all it takes to perform chordal completion (= CCH contraction) for a given order.
                     subgraph[lowest_neighbor as usize].merge_neighbors(other_neighbors);
                     num_shortcut_arcs += subgraph[lowest_neighbor as usize].edges.len() - prev_deg;
                 }
@@ -154,9 +181,13 @@ impl<'a, Graph: for<'b> LinkIterGraph<'b>> ContractionGraph<'a, Graph> {
     }
 }
 
+// a struct to keep track of the partial graphs during contraction
 #[derive(Debug)]
 struct PartialContractionGraph<'a> {
+    // the nodes in the partial graph
     nodes: &'a mut [Node],
+    // slice indices always start at zero, but we need to index by node id,
+    // so we remember the number of nodes already contracted
     id_offset: NodeId,
 }
 
@@ -188,6 +219,7 @@ impl<'a> IndexMut<usize> for PartialContractionGraph<'a> {
     }
 }
 
+/// Phase one result without any extra info
 #[derive(Debug)]
 pub struct ContractedGraph<'a, Graph: for<'b> LinkIterGraph<'b> + 'a>(ContractionGraph<'a, Graph>);
 

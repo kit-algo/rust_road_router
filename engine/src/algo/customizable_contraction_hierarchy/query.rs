@@ -1,3 +1,5 @@
+//! CCH query based on elimination tree
+
 use super::*;
 pub mod stepped_elimination_tree;
 use stepped_elimination_tree::SteppedEliminationTree;
@@ -27,6 +29,7 @@ impl<'a> Server<'a> {
         }
     }
 
+    // Update the metric using a new customization result
     pub fn update(&mut self, mut customized: Customized<'a>) {
         self.forward.graph_mut().swap_weights(&mut customized.upward);
         self.backward.graph_mut().swap_weights(&mut customized.downward);
@@ -42,11 +45,13 @@ impl<'a> Server<'a> {
         self.forward.initialize_query(from);
         self.backward.initialize_query(to);
 
+        // walk up forward elimination tree
         while self.forward.next().is_some() {
             self.forward.next_step();
         }
 
-        while let QueryProgress::Progress(State { distance, node }) = self.backward.next_step() {
+        // walk up backward elimination tree while updating tentative distances
+        while let QueryProgress::Settled(State { distance, node }) = self.backward.next_step() {
             if distance + self.forward.tentative_distance(node) < self.tentative_distance {
                 self.tentative_distance = distance + self.forward.tentative_distance(node);
                 self.meeting_node = node;
@@ -60,6 +65,7 @@ impl<'a> Server<'a> {
     }
 
     fn path(&mut self) -> Vec<NodeId> {
+        // unpack shortcuts so that parant pointers already point along the completely unpacked path
         self.forward
             .unpack_path(self.meeting_node, true, self.cch_graph, self.backward.graph().weight());
         self.backward

@@ -109,7 +109,7 @@ impl<'a> Server<'a> {
         let backward_elimination_tree = &self.backward_elimination_tree;
         let forward_elimination_tree = &self.forward_elimination_tree;
 
-        while let QueryProgress::Progress(State { node, distance: _dist }) = backward_dijkstra.next_step_with_callbacks(
+        while let QueryProgress::Settled(State { node, distance: _dist }) = backward_dijkstra.next_step_with_callbacks(
             |_, distance| distance,
             |tail, link, dijk| !in_core(tail) || dijk.queue().contains_index(link.node as usize),
         ) {
@@ -129,7 +129,7 @@ impl<'a> Server<'a> {
             };
         }
 
-        while let QueryProgress::Progress(State { distance, node }) = forward_dijkstra.next_step_with_callbacks(
+        while let QueryProgress::Settled(State { distance, node }) = forward_dijkstra.next_step_with_callbacks(
             |node, distance| {
                 distance
                     + Self::potential(

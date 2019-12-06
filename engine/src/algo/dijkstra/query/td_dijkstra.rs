@@ -1,5 +1,5 @@
 use super::*;
-use crate::algo::dijkstra::td_stepped_dijkstra::{QueryProgress, TDSteppedDijkstra};
+use crate::algo::dijkstra::td_stepped_dijkstra::TDSteppedDijkstra;
 use crate::datastr::graph::time_dependent::*;
 
 #[derive(Debug)]
@@ -19,7 +19,7 @@ impl Server {
 
         loop {
             match self.dijkstra.next_step(|_| true, |_| 0) {
-                QueryProgress::Progress(_) => continue,
+                QueryProgress::Settled(_) => continue,
                 QueryProgress::Done(result) => return result,
             }
         }

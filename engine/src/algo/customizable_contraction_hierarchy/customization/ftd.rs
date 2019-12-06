@@ -1,3 +1,5 @@
+//! CATCHUp Customization
+
 use super::*;
 use crate::report::*;
 use floating_time_dependent::*;
@@ -6,20 +8,27 @@ use std::{
     sync::atomic::Ordering,
 };
 
+// Reusable buffers for main CATCHUp customization, to reduce allocations
 scoped_thread_local!(static MERGE_BUFFERS: RefCell<MergeBuffers>);
+// Workspaces for static CATCHUp precustomization - similar to regular static customization - see parent module
 scoped_thread_local!(static UPWARD_WORKSPACE: RefCell<Vec<(FlWeight, FlWeight)>>);
 scoped_thread_local!(static DOWNWARD_WORKSPACE: RefCell<Vec<(FlWeight, FlWeight)>>);
+// Workspace for perfect static CATCHUp precustomization - here we just need one for both directions
+// because we map to the edge id instead of the values.
 scoped_thread_local!(static PERFECT_WORKSPACE: RefCell<Vec<InRangeOption<EdgeId>>>);
 
+/// Run CATCHUp customization
 pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph<'a> {
     report!("algo", "Floating TDCCH Customization");
 
     let n = (cch.first_out.len() - 1) as NodeId;
     let m = cch.head.len();
 
+    // these will contain our customized shortcuts
     let mut upward: Vec<_> = std::iter::repeat_with(|| Shortcut::new(None, metric)).take(m).collect();
     let mut downward: Vec<_> = std::iter::repeat_with(|| Shortcut::new(None, metric)).take(m).collect();
 
+    // start with respecting - set shortcuts to respective original edge.
     let subctxt = push_context("weight_applying".to_string());
     report_time("TD-CCH apply weights", || {
         upward
@@ -37,6 +46,8 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph
     });
     drop(subctxt);
 
+    // This is the routine for basic static customization with just the upper and lower bounds.
+    // It runs completely analogue the standard customization algorithm.
     let customize = |nodes: Range<usize>, offset, upward_weights: &mut [Shortcut], downward_weights: &mut [Shortcut]| {
         UPWARD_WORKSPACE.with(|node_outgoing_weights| {
             let mut node_outgoing_weights = node_outgoing_weights.borrow_mut();
@@ -105,12 +116,19 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph
         });
     };
 
+    // Routine for CATCHUp perfect precustomization on the bounds.
+    // The interface is similar to the one for the basic customization, but we need access to nonconsecutive ranges of edges,
+    // so we can't use slices. Thus, we just take a mutable pointer to the shortcut vecs.
+    // The logic of the perfect customization based on separators guarantees, that we will never concurrently modify
+    // the same shortcuts, but so far I haven't found a way to express that in safe rust.
     let customize_perfect = |nodes: Range<usize>, upward: *mut Shortcut, downward: *mut Shortcut| {
         PERFECT_WORKSPACE.with(|node_edge_ids| {
             let mut node_edge_ids = node_edge_ids.borrow_mut();
 
+            // processing nodes in reverse order
             for current_node in nodes.rev() {
                 let current_node = current_node as NodeId;
+                // store mapping of head node to corresponding outgoing edge id
                 for (node, edge_id) in cch.neighbor_iter(current_node).zip(cch.neighbor_edge_indices(current_node)) {
                     node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
                 }
@@ -119,6 +137,9 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph
                     let shortcut_edge_ids = cch.neighbor_edge_indices(node);
                     for (target, shortcut_edge_id) in cch.neighbor_iter(node).zip(shortcut_edge_ids) {
                         if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
+                            // Here we have both an intermediate and an upper triangle
+                            // depending on which edge we take as the base
+                            // Relax all them.
                             unsafe {
                                 (*upward.add(other_edge_id as usize)).upper_bound = min(
                                     (*upward.add(other_edge_id as usize)).upper_bound,
@@ -160,6 +181,7 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph
                     }
                 }
 
+                // reset the mapping
                 for node in cch.neighbor_iter(current_node) {
                     node_edge_ids[node as usize] = InRangeOption::new(None);
                 }
@@ -167,9 +189,11 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph
         });
     };
 
+    // parallelize precusotmization
     let static_customization = SeperatorBasedParallelCustomization::new(cch, customize, customize);
     let static_perfect_customization = SeperatorBasedPerfectParallelCustomization::new(cch, customize_perfect, customize_perfect);
 
+    // routine to disable shortcuts for which the perfect precustomization determined them to be irrelevant
     let disable_dominated = |(shortcut, &lower_bound): (&mut Shortcut, &FlWeight)| {
         if shortcut.upper_bound.fuzzy_lt(lower_bound) {
             shortcut.required = false;
@@ -181,6 +205,7 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph
     };
 
     if cfg!(feature = "tdcch-precustomization") {
+        // execute CATCHUp precustomization
         let _subctxt = push_context("precustomization".to_string());
         report_time("TD-CCH Pre-Customization", || {
             static_customization.customize(&mut upward, &mut downward, |cb| {
@@ -201,6 +226,7 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph
         });
     }
 
+    // block for main CATCHUp customization
     {
         let subctxt = push_context("main".to_string());
 
@@ -210,19 +236,26 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph
         let (tx, rx) = channel();
         let (events_tx, events_rx) = channel();
 
+        // use separator based parallelization
         let customization = SeperatorBasedParallelCustomization::new(
             cch,
+            // routines created in this function
+            // we customize many cells in parallel - so iterate over triangles sequentially
             create_customization_fn(&cch, metric, SeqIter(&cch)),
+            // the final separator can only be customized, once everything else is done, but it still takes up a significant amount of time
+            // But we can still parallelize the processing of edges from one node within this separator.
             create_customization_fn(&cch, metric, ParIter(&cch)),
         );
 
         report_time("TD-CCH Customization", || {
+            // spawn of a thread, which periodically reports the state of things
             thread::spawn(move || {
                 let timer = Timer::new();
 
                 let mut events = Vec::new();
 
                 loop {
+                    // this actually reports to stderr and stores the data in the `events` `Vec`
                     report!("at_s", timer.get_passed_ms() / 1000);
                     report!("nodes_customized", NODES_CUSTOMIZED.load(Ordering::Relaxed));
                     if cfg!(feature = "detailed-stats") {
@@ -260,6 +293,7 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph
                 }
             });
 
+            // execute main customization
             customization.customize(&mut upward, &mut downward, |cb| {
                 MERGE_BUFFERS.set(&RefCell::new(MergeBuffers::new()), || {
                     cb();
@@ -267,8 +301,11 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph
             });
         });
 
+        // shut down reporting thread
         tx.send(()).unwrap();
 
+        // actual reporting for experiements
+        // silent because we already wrote everything to stderr
         for events in events_rx {
             let mut events_ctxt = push_collection_context("events".to_string());
 
@@ -307,6 +344,7 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph
     report!("approx_threshold", APPROX_THRESHOLD);
 
     if cfg!(feature = "tdcch-postcustomization") {
+        // do perfect bound based customization again, because we now have better bounds and can get rid of some additional shortcuts
         let _subctxt = push_context("postcustomization".to_string());
         report_time("TD-CCH Post-Customization", || {
             let upward_preliminary_bounds: Vec<_> = upward.iter().map(|s| s.lower_bound).collect();
@@ -340,11 +378,14 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph
     ShortcutGraph::new(metric, &cch.first_out, &cch.head, upward, downward)
 }
 
+// Encapsulates the creation of the CATCHUp main customization lambdas
+// The function signature gives us some additional control of lifetimes and stuff
 fn create_customization_fn<'s, F: 's>(cch: &'s CCH, metric: &'s TDGraph, merge_iter: F) -> impl Fn(Range<usize>, usize, &mut [Shortcut], &mut [Shortcut]) + 's
 where
     for<'p> F: ForEachIter<'p, 's>,
 {
     move |nodes, edge_offset, upward: &mut [Shortcut], downward: &mut [Shortcut]| {
+        // for all nodes we should currently process
         for current_node in nodes {
             let (upward_below, upward_above) = upward.split_at_mut(cch.first_out[current_node as usize] as usize - edge_offset);
             let upward_active = &mut upward_above[0..cch.neighbor_edge_indices(current_node as NodeId).len()];
@@ -355,6 +396,7 @@ where
             debug_assert_eq!(upward_active.len(), cch.degree(current_node as NodeId));
             debug_assert_eq!(downward_active.len(), cch.degree(current_node as NodeId));
 
+            // for all outgoing edges - parallel or sequentially, depending on the type of `merge_iter`
             merge_iter.for_each(
                 current_node as NodeId,
                 upward_active,
@@ -363,8 +405,13 @@ where
                     MERGE_BUFFERS.with(|buffers| {
                         let mut buffers = buffers.borrow_mut();
 
+                        // here, we enumerate lower triangles the classic way, as described in the CCH journal
+                        // because it is completely dominated by linking and merging.
+                        // Also storing the triangles allows us to sort them and process shorter triangles first,
+                        // which gives better bounds, which allows skipping unnecessary operations.
                         let mut triangles = Vec::new();
 
+                        // downward edges from both endpoints of the current edge
                         let mut current_iter = cch.inverted.neighbor_iter(current_node as NodeId).peekable();
                         let mut other_iter = cch.inverted.neighbor_iter(node as NodeId).peekable();
 
@@ -388,6 +435,7 @@ where
                                 Ord::Less => current_iter.next(),
                                 Ord::Greater => other_iter.next(),
                                 Ord::Equal => {
+                                    // lower triangle
                                     triangles.push((*edge_from_cur_id, *edge_from_oth_id));
 
                                     current_iter.next();
@@ -399,6 +447,7 @@ where
                             triangles.sort_by_key(|&(down, up)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
                         }
                         for &edges in &triangles {
+                            // main work happening here
                             upward_shortcut.merge(edges, &shortcut_graph, &mut buffers);
                         }
                         upward_shortcut.finalize_bounds(&shortcut_graph);
@@ -407,6 +456,7 @@ where
                             triangles.sort_by_key(|&(up, down)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
                         }
                         for &(up, down) in &triangles {
+                            // an here
                             downward_shortcut.merge((down, up), &shortcut_graph, &mut buffers);
                         }
                         downward_shortcut.finalize_bounds(&shortcut_graph);
@@ -414,6 +464,7 @@ where
                 },
             );
 
+            // free up space - we will never need the explicit functions again during customization
             for Link { weight: edge_id, .. } in cch.inverted.neighbor_iter(current_node as NodeId) {
                 upward[edge_id as usize - edge_offset].clear_plf();
                 downward[edge_id as usize - edge_offset].clear_plf();

@@ -17,7 +17,7 @@ impl<Graph: for<'a> LinkIterGraph<'a>> Server<Graph> {
 
         loop {
             match self.dijkstra.next_step() {
-                QueryProgress::Progress(_) => continue,
+                QueryProgress::Settled(_) => continue,
                 QueryProgress::Done(result) => return result,
             }
         }

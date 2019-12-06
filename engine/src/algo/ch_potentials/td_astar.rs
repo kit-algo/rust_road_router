@@ -1,4 +1,4 @@
-use super::dijkstra::td_stepped_dijkstra::{QueryProgress, *};
+use super::dijkstra::td_stepped_dijkstra::*;
 use super::*;
 use crate::algo::customizable_contraction_hierarchy::{query::stepped_elimination_tree::SteppedEliminationTree, *};
 use crate::datastr::graph::time_dependent::*;
@@ -70,7 +70,7 @@ impl Server<'_> {
 
         loop {
             match dijkstra.next_step(|_| true, |node| Self::potential(potentials, upward, backward, cch.node_order().rank(node))) {
-                QueryProgress::Progress(_) => continue,
+                QueryProgress::Settled(_) => continue,
                 QueryProgress::Done(result) => return result,
             }
         }

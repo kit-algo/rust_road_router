@@ -1,7 +1,10 @@
 use std::{env, error::Error, path::Path};
 
 use bmw_routing_engine::{
-    algo::{dijkstra::stepped_dijkstra::*, Query},
+    algo::{
+        dijkstra::{stepped_dijkstra::*, *},
+        Query,
+    },
     cli::CliErr,
     datastr::graph::*,
     io::Load,
@@ -71,7 +74,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     });
 
     let mut counter = 0;
-    while let QueryProgress::Progress(State { node, .. }) = dijkstra.next_step() {
+    while let QueryProgress::Settled(State { node, .. }) = dijkstra.next_step() {
         if counter > 500 {
             break;
         }

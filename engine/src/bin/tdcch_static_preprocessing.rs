@@ -37,29 +37,29 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let cch_order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm"))?);
     let cch_build_ctxt = algo_runs_ctxt.push_collection_item();
-    let cch = contract(&graph, cch_order.clone());
+    let cch = contract(&graph, cch_order);
     drop(cch_build_ctxt);
 
     let latitude = Vec::<f32>::load_from(path.join("latitude"))?;
     let longitude = Vec::<f32>::load_from(path.join("longitude"))?;
 
     let cch_order = CCHReordering {
-        node_order: cch_order,
+        cch: &cch,
         latitude: &latitude,
         longitude: &longitude,
     }
-    .reorder(cch.separators());
+    .reorder();
 
     let cch_build_ctxt = algo_runs_ctxt.push_collection_item();
-    let cch = contract(&graph, cch_order.clone());
+    let cch = contract(&graph, cch_order);
     drop(cch_build_ctxt);
 
     let cch_order = CCHReordering {
-        node_order: cch_order,
+        cch: &cch,
         latitude: &latitude,
         longitude: &longitude,
     }
-    .reorder_for_seperator_based_customization(cch.separators());
+    .reorder_for_seperator_based_customization();
     if !cch_folder.exists() {
         std::fs::create_dir(&cch_folder)?;
     }

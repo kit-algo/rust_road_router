@@ -1,25 +1,31 @@
+//! Modify CCH nested dissection orders.
+//!
+//! FlowCutter emits orders of the form sep0-sep1l-sep1r-rest1l-rest1r
+//! But we need sep0-sep1l-rest1l-sep1r-rest1r - cells must always form a consecutive node id block including their separator.
+
 use super::*;
 use crate::util::NonNan;
 
+/// Supplemental data for reordering operations
 #[derive(Debug)]
-pub struct CCHReordering<'a> {
-    pub node_order: NodeOrder,
+pub struct CCHReordering<'a, 'c> {
+    pub cch: &'c CCH,
     pub latitude: &'a [f32],
     pub longitude: &'a [f32],
 }
 
-impl<'a> CCHReordering<'a> {
+impl<'a, 'c> CCHReordering<'a, 'c> {
     fn distance(&self, n1: NodeId, n2: NodeId) -> NonNan {
         use nav_types::WGS84;
         NonNan::new(
             WGS84::new(
-                self.latitude[self.node_order.node(n1) as usize],
-                self.longitude[self.node_order.node(n1) as usize],
+                self.latitude[self.cch.node_order.node(n1) as usize],
+                self.longitude[self.cch.node_order.node(n1) as usize],
                 0.0,
             )
             .distance(&WGS84::new(
-                self.latitude[self.node_order.node(n2) as usize],
-                self.longitude[self.node_order.node(n2) as usize],
+                self.latitude[self.cch.node_order.node(n2) as usize],
+                self.longitude[self.cch.node_order.node(n2) as usize],
                 0.0,
             )),
         )
@@ -71,26 +77,30 @@ impl<'a> CCHReordering<'a> {
         }
     }
 
-    pub fn reorder(self, mut separators: SeparatorTree) -> NodeOrder {
+    /// Try to reorder separator nodes of top levels such that they follow a linear order based on their geographic position
+    pub fn reorder(&self) -> NodeOrder {
+        let mut separators = self.cch.separators();
         self.reorder_tree(&mut separators, 0);
         let mut order = Vec::new();
         self.to_ordering(separators, &mut order);
 
         for rank in &mut order {
-            *rank = self.node_order.node(*rank);
+            *rank = self.cch.node_order.node(*rank);
         }
         order.reverse();
 
         NodeOrder::from_node_order(order)
     }
 
-    pub fn reorder_for_seperator_based_customization(self, mut separators: SeparatorTree) -> NodeOrder {
+    /// Create a new order which has the same separator tree but is laid out, such that the separator based paralellization works fine.
+    pub fn reorder_for_seperator_based_customization(&self) -> NodeOrder {
+        let mut separators = self.cch.separators();
         self.reorder_children_by_size(&mut separators);
         let mut order = Vec::new();
         self.to_ordering(separators, &mut order);
 
         for rank in &mut order {
-            *rank = self.node_order.node(*rank);
+            *rank = self.cch.node_order.node(*rank);
         }
         order.reverse();
 

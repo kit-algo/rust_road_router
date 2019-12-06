@@ -1,31 +1,15 @@
+//! Time-dependent Dijkstra with int based weights
+
 use super::*;
 use crate::datastr::graph::time_dependent::*;
 use crate::datastr::{index_heap::*, timestamped_vector::*};
-
-#[derive(Debug, Clone)]
-pub enum QueryProgress {
-    Progress(State),
-    Done(Option<Weight>),
-}
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Ord, PartialOrd)]
-pub struct State {
-    pub distance: Weight,
-    pub node: NodeId,
-}
-
-impl Indexing for State {
-    fn as_index(&self) -> usize {
-        self.node as usize
-    }
-}
 
 #[derive(Debug)]
 pub struct TDSteppedDijkstra {
     graph: TDGraph,
     distances: TimestampedVector<Weight>,
     predecessors: Vec<NodeId>,
-    closest_node_priority_queue: IndexdMinHeap<State>,
+    closest_node_priority_queue: IndexdMinHeap<State<Weight>>,
     // the current query
     query: Option<TDQuery<Timestamp>>,
     // first option: algorithm finished? second option: final result of algorithm
@@ -64,14 +48,14 @@ impl TDSteppedDijkstra {
         });
     }
 
-    pub fn next_step<F: Fn(EdgeId) -> bool, G: FnMut(NodeId) -> Weight>(&mut self, check_edge: F, potential: G) -> QueryProgress {
+    pub fn next_step<F: Fn(EdgeId) -> bool, G: FnMut(NodeId) -> Weight>(&mut self, check_edge: F, potential: G) -> QueryProgress<Weight> {
         match self.result {
             Some(result) => QueryProgress::Done(result),
             None => self.settle_next_node(check_edge, potential),
         }
     }
 
-    fn settle_next_node<F: Fn(EdgeId) -> bool, G: FnMut(NodeId) -> Weight>(&mut self, check_edge: F, mut potential: G) -> QueryProgress {
+    fn settle_next_node<F: Fn(EdgeId) -> bool, G: FnMut(NodeId) -> Weight>(&mut self, check_edge: F, mut potential: G) -> QueryProgress<Weight> {
         let to = self.query().to;
 
         // Examine the frontier with lower distance nodes first (min-heap)
@@ -109,7 +93,7 @@ impl TDSteppedDijkstra {
                 }
             }
 
-            QueryProgress::Progress(State {
+            QueryProgress::Settled(State {
                 distance: distance - self.query().departure,
                 node,
             })

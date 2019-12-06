@@ -1,3 +1,10 @@
+//! Contraction Hierarchy query server.
+//!
+//! Actually not much more than a bidirectional dijkstra with a different stopping criterion.
+//! And more complicated path unpacking.
+//! This works because the augmented graph was split into an upward and an downward part.
+//! This implicitly makes sure, that both searches only go to higher ranked nodes.
+
 use super::*;
 
 #[derive(Debug)]
@@ -37,10 +44,11 @@ impl Server {
         let mut forward_done = false;
         let mut backward_done = false;
 
+        // compare tentative distance to both directions progress individually rather than the sum!
         while (self.tentative_distance > forward_progress || self.tentative_distance > backward_progress) && !(forward_done && backward_done) {
             if backward_done || (forward_progress <= backward_progress && !forward_done) {
                 match self.forward_dijkstra.next_step() {
-                    QueryProgress::Progress(State { distance, node }) => {
+                    QueryProgress::Settled(State { distance, node }) => {
                         forward_progress = distance;
                         if distance + self.backward_dijkstra.tentative_distance(node) < self.tentative_distance {
                             self.tentative_distance = distance + self.backward_dijkstra.tentative_distance(node);
@@ -59,7 +67,7 @@ impl Server {
                 }
             } else {
                 match self.backward_dijkstra.next_step() {
-                    QueryProgress::Progress(State { distance, node }) => {
+                    QueryProgress::Settled(State { distance, node }) => {
                         backward_progress = distance;
                         if distance + self.forward_dijkstra.tentative_distance(node) < self.tentative_distance {
                             self.tentative_distance = distance + self.forward_dijkstra.tentative_distance(node);
@@ -85,6 +93,8 @@ impl Server {
         }
     }
 
+    // Ugly path unpacking.
+    // Should probably switch to something similar as in CCH query, which utilizes the parent pointers in the dijkstra struct.
     fn path(&self) -> Vec<NodeId> {
         use std::collections::LinkedList;
 

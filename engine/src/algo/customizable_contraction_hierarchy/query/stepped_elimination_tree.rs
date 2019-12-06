@@ -1,3 +1,5 @@
+//! Elimination Tree path to root traversal while relaxing edges.
+
 use super::*;
 use crate::algo::customizable_contraction_hierarchy::CCH;
 use crate::as_slice::AsSlice;
@@ -39,12 +41,12 @@ impl<'b, Graph: for<'a> LinkIterGraph<'a>> SteppedEliminationTree<'b, Graph> {
         self.distances.set(from as usize, 0);
     }
 
-    pub fn next_step(&mut self) -> QueryProgress {
+    pub fn next_step(&mut self) -> QueryProgress<Weight> {
         self.settle_next_node()
     }
 
-    fn settle_next_node(&mut self) -> QueryProgress {
-        // Examine the frontier with lower distance nodes first (min-heap)
+    fn settle_next_node(&mut self) -> QueryProgress<Weight> {
+        // Examine the next node on the path to the elimination tree node
         if let Some(node) = self.next {
             let distance = self.distances[node as usize];
             self.next = self.elimination_tree[node as usize].value();
@@ -57,7 +59,6 @@ impl<'b, Graph: for<'a> LinkIterGraph<'a>> SteppedEliminationTree<'b, Graph> {
                     node: edge.node,
                 };
 
-                // If so, add it to the frontier and continue
                 if next.distance < self.distances[next.node as usize] {
                     // Relaxation, we have now found a better way
                     self.distances.set(next.node as usize, next.distance);
@@ -65,7 +66,7 @@ impl<'b, Graph: for<'a> LinkIterGraph<'a>> SteppedEliminationTree<'b, Graph> {
                 }
             }
 
-            QueryProgress::Progress(State { distance, node })
+            QueryProgress::Settled(State { distance, node })
         } else {
             QueryProgress::Done(None) // TODO
         }
@@ -106,6 +107,7 @@ where
     HeadContainer: AsSlice<NodeId>,
     WeightContainer: AsSlice<Weight>,
 {
+    /// Unpack path from a start node (the meeting node of the CCH query), so that parent pointers point along the unpacked path.
     pub fn unpack_path(&mut self, target: NodeId, forward: bool, cch: &CCH, other_weights: &[Weight]) {
         let origin = self.origin();
         let mut current = target;

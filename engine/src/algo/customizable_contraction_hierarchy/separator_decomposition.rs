@@ -1,3 +1,5 @@
+//! Reconstruct separator tree from nested dissection order and elimination tree.
+
 use super::*;
 
 #[derive(Debug)]
@@ -8,6 +10,7 @@ pub struct SeparatorTree {
 }
 
 impl SeparatorTree {
+    /// Check if the node order used for the CCH allows for safe basic parellized customization.
     pub fn validate_for_parallelization(&self) {
         for nodes in self.nodes.windows(2) {
             assert_eq!(nodes[0], nodes[1] + 1, "Disconnected ID Ranges in nested dissection separator")
@@ -32,6 +35,7 @@ impl SeparatorTree {
         }
     }
 
+    /// Reconstruct separator tree from a preprocessed CCH
     pub fn new(cch: &CCH) -> Self {
         let mut children = vec![Vec::new(); cch.num_nodes()];
         let mut roots = Vec::new();

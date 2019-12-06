@@ -39,7 +39,7 @@ impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>> Server<G, H> {
         while forward_progress + backward_progress < self.tentative_distance && forward_progress + backward_progress < maximum_distance {
             if forward_progress <= backward_progress {
                 match self.forward_dijkstra.next_step() {
-                    QueryProgress::Progress(State { distance, node }) => {
+                    QueryProgress::Settled(State { distance, node }) => {
                         forward_progress = distance;
                         if distance + self.backward_dijkstra.tentative_distance(node) < self.tentative_distance {
                             self.tentative_distance = distance + self.backward_dijkstra.tentative_distance(node);
@@ -53,7 +53,7 @@ impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>> Server<G, H> {
                 }
             } else {
                 match self.backward_dijkstra.next_step() {
-                    QueryProgress::Progress(State { distance, node }) => {
+                    QueryProgress::Settled(State { distance, node }) => {
                         backward_progress = distance;
                         if distance + self.forward_dijkstra.tentative_distance(node) < self.tentative_distance {
                             self.tentative_distance = distance + self.forward_dijkstra.tentative_distance(node);
