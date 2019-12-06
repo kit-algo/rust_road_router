@@ -1,3 +1,5 @@
+//! No space overhead `Option`s for types with sentinels
+
 use std::fmt::Debug;
 use std::{i32, u32, u64, usize};
 
