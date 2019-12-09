@@ -72,13 +72,13 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
     pub fn next_step(&mut self) -> QueryProgress<Weight> {
         match self.result {
             Some(result) => QueryProgress::Done(result),
-            None => self.settle_next_node(|_, dist| dist, |_, _, _| true),
+            None => self.settle_next_node(|_, dist| Some(dist), |_, _, _| true),
         }
     }
 
     pub fn next_step_with_callbacks(
         &mut self,
-        potential: impl FnMut(NodeId, Weight) -> Weight,
+        potential: impl FnMut(NodeId, Weight) -> Option<Weight>,
         relax_edge: impl FnMut(NodeId, Link, &Self) -> bool,
     ) -> QueryProgress<Weight> {
         match self.result {
@@ -89,7 +89,7 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
 
     fn settle_next_node(
         &mut self,
-        mut potential: impl FnMut(NodeId, Weight) -> Weight,
+        mut potential: impl FnMut(NodeId, Weight) -> Option<Weight>,
         mut relax_edge: impl FnMut(NodeId, Link, &Self) -> bool,
     ) -> QueryProgress<Weight> {
         let to = self.query.as_ref().expect("query was not initialized properly").to;
@@ -121,14 +121,16 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
                     self.distances.set(edge.node as usize, next_distance);
                     self.predecessors[edge.node as usize] = node;
 
-                    let next = State {
-                        distance: potential(edge.node, next_distance),
-                        node: edge.node,
-                    };
-                    if self.closest_node_priority_queue.contains_index(next.as_index()) {
-                        self.closest_node_priority_queue.decrease_key(next);
-                    } else {
-                        self.closest_node_priority_queue.push(next);
+                    if let Some(pot) = potential(edge.node, next_distance) {
+                        let next = State {
+                            distance: pot,
+                            node: edge.node,
+                        };
+                        if self.closest_node_priority_queue.contains_index(next.as_index()) {
+                            self.closest_node_priority_queue.decrease_key(next);
+                        } else {
+                            self.closest_node_priority_queue.push(next);
+                        }
                     }
                 }
             }

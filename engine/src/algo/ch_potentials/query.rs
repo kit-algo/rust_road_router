@@ -110,7 +110,7 @@ impl<'a> Server<'a> {
         let forward_elimination_tree = &self.forward_elimination_tree;
 
         while let QueryProgress::Settled(State { node, distance: _dist }) = backward_dijkstra.next_step_with_callbacks(
-            |_, distance| distance,
+            |_, distance| Some(distance),
             |tail, link, dijk| !in_core(tail) || dijk.queue().contains_index(link.node as usize),
         ) {
             if in_core(node) {
@@ -131,15 +131,15 @@ impl<'a> Server<'a> {
 
         while let QueryProgress::Settled(State { distance, node }) = forward_dijkstra.next_step_with_callbacks(
             |node, distance| {
-                distance
-                    + Self::potential(
-                        potentials,
-                        forward_elimination_tree,
-                        backward_elimination_tree,
-                        cch.node_order().rank(order.node(node)),
-                        stack,
-                    )
-                    + if in_core(node) { INFINITY } else { 0 }
+                debug_assert!(distance < INFINITY);
+                Self::potential(
+                    potentials,
+                    forward_elimination_tree,
+                    backward_elimination_tree,
+                    cch.node_order().rank(order.node(node)),
+                    stack,
+                )
+                .map(|pot| distance + pot + if in_core(node) { INFINITY } else { 0 })
             },
             |_, _, _| true,
         ) {
@@ -180,7 +180,7 @@ impl<'a> Server<'a> {
             }
         }
 
-        dbg!(settled_core_nodes, settled_non_core_nodes);
+        // dbg!(settled_core_nodes, settled_non_core_nodes);
 
         match tentative_distance {
             INFINITY => None,
@@ -194,7 +194,7 @@ impl<'a> Server<'a> {
         backward: &SteppedEliminationTree<'_, FirstOutGraph<&[EdgeId], &[NodeId], Vec<Weight>>>,
         node: NodeId,
         stack: &mut Vec<NodeId>,
-    ) -> Weight {
+    ) -> Option<Weight> {
         let mut cur_node = node;
         while potentials[cur_node as usize].value().is_none() {
             stack.push(cur_node);
@@ -216,7 +216,12 @@ impl<'a> Server<'a> {
             potentials[node as usize] = InRangeOption::new(Some(std::cmp::min(backward.tentative_distance(node), min_by_up)));
         }
 
-        potentials[node as usize].value().unwrap()
+        let dist = potentials[node as usize].value().unwrap();
+        if dist < INFINITY {
+            Some(dist)
+        } else {
+            None
+        }
     }
 
     fn path(&self) -> Vec<NodeId> {
@@ -245,8 +250,8 @@ impl<'a> Server<'a> {
             }
             *node = self.order.node(*node);
         }
-        dbg!(core_nodes);
-        dbg!(non_core_nodes);
+        // dbg!(core_nodes);
+        // dbg!(non_core_nodes);
 
         path
     }

@@ -65,7 +65,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut total_query_time = Duration::zero();
 
-    let num_queries = 1000;
+    let num_queries = 10000;
 
     for ((&from, &to), &ground_truth) in from.iter().zip(to.iter()).zip(ground_truth.iter()).take(num_queries) {
         let ground_truth = match ground_truth {
