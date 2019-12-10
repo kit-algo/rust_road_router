@@ -165,20 +165,17 @@ impl<'a> Server<'a> {
             }
         }
 
-        while let QueryProgress::Settled(State { distance, node }) = forward_dijkstra.next_step_with_callbacks(
-            |node, distance| {
-                debug_assert!(distance < INFINITY);
-                Self::potential(
-                    potentials,
-                    forward_cch_graph,
-                    backward_elimination_tree,
-                    cch.node_order().rank(order.node(node)),
-                    stack,
-                )
-                .map(|pot| distance + pot + if in_core(node) { INFINITY } else { 0 })
-            },
-            |_, _, _| true,
-        ) {
+        while let QueryProgress::Settled(State { distance, node }) = forward_dijkstra.next_step_with_potential(|node, distance| {
+            debug_assert!(distance < INFINITY);
+            Self::potential(
+                potentials,
+                forward_cch_graph,
+                backward_elimination_tree,
+                cch.node_order().rank(order.node(node)),
+                stack,
+            )
+            .map(|pot| distance + pot + if in_core(node) { INFINITY } else { 0 })
+        }) {
             if in_core(node) {
                 settled_core_nodes += 1
             } else {
