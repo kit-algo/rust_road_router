@@ -1,6 +1,7 @@
 use super::*;
 use crate::algo::customizable_contraction_hierarchy::{query::stepped_elimination_tree::SteppedEliminationTree, *};
 use crate::datastr::node_order::NodeOrder;
+use crate::datastr::rank_select_map::*;
 use crate::datastr::timestamped_vector::TimestampedVector;
 use crate::util::in_range_option::InRangeOption;
 
@@ -18,6 +19,9 @@ pub struct Server<'a> {
     potentials: TimestampedVector<InRangeOption<Weight>>,
     forward_elimination_tree: SteppedEliminationTree<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], Vec<Weight>>>,
     backward_elimination_tree: SteppedEliminationTree<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], Vec<Weight>>>,
+    border_nodes: FastClearBitVec,
+
+    visited: FastClearBitVec,
 
     #[cfg(feature = "chpot_visualize")]
     lat: &[f32],
@@ -52,12 +56,35 @@ impl<'a> Server<'a> {
             forward_elimination_tree,
             backward_elimination_tree,
             potentials: TimestampedVector::new(cch.num_nodes(), InRangeOption::new(None)),
+            border_nodes: FastClearBitVec::new(topocore.core_size),
+            visited: FastClearBitVec::new(cch.num_nodes()),
 
             #[cfg(feature = "chpot_visualize")]
             lat,
             #[cfg(feature = "chpot_visualize")]
             lng,
         }
+    }
+
+    fn dfs(graph: &OwnedGraph, node: NodeId, visited: &mut FastClearBitVec, border_callback: &mut impl FnMut(NodeId), in_core: &impl Fn(NodeId) -> bool) {
+        if visited.get(node as usize) {
+            return;
+        }
+        visited.set(node as usize);
+        if in_core(node) {
+            border_callback(node);
+            return;
+        }
+        for link in graph.neighbor_iter(node) {
+            Self::dfs(graph, link.node, visited, border_callback, in_core);
+        }
+    }
+
+    fn border(&mut self, node: NodeId, in_core: &impl Fn(NodeId) -> bool) -> Vec<NodeId> {
+        let mut border = Vec::new();
+        self.visited.clear();
+        Self::dfs(self.backward_dijkstra.graph(), node, &mut self.visited, &mut |node| border.push(node), in_core);
+        border
     }
 
     fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
@@ -91,6 +118,13 @@ impl<'a> Server<'a> {
             move |node| (node as usize) < core_size
         };
 
+        self.border_nodes.clear();
+        let border = self.border(to, &in_core);
+        let mut num_unsettled_border_nodes = border.len();
+        for border_node in border {
+            self.border_nodes.set(border_node as usize);
+        }
+
         self.forward_dijkstra.initialize_query(Query { from, to });
         self.backward_dijkstra.initialize_query(Query { from: to, to: from });
 
@@ -109,14 +143,14 @@ impl<'a> Server<'a> {
         let backward_elimination_tree = &self.backward_elimination_tree;
         let forward_elimination_tree = &self.forward_elimination_tree;
 
-        while let QueryProgress::Settled(State { node, distance: _dist }) = backward_dijkstra.next_step_with_callbacks(
-            |_, distance| Some(distance),
-            |tail, link, dijk| !in_core(tail) || dijk.queue().contains_index(link.node as usize),
-        ) {
+        while let QueryProgress::Settled(State { node, distance: _dist }) = backward_dijkstra.next_step() {
             if in_core(node) {
-                settled_core_nodes += 1
+                settled_core_nodes += 1;
+                if self.border_nodes.get(node as usize) {
+                    num_unsettled_border_nodes -= 1;
+                }
             } else {
-                settled_non_core_nodes += 1
+                settled_non_core_nodes += 1;
             }
             #[cfg(feature = "chpot_visualize")]
             {
@@ -127,6 +161,9 @@ impl<'a> Server<'a> {
                 );
                 println!("marker.bindPopup(\"id: {}<br>distance: {}\");", node, _dist);
             };
+            if num_unsettled_border_nodes == 0 {
+                break;
+            }
         }
 
         while let QueryProgress::Settled(State { distance, node }) = forward_dijkstra.next_step_with_callbacks(
@@ -175,7 +212,7 @@ impl<'a> Server<'a> {
                 *meeting_node = node;
             }
 
-            if backward_dijkstra.tentative_distance(node) != INFINITY {
+            if in_core(node) && self.border_nodes.get(node as usize) {
                 break;
             }
         }
