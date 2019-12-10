@@ -17,7 +17,7 @@ pub struct Server<'a> {
     cch: &'a CCH,
 
     potentials: TimestampedVector<InRangeOption<Weight>>,
-    forward_elimination_tree: SteppedEliminationTree<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], Vec<Weight>>>,
+    forward_cch_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], Vec<Weight>>,
     backward_elimination_tree: SteppedEliminationTree<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], Vec<Weight>>>,
     border_nodes: FastClearBitVec,
 
@@ -42,7 +42,6 @@ impl<'a> Server<'a> {
     {
         let customized = customize(cch, lower_bound);
         let (forward_up_graph, backward_up_graph) = customized.into_ch_graphs();
-        let forward_elimination_tree = SteppedEliminationTree::new(forward_up_graph, cch.elimination_tree());
         let backward_elimination_tree = SteppedEliminationTree::new(backward_up_graph, cch.elimination_tree());
 
         Server {
@@ -53,7 +52,7 @@ impl<'a> Server<'a> {
             stack: Vec::new(),
             order: topocore.order,
             cch,
-            forward_elimination_tree,
+            forward_cch_graph: forward_up_graph,
             backward_elimination_tree,
             potentials: TimestampedVector::new(cch.num_nodes(), InRangeOption::new(None)),
             border_nodes: FastClearBitVec::new(topocore.core_size),
@@ -141,7 +140,7 @@ impl<'a> Server<'a> {
 
         let potentials = &mut self.potentials;
         let backward_elimination_tree = &self.backward_elimination_tree;
-        let forward_elimination_tree = &self.forward_elimination_tree;
+        let forward_cch_graph = &self.forward_cch_graph;
 
         while let QueryProgress::Settled(State { node, distance: _dist }) = backward_dijkstra.next_step() {
             if in_core(node) {
@@ -171,7 +170,7 @@ impl<'a> Server<'a> {
                 debug_assert!(distance < INFINITY);
                 Self::potential(
                     potentials,
-                    forward_elimination_tree,
+                    forward_cch_graph,
                     backward_elimination_tree,
                     cch.node_order().rank(order.node(node)),
                     stack,
@@ -227,7 +226,7 @@ impl<'a> Server<'a> {
 
     fn potential(
         potentials: &mut TimestampedVector<InRangeOption<Weight>>,
-        forward: &SteppedEliminationTree<'_, FirstOutGraph<&[EdgeId], &[NodeId], Vec<Weight>>>,
+        forward: &FirstOutGraph<&[EdgeId], &[NodeId], Vec<Weight>>,
         backward: &SteppedEliminationTree<'_, FirstOutGraph<&[EdgeId], &[NodeId], Vec<Weight>>>,
         node: NodeId,
         stack: &mut Vec<NodeId>,
@@ -244,7 +243,6 @@ impl<'a> Server<'a> {
 
         while let Some(node) = stack.pop() {
             let min_by_up = forward
-                .graph()
                 .neighbor_iter(node)
                 .map(|edge| edge.weight + potentials[edge.node as usize].value().unwrap())
                 .min()
