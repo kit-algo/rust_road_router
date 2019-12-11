@@ -477,13 +477,15 @@ fn biconnected<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> Vec<Vec<(Node
             }
 
             if let Some(Link { node: neighbor, .. }) = neighbors.next() {
-                if dfs_num[neighbor as usize].value().is_none() {
+                if let Some(neighbor_dfs_num) = dfs_num[neighbor as usize].value() {
+                    if neighbor_dfs_num < dfs_num[node].value().unwrap() && (neighbor as usize) != dfs_parent[node] {
+                        edge_stack.push((node as NodeId, neighbor));
+                        dfs_low[node] = std::cmp::min(dfs_low[node], neighbor_dfs_num);
+                    }
+                } else {
                     dfs_parent[neighbor as usize] = node;
                     edge_stack.push((node as NodeId, neighbor));
                     stack.push((neighbor as usize, graph.neighbor_iter(neighbor)));
-                } else if dfs_parent[node] != neighbor as usize {
-                    edge_stack.push((node as NodeId, neighbor));
-                    dfs_low[node] = std::cmp::min(dfs_low[node], dfs_num[neighbor as usize].value().unwrap());
                 }
             } else {
                 stack.pop();
