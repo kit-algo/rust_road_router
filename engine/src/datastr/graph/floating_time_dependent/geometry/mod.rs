@@ -1,3 +1,5 @@
+//! Algorithmic geometry related structs and methods
+
 use super::*;
 
 mod point;

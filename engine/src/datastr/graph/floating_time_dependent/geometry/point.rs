@@ -1,13 +1,18 @@
 use super::*;
 use std::ops::{Mul, Sub};
 
+/// Struct for interpolation points of travel time functions
 #[derive(Debug, Clone, PartialEq)]
 pub struct TTFPoint {
+    /// Time
     pub at: Timestamp,
+    /// Value
     pub val: FlWeight,
 }
 
 impl TTFPoint {
+    /// Shift time coordinate by given offset.
+    /// No wrapping will be performed.
     pub fn shifted(&self, offset: FlWeight) -> TTFPoint {
         TTFPoint {
             at: self.at + offset,
@@ -89,14 +94,17 @@ pub fn intersection_point(f1: &TTFPoint, f2: &TTFPoint, g1: &TTFPoint, g2: &TTFP
     }
 }
 
+/// True when r (or p->r) lies counterclockwise of p->q
 pub fn counter_clockwise(p: &TTFPoint, q: &TTFPoint, r: &TTFPoint) -> bool {
     ccw(p, q, r) == -1
 }
 
+/// True when r (or p->r) lies clockwise of p->q
 pub fn clockwise(p: &TTFPoint, q: &TTFPoint, r: &TTFPoint) -> bool {
     ccw(p, q, r) == 1
 }
 
+/// More efficient colinearity check when `p.at < q.at < r.at` through linear interpolation
 pub fn colinear_ordered(p: &TTFPoint, q: &TTFPoint, r: &TTFPoint) -> bool {
     debug_assert!(p.at.fuzzy_lt(q.at));
     debug_assert!(q.at.fuzzy_lt(r.at));
@@ -105,6 +113,7 @@ pub fn colinear_ordered(p: &TTFPoint, q: &TTFPoint, r: &TTFPoint) -> bool {
     q.val.fuzzy_eq(p.val + (f64::from(q.at - p.at) / f64::from(v.at)) * v.val)
 }
 
+/// -1 when r (or p->r) lies counterclockwise of p->q, 0 when colinear, 1 when clockwise
 fn ccw(a: &TTFPoint, b: &TTFPoint, c: &TTFPoint) -> i32 {
     if a.at.fuzzy_eq(b.at) && a.val.fuzzy_eq(b.val) {
         return 0;
@@ -138,4 +147,27 @@ fn ccw(a: &TTFPoint, b: &TTFPoint, c: &TTFPoint) -> i32 {
 
 fn perp_dot_product(p: &TTFPoint, q: &TTFPoint) -> f64 {
     f64::from(p.at) * f64::from(q.val) - f64::from(q.at) * f64::from(p.val)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_counter_clockwise() {
+        assert!(counter_clockwise(
+            &TTFPoint {
+                at: Timestamp::new(0.0),
+                val: FlWeight::new(0.0)
+            },
+            &TTFPoint {
+                at: Timestamp::new(1.0),
+                val: FlWeight::new(0.0)
+            },
+            &TTFPoint {
+                at: Timestamp::new(1.0),
+                val: FlWeight::new(1.0)
+            }
+        ));
+    }
 }

@@ -1,19 +1,24 @@
 use super::*;
 use crate::util::in_range_option::InRangeOption;
 
+/// An enum for what might make up a TD-CCH edge at a given point in time.
 #[derive(Debug, Clone, Copy)]
 pub enum ShortcutSource {
-    Shortcut(EdgeId, EdgeId),
-    OriginalEdge(EdgeId),
-    None,
+    Shortcut(EdgeId, EdgeId), // shortcut over lower triangle
+    OriginalEdge(EdgeId),     // original edge with corresponding id in the original graph
+    None,                     // an infinity edge
 }
 
 impl ShortcutSource {
+    /// Evaluate travel time of this shortcut for a given point in time and a completely customized graph.
+    /// Will unpack and recurse if this is a real shortcut.
+    /// The callback `f` can be used to do early returns if we reach a node that already has a better tentative distance.
     pub(super) fn evaluate<F>(&self, t: Timestamp, customized_graph: &CustomizedGraph, f: &mut F) -> FlWeight
     where
         F: (FnMut(bool, EdgeId, Timestamp) -> bool),
     {
         match *self {
+            // recursively eval down edge, then up edge
             ShortcutSource::Shortcut(down, up) => {
                 if !f(false, down, t) {
                     return FlWeight::INFINITY;
@@ -37,6 +42,8 @@ impl ShortcutSource {
         }
     }
 
+    /// Recursively unpack this source and append the path to `result`.
+    /// The timestamp is just needed for the recursion.
     pub(super) fn unpack_at(&self, t: Timestamp, customized_graph: &CustomizedGraph, result: &mut Vec<(EdgeId, Timestamp)>) {
         match *self {
             ShortcutSource::Shortcut(down, up) => {
@@ -54,6 +61,10 @@ impl ShortcutSource {
         }
     }
 
+    /// (Recursively) calculate the exact PLF for this source in a given time range.
+    // Use two `ReusablePLFStorage`s to reduce allocations.
+    // One storage will contain the functions of `up` and `down` - the other the result function.
+    // That means when recursing, we need to use the two storages with flipped roles.
     pub(super) fn exact_ttf_for(
         &self,
         start: Timestamp,
@@ -70,6 +81,7 @@ impl ShortcutSource {
                 shortcut_graph
                     .get_incoming(down)
                     .exact_ttf_for(start, end, shortcut_graph, &mut first_target, target.storage_mut());
+                // for `up` PLF we need to shift the time range
                 let second_start = start + interpolate_linear(&first_target[0], &first_target[1], start);
                 let second_end = end + interpolate_linear(&first_target[first_target.len() - 2], &first_target[first_target.len() - 1], end);
 
@@ -91,6 +103,7 @@ impl ShortcutSource {
         }
     }
 
+    /// Check if this edge is actually necessary for correctness of the CH or if it could possibly be removed (or set to infinity)
     pub(super) fn required(&self, shortcut_graph: &PartialShortcutGraph) -> bool {
         match *self {
             ShortcutSource::Shortcut(down, up) => shortcut_graph.get_incoming(down).required && shortcut_graph.get_outgoing(up).required,
@@ -100,6 +113,7 @@ impl ShortcutSource {
     }
 }
 
+/// More compact struct to actually store `ShortcutSource`s in memory.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ShortcutSourceData {
     down_arc: InRangeOption<EdgeId>,

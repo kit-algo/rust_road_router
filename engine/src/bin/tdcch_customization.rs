@@ -52,7 +52,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let customized_folder = path.join("customized");
 
     let _cch_customization_ctxt = algo_runs_ctxt.push_collection_item();
-    let td_cch_graph: CustomizedGraph = ftd_cch::customize(&cch, &graph).into();
+    let td_cch_graph = ftd_cch::customize(&cch, &graph);
     if !customized_folder.exists() {
         std::fs::create_dir(&customized_folder)?;
     }

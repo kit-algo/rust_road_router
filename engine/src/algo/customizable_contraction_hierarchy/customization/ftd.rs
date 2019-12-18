@@ -18,7 +18,7 @@ scoped_thread_local!(static DOWNWARD_WORKSPACE: RefCell<Vec<(FlWeight, FlWeight)
 scoped_thread_local!(static PERFECT_WORKSPACE: RefCell<Vec<InRangeOption<EdgeId>>>);
 
 /// Run CATCHUp customization
-pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph<'a> {
+pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> CustomizedGraph<'a> {
     report!("algo", "Floating TDCCH Customization");
 
     let n = (cch.first_out.len() - 1) as NodeId;
@@ -375,7 +375,7 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> ShortcutGraph
         });
     }
 
-    ShortcutGraph::new(metric, &cch.first_out, &cch.head, upward, downward)
+    CustomizedGraph::new(metric, &cch.first_out, &cch.head, upward, downward)
 }
 
 // Encapsulates the creation of the CATCHUp main customization lambdas

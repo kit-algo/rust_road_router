@@ -1,3 +1,5 @@
+//! Graph structs used during and after the customization.
+
 use super::*;
 use crate::datastr::clearlist_vector::ClearlistVector;
 use crate::datastr::graph::first_out_graph::degrees_to_first_out;
@@ -5,8 +7,9 @@ use crate::datastr::rank_select_map::*;
 use crate::io::*;
 use crate::util::*;
 use std::cmp::min;
-use std::mem::swap;
 
+/// Container for partial CCH graphs during CATCHUp customization.
+/// Think split borrows.
 #[derive(Debug)]
 pub struct PartialShortcutGraph<'a> {
     pub original_graph: &'a TDGraph,
@@ -16,6 +19,7 @@ pub struct PartialShortcutGraph<'a> {
 }
 
 impl<'a> PartialShortcutGraph<'a> {
+    /// Create `PartialShortcutGraph` from original graph, shortcut slices in both directions and an offset to map CCH edge ids to slice indices
     pub fn new(original_graph: &'a TDGraph, outgoing: &'a [Shortcut], incoming: &'a [Shortcut], offset: usize) -> PartialShortcutGraph<'a> {
         PartialShortcutGraph {
             original_graph,
@@ -25,17 +29,20 @@ impl<'a> PartialShortcutGraph<'a> {
         }
     }
 
+    /// Borrow upward `Shortcut` with given CCH EdgeId
     pub fn get_outgoing(&self, edge_id: EdgeId) -> &Shortcut {
         &self.outgoing[edge_id as usize - self.offset]
     }
 
+    /// Borrow downward `Shortcut` with given CCH EdgeId
     pub fn get_incoming(&self, edge_id: EdgeId) -> &Shortcut {
         &self.incoming[edge_id as usize - self.offset]
     }
 }
 
+// Just a container to group some data
 #[derive(Debug)]
-pub struct ShortcutGraph<'a> {
+struct ShortcutGraph<'a> {
     original_graph: &'a TDGraph,
     first_out: &'a [EdgeId],
     head: &'a [NodeId],
@@ -43,75 +50,7 @@ pub struct ShortcutGraph<'a> {
     incoming: Vec<Shortcut>,
 }
 
-impl<'a> ShortcutGraph<'a> {
-    pub fn new(
-        original_graph: &'a TDGraph,
-        first_out: &'a [EdgeId],
-        head: &'a [NodeId],
-        outgoing: Vec<Shortcut>,
-        incoming: Vec<Shortcut>,
-    ) -> ShortcutGraph<'a> {
-        ShortcutGraph {
-            original_graph,
-            first_out,
-            head,
-            outgoing,
-            incoming,
-        }
-    }
-
-    pub fn get_outgoing(&self, edge_id: EdgeId) -> &Shortcut {
-        &self.outgoing[edge_id as usize]
-    }
-
-    pub fn get_incoming(&self, edge_id: EdgeId) -> &Shortcut {
-        &self.incoming[edge_id as usize]
-    }
-
-    // a little crazy construction to make the borrow checker happy
-    // so we take the shortcut we want to mutate temporarily out of the graph
-    // that enables us to pass the reference to the graph as an argument to any calculation the mutation might need
-    // the mutation just needs to guarantee that it will never refetch the edge under mutation.
-    // But this is usually no problem since we know that a shortcut can only consist of paths of edges lower in the graph
-    pub fn borrow_mut_outgoing<F: FnOnce(&mut Shortcut, &ShortcutGraph)>(&mut self, edge_id: EdgeId, f: F) {
-        let mut shortcut = Shortcut::new(None, self.original_graph);
-        swap(&mut self.outgoing[edge_id as usize], &mut shortcut);
-        f(&mut shortcut, &self);
-        swap(&mut self.outgoing[edge_id as usize], &mut shortcut);
-    }
-
-    pub fn borrow_mut_incoming<F: FnOnce(&mut Shortcut, &ShortcutGraph)>(&mut self, edge_id: EdgeId, f: F) {
-        let mut shortcut = Shortcut::new(None, self.original_graph);
-        swap(&mut self.incoming[edge_id as usize], &mut shortcut);
-        f(&mut shortcut, &self);
-        swap(&mut self.incoming[edge_id as usize], &mut shortcut);
-    }
-
-    pub fn swap_out_outgoing(&mut self, edge_id: EdgeId) -> Shortcut {
-        let mut shortcut = Shortcut::new(None, self.original_graph);
-        swap(&mut self.outgoing[edge_id as usize], &mut shortcut);
-        shortcut
-    }
-
-    pub fn swap_out_incoming(&mut self, edge_id: EdgeId) -> Shortcut {
-        let mut shortcut = Shortcut::new(None, self.original_graph);
-        swap(&mut self.incoming[edge_id as usize], &mut shortcut);
-        shortcut
-    }
-
-    pub fn swap_in_outgoing(&mut self, edge_id: EdgeId, mut shortcut: Shortcut) {
-        swap(&mut self.outgoing[edge_id as usize], &mut shortcut);
-    }
-
-    pub fn swap_in_incoming(&mut self, edge_id: EdgeId, mut shortcut: Shortcut) {
-        swap(&mut self.incoming[edge_id as usize], &mut shortcut);
-    }
-
-    pub fn original_graph(&self) -> &TDGraph {
-        self.original_graph
-    }
-}
-
+/// Result of CATCHUp customization to be passed to query algorithm.
 #[derive(Debug)]
 pub struct CustomizedGraph<'a> {
     pub original_graph: &'a TDGraph,
@@ -122,6 +61,7 @@ pub struct CustomizedGraph<'a> {
 }
 
 impl<'a> From<ShortcutGraph<'a>> for CustomizedGraph<'a> {
+    // cleaning up and compacting preprocessing results.
     fn from(shortcut_graph: ShortcutGraph<'a>) -> Self {
         let mut outgoing_required = BitVec::new(shortcut_graph.head.len());
         let mut incoming_required = BitVec::new(shortcut_graph.head.len());
@@ -261,6 +201,19 @@ impl<'a> From<ShortcutGraph<'a>> for CustomizedGraph<'a> {
 }
 
 impl<'a> CustomizedGraph<'a> {
+    /// Create CustomizedGraph from original graph, CCH topology, and customized `Shortcut`s for each CCH edge in both directions
+    pub fn new(original_graph: &'a TDGraph, first_out: &'a [EdgeId], head: &'a [NodeId], outgoing: Vec<Shortcut>, incoming: Vec<Shortcut>) -> Self {
+        ShortcutGraph {
+            original_graph,
+            first_out,
+            head,
+            outgoing,
+            incoming,
+        }
+        .into()
+    }
+
+    /// Get bounds graph for forward elimination tree interval query
     pub fn upward_bounds_graph(&self) -> SingleDirBoundsGraph {
         SingleDirBoundsGraph {
             first_out: &self.outgoing.first_out[..],
@@ -269,6 +222,7 @@ impl<'a> CustomizedGraph<'a> {
         }
     }
 
+    /// Get bounds graph for backward elimination tree interval query
     pub fn downward_bounds_graph(&self) -> SingleDirBoundsGraph {
         SingleDirBoundsGraph {
             first_out: &self.incoming.first_out[..],
@@ -296,6 +250,7 @@ impl<'a> Deconstruct for CustomizedGraph<'a> {
     }
 }
 
+/// Additional data to load CATCHUp customization results back from disk.
 #[derive(Debug)]
 pub struct CustomizedGraphReconstrctor<'a> {
     pub original_graph: &'a TDGraph,
@@ -354,6 +309,7 @@ impl<'a> ReconstructPrepared<CustomizedGraph<'a>> for CustomizedGraphReconstrcto
     }
 }
 
+/// Data for result of CATCHUp customization; one half/direction of it.
 #[derive(Debug)]
 pub struct CustomizedSingleDirGraph {
     first_out: Vec<EdgeId>,
@@ -367,22 +323,28 @@ pub struct CustomizedSingleDirGraph {
 }
 
 impl CustomizedSingleDirGraph {
+    /// Number of outgoing/incoming edges to/from higher ranked nodes for a given node
     pub fn degree(&self, node: NodeId) -> usize {
         (self.first_out[node as usize + 1] - self.first_out[node as usize]) as usize
     }
 
+    /// Borrow full slice of upper and lower bounds for each edge in this graph
     pub fn bounds(&self) -> &[(FlWeight, FlWeight)] {
         &self.bounds[..]
     }
 
+    /// Borrow full slice of head node for each edge in this graph
     pub fn head(&self) -> &[NodeId] {
         &self.head[..]
     }
 
+    /// Borrow full slice of tail node for each edge in this graph
     pub fn tail(&self) -> &[NodeId] {
         &self.tail[..]
     }
 
+    /// (Recursively) evaluate the travel time of edge with a given id for given point in time.
+    /// The callback `f` can be used to do early returns if we reach a node that already has a better tentative distance.
     pub fn evaluate<F>(&self, edge_id: EdgeId, t: Timestamp, customized_graph: &CustomizedGraph, f: &mut F) -> FlWeight
     where
         F: (FnMut(bool, EdgeId, Timestamp) -> bool),
@@ -407,6 +369,14 @@ impl CustomizedSingleDirGraph {
             .unwrap_or(FlWeight::INFINITY)
     }
 
+    /// Evaluate the first original edge on the path that the edge with the given id represents at the given point in time.
+    ///
+    /// This means we recursively unpack the downward edges of all lower triangles of shortcuts.
+    /// While doing so, we mark the respective up arc as contained in the search space using the `mark_upwards` callback.
+    /// We also update lower bounds to the target of all middle nodes of unpacked triangles.
+    /// The Dir parameter is used to distinguish the direction of the current edge - True means upward, False downward.
+    /// We return an `Option` of a tuple with the evaluated `FlWeight`, the CCH `NodeId` of the head node of the evaluated edge, and the CCH `EdgeId` of the evaluated edge.
+    /// The result will be `None` when this is an always infinity edge.
     pub fn evaluate_next_segment_at<Dir: Bool, F>(
         &self,
         edge_id: EdgeId,
@@ -450,6 +420,7 @@ impl CustomizedSingleDirGraph {
         })
     }
 
+    /// Recursively unpack the edge with the given id at the given timestamp and add the path to `result`
     pub fn unpack_at(&self, edge_id: EdgeId, t: Timestamp, customized_graph: &CustomizedGraph, result: &mut Vec<(EdgeId, Timestamp)>) {
         self.edge_source_at(edge_id as usize, t)
             .map(|&source| ShortcutSource::from(source).unpack_at(t, customized_graph, result))
@@ -481,11 +452,13 @@ impl CustomizedSingleDirGraph {
         .map(|(_, s)| s)
     }
 
+    /// Borrow slice of all the source of the edge with given id.
     pub fn edge_sources(&self, edge_idx: usize) -> &[(Timestamp, ShortcutSourceData)] {
         &self.sources[(self.first_source[edge_idx] as usize)..(self.first_source[edge_idx + 1] as usize)]
     }
 }
 
+/// Struct with borrowed slice of the relevant parts (topology, upper and lower bounds) for elimination tree corridor query.
 #[derive(Debug)]
 pub struct SingleDirBoundsGraph<'a> {
     first_out: &'a [EdgeId],
@@ -509,6 +482,7 @@ impl<'a> SingleDirBoundsGraph<'a> {
     }
 }
 
+// Util function to skip early returns
 fn always(_up: bool, _shortcut_id: EdgeId, _t: Timestamp) -> bool {
     true
 }

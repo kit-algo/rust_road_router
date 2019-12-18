@@ -4,6 +4,8 @@ use crate::datastr::graph::Graph as GraphTrait;
 
 type IPPIndex = u32;
 
+/// First out based graph data structure for time-dependent graphs.
+/// All data is owned.
 #[derive(Debug, Clone)]
 pub struct Graph {
     first_out: Vec<EdgeId>,
@@ -13,6 +15,8 @@ pub struct Graph {
 }
 
 impl Graph {
+    /// Create new Graph from raw data.
+    /// Performs a bit of clean up on the input.
     pub fn new(
         first_out: Vec<EdgeId>,
         head: Vec<NodeId>,
@@ -25,6 +29,8 @@ impl Graph {
 
         let mut added = 0;
 
+        // Make sure all nonconst PLFs have a point at time 0 and one at time `period` and these two have the same value
+        // Make sure all const PLFs have exactly one point at time 0.
         for i in 0..head.len() {
             let range = first_ipp_of_arc[i] as usize..first_ipp_of_arc[i + 1] as usize;
             assert_ne!(range.start, range.end);
@@ -53,6 +59,7 @@ impl Graph {
             .into_iter()
             .zip(new_ipp_travel_time.into_iter())
             .map(|(dt, tt)| TTFPoint {
+                // ms to s
                 at: Timestamp::new(f64::from(dt) / 1000.0),
                 val: FlWeight::new(f64::from(tt) / 1000.0),
             })
@@ -66,11 +73,13 @@ impl Graph {
         }
     }
 
+    /// Borrow PLF
     pub fn travel_time_function(&self, edge_id: EdgeId) -> PiecewiseLinearFunction {
         let edge_id = edge_id as usize;
         PiecewiseLinearFunction::new(&self.ipps[self.first_ipp_of_arc[edge_id] as usize..self.first_ipp_of_arc[edge_id + 1] as usize])
     }
 
+    /// Outgoing edge iterator
     pub fn neighbor_and_edge_id_iter(&self, node: NodeId) -> impl Iterator<Item = (&NodeId, EdgeId)> {
         let range = self.neighbor_edge_indices_usize(node);
         self.head[range].iter().zip(self.neighbor_edge_indices(node))
@@ -84,6 +93,7 @@ impl Graph {
         &self.head[..]
     }
 
+    /// Assert that a time annotated path is valid and that the times of the path match the edge weights at the time.
     pub fn check_path(&self, path: Vec<(NodeId, Timestamp)>) {
         let mut iter = path.into_iter();
         let mut prev = iter.next().unwrap();
@@ -105,10 +115,12 @@ impl Graph {
         }
     }
 
+    /// Total number of interpolation points
     pub fn num_ipps(&self) -> usize {
         self.ipps.len()
     }
 
+    /// Number of edges with constant PLF
     pub fn num_constant(&self) -> usize {
         self.first_ipp_of_arc
             .windows(2)

@@ -1,12 +1,18 @@
+//! Logic and data structures for managing data associated TD-CCH edges.
+
 use super::*;
 use std::cmp::{max, min, Ordering};
 use std::sync::atomic::Ordering::Relaxed;
 
+/// Number of points that a PLF is allowed to have before reduction by approximation is triggered.
+/// Can be overriden through the TDCCH_APPROX_THRESHOLD env var
 #[cfg(not(override_tdcch_approx_threshold))]
 pub const APPROX_THRESHOLD: usize = 1000;
 #[cfg(override_tdcch_approx_threshold)]
 pub const APPROX_THRESHOLD: usize = include!(concat!(env!("OUT_DIR"), "/TDCCH_APPROX_THRESHOLD"));
 
+// During customization we need to store PLFs.
+// For each shortcut we either have the exact function (`Exact`) or an approximation through less complex upper and lower bounds (`Approx`).
 #[derive(Debug)]
 enum TTFCache<D> {
     Exact(D),
@@ -44,6 +50,7 @@ impl From<TTFCache<Vec<TTFPoint>>> for TTFCache<Box<[TTFPoint]>> {
     }
 }
 
+// When merging approximated functions, either it is clear which one is better by the bounds alone, or we need to do exact merging by unpacking the exact functions,
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum BoundMergingState {
     First,
@@ -51,6 +58,7 @@ enum BoundMergingState {
     Merge,
 }
 
+// Similar to `TTFCache`, though this one is for actually working with the functions, `TTFCache` is for storing them.
 #[derive(Debug)]
 enum TTF<'a> {
     Exact(PiecewiseLinearFunction<'a>),
@@ -94,19 +102,27 @@ impl<'a> TTF<'a> {
         }
     }
 
+    // Link to TTFs, creating a new function
     fn link(&self, second: &TTF) -> TTFCache<Vec<TTFPoint>> {
         use TTF::*;
 
+        // if both TTFs are exact, we can link exact
         if let (Exact(first), Exact(second)) = (self, second) {
             return TTFCache::Exact(first.link(second));
         }
+        // else the result will be approximated anyway
 
         let (first_lower, first_upper) = self.bound_plfs();
         let (second_lower, second_upper) = second.bound_plfs();
 
+        // linking two upper bounds is a valid upper bound, same for lower bounds
         TTFCache::Approx(first_lower.link(&second_lower), first_upper.link(&second_upper))
     }
 
+    // this ones a bit ugly...
+    // exactly merging two TTFs, even when we only have approximations by lazily calculating exact functions for time ranges where the approximated bounds overlap.
+    // beside the two TTFs we take buffers to reduce allocations
+    // and a callback which does lazy exact function retrieval and merging when we really need it.
     #[allow(clippy::collapsible_if)]
     #[allow(clippy::cognitive_complexity)]
     #[allow(clippy::type_complexity)]
@@ -118,36 +134,43 @@ impl<'a> TTF<'a> {
     ) -> (TTFCache<Box<[TTFPoint]>>, Vec<(Timestamp, bool)>) {
         use TTF::*;
 
+        // easy case, both functions are exact, we can just do actual function mering and are done
         if let (Exact(self_plf), Exact(other)) = (self, other) {
             let (plf, intersections) = self_plf.merge(other, &mut buffers.buffer);
             return (TTFCache::Exact(plf), intersections);
         }
 
+        // get bound functions
         let (self_lower, self_upper) = self.bound_plfs();
         let (other_lower, other_upper) = other.bound_plfs();
 
+        // merge lower with upper bounds to check when one function completely dominates the other one
+        // and when bounds overlap
         let (_, self_dominating_intersections) = self_upper.merge(&other_lower, &mut buffers.buffer);
         let (_, other_dominating_intersections) = other_upper.merge(&self_lower, &mut buffers.buffer);
 
-        let mut dominating = false;
-        let mut start_of_segment = Timestamp::zero();
+        let mut dominating = false; // does currently one function completely dominate the other
+        let mut start_of_segment = Timestamp::zero(); // where does the current dominance segment start
         let mut self_dominating_iter = self_dominating_intersections.iter().peekable();
         let mut other_dominating_iter = other_dominating_intersections.iter().peekable();
-        let mut result = Vec::new();
-        let mut bound_merge_state = Vec::new();
+        let mut result = Vec::new(); // Will contain final (Timestamp, bool) pairs which indicate which function is better when
+        let mut bound_merge_state = Vec::new(); // track `BoundMergingState` for constructing TTFs in the end
 
         match (self_dominating_iter.peek().unwrap().1, other_dominating_iter.peek().unwrap().1) {
             (true, false) => {
+                // first function is currently better
                 dominating = true;
                 result.push((Timestamp::zero(), true));
                 bound_merge_state.push((Timestamp::zero(), BoundMergingState::First));
             }
             (false, true) => {
+                // second function is currently better
                 dominating = true;
                 result.push((Timestamp::zero(), false));
                 bound_merge_state.push((Timestamp::zero(), BoundMergingState::Second));
             }
             _ => {
+                // false false -> bounds overlap
                 // in BOTH cases (especially the broken true true case) everything is unclear and we need to do exact merging
             }
         }
@@ -155,12 +178,16 @@ impl<'a> TTF<'a> {
         self_dominating_iter.next();
         other_dominating_iter.next();
 
+        // while there are still more intersections of the bound functions
         while self_dominating_iter.peek().is_some() || other_dominating_iter.peek().is_some() {
+            // get timestamps of next intersections
             let next_t_self = self_dominating_iter.peek().map(|(t, _)| *t).unwrap_or(Timestamp::NEVER);
             let next_t_other = other_dominating_iter.peek().map(|(t, _)| *t).unwrap_or(Timestamp::NEVER);
 
             if dominating {
+                // currently one function dominates
                 if next_t_self.fuzzy_lt(next_t_other) {
+                    // next intersection is self upper with other lower
                     debug_assert!(
                         !self_dominating_iter.peek().unwrap().1,
                         "{:?}",
@@ -185,11 +212,12 @@ impl<'a> TTF<'a> {
                             &other_upper
                         )
                     );
-                    dominating = false;
+                    dominating = false; // no clear dominance by bounds
 
                     start_of_segment = next_t_self;
                     self_dominating_iter.next();
                 } else if next_t_other.fuzzy_lt(next_t_self) {
+                    // next intersection is other upper with self lower
                     debug_assert!(
                         !other_dominating_iter.peek().unwrap().1,
                         "{:?}",
@@ -214,11 +242,12 @@ impl<'a> TTF<'a> {
                             &other_upper
                         )
                     );
-                    dominating = false;
+                    dominating = false; // no clear dominance by bounds
 
                     start_of_segment = next_t_other;
                     other_dominating_iter.next();
                 } else {
+                    // both bounds intersect at the same time - still clear dominance but with switched roles
                     debug_assert_ne!(
                         self_dominating_iter.peek().unwrap().1,
                         other_dominating_iter.peek().unwrap().1,
@@ -276,9 +305,15 @@ impl<'a> TTF<'a> {
                     other_dominating_iter.next();
                 }
             } else {
+                // currently no dominance, bounds overlap
                 if next_t_self.fuzzy_lt(next_t_other) {
+                    // next intersection is self upper with other lower
+                    // overlap ends, do exact merging in the overlapping range by unpacking
                     let (_, intersections) = merge_exact(start_of_segment, next_t_self, buffers);
 
+                    // if there actually is a real intersection
+                    // (either something happens in the range,
+                    // or the better function at the beginning is not the one, that we currently think is the better)
                     if intersections.len() > 1
                         || result
                             .last()
@@ -295,6 +330,7 @@ impl<'a> TTF<'a> {
                         );
                         bound_merge_state.push((start_of_segment, BoundMergingState::Merge));
                         debug_assert!(start_of_segment.fuzzy_lt(next_t_self), "{:?}", dbg_each!(start_of_segment, next_t_self));
+                        // setup bound merge state for next segment
                         bound_merge_state.push((
                             next_t_self,
                             if self_dominating_iter.peek().unwrap().1 {
@@ -305,6 +341,7 @@ impl<'a> TTF<'a> {
                         ));
                     }
 
+                    // append intersections to `result`
                     let mut iter = intersections.into_iter();
                     let first_intersection = iter.next().unwrap();
                     if result.last().map(|(_, self_better)| *self_better != first_intersection.1).unwrap_or(true) {
@@ -312,6 +349,9 @@ impl<'a> TTF<'a> {
                     }
                     result.extend(iter);
 
+                    // when our bound merge iterators say, we continue different, than we currently are
+                    // there has to be an intersection at the end of the segment we are currently mering
+                    // so push that to result
                     if self_dominating_iter.peek().unwrap().1 {
                         if !result.last().unwrap().1 {
                             result.push((next_t_self, true));
@@ -326,8 +366,13 @@ impl<'a> TTF<'a> {
                     dominating = true;
                     self_dominating_iter.next();
                 } else if next_t_other.fuzzy_lt(next_t_self) {
+                    // next intersection is other upper with self lower
+                    // overlap ends, do exact merging in the overlapping range by unpacking
                     let (_, intersections) = merge_exact(start_of_segment, next_t_other, buffers);
 
+                    // if there actually is a real intersection
+                    // (either something happens in the range,
+                    // or the better function at the beginning is not the one, that we currently think is the better)
                     if intersections.len() > 1
                         || result
                             .last()
@@ -344,6 +389,7 @@ impl<'a> TTF<'a> {
                         );
                         bound_merge_state.push((start_of_segment, BoundMergingState::Merge));
                         debug_assert!(start_of_segment.fuzzy_lt(next_t_other), "{:?}", dbg_each!(start_of_segment, next_t_other));
+                        // setup bound merge state for next segment
                         bound_merge_state.push((
                             next_t_other,
                             if other_dominating_iter.peek().unwrap().1 {
@@ -354,6 +400,7 @@ impl<'a> TTF<'a> {
                         ));
                     }
 
+                    // append intersections to `result`
                     let mut iter = intersections.into_iter();
                     let first_intersection = iter.next().unwrap();
                     if result.last().map(|(_, self_better)| *self_better != first_intersection.1).unwrap_or(true) {
@@ -361,6 +408,9 @@ impl<'a> TTF<'a> {
                     }
                     result.extend(iter);
 
+                    // when our bound merge iterators say, we continue different, than we currently are
+                    // there has to be an intersection at the end of the segment we are currently mering
+                    // so push that to result
                     if other_dominating_iter.peek().unwrap().1 {
                         if result.last().unwrap().1 {
                             result.push((next_t_other, false));
@@ -375,12 +425,16 @@ impl<'a> TTF<'a> {
                     dominating = true;
                     other_dominating_iter.next();
                 } else {
+                    // were currently not dominating and both bounds intersect at the same time, so we're still not dominating.
+                    // just merge it when we finally start dominating.
                     self_dominating_iter.next();
                     other_dominating_iter.next();
                 }
             }
         }
+        // all intersections processed
 
+        // we were not dominating in the end, so we need to merge the rest
         if !dominating {
             let (_, intersections) = merge_exact(start_of_segment, period(), buffers);
 
@@ -409,6 +463,7 @@ impl<'a> TTF<'a> {
             }
             result.extend(iter);
         }
+        // `result` now is finalized
 
         debug_assert!(result.first().unwrap().0 == Timestamp::zero());
         for better in result.windows(2) {
@@ -425,6 +480,8 @@ impl<'a> TTF<'a> {
             );
         }
 
+        // we still need new upper and lower bounds for the merged function
+        // do some preallocation
         buffers.exact_self_buffer.reserve(max(self_lower.len(), self_upper.len()));
         buffers.exact_other_buffer.reserve(max(other_lower.len(), other_upper.len()));
         buffers.exact_result_lower.reserve(2 * self_lower.len() + 2 * other_lower.len() + 2);
@@ -435,6 +492,7 @@ impl<'a> TTF<'a> {
         let mut end_of_segment_iter = bound_merge_state.iter().map(|(t, _)| *t).chain(std::iter::once(period()));
         end_of_segment_iter.next();
 
+        // go over all segments, either copy the better one, or merge bounds (this time lower with lower and upper with upper) and append these
         for (&(start_of_segment, state), end_of_segment) in bound_merge_state.iter().zip(end_of_segment_iter) {
             match state {
                 BoundMergingState::First => {
@@ -489,6 +547,7 @@ impl<'a> TTF<'a> {
         buffers.exact_result_upper.clear();
 
         ret
+        // alternatively just merge the complete lower and upper bounds, but the other variant turned out to be faster.
         // let (result_lower, _) = self_lower.merge(&other_lower, &mut buffers.buffer);
         // let (result_upper, _) = self_upper.merge(&other_upper, &mut buffers.buffer);
         // (TTFCache::Approx(result_lower, result_upper), result)
@@ -516,6 +575,15 @@ impl<'a> TTF<'a> {
     }
 }
 
+/// Shortcut data for a CCH edge.
+///
+/// Here, we use Shortcut as the name for all CCH edges -- probably TDCCHEdge would be a better name.
+/// A shortcut may contain several `ShortcutSource`s which are valid (optimal) for different ranges of times.
+/// `ShortcutSource`s may be edges from the original graph, real shortcuts - that is skipping over a lower triangle, or None, if edge is not necessary for some time.
+///
+/// A shortcut additionally stores upper and lower bounds, a flag if its function is constant and
+/// one if the edge is necessary at all (unnecessary edges may be removed during perfect customization).
+/// Also during customization we keep the corresponding travel time function around for as long as we need it.
 #[derive(Debug)]
 pub struct Shortcut {
     sources: Sources,
@@ -523,10 +591,12 @@ pub struct Shortcut {
     pub lower_bound: FlWeight,
     pub upper_bound: FlWeight,
     constant: bool,
+    /// Is this edge actually necessary in a CH? Set to `false` to mark for removal in perfect customization.
     pub required: bool,
 }
 
 impl Shortcut {
+    /// Create new `Shortcut` referencing an original edge or set to Infinity.
     pub fn new(source: Option<EdgeId>, original_graph: &TDGraph) -> Self {
         match source {
             Some(edge_id) => {
@@ -553,7 +623,10 @@ impl Shortcut {
         }
     }
 
+    /// Merge this Shortcut with the lower triangle made up of the two EdgeIds (first down, then up).
+    /// The `shortcut_graph` has to contain all the edges we may need to unpack.
     pub fn merge(&mut self, linked_ids: (EdgeId, EdgeId), shortcut_graph: &PartialShortcutGraph, buffers: &mut MergeBuffers) {
+        // We already know, we won't need this edge, so do nothing
         if !self.required {
             return;
         }
@@ -566,9 +639,11 @@ impl Shortcut {
             }
         }
 
+        // we have to update the stats once we're done merging, so wrap everything in a lambda so we can do early returns and only exit the lambda.
         (|| {
             let other_data = ShortcutSource::Shortcut(linked_ids.0, linked_ids.1).into();
 
+            // if one of the edges of the triangle is an infinity edge we don't need to do anything
             if !(shortcut_graph.get_incoming(linked_ids.0).is_valid_path() && shortcut_graph.get_outgoing(linked_ids.1).is_valid_path()) {
                 return;
             }
@@ -578,17 +653,21 @@ impl Shortcut {
 
             let other_lower_bound = first.lower_bound + second.lower_bound;
 
+            // current upper bound always better than linked lower bound - do nothing
             if self.upper_bound.fuzzy_lt(other_lower_bound) {
                 return;
             }
 
+            // get cached (possibly approximated) TTFs
             let first_plf = first.plf(shortcut_graph);
             let second_plf = second.plf(shortcut_graph);
 
+            // when the current shortcut is always infinity, the linked paths will always be better.
             if !self.is_valid_path() {
                 if cfg!(feature = "detailed-stats") {
                     ACTUALLY_LINKED.fetch_add(1, Relaxed);
                 }
+                // link functions
                 let linked = first_plf.link(&second_plf);
 
                 self.upper_bound = min(self.upper_bound, TTF::from(&linked).static_upper_bound());
@@ -603,18 +682,25 @@ impl Shortcut {
                 return;
             }
 
+            // get own cached TTF
             let self_plf = self.plf(shortcut_graph);
 
+            // link TTFs in triangle
             let linked_ipps = first_plf.link(&second_plf);
             if cfg!(feature = "detailed-stats") {
                 ACTUALLY_LINKED.fetch_add(1, Relaxed);
             }
 
             let linked = TTF::from(&linked_ipps);
+            // these bounds are more tight than the previous ones
             let other_lower_bound = linked.static_lower_bound();
             let other_upper_bound = linked.static_upper_bound();
 
+            // note that self_plf.static_lower_bound() >= self.lower_bound
+            // this can be the case because we set self.lower_bound during precustomization as low as possible
+            // if we would compare here to self.lower_bound we might never take that branch, even when we would have to.
             if !self_plf.static_lower_bound().fuzzy_lt(other_upper_bound) {
+                // new linked function is always better than the current one
                 self.upper_bound = min(self.upper_bound, other_upper_bound);
                 debug_assert!(
                     !self.upper_bound.fuzzy_lt(self.lower_bound),
@@ -641,12 +727,17 @@ impl Shortcut {
                 }
                 return;
             } else if self.upper_bound.fuzzy_lt(other_lower_bound) {
+                // current upper bound always better than linked lower bound - keep whatever we currently have
                 return;
             }
 
+            // all bound checking done, we need to actually merge
             if cfg!(feature = "detailed-stats") {
                 ACTUALLY_MERGED.fetch_add(1, Relaxed);
             }
+
+            // this function does exact merging, even when we have only approximate functions by unpacking exact functions for time ranges when bounds overlap.
+            // the callback executes exact merging for small time ranges where the bounds overlap, the function takes care of all the rest around that.
             let (mut merged, intersection_data) = self_plf.merge(&linked, buffers, |start, end, buffers| {
                 let mut self_target = buffers.unpacking_target.push_plf();
                 self.exact_ttf_for(start, end, shortcut_graph, &mut self_target, &mut buffers.unpacking_tmp);
@@ -668,6 +759,11 @@ impl Shortcut {
                 }
             }
 
+            // update upper bounds after merging, but not lower bounds.
+            // lower bounds were already set during precustomization -- possibly lower than necessary.
+            // We would like to increase the lower bound to make it tighter, but we can't take the max right now,
+            // We might find a lower function during a later merge operation.
+            // We can only set the lower bound as tight as possible, once we have the final travel time function.
             self.upper_bound = min(self.upper_bound, TTF::from(&merged).static_upper_bound());
             debug_assert!(
                 !self.upper_bound.fuzzy_lt(self.lower_bound),
@@ -678,6 +774,7 @@ impl Shortcut {
             self.cache = Some(merged);
             let mut sources = Sources::None;
             std::mem::swap(&mut sources, &mut self.sources);
+            // calculate new `ShortcutSource`s.
             self.sources = Shortcut::combine(sources, intersection_data, other_data);
         })();
 
@@ -711,6 +808,8 @@ impl Shortcut {
         }
     }
 
+    /// Once the TTF of this Shortcut is final, we can tighten the lower bound.
+    /// When we know or detect, that we don't need this shortcut, we set all bounds to infinity.
     pub fn finalize_bounds(&mut self, shortcut_graph: &PartialShortcutGraph) {
         if !self.required {
             return;
@@ -729,6 +828,8 @@ impl Shortcut {
             self.plf(shortcut_graph).static_lower_bound()
         };
 
+        // The final functions lower bound is worse than the upper bound this shortcut got during pre/post/perfect customization
+        // Thus, we will never need it.
         if self.upper_bound.fuzzy_lt(new_lower_bound) {
             self.required = false;
             self.sources = Sources::None;
@@ -747,6 +848,7 @@ impl Shortcut {
         self.upper_bound = new_upper_bound;
     }
 
+    /// If Shortcuts in skipped triangles are not required, the corresponding `Source` in this shortcut is also not required, so remove it
     pub fn invalidate_unneccesary_sources(&mut self, shortcut_graph: &PartialShortcutGraph) {
         match &mut self.sources {
             Sources::None => {}
@@ -768,9 +870,12 @@ impl Shortcut {
     }
 
     pub fn update_is_constant(&mut self) {
+        // exact check here probably overly pessimistic, but we only loose performance when an edge is unnecessarily marked as non-const
         self.constant = self.upper_bound == self.lower_bound;
     }
 
+    /// Drop cached TTF to save memory.
+    /// Should only be called once it is really not needed anymore.
     pub fn clear_plf(&mut self) {
         if cfg!(feature = "detailed-stats") {
             IPP_COUNT.fetch_sub(self.cache.as_ref().map(TTFCache::<Box<[TTFPoint]>>::num_points).unwrap_or(0), Relaxed);
@@ -781,11 +886,15 @@ impl Shortcut {
         self.cache = None;
     }
 
+    // Combine current `Sources` and the result of a merge into new `Sources`
     fn combine(sources: Sources, intersection_data: Vec<(Timestamp, bool)>, other_data: ShortcutSourceData) -> Sources {
+        // when just one is better all the time
         if let [(_, is_self_better)] = &intersection_data[..] {
             if *is_self_better {
+                // stick with current sources
                 return sources;
             } else {
+                // just the new data
                 return Sources::One(other_data);
             }
         }
@@ -800,6 +909,10 @@ impl Shortcut {
         let mut prev_source = &dummy;
         let mut new_sources = Vec::new();
 
+        // iterate over all old sources.
+        // while self is better we need to copy these over
+        // when other becomes better at an intersection we need to insert other_data at the intersection time
+        // when self becomes better at an intersection we need to insert the source that was active at that time in the old sources at the new intersection time.
         for (at, source) in sources.iter() {
             if intersection_iter.peek().is_none() || at < intersection_iter.peek().unwrap().0 {
                 if self_currently_better {
@@ -832,6 +945,7 @@ impl Shortcut {
             prev_source = source;
         }
 
+        // intersections after the last old source
         for (at, is_self_better) in intersection_iter {
             if is_self_better {
                 new_sources.push((at, *prev_source));
@@ -867,6 +981,10 @@ impl Shortcut {
         Sources::Multi(new_sources.into_boxed_slice())
     }
 
+    /// Recursively unpack the exact travel time function for a given time range.
+    // Use two `ReusablePLFStorage`s to reduce allocations.
+    // One storage will contain the functions for each source - the other the complete resulting function.
+    // That means when fetching the functions for each source, we need to use the two storages with flipped roles.
     pub(super) fn exact_ttf_for(
         &self,
         start: Timestamp,
@@ -893,6 +1011,7 @@ impl Shortcut {
             Sources::None => unreachable!("There are no TTFs for empty shortcuts"),
             Sources::One(source) => ShortcutSource::from(*source).exact_ttf_for(start, end, shortcut_graph, target, tmp),
             Sources::Multi(sources) => {
+                // when we have multiple source, we need to do unpacking (and append the results) for all sources which are relevant for the given time range.
                 let mut c = SourceCursor::valid_at(sources, start);
 
                 while c.cur().0.fuzzy_lt(end) {
@@ -920,6 +1039,7 @@ impl Shortcut {
         self.sources.len()
     }
 
+    /// Returns an iterator over all the sources combined with a Timestamp for the time from which the corresponding source becomes valid.
     pub fn sources_iter(&self) -> impl Iterator<Item = (Timestamp, &ShortcutSourceData)> {
         self.sources.iter()
     }
@@ -929,6 +1049,7 @@ impl Shortcut {
     }
 }
 
+// Enum to catch the common no source or just one source cases without allocations.
 #[derive(Debug, Clone)]
 enum Sources {
     None,
@@ -973,8 +1094,11 @@ impl<'a> Iterator for SourcesIter<'a> {
     }
 }
 
+// Helper struct to iterate over sources.
+// Allows to get sources valid for times > period().
+// Handles all the ugly wraparound logic.
 #[derive(Debug)]
-pub struct SourceCursor<'a> {
+struct SourceCursor<'a> {
     sources: &'a [(Timestamp, ShortcutSourceData)],
     current_index: usize,
     offset: FlWeight,
@@ -1032,6 +1156,7 @@ impl<'a> SourceCursor<'a> {
     }
 }
 
+/// Container struct which bundles all the reusable buffers we need during the customization for merging.
 pub struct MergeBuffers {
     unpacking_target: ReusablePLFStorage,
     unpacking_tmp: ReusablePLFStorage,

@@ -1,4 +1,4 @@
-//! Imai Iri approximation algorithm for piecewise linear functions
+//! Imai Iri approximation algorithm for piecewise linear functions.
 //!
 //! Taken more or less straight from the TD-CRP code which in turn seems to haven taken it from
 //! Veith-Batz and his T-CH which in turn seems to have gotton it from Sabine Neubauers student thesis.
