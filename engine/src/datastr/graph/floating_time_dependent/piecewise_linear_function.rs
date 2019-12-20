@@ -1,3 +1,12 @@
+//! Actual algorithms for linking, merging and copying around `PiecewiseLinearFunctions`.
+//!
+//! Code tuned for maximum performance, not for readability or maintainability.
+//! Whatever happens in here should stay in here, theres quite a bit of Type abuse,
+//! a lot of code with subtle implications and many ugly floating point arithmetic things.
+//! Many things which might seem confusing or like they should be refactored have subtle reasons for being exactly like that.
+//! The git history might be interesting for some of that.
+//! The initial implementation of linking and merging took quite a few inspirations from https://github.com/GVeitBatz/KaTCH/blob/master/datastr/base/pwl_ttf.h
+
 use self::debug::debug_merge;
 use super::*;
 use crate::util::*;
@@ -6,12 +15,15 @@ use std::cmp::{max, min, Ordering};
 mod cursor;
 use cursor::*;
 
+/// A struct borrowing a slice of points which implements all sorts of operations and algorithms for PLFs.
 #[derive(Debug, Clone, Copy)]
 pub struct PiecewiseLinearFunction<'a> {
     ipps: &'a [TTFPoint],
 }
 
 impl<'a> PiecewiseLinearFunction<'a> {
+    /// New PLF from slice of points.
+    /// In debug will validate the invariants we need from the function.
     pub fn new(ipps: &'a [TTFPoint]) -> PiecewiseLinearFunction<'a> {
         debug_assert!(ipps.first().unwrap().at == Timestamp::zero(), "{:?}", ipps);
         debug_assert!(ipps.first().unwrap().val.fuzzy_eq(ipps.last().unwrap().val), "{:?}", ipps);
@@ -73,6 +85,8 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
+    /// Copy range of points to target such that [start, end] is completely covered
+    /// (that is there may be one point before start and one after end in the result).
     pub(super) fn copy_range(&self, start: Timestamp, end: Timestamp, target: &mut impl PLFTarget) {
         debug_assert!(start.fuzzy_lt(end), "{:?} - {:?}", start, end);
 
@@ -87,6 +101,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
             f.advance();
         }
 
+        // this ons is on or after end
         target.push(f.cur());
 
         debug_assert!(target.len() > 1);
@@ -101,6 +116,9 @@ impl<'a> PiecewiseLinearFunction<'a> {
         debug_assert!(!target[target.len() - 1].at.fuzzy_lt(end));
     }
 
+    /// Copy range of points to target such that [start, end] is completely covered but target may already contain points.
+    /// When target already covers start, restrict those points to the range up to start, insert a point by linear interpolation
+    /// and then insert points to cover everything up to (including) end.
     pub(super) fn copy_append_to_partial(&self, start: Timestamp, end: Timestamp, target: &mut Vec<TTFPoint>) {
         debug_assert!(start.fuzzy_lt(end), "{:?} - {:?}", start, end);
 
@@ -146,6 +164,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
             f.advance();
         }
 
+        // this ons is on or after end
         target.push(f.cur());
 
         for points in target.windows(2) {
@@ -153,6 +172,10 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
+    /// Copy full slice of points to target/first.
+    /// The difference here to the other copy/append methods is that we don't need the Cursor logig but can copy the entire slice.
+    /// When target already covers switchover, restrict those points to the range up to start, insert a point by linear interpolation
+    /// and then insert points to cover everything up to (including) end.
     #[allow(clippy::cognitive_complexity)]
     pub(super) fn append_partials(first: &mut impl PLFTarget, second: &[TTFPoint], switchover: Timestamp) {
         debug_assert!(second.len() > 1);
@@ -206,6 +229,8 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
+    /// Link two complete and valid PLFs.
+    /// The result is also a complete and valid PLF, but since PLF is just a borrow we return a `Vec<TTFPoint>`
     pub fn link(&self, other: &Self) -> Vec<TTFPoint> {
         if let [TTFPoint { val, .. }] = &self.ipps {
             if let [TTFPoint { val: other, .. }] = &other.ipps {
@@ -299,6 +324,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         result
     }
 
+    /// Link to partial PLFs and append the result to target, taking care of overlap
     #[allow(clippy::cognitive_complexity)]
     pub(super) fn link_partials(first: &[TTFPoint], second: &[TTFPoint], start: Timestamp, end: Timestamp, target: &mut MutTopPLF) {
         let mut f = PartialPlfLinkCursor::new(first);
@@ -332,6 +358,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 f.advance();
             }
 
+            // x <= start, target already has a point -> we got overlap at the start, pop last point from target
             if !start.fuzzy_lt(x) && !target.is_empty() {
                 target.pop();
             }
@@ -376,6 +403,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         debug_assert!(!target[target.len() - 1].at.fuzzy_lt(end));
     }
 
+    // Merge two partial plfs in the range between start and end and store the result in buffer.
     pub fn merge_partials(
         first: &[TTFPoint],
         second: &[TTFPoint],
@@ -386,13 +414,17 @@ impl<'a> PiecewiseLinearFunction<'a> {
         debug_assert!(start >= Timestamp::zero());
         debug_assert!(end <= period());
 
+        // We just put the partial PLFs into `PiecewiseLinearFunction` objects without caring about the invariants
+        // but use the CursorType to make sure a Cursor is used which handles them the right way.
         PiecewiseLinearFunction { ipps: first }.merge_in_bounds::<PartialPlfMergeCursor, False>(&PiecewiseLinearFunction { ipps: second }, start, end, buffer)
     }
 
+    // Merge two complete and valid PLFs in the range between 0 and period and store the result in buffer.
     pub fn merge(&self, other: &Self, buffer: &mut Vec<TTFPoint>) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
         self.merge_in_bounds::<Cursor, True>(other, Timestamp::zero(), period(), buffer)
     }
 
+    // Actual merging logic. Here be dragons.
     #[allow(clippy::cognitive_complexity)]
     fn merge_in_bounds<C: MergeCursor<'a>, FullRange: Bool>(
         &self,
@@ -401,12 +433,14 @@ impl<'a> PiecewiseLinearFunction<'a> {
         end: Timestamp,
         result: &mut Vec<TTFPoint>,
     ) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
+        // easy cases
         if self.upper_bound() < other.lower_bound() {
             return (self.ipps.to_vec().into_boxed_slice(), vec![(start, true)]);
         } else if other.upper_bound() < self.lower_bound() {
             return (other.ipps.to_vec().into_boxed_slice(), vec![(start, false)]);
         }
 
+        // setup
         result.reserve(2 * self.ipps.len() + 2 * other.ipps.len() + 2);
         let mut better = Vec::new();
 
@@ -445,6 +479,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         f.advance();
         g.advance();
 
+        // parallel sweep over both functions with linear_interpolation to check if one completely dominates the other,
         while !needs_merging && (!end.fuzzy_lt(f.prev().at) || !end.fuzzy_lt(g.prev().at)) {
             if f.cur().at.fuzzy_eq(g.cur().at) {
                 if !f.cur().val.fuzzy_eq(g.cur().val) && (f.cur().val < g.cur().val) != better.last().unwrap().1 {
@@ -486,6 +521,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         f.advance();
         g.advance();
 
+        // main loop
         while f.cur().at < end || g.cur().at < end {
             if intersect(&f.prev(), &f.cur(), &g.prev(), &g.cur()) {
                 let intersection = intersection_point(&f.prev(), &f.cur(), &g.prev(), &g.cur());
@@ -609,6 +645,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         debug_assert!(!f.cur().at.fuzzy_lt(end), "{:?}", debug_merge(&f, &g, &result, &better));
         debug_assert!(!g.cur().at.fuzzy_lt(end), "{:?}", debug_merge(&f, &g, &result, &better));
 
+        // intersection of final segments?
         if intersect(&f.prev(), &f.cur(), &g.prev(), &g.cur()) {
             let intersection = intersection_point(&f.prev(), &f.cur(), &g.prev(), &g.cur());
             if start.fuzzy_lt(intersection.at) && intersection.at.fuzzy_lt(end) {
@@ -623,6 +660,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
             }
         }
 
+        // last point
         if FullRange::VALUE {
             if result.len() > 1 {
                 let p = TTFPoint { at: end, val: result[0].val };
@@ -659,6 +697,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         ret
     }
 
+    // append point to a PLF making sure, that its not too close to the previous point
     fn append_point(points: &mut Vec<TTFPoint>, point: TTFPoint) {
         debug_assert!(point.val >= FlWeight::new(0.0), "{:?}", point);
         if let Some(p) = points.last() {
@@ -676,6 +715,9 @@ impl<'a> PiecewiseLinearFunction<'a> {
         points.push(point)
     }
 
+    // douglas peuker approximation implementaion
+
+    /// Approximate a PLF
     #[cfg(not(feature = "tdcch-approx-imai-iri"))]
     pub fn approximate(&self, buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
         buffer.reserve(self.ipps.len());
@@ -685,6 +727,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         result
     }
 
+    /// Generate an approximated function which is always less or equal to the original function
     #[cfg(not(feature = "tdcch-approx-imai-iri"))]
     pub fn lower_bound_ttf(&self, buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
         buffer.reserve(self.ipps.len());
@@ -700,6 +743,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         result
     }
 
+    /// Generate an approximated function which is always greater or equal to the original function
     #[cfg(not(feature = "tdcch-approx-imai-iri"))]
     pub fn upper_bound_ttf(&self, buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
         buffer.reserve(self.ipps.len());
@@ -715,6 +759,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         result
     }
 
+    /// Same result as `(lower_bound_ttf(), upper_bound_ttf())` but with just one call to DP
     #[cfg(not(feature = "tdcch-approx-imai-iri"))]
     pub fn bound_ttfs(&self) -> (Box<[TTFPoint]>, Box<[TTFPoint]>) {
         let mut result_lower = Vec::with_capacity(self.ipps.len());
@@ -732,6 +777,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         (result_lower.into_boxed_slice(), result_upper.into_boxed_slice())
     }
 
+    // calculate approximated function
     #[cfg(not(feature = "tdcch-approx-imai-iri"))]
     fn douglas_peuker(&self, result: &mut Vec<TTFPoint>) {
         if self.ipps.len() <= 2 {
@@ -762,6 +808,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
+    // calculate approximated bound functions and make them as tight as possible
     #[cfg(not(feature = "tdcch-approx-imai-iri"))]
     fn douglas_peuker_combined(&self, result_lower: &mut Vec<TTFPoint>, result_upper: &mut Vec<TTFPoint>) {
         if self.ipps.len() <= 2 {
@@ -818,6 +865,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
+    // calculate approximated lower bound function and make it as tight as possible
     #[cfg(not(feature = "tdcch-approx-imai-iri"))]
     fn douglas_peuker_lower(&self, result_lower: &mut Vec<TTFPoint>) {
         if self.ipps.len() <= 2 {
@@ -863,6 +911,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
+    // calculate approximated upper bound function and make it as tight as possible
     #[cfg(not(feature = "tdcch-approx-imai-iri"))]
     fn douglas_peuker_upper(&self, result_upper: &mut Vec<TTFPoint>) {
         if self.ipps.len() <= 2 {
@@ -1186,6 +1235,8 @@ mod tests {
     }
 }
 
+/// Utilities for debugging PLF ops.
+/// Will dump functions into a python file which when executed uses matplotlib to plot stuff.
 mod debug {
     use super::*;
 

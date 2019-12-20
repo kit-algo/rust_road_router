@@ -1,5 +1,10 @@
+//! Data structures to efficiently iterate over TTFPoints.
+//! Allows to get points valid for times > period().
+//! Handling all the ugly shifting and wrapping logic.
+
 use super::*;
 
+/// All the ops we need during merging
 pub trait MergeCursor<'a> {
     fn new(ipps: &'a [TTFPoint]) -> Self;
     fn cur(&self) -> TTFPoint;
@@ -10,6 +15,7 @@ pub trait MergeCursor<'a> {
     fn ipps(&self) -> &'a [TTFPoint];
 }
 
+/// Cursor for complete TTFs
 #[derive(Debug)]
 pub struct Cursor<'a> {
     ipps: &'a [TTFPoint],
@@ -113,6 +119,9 @@ impl<'a> MergeCursor<'a> for Cursor<'a> {
     }
 }
 
+/// Cursor for partial TTFs.
+/// Needing no wrapping here.
+/// When we move beyond end, we just move in one second steps and keep the last value.
 #[derive(Debug)]
 pub struct PartialPlfMergeCursor<'a> {
     iter: std::slice::Iter<'a, TTFPoint>,
@@ -166,6 +175,8 @@ impl<'a> MergeCursor<'a> for PartialPlfMergeCursor<'a> {
     }
 }
 
+/// Similar to PartialPlfMergeCursor but for linking.
+/// Without lookahead, and we need to know when we're done.
 #[derive(Debug)]
 pub struct PartialPlfLinkCursor<'a> {
     iter: std::slice::Iter<'a, TTFPoint>,

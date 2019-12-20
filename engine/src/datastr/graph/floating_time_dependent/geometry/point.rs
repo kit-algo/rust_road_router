@@ -113,7 +113,7 @@ pub fn colinear_ordered(p: &TTFPoint, q: &TTFPoint, r: &TTFPoint) -> bool {
     q.val.fuzzy_eq(p.val + (f64::from(q.at - p.at) / f64::from(v.at)) * v.val)
 }
 
-/// -1 when r (or p->r) lies counterclockwise of p->q, 0 when colinear, 1 when clockwise
+/// -1 when c (or a->c) lies counterclockwise of a->b, 0 when colinear, 1 when clockwise
 fn ccw(a: &TTFPoint, b: &TTFPoint, c: &TTFPoint) -> i32 {
     if a.at.fuzzy_eq(b.at) && a.val.fuzzy_eq(b.val) {
         return 0;

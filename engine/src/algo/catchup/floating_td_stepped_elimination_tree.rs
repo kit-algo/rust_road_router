@@ -1,3 +1,9 @@
+//! Corridor elimination tree query.
+//!
+//! Same algorithm as the static elimination tree query.
+//! Difference is, we only have upper and lower bounds for each edge.
+//! Thus we may have multiple potentially optimal labels for each node and get a corridor instead of a path.
+
 use super::*;
 use crate::datastr::graph::floating_time_dependent::SingleDirBoundsGraph;
 use crate::datastr::graph::floating_time_dependent::*;
@@ -54,6 +60,7 @@ impl<'a, 'b> FloatingTDSteppedEliminationTree<'a, 'b> {
     }
 
     pub fn initialize_query(&mut self, from: NodeId) {
+        // clean up previous data.
         if let Some(from) = self.origin {
             let mut next = Some(from);
             while let Some(node) = next {
@@ -68,7 +75,6 @@ impl<'a, 'b> FloatingTDSteppedEliminationTree<'a, 'b> {
         self.origin = Some(from);
         self.next = Some(from);
 
-        // Starte with origin
         self.distances[from as usize].upper_bound = FlWeight::zero();
         self.distances[from as usize].lower_bound = FlWeight::zero();
     }
