@@ -1,3 +1,5 @@
+//! A few handy methods for ranges
+
 use std::cmp::{max, min};
 use std::ops::Range;
 

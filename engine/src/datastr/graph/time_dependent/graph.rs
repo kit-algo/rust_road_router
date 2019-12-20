@@ -3,6 +3,7 @@ use crate::datastr::graph::Graph as GraphTrait;
 
 type IPPIndex = u32;
 
+/// Container for basic TD-Graph data.
 #[derive(Debug, Clone)]
 pub struct Graph {
     first_out: Vec<EdgeId>,
@@ -13,6 +14,7 @@ pub struct Graph {
 }
 
 impl Graph {
+    /// Construct graph from raw data.
     pub fn new(
         first_out: Vec<EdgeId>,
         head: Vec<NodeId>,
@@ -29,6 +31,7 @@ impl Graph {
         }
     }
 
+    /// Borrow an individual travel time function.
     pub fn travel_time_function(&self, edge_id: EdgeId) -> PiecewiseLinearFunction {
         let edge_id = edge_id as usize;
         PiecewiseLinearFunction::new(
@@ -37,6 +40,7 @@ impl Graph {
         )
     }
 
+    /// Iterator over neighbors and corresponding edge ids.
     pub fn neighbor_and_edge_id_iter(&self, node: NodeId) -> impl Iterator<Item = (&NodeId, EdgeId)> {
         let range = self.neighbor_edge_indices_usize(node);
         self.head[range].iter().zip(self.neighbor_edge_indices(node))

@@ -1,3 +1,9 @@
+//! Data structures for time-dependent routing with integer weights.
+//!
+//! The stuff in this module is actually not that interesting since it's just the
+//! leftovers from early attempts on time-dependend CCHs.
+//! What remains are the few parts that TD-S and TD-Dijkstra need.
+
 use super::*;
 
 mod piecewise_linear_function;
@@ -15,6 +21,7 @@ use self::geometry::*;
 mod math;
 mod sorted_search_slice_ext;
 
+/// A point in time.
 pub type Timestamp = Weight;
 
 #[cfg(test)]
@@ -56,14 +63,11 @@ pub fn period() -> Timestamp {
     TEST_PERIOD_MOCK.with(|period_cell| period_cell.get().expect("period() used but not set"))
 }
 
+/// Travel time functions are periodic.
+/// This value is the wraparound value.
+/// Hardcoded to `86400s`, that is 1 day.
 #[cfg(not(test))]
 #[inline]
 pub const fn period() -> Timestamp {
     86_400_000
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum ShortcutId {
-    Outgoing(EdgeId),
-    Incmoing(EdgeId),
 }

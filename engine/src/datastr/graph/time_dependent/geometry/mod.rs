@@ -1,3 +1,5 @@
+//! Too much type system around basic geoemtric operations.
+
 use super::{Timestamp, Weight, INFINITY};
 
 mod point;

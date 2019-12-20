@@ -1,3 +1,5 @@
+//! A random collection of small utilities.
+
 use std::cmp::Ordering;
 
 pub mod in_range_option;
@@ -7,19 +9,22 @@ pub trait Bool {
     const VALUE: bool;
 }
 
+/// Poor mans const generic bool true.
 pub struct True;
 
 impl Bool for True {
     const VALUE: bool = true;
 }
 
+/// Poor mans const generic bool false.
 pub struct False;
 
 impl Bool for False {
     const VALUE: bool = false;
 }
 
-/// Yes rust, I know floats are dangerous but I have to sort them anyway.
+/// Non NaN float wrapper for sorting floats
+/// (Yes rust, I know floats are dangerous but I have to sort them anyway.)
 #[derive(PartialEq, PartialOrd)]
 pub struct NonNan(f32);
 

@@ -2,6 +2,7 @@ use super::math::*;
 use super::sorted_search_slice_ext::*;
 use super::*;
 
+/// A struct borrowing data of a single PLF and exposing some methods to work with it.
 #[derive(Debug)]
 pub struct PiecewiseLinearFunction<'a> {
     departure_time: &'a [Timestamp],
@@ -9,6 +10,7 @@ pub struct PiecewiseLinearFunction<'a> {
 }
 
 impl<'a> PiecewiseLinearFunction<'a> {
+    /// Create from two slices and make sure certain invariants hold.
     pub fn new(departure_time: &'a [Timestamp], travel_time: &'a [Weight]) -> PiecewiseLinearFunction<'a> {
         debug_assert_eq!(departure_time.len(), travel_time.len());
         debug_assert!(!departure_time.is_empty());
@@ -26,6 +28,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         PiecewiseLinearFunction { departure_time, travel_time }
     }
 
+    /// Calculate average Weight over a given time range.
     pub fn average(&self, range: WrappingRange) -> Weight {
         let monotone_range = range.monotonize();
         let total_time = monotone_range.end - monotone_range.start;
@@ -39,14 +42,17 @@ impl<'a> PiecewiseLinearFunction<'a> {
         (sum / 2 / u64::from(total_time)) as Weight
     }
 
+    /// Evaluate function at an arbitrary point in time
     pub fn eval(&self, departure: Timestamp) -> Weight {
         self.evaluate(departure % period())
     }
 
+    /// Find the lowest value of the function
     pub fn lower_bound(&self) -> Weight {
         *self.travel_time.iter().min().unwrap()
     }
 
+    /// Evaluate for a point in time within period!
     pub(super) fn evaluate(&self, departure: Timestamp) -> Weight {
         debug_assert!(departure <= period());
         if self.departure_time.len() <= 2 {

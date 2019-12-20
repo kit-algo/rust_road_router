@@ -1,3 +1,5 @@
+//! Slightly optimized versions of binary search for PLFs.
+
 use crate::datastr::graph::time_dependent::period;
 use crate::datastr::graph::time_dependent::*;
 use std::ops::Range;
