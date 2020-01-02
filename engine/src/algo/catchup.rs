@@ -5,6 +5,8 @@ use crate::report::*;
 use crate::util::*;
 use std::cmp::*;
 
+pub use crate::algo::customizable_contraction_hierarchy::ftd_cch::customize;
+
 mod floating_td_stepped_elimination_tree;
 use floating_td_stepped_elimination_tree::{QueryProgress, *};
 

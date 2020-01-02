@@ -1,3 +1,5 @@
+// A HTTP query server based on CCHs.
+
 #![feature(proc_macro_hygiene, decl_macro)]
 
 #[macro_use]
@@ -43,7 +45,7 @@ struct NodeCoord {
 }
 
 impl KdtreePointTrait for NodeCoord {
-    #[inline] // the inline on this method is important! as without it there is ~25% speed loss on the tree when cross-crate usage.
+    #[inline] // the inline on this method is important! Without it there is ~25% speed loss on the tree when cross-crate usage.
     fn dims(&self) -> &[f64] {
         &self.coords
     }
@@ -200,6 +202,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let here_rank_to_link_id = Vec::load_from(path.join("here_rank_to_link_id"))?;
     let cch_order = Vec::load_from(path.join("cch_perm"))?;
 
+    // all further preprocessing happening asynchronous
     thread::spawn(move || {
         let id_mapper = LinkIdMapper::new(link_id_mapping, here_rank_to_link_id, head.len());
 
@@ -221,6 +224,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             .node_id
         };
 
+        // Customization should run asynchronous to queries but needs all the data,
+        // Thus we create a scope here, so we can later spawn new threads
+        // without the risk of data going out of scope.
         crossbeam_utils::thread::scope(|scope| {
             for query_params in rx_query {
                 match query_params {
@@ -306,6 +312,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         let first_out = &first_out;
                         let head = &head;
 
+                        // asynchronous customization
                         scope.spawn(move || {
                             for (here_link_id, is_from_ref, weight) in updates.into_iter() {
                                 if is_from_ref {

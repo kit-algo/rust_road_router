@@ -1,5 +1,7 @@
 #!/usr/bin/env sh
 
+# calculate nested disection order for CCHs using InertialFlowCutter
+
 seed=5489
 
 ./lib/InertialFlowCutter/build/console \
