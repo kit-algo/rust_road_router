@@ -1,3 +1,5 @@
+// Utility to check OSM Live data and determine how many of the referenced nodes are known.
+
 use bmw_routing_engine::{
     cli::CliErr,
     datastr::{graph::*, rank_select_map::*},

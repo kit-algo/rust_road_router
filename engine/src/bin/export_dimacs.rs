@@ -1,3 +1,5 @@
+// Utility to convert a graph from RoutingKit format to DIMACs format
+
 use std::{env, error::Error, path::Path};
 
 use bmw_routing_engine::{cli::CliErr, datastr::graph::*, export::*, io::Load};

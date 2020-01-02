@@ -1,3 +1,5 @@
+// Plot a subgraph within given geographic boundaries to a SVG.
+
 use bmw_routing_engine::{cli::CliErr, datastr::graph::*, io::*};
 use std::{env, error::Error, path::Path};
 

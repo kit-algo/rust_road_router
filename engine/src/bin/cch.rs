@@ -1,3 +1,6 @@
+// Example of complete CCH toolchain.
+// Takes a directory as argument, which has to contain the graph (in RoutingKit format), a nested disection order and queries.
+
 use std::{env, error::Error, path::Path};
 
 use bmw_routing_engine::{

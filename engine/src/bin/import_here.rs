@@ -1,3 +1,5 @@
+// Program to convert map data from HERE into RoutingKit data structures
+
 use std::{env, error::Error, path::Path, str::FromStr};
 
 use bmw_routing_engine::{

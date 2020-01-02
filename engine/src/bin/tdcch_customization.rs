@@ -1,3 +1,6 @@
+// Metric dependent part of CATCHUp preprocessing - the customization - with reporting for experiments.
+// Takes as input one directory arg which should contain the all data and to which results will be written.
+
 use std::{env, error::Error, path::Path};
 
 #[macro_use]

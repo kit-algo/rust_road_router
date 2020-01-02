@@ -1,3 +1,5 @@
+// Utility to find out which CPU features rustc enables for the current platform.
+
 fn main() {
     eprintln!("16bit-mode {:?}", cfg!(target_feature = "16bit-mode"));
     eprintln!("32bit-mode {:?}", cfg!(target_feature = "32bit-mode"));

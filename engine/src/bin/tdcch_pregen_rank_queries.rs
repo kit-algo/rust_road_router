@@ -1,3 +1,6 @@
+// CATCHUp query experiments with pregenerated rank queries.
+// Takes as input one directory arg which should contain the all data.
+
 use std::{env, error::Error, path::Path};
 
 #[macro_use]

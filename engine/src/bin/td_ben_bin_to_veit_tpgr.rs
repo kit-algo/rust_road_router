@@ -1,3 +1,5 @@
+// CATCHUp graph conversion utility from RoutingKit format to KaTCH tpgr.
+
 use std::{env, error::Error, fs::File, io::prelude::*, path::Path};
 
 use bmw_routing_engine::{cli::CliErr, io::*};

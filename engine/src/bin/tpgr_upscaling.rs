@@ -1,3 +1,5 @@
+// Graph processing utility to scale the weights of a tpgr graph (because KaTCH uses tenths of seconds as the base unit).
+
 use bmw_routing_engine::cli::CliErr;
 use std::env;
 use std::error::Error;

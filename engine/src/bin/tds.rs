@@ -1,3 +1,6 @@
+// Example of complete Time-Dependent Sampling toolchain.
+// Takes a directory as argument, which has to contain the graph (in RoutingKit format) and a nested disection order.
+
 use std::{env, error::Error, path::Path};
 
 use bmw_routing_engine::{

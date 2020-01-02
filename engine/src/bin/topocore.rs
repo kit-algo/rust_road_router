@@ -1,3 +1,5 @@
+// WIP: CH potentials
+
 use std::{env, error::Error, path::Path};
 
 use time::Duration;

@@ -1,3 +1,5 @@
+// CATCHUp utilitie to write RoutingKit querties to KaTCH demands
+
 use std::{env, error::Error, fs::File, io::prelude::*, path::Path};
 
 use bmw_routing_engine::{cli::CliErr, datastr::graph::INFINITY, io::*};

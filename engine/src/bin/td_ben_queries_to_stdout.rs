@@ -1,3 +1,5 @@
+// CATCHUp utilitie to write RoutingKit querties to stdout
+
 use std::{
     env,
     error::Error,

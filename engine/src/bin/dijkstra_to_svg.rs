@@ -1,3 +1,5 @@
+// Utility binary to plot the progress of dijkstras algorithm as an SVG file
+
 use std::{env, error::Error, path::Path};
 
 use bmw_routing_engine::{

@@ -1,3 +1,7 @@
+// Ad hoc CATCHUp query experiments for quick results.
+// The real experiments use pregenerated query sets.
+// Takes as input one directory arg which should contain the all data.
+
 use std::{env, error::Error, path::Path};
 
 #[macro_use]

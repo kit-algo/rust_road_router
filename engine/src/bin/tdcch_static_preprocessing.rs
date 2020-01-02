@@ -1,3 +1,6 @@
+// Metric independent parts of CATCHUp preprocessing with reporting for experiments.
+// Takes as input one directory arg which should contain the graph and an order and to which the results will be written.
+
 use std::{env, error::Error, path::Path};
 
 #[macro_use]

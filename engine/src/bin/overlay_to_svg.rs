@@ -1,3 +1,7 @@
+// Utility for visualization of overlay graphs.
+// Uses Contraction Hierarchies to obtain the overlay.
+// Takes a geographic bounding box to which the output is limited.
+
 use std::{env, error::Error, path::Path};
 
 use bmw_routing_engine::{

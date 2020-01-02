@@ -1,3 +1,5 @@
+// Utility to invert a node order that is turn a permutation into a ranking or vice versa.
+
 use std::{env, error::Error};
 
 use bmw_routing_engine::{cli::CliErr, datastr::node_order::NodeOrder, io::*};

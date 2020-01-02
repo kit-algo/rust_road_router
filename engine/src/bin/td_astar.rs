@@ -1,3 +1,5 @@
+// WIP: CH potentials for TD Routing.
+
 use std::{env, error::Error, path::Path};
 
 use bmw_routing_engine::{
