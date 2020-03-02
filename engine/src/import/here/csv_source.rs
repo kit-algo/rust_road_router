@@ -31,10 +31,10 @@ impl<'a> RdfDataSource for CSVSource<'a> {
                         .escape(None)
                         .from_reader(file);
 
-                    for (i, line) in reader.records().enumerate() {
+                    elements.extend(reader.records().enumerate().map(|(i, line)| {
                         let record = line.unwrap();
 
-                        elements.push(RdfLink {
+                        RdfLink {
                             link_id: record[0]
                                 .parse()
                                 .unwrap_or_else(|_| panic!("could not parse {:?} as link_id in line {} of {:?}", &record[0], i, path)),
@@ -44,8 +44,8 @@ impl<'a> RdfDataSource for CSVSource<'a> {
                             nonref_node_id: record[2]
                                 .parse()
                                 .unwrap_or_else(|_| panic!("could not parse {:?} as nonref_node_id in line {} of {:?}", &record[2], i, path)),
-                        });
-                    }
+                        }
+                    }));
                 }
                 Err(e) => println!("{:?}", e),
             }
@@ -69,10 +69,10 @@ impl<'a> RdfDataSource for CSVSource<'a> {
                         .escape(None)
                         .from_reader(file);
 
-                    for (i, line) in reader.records().enumerate() {
+                    elements.extend(reader.records().enumerate().map(|(i, line)| {
                         let record = line.unwrap();
 
-                        elements.push(RdfNavLink {
+                        RdfNavLink {
                             link_id: record[0]
                                 .parse()
                                 .unwrap_or_else(|_| panic!("could not parse {:?} as link_id in line {} of {:?}", &record[0], i, path)),
@@ -87,8 +87,8 @@ impl<'a> RdfDataSource for CSVSource<'a> {
                                 .unwrap_or_else(|_| panic!("could not parse {:?} as speed_category in line {} of {:?}", &record[19], i, path)),
                             from_ref_speed_limit: record[25].parse().ok(),
                             to_ref_speed_limit: record[26].parse().ok(),
-                        });
-                    }
+                        }
+                    }));
                 }
                 Err(e) => println!("{:?}", e),
             }
@@ -112,10 +112,10 @@ impl<'a> RdfDataSource for CSVSource<'a> {
                         .escape(None)
                         .from_reader(file);
 
-                    for (i, line) in reader.records().enumerate() {
+                    elements.extend(reader.records().enumerate().map(|(i, line)| {
                         let record = line.unwrap();
 
-                        elements.push(RdfNode {
+                        RdfNode {
                             node_id: record[0]
                                 .parse()
                                 .unwrap_or_else(|_| panic!("could not parse {:?} as node_id in line {} of {:?}", &record[0], i, path)),
@@ -126,8 +126,8 @@ impl<'a> RdfDataSource for CSVSource<'a> {
                                 .parse()
                                 .unwrap_or_else(|_| panic!("could not parse {:?} as lon in line {} of {:?}", &record[2], i, path)),
                             z_coord: record[3].parse().ok(),
-                        });
-                    }
+                        }
+                    }));
                 }
                 Err(e) => println!("{:?}", e),
             }
@@ -151,10 +151,10 @@ impl<'a> RdfDataSource for CSVSource<'a> {
                         .escape(None)
                         .from_reader(file);
 
-                    for (i, line) in reader.records().enumerate() {
+                    elements.extend(reader.records().enumerate().map(|(i, line)| {
                         let record = line.unwrap();
 
-                        elements.push(RdfLinkGeometry {
+                        RdfLinkGeometry {
                             link_id: record[0]
                                 .parse()
                                 .unwrap_or_else(|_| panic!("could not parse {:?} as link_id in line {} of {:?}", &record[0], i, path)),
@@ -168,8 +168,8 @@ impl<'a> RdfDataSource for CSVSource<'a> {
                                 .parse()
                                 .unwrap_or_else(|_| panic!("could not parse {:?} as lon in line {} of {:?}", &record[3], i, path)),
                             z_coord: record[4].parse().ok(),
-                        });
-                    }
+                        }
+                    }));
                 }
                 Err(e) => println!("{:?}", e),
             }
