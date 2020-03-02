@@ -4,7 +4,7 @@ use std::cmp::min;
 use std::mem::size_of;
 use std::ops::Deref;
 
-use std::alloc::{Alloc, Global, Layout};
+use std::alloc::{alloc_zeroed, Layout};
 
 use crate::io::*;
 
@@ -32,14 +32,12 @@ impl BitVec {
         // ceiling to the right number of u64s
         let num_ints = (size + STORAGE_BITS - 1) / STORAGE_BITS;
         let data = unsafe {
-            let pointer = Global
-                .alloc_zeroed(Layout::from_size_align(num_ints * size_of::<usize>(), CACHE_LINE_WIDTH).unwrap())
-                .unwrap();
+            let pointer = alloc_zeroed(Layout::from_size_align(num_ints * size_of::<usize>(), CACHE_LINE_WIDTH).unwrap());
             // TODO: freeing will supply a different alignment (the one of u64)
             // appearently this is not a problem, but it could be some day
             // so we probably should also do the dropping ourselves
             #[allow(clippy::cast_ptr_alignment)] // was actually allocated with greater alignment
-            Vec::from_raw_parts(pointer.as_ptr() as *mut u64, num_ints, num_ints)
+            Vec::from_raw_parts(pointer as *mut u64, num_ints, num_ints)
         };
 
         BitVec { data, size }
