@@ -78,7 +78,7 @@ impl<'a> RdfDataSource for CSVSource<'a> {
                                 .unwrap_or_else(|_| panic!("could not parse {:?} as link_id in line {} of {:?}", &record[0], i, path)),
                             functional_class: record[4]
                                 .parse()
-                                .unwrap_or_else(|_| panic!("could not parse {:?} as travel_direction in line {} of {:?}", &record[6], i, path)),
+                                .unwrap_or_else(|_| panic!("could not parse {:?} as functional_class in line {} of {:?}", &record[6], i, path)),
                             travel_direction: record[6]
                                 .parse()
                                 .unwrap_or_else(|_| panic!("could not parse {:?} as travel_direction in line {} of {:?}", &record[6], i, path)),
