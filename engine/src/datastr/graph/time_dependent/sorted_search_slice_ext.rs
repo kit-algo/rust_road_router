@@ -52,7 +52,7 @@ impl<T> FullPeriodTimestampSliceExt for [T] {
         F: FnMut(&'a Self::Item) -> Timestamp,
     {
         if range.start == range.end {
-            (0..0)
+            0..0
         } else {
             let start_index = match self.locate(range.start, |el| f(el)) {
                 Location::On(index) => index,
@@ -63,7 +63,7 @@ impl<T> FullPeriodTimestampSliceExt for [T] {
                 Location::Between(_lower_index, upper_index) => upper_index + 1,
             };
 
-            (start_index..end_index)
+            start_index..end_index
         }
     }
 }
