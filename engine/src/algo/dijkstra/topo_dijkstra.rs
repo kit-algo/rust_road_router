@@ -68,9 +68,12 @@ impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
         {
             let distance = self.distances[node as usize];
 
-            // Alternatively we could have continued to find all shortest paths
             if node == to {
                 self.result = Some(Some(distance));
+            }
+
+            if distance >= self.distances[to as usize] {
+                self.result = Some(Some(self.distances[to as usize]));
             }
 
             for edge in self.graph.neighbor_iter(node) {
