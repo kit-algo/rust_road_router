@@ -27,6 +27,10 @@ impl<'a> Graph for UndirectedGraph<'a> {
     fn num_arcs(&self) -> usize {
         unimplemented!()
     }
+
+    fn degree(&self, node: NodeId) -> usize {
+        unimplemented!()
+    }
 }
 
 impl<'a, 'b> LinkIterGraph<'a> for UndirectedGraph<'b> {

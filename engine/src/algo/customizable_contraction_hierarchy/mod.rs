@@ -167,12 +167,6 @@ impl CCH {
         &self.head
     }
 
-    /// Get number of upward going edges in chordal supergraph for given node.
-    pub fn degree(&self, node: NodeId) -> usize {
-        let range = self.neighbor_edge_indices_usize(node);
-        range.end - range.start
-    }
-
     #[inline]
     fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {
         (self.first_out[node as usize] as EdgeId)..(self.first_out[(node + 1) as usize] as EdgeId)
@@ -238,6 +232,11 @@ impl Graph for CCH {
 
     fn num_nodes(&self) -> usize {
         self.first_out.len() - 1
+    }
+
+    fn degree(&self, node: NodeId) -> usize {
+        let node = node as usize;
+        (self.first_out[node + 1] - self.first_out[node]) as usize
     }
 }
 

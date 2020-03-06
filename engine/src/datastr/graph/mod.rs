@@ -35,6 +35,7 @@ pub struct Link {
 pub trait Graph {
     fn num_nodes(&self) -> usize;
     fn num_arcs(&self) -> usize;
+    fn degree(&self, node: NodeId) -> usize;
 }
 
 /// Trait for graph data structures which allow iterating over outgoing links of a node.

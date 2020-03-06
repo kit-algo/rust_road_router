@@ -133,6 +133,11 @@ where
     fn num_arcs(&self) -> usize {
         self.head().len()
     }
+
+    fn degree(&self, node: NodeId) -> usize {
+        let node = node as usize;
+        (self.first_out()[node + 1] - self.first_out()[node]) as usize
+    }
 }
 
 impl<'a, FirstOutContainer, HeadContainer, WeightContainer> LinkIterGraph<'a> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
