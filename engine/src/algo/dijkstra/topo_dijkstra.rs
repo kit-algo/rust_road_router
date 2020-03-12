@@ -80,24 +80,59 @@ impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
                 let mut prev_node = node;
                 let mut next_node = edge.node;
                 let mut next_distance = distance + edge.weight;
+                let mut deg_three = None;
+                let mut had_deg_three = false;
 
-                while next_distance < self.distances[next_node as usize] {
+                while next_distance < self.distances[next_node as usize] || deg_three.is_some() {
+                    // dbg!(prev_node);
+                    // dbg!(next_node);
+                    // dbg!(next_distance);
+                    // dbg!(deg_three);
+                    // dbg!(had_deg_three);
                     let mut next_edge = None;
+                    let mut cur_deg_three = None;
 
-                    if self.graph.degree(next_node) <= 2 {
-                        for edge in self.graph.neighbor_iter(next_node) {
-                            if edge.node != prev_node {
-                                if next_edge.is_some() {
-                                    next_edge = None;
-                                } else {
-                                    next_edge = Some(edge);
+                    if next_distance < self.distances[next_node as usize] {
+                        if self.graph.degree(next_node) <= 3 {
+                            for edge in self.graph.neighbor_iter(next_node) {
+                                if edge.node != prev_node {
+                                    if next_edge.is_some() {
+                                        // deg > 2
+                                        if cur_deg_three.is_none()
+                                            && deg_three.is_none()
+                                            && !had_deg_three
+                                            && !self.closest_node_priority_queue.contains_index(
+                                                State {
+                                                    distance: next_distance,
+                                                    node: next_node,
+                                                }
+                                                .as_index(),
+                                            )
+                                        {
+                                            cur_deg_three = Some((next_node, next_distance, edge));
+                                        } else {
+                                            // degree > 3 or part of virtual core
+                                            next_edge = None;
+                                            cur_deg_three = None;
+                                            break;
+                                        }
+                                    } else {
+                                        next_edge = Some(edge);
+                                    }
                                 }
                             }
                         }
+
+                        if deg_three.is_none() && cur_deg_three.is_some() {
+                            deg_three = cur_deg_three;
+                        }
+
+                        self.distances.set(next_node as usize, next_distance);
+                        self.predecessors[next_node as usize] = prev_node;
                     }
 
-                    self.distances.set(next_node as usize, next_distance);
-                    self.predecessors[next_node as usize] = prev_node;
+                    // dbg!(next_node);
+                    // dbg!(next_edge);
 
                     if let Some(next_edge) = next_edge {
                         prev_node = next_node;
@@ -115,7 +150,15 @@ impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
                                 self.closest_node_priority_queue.push(next);
                             }
                         }
-                        break;
+                        if let Some((deg_three_node, deg_three_distance, edge)) = deg_three {
+                            prev_node = deg_three_node;
+                            next_distance = deg_three_distance + edge.weight;
+                            next_node = edge.node;
+                            deg_three = None;
+                            had_deg_three = true;
+                        } else {
+                            break;
+                        }
                     }
                 }
             }
