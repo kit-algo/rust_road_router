@@ -157,7 +157,7 @@ pub trait RdfDataSource {
 pub fn read_graph(source: &dyn RdfDataSource, (min_lat, min_lon): (i64, i64), (max_lat, max_lon): (i64, i64)) -> HereData {
     let included = |node: &RdfNode| node.lat >= min_lat && node.lat <= max_lat && node.lon >= min_lon && node.lon <= max_lon;
 
-    println!("read nodes");
+    eprintln!("read nodes");
 
     let input_nodes = source.nodes();
     let max_node_id = input_nodes.iter().filter(|&n| included(n)).map(|node| node.node_id).max().unwrap();
@@ -166,11 +166,11 @@ pub fn read_graph(source: &dyn RdfDataSource, (min_lat, min_lon): (i64, i64), (m
         filtered_node_ids.set(node.node_id as usize);
     }
 
-    println!("read nav links");
+    eprintln!("read nav links");
     // start with all nav links
     let nav_links: Vec<RdfNavLink> = source.nav_links();
 
-    println!("build link id mapping");
+    eprintln!("build link id mapping");
     // local ids for links
     let mut link_id_mapping = BitVec::new(nav_links.iter().map(|l| l.link_id).max().unwrap() as usize + 1);
     for nav_link in &nav_links {
@@ -178,7 +178,7 @@ pub fn read_graph(source: &dyn RdfDataSource, (min_lat, min_lon): (i64, i64), (m
     }
     let link_id_mapping = RankSelectMap::new(link_id_mapping);
 
-    println!("sort nav links");
+    eprintln!("sort nav links");
     let mut sorted_nav_links = vec![RdfNavLink::default(); nav_links.len() + 1];
     for link in nav_links {
         let rank = link_id_mapping.get(link.link_id as usize).unwrap();
@@ -186,7 +186,7 @@ pub fn read_graph(source: &dyn RdfDataSource, (min_lat, min_lon): (i64, i64), (m
     }
     let nav_links = sorted_nav_links;
 
-    println!("read links");
+    eprintln!("read links");
     let links: Vec<_> = source
         .links()
         .into_iter()
@@ -201,7 +201,7 @@ pub fn read_graph(source: &dyn RdfDataSource, (min_lat, min_lon): (i64, i64), (m
     // a data structure to do the global to local node ids mapping
     let mut node_id_mapping = BitVec::new(maximum_node_id as usize + 1);
 
-    println!("build node id mapping");
+    eprintln!("build node id mapping");
     // insert all global node ids we encounter in links
     for link in &links {
         if link_id_mapping.get(link.link_id as usize).is_some() {
@@ -211,7 +211,7 @@ pub fn read_graph(source: &dyn RdfDataSource, (min_lat, min_lon): (i64, i64), (m
     }
     let node_id_mapping = RankSelectMap::new(node_id_mapping);
 
-    println!("build up degrees");
+    eprintln!("build up degrees");
     // now we know the number of nodes
     let n = node_id_mapping.len();
     // vector to store degrees which will then be turned into the first_out array
@@ -241,7 +241,7 @@ pub fn read_graph(source: &dyn RdfDataSource, (min_lat, min_lon): (i64, i64), (m
     });
     let mut first_out = degrees; // move
 
-    println!("read link geometry");
+    eprintln!("read link geometry");
     // fetch links geometry
     let mut link_geometries = vec![Vec::new(); link_id_mapping.len()];
     for geometry in source.link_geometries() {
@@ -253,7 +253,7 @@ pub fn read_graph(source: &dyn RdfDataSource, (min_lat, min_lon): (i64, i64), (m
         geometries.sort_by_key(|geometry| geometry.seq_num);
     }
 
-    println!("sort nodes");
+    eprintln!("sort nodes");
     let mut nodes: Vec<RdfNode> = vec![
         RdfNode {
             node_id: 0,
@@ -276,7 +276,7 @@ pub fn read_graph(source: &dyn RdfDataSource, (min_lat, min_lon): (i64, i64), (m
     let mut functional_road_classes: Vec<u8> = vec![0; m as usize];
     let mut here_rank_to_link_id: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)> = vec![(InRangeOption::new(None), InRangeOption::new(None)); links.len()];
 
-    println!("calculate weights");
+    eprintln!("calculate weights");
     // iterate over all links and insert head and weight
     // increment the first_out values along the way
     for link in &links {
