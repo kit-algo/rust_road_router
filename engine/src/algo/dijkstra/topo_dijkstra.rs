@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::datastr::{index_heap::*, timestamped_vector::*};
+use crate::util::TapOps;
 
 #[derive(Debug)]
 pub struct TopoDijkstra<Graph: for<'a> LinkIterGraph<'a>> {
@@ -14,11 +15,28 @@ pub struct TopoDijkstra<Graph: for<'a> LinkIterGraph<'a>> {
     // first option: algorithm finished? second option: final result of algorithm
     #[allow(clippy::option_option)]
     result: Option<Option<Weight>>,
+    prev_dist: Weight,
+    symmetric_degrees: Vec<u8>,
 }
 
 impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
     pub fn new(graph: Graph) -> TopoDijkstra<Graph> {
         let n = graph.num_nodes();
+
+        let reversed = graph.reverse();
+
+        let symmetric_degrees = (0..graph.num_nodes())
+            .map(|node| {
+                graph
+                    .neighbor_iter(node as NodeId)
+                    .map(|l| l.node)
+                    .chain(reversed.neighbor_iter(node as NodeId).map(|l| l.node))
+                    .collect::<Vec<NodeId>>()
+                    .tap(|neighbors| neighbors.sort_unstable())
+                    .tap(|neighbors| neighbors.dedup())
+                    .len() as u8
+            })
+            .collect();
 
         TopoDijkstra {
             graph,
@@ -28,6 +46,8 @@ impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
             closest_node_priority_queue: IndexdMinHeap::new(n),
             query: None,
             result: None,
+            prev_dist: 0,
+            symmetric_degrees,
         }
     }
 
@@ -39,6 +59,7 @@ impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
         self.closest_node_priority_queue.clear();
         self.distances.reset();
         self.distances[from as usize] = 0;
+        self.prev_dist = 0;
 
         self.closest_node_priority_queue.push(State { distance: 0, node: from });
     }
@@ -66,7 +87,11 @@ impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
             distance: _dist_with_pot,
         }) = self.closest_node_priority_queue.pop()
         {
+            // dbg!(node);
             let distance = self.distances[node as usize];
+            debug_assert!(_dist_with_pot >= self.prev_dist);
+            debug_assert!(distance >= self.prev_dist);
+            self.prev_dist = distance;
 
             if node == to {
                 self.result = Some(Some(distance));
@@ -77,6 +102,7 @@ impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
             }
 
             for edge in self.graph.neighbor_iter(node) {
+                // dbg!(edge);
                 let mut prev_node = node;
                 let mut next_node = edge.node;
                 let mut next_distance = distance + edge.weight;
@@ -90,44 +116,42 @@ impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
                     // dbg!(deg_three);
                     // dbg!(had_deg_three);
                     let mut next_edge = None;
-                    let mut cur_deg_three = None;
-                    assert!(next_distance >= distance);
+                    debug_assert!(next_distance >= distance);
 
                     let improvement = next_distance < self.distances[next_node as usize];
 
                     if improvement {
-                        if self.graph.degree(next_node) <= 3 {
-                            for edge in self.graph.neighbor_iter(next_node) {
-                                if edge.node != prev_node {
-                                    if next_edge.is_some() {
-                                        // deg > 2
-                                        if cur_deg_three.is_none()
-                                            && deg_three.is_none()
-                                            && !had_deg_three
-                                            && !self.closest_node_priority_queue.contains_index(
-                                                State {
-                                                    distance: next_distance,
-                                                    node: next_node,
-                                                }
-                                                .as_index(),
-                                            )
-                                        {
-                                            cur_deg_three = Some((next_node, next_distance, edge));
-                                        } else {
-                                            // degree > 3 or part of virtual core
-                                            next_edge = None;
-                                            cur_deg_three = None;
-                                            break;
-                                        }
-                                    } else {
+                        match self.symmetric_degrees[next_node as usize] {
+                            2 => {
+                                for edge in self.graph.neighbor_iter(next_node) {
+                                    if edge.node != prev_node {
                                         next_edge = Some(edge);
                                     }
                                 }
                             }
-                        }
-
-                        if deg_three.is_none() && cur_deg_three.is_some() {
-                            deg_three = cur_deg_three;
+                            3 => {
+                                if !had_deg_three
+                                    && !self.closest_node_priority_queue.contains_index(
+                                        State {
+                                            distance: next_distance,
+                                            node: next_node,
+                                        }
+                                        .as_index(),
+                                    )
+                                {
+                                    had_deg_three = true;
+                                    for edge in self.graph.neighbor_iter(next_node) {
+                                        if edge.node != prev_node {
+                                            if next_edge.is_none() {
+                                                next_edge = Some(edge);
+                                            } else {
+                                                deg_three = Some((next_node, next_distance, edge));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {}
                         }
 
                         self.distances.set(next_node as usize, next_distance);
@@ -143,6 +167,7 @@ impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
                         next_distance += next_edge.weight;
                     } else {
                         if improvement {
+                            // debug_assert!(self.symmetric_degrees[next_node as usize] > 2);
                             if let Some(pot) = potential(next_node, next_distance) {
                                 let next = State {
                                     distance: pot,
@@ -161,7 +186,6 @@ impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
                             next_distance = deg_three_distance + edge.weight;
                             next_node = edge.node;
                             deg_three = None;
-                            had_deg_three = true;
                         } else {
                             break;
                         }
@@ -173,6 +197,12 @@ impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
         } else {
             self.result = Some(None);
             QueryProgress::Done(None)
+            // if self.distances[to as usize] < INFINITY {
+            //     self.result = Some(Some(self.distances[to as usize]));
+            // } else {
+            //     self.result = Some(None);
+            // }
+            // QueryProgress::Done(self.result.unwrap())
         }
     }
 
