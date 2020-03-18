@@ -91,8 +91,11 @@ impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
                     // dbg!(had_deg_three);
                     let mut next_edge = None;
                     let mut cur_deg_three = None;
+                    assert!(next_distance >= distance);
 
-                    if next_distance < self.distances[next_node as usize] {
+                    let improvement = next_distance < self.distances[next_node as usize];
+
+                    if improvement {
                         if self.graph.degree(next_node) <= 3 {
                             for edge in self.graph.neighbor_iter(next_node) {
                                 if edge.node != prev_node {
@@ -139,15 +142,18 @@ impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
                         next_node = next_edge.node;
                         next_distance += next_edge.weight;
                     } else {
-                        if let Some(pot) = potential(next_node, next_distance) {
-                            let next = State {
-                                distance: pot,
-                                node: next_node,
-                            };
-                            if self.closest_node_priority_queue.contains_index(next.as_index()) {
-                                self.closest_node_priority_queue.decrease_key(next);
-                            } else {
-                                self.closest_node_priority_queue.push(next);
+                        if improvement {
+                            if let Some(pot) = potential(next_node, next_distance) {
+                                let next = State {
+                                    distance: pot,
+                                    node: next_node,
+                                };
+                                if let Some(other) = self.closest_node_priority_queue.get(next.as_index()) {
+                                    assert!(other.distance >= next.distance);
+                                    self.closest_node_priority_queue.decrease_key(next);
+                                } else {
+                                    self.closest_node_priority_queue.push(next);
+                                }
                             }
                         }
                         if let Some((deg_three_node, deg_three_distance, edge)) = deg_three {
