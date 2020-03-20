@@ -15,7 +15,6 @@ pub struct TopoDijkstra<Graph: for<'a> LinkIterGraph<'a>> {
     // first option: algorithm finished? second option: final result of algorithm
     #[allow(clippy::option_option)]
     result: Option<Option<Weight>>,
-    prev_dist: Weight,
     symmetric_degrees: Vec<u8>,
 }
 
@@ -53,7 +52,6 @@ impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
             closest_node_priority_queue: IndexdMinHeap::new(n),
             query: None,
             result: None,
-            prev_dist: 0,
             symmetric_degrees,
         }
     }
@@ -66,7 +64,6 @@ impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
         self.closest_node_priority_queue.clear();
         self.distances.reset();
         self.distances[from as usize] = 0;
-        self.prev_dist = 0;
 
         self.closest_node_priority_queue.push(State { distance: 0, node: from });
     }
@@ -95,9 +92,6 @@ impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
         }) = self.closest_node_priority_queue.pop()
         {
             let distance = self.distances[node as usize];
-            debug_assert!(_dist_with_pot >= self.prev_dist);
-            debug_assert!(distance >= self.prev_dist);
-            self.prev_dist = distance;
 
             if node == to {
                 self.result = Some(Some(distance));
