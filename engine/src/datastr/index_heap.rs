@@ -33,10 +33,7 @@
 //!
 //! ```
 
-use std;
-use std::cmp::min;
-use std::mem::swap;
-use std::ptr;
+use std::{cmp::min, mem::swap, ptr};
 
 /// A trait to map elements in a heap to a unique index.
 /// The element type of the `IndexdMinHeap` has to implement this trait.

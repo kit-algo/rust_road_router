@@ -3,7 +3,6 @@
 //! Several traits and structs for working with graphs.
 
 use crate::datastr::node_order::NodeOrder;
-use std;
 use std::ops::Range;
 
 pub mod first_out_graph;
@@ -115,7 +114,7 @@ pub fn unify_parallel_edges<G: for<'a> MutWeightLinkIterGraph<'a>>(graph: &mut G
 }
 
 /// Trait for graph types which allow random access to links based on edge ids.
-pub trait RandomLinkAccessGraph {
+pub trait RandomLinkAccessGraph: Graph {
     /// Get the link with the given id.
     fn link(&self, edge_id: EdgeId) -> Link;
     /// Find the id of the edge from `from` to `to` if it exists.

@@ -359,7 +359,6 @@ impl<'a> Iterator for LinkMappingIterator<'a> {
     }
 }
 
-use std;
 impl<'a, 'b> LinkIterGraph<'b> for ForwardWrapper<'a> {
     type Iter = LinkMappingIterator<'b>;
 

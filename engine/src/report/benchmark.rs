@@ -3,7 +3,6 @@
 
 use super::*;
 use std::sync::atomic::{compiler_fence, Ordering::SeqCst};
-use time;
 
 /// This function will measure how long it takes to execute the given lambda,
 /// print the time and return the result of the lambda.
