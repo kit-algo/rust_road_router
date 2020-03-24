@@ -130,4 +130,24 @@ pub trait RandomLinkAccessGraph: Graph {
             end: range.end as usize,
         }
     }
+
+    fn line_graph(&self) -> OwnedGraph {
+        let mut first_out = Vec::with_capacity(self.num_arcs() + 1);
+        first_out.push(0);
+        let mut head = Vec::new();
+        let mut weight = Vec::new();
+        let mut num_turns = 0;
+
+        for edge_id in 0..self.num_arcs() {
+            let link = self.link(edge_id as EdgeId);
+            for next_link_id in self.neighbor_edge_indices(link.node) {
+                head.push(next_link_id);
+                weight.push(link.weight);
+                num_turns += 1;
+            }
+            first_out.push(num_turns as EdgeId);
+        }
+
+        OwnedGraph::new(first_out, head, weight)
+    }
 }
