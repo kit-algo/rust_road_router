@@ -20,15 +20,75 @@ pub fn customize<'c, Graph>(cch: &'c CCH, metric: &Graph) -> Customized<'c>
 where
     Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph + Sync,
 {
-    let n = cch.num_nodes() as NodeId;
     let m = cch.num_arcs();
+    // buffers for the customized weights
+    let mut upward_weights = vec![INFINITY; m];
+    let mut downward_weights = vec![INFINITY; m];
+
+    // respecting phase
+    // copy metric weights to their respective edges in the CCH
+    prepare_weights(cch, &mut upward_weights, &mut downward_weights, metric);
+
+    customize_basic(cch, upward_weights, downward_weights)
+}
+
+pub fn always_infinity(cch: &CCH) -> Customized {
+    let m = cch.num_arcs();
+    // buffers for the customized weights
+    let mut upward_weights = vec![INFINITY; m];
+    let mut downward_weights = vec![INFINITY; m];
+
+    prepare_zero_weights(cch, &mut upward_weights, &mut downward_weights);
+
+    customize_basic(cch, upward_weights, downward_weights)
+}
+
+fn prepare_weights<Graph>(cch: &CCH, upward_weights: &mut [Weight], downward_weights: &mut [Weight], metric: &Graph)
+where
+    Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph + Sync,
+{
+    report_time("CCH apply weights", || {
+        upward_weights
+            .par_iter_mut()
+            .zip(downward_weights.par_iter_mut())
+            .zip(cch.cch_edge_to_orig_arc.par_iter())
+            .for_each(|((up_weight, down_weight), &(up_arc, down_arc))| {
+                if let Some(up_arc) = up_arc.value() {
+                    *up_weight = metric.link(up_arc).weight;
+                }
+                if let Some(down_arc) = down_arc.value() {
+                    *down_weight = metric.link(down_arc).weight;
+                }
+            });
+    });
+}
+
+fn prepare_zero_weights(cch: &CCH, upward_weights: &mut [Weight], downward_weights: &mut [Weight]) {
+    report_time("CCH apply weights", || {
+        upward_weights
+            .par_iter_mut()
+            .zip(downward_weights.par_iter_mut())
+            .zip(cch.cch_edge_to_orig_arc.par_iter())
+            .for_each(|((up_weight, down_weight), &(up_arc, down_arc))| {
+                if up_arc.value().is_some() {
+                    *up_weight = 0;
+                }
+                if down_arc.value().is_some() {
+                    *down_weight = 0;
+                }
+            });
+    });
+}
+
+fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weights: Vec<Weight>) -> Customized {
+    let n = cch.num_nodes() as NodeId;
 
     // Main customization routine.
     // Executed by one thread for a consecutive range of nodes.
     // For these nodes all upward arcs will be customized
     // If `nodes` contains all nodes, than it means we perform the regular sequential customization.
     //
-    // However it is also possible to execute this routine just for subset of the nodes.
+    // However, it is also possible to execute this routine just for subset of the nodes.
     // We use this for the separator based parallelization.
     // The graph will be split into smaller components using the separator decomposition.
     // These can be customized independently.
@@ -118,27 +178,6 @@ where
 
     // setup customization for parallization
     let customization = SeperatorBasedParallelCustomization::new(cch, customize, customize);
-
-    // buffers for the customized weights
-    let mut upward_weights = vec![INFINITY; m];
-    let mut downward_weights = vec![INFINITY; m];
-
-    // respecting phase
-    // copy metric weights to their respective edges in the CCH
-    report_time("CCH apply weights", || {
-        upward_weights
-            .par_iter_mut()
-            .zip(downward_weights.par_iter_mut())
-            .zip(cch.cch_edge_to_orig_arc.par_iter())
-            .for_each(|((up_weight, down_weight), &(up_arc, down_arc))| {
-                if let Some(up_arc) = up_arc.value() {
-                    *up_weight = metric.link(up_arc).weight;
-                }
-                if let Some(down_arc) = down_arc.value() {
-                    *down_weight = metric.link(down_arc).weight;
-                }
-            });
-    });
 
     // execute customization
     report_time("CCH Customization", || {
