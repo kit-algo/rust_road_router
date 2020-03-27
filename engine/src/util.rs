@@ -76,6 +76,17 @@ impl<'a, I, T> Slcs<'a, I, T> {
     }
 }
 
+impl<'a, I, T> Slcs<'a, I, T>
+where
+    usize: TryFrom<I>,
+    <usize as std::convert::TryFrom<I>>::Error: std::fmt::Debug,
+    I: Copy,
+{
+    pub fn range(&self, idx: usize) -> std::ops::Range<usize> {
+        usize::try_from(self.first_elem[idx]).unwrap()..usize::try_from(self.first_elem[idx + 1]).unwrap()
+    }
+}
+
 use std::convert::TryFrom;
 
 impl<'a, I, T> std::ops::Index<usize> for Slcs<'a, I, T>

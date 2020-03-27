@@ -36,11 +36,11 @@ impl SeparatorTree {
     }
 
     /// Reconstruct separator tree from a preprocessed CCH
-    pub fn new(cch: &CCH) -> Self {
-        let mut children = vec![Vec::new(); cch.num_nodes()];
+    pub fn new(elimination_tree: &[InRangeOption<NodeId>]) -> Self {
+        let mut children = vec![Vec::new(); elimination_tree.len()];
         let mut roots = Vec::new();
 
-        for (node_index, parent) in cch.elimination_tree.iter().enumerate() {
+        for (node_index, parent) in elimination_tree.iter().enumerate() {
             if let Some(parent) = parent.value() {
                 children[parent as usize].push(node_index as NodeId);
             } else {
@@ -50,7 +50,7 @@ impl SeparatorTree {
 
         let children: Vec<_> = roots.into_iter().map(|root| SeparatorTree::new_subtree(root, &children)).collect();
         let num_nodes = children.iter().map(|child| child.num_nodes).sum::<usize>();
-        debug_assert_eq!(num_nodes, cch.num_nodes());
+        debug_assert_eq!(num_nodes, elimination_tree.len());
 
         SeparatorTree {
             nodes: Vec::new(),

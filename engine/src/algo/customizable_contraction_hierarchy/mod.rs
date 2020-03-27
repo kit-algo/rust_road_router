@@ -110,7 +110,7 @@ impl CCH {
 
     /// Reconstruct the separators of the nested dissection order.
     pub fn separators(&self) -> SeparatorTree {
-        SeparatorTree::new(&self)
+        SeparatorTree::new(&self.elimination_tree)
     }
 
     fn build_elimination_tree(graph: &OwnedGraph) -> Vec<InRangeOption<NodeId>> {
@@ -332,8 +332,32 @@ impl<'c> Customized<'c> {
     }
 }
 
+/// A struct containing the results of the second preprocessing phase.
 #[derive(Debug)]
-struct DirectedCCH {
+pub struct CustomizedDirected<'c> {
+    cch: &'c DirectedCCH,
+    upward: Vec<Weight>,
+    downward: Vec<Weight>,
+}
+
+impl<'c> CustomizedDirected<'c> {
+    /// Decompose into an upward and a downward graph which could be used for a CH query.
+    #[allow(clippy::type_complexity)]
+    pub fn into_ch_graphs(
+        self,
+    ) -> (
+        FirstOutGraph<&'c [EdgeId], &'c [NodeId], Vec<Weight>>,
+        FirstOutGraph<&'c [EdgeId], &'c [NodeId], Vec<Weight>>,
+    ) {
+        (
+            FirstOutGraph::new(&self.cch.forward_first_out[..], &self.cch.forward_head[..], self.upward),
+            FirstOutGraph::new(&self.cch.backward_first_out[..], &self.cch.backward_head[..], self.downward),
+        )
+    }
+}
+
+#[derive(Debug)]
+pub struct DirectedCCH {
     forward_first_out: Vec<EdgeId>,
     forward_head: Vec<NodeId>,
     forward_tail: Vec<NodeId>,
@@ -346,4 +370,23 @@ struct DirectedCCH {
     elimination_tree: Vec<InRangeOption<NodeId>>,
     forward_inverted: OwnedGraph,
     backward_inverted: OwnedGraph,
+}
+
+impl DirectedCCH {
+    fn num_nodes(&self) -> usize {
+        self.forward_first_out.len() - 1
+    }
+
+    fn forward(&self) -> Slcs<EdgeId, NodeId> {
+        Slcs::new(&self.forward_first_out, &self.forward_head)
+    }
+
+    fn backward(&self) -> Slcs<EdgeId, NodeId> {
+        Slcs::new(&self.forward_first_out, &self.forward_head)
+    }
+
+    /// Reconstruct the separators of the nested dissection order.
+    pub fn separators(&self) -> SeparatorTree {
+        SeparatorTree::new(&self.elimination_tree)
+    }
 }
