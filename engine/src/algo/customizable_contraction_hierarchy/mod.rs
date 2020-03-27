@@ -5,7 +5,7 @@ use crate::{
     datastr::{graph::first_out_graph::degrees_to_first_out, node_order::NodeOrder},
     io::*,
     report::benchmark::*,
-    util::in_range_option::InRangeOption,
+    util::{in_range_option::InRangeOption, *},
 };
 use std::{cmp::Ordering, ops::Range};
 
@@ -94,26 +94,7 @@ impl CCH {
                 .for_each(|tail| *tail = node);
         }
 
-        let mut inverted = vec![Vec::new(); n as usize];
-        for current_node in 0..n {
-            for (Link { node, .. }, edge_id) in contracted_graph
-                .neighbor_iter(current_node)
-                .zip(contracted_graph.neighbor_edge_indices(current_node))
-            {
-                // the heads of inverted will be sorted ascending for each node, because current node goes from 0 to n
-                inverted[node as usize].push((current_node, edge_id));
-            }
-        }
-
-        let down_first_out: Vec<EdgeId> = {
-            let degrees = inverted.iter().map(|neighbors| neighbors.len() as EdgeId);
-            degrees_to_first_out(degrees).collect()
-        };
-        debug_assert_eq!(down_first_out.len(), n as usize + 1);
-
-        let (down_head, down_up_edge_ids): (Vec<_>, Vec<_>) = inverted.into_iter().flat_map(|neighbors| neighbors.into_iter()).unzip();
-
-        let inverted = OwnedGraph::new(down_first_out, down_head, down_up_edge_ids);
+        let inverted = inverted_with_orig_edge_ids_as_weights(&contracted_graph);
         let (first_out, head, _) = contracted_graph.decompose();
 
         CCH {
@@ -229,6 +210,72 @@ impl CCH {
 
         None
     }
+
+    fn into_directed_cch(self) -> DirectedCCH {
+        let (forward, backward) = customization::always_infinity(&self).into_ch_graphs();
+        let mut forward_first_out = Vec::with_capacity(self.first_out.len());
+        forward_first_out.push(0);
+        let mut forward_head = Vec::with_capacity(self.head.len());
+        let mut forward_cch_edge_to_orig_arc = Vec::with_capacity(self.head.len());
+
+        let mut backward_first_out = Vec::with_capacity(self.first_out.len());
+        backward_first_out.push(0);
+        let mut backward_head = Vec::with_capacity(self.head.len());
+        let mut backward_cch_edge_to_orig_arc = Vec::with_capacity(self.head.len());
+
+        let mut forward_edge_counter = 0;
+        let mut backward_edge_counter = 0;
+
+        for node in 0..self.num_nodes() as NodeId {
+            let orig_arcs = &self.cch_edge_to_orig_arc[self.neighbor_edge_indices_usize(node)];
+            for (link, &(forward_orig_arc, _)) in forward.neighbor_iter(node).zip(orig_arcs.iter()) {
+                if link.weight < INFINITY {
+                    forward_head.push(link.node);
+                    forward_cch_edge_to_orig_arc.push(forward_orig_arc);
+                    forward_edge_counter += 1;
+                }
+            }
+            for (link, &(_, backward_orig_arc)) in backward.neighbor_iter(node).zip(orig_arcs.iter()) {
+                if link.weight < INFINITY {
+                    backward_head.push(link.node);
+                    backward_cch_edge_to_orig_arc.push(backward_orig_arc);
+                    backward_edge_counter += 1;
+                }
+            }
+            forward_first_out.push(forward_edge_counter);
+            backward_first_out.push(backward_edge_counter);
+        }
+
+        let mut forward_tail = vec![0; forward_head.len()];
+        let mut backward_tail = vec![0; backward_head.len()];
+
+        for node in 0..(self.num_nodes() as NodeId) {
+            SlcsMut::new(&forward_first_out, &mut forward_tail)[node as usize]
+                .iter_mut()
+                .for_each(|tail| *tail = node);
+            SlcsMut::new(&backward_first_out, &mut backward_tail)[node as usize]
+                .iter_mut()
+                .for_each(|tail| *tail = node);
+        }
+
+        let forward_inverted = inverted_with_orig_edge_ids_as_weights(&FirstOutGraph::new(&forward_first_out[..], &forward_head[..], &forward_head[..]));
+        let backward_inverted = inverted_with_orig_edge_ids_as_weights(&FirstOutGraph::new(&backward_first_out[..], &backward_head[..], &backward_head[..]));
+
+        DirectedCCH {
+            forward_first_out,
+            forward_head,
+            forward_tail,
+            backward_first_out,
+            backward_head,
+            backward_tail,
+            node_order: self.node_order,
+            forward_cch_edge_to_orig_arc,
+            backward_cch_edge_to_orig_arc,
+            elimination_tree: self.elimination_tree,
+            forward_inverted,
+            backward_inverted,
+        }
+    }
 }
 
 impl Graph for CCH {
@@ -239,6 +286,26 @@ impl Graph for CCH {
     fn num_nodes(&self) -> usize {
         self.first_out.len() - 1
     }
+}
+
+fn inverted_with_orig_edge_ids_as_weights<'a>(graph: &'a (impl RandomLinkAccessGraph + LinkIterGraph<'a>)) -> OwnedGraph {
+    let mut inverted = vec![Vec::new(); graph.num_nodes()];
+    for current_node in 0..(graph.num_nodes() as NodeId) {
+        for (Link { node, .. }, edge_id) in graph.neighbor_iter(current_node).zip(graph.neighbor_edge_indices(current_node)) {
+            // the heads of inverted will be sorted ascending for each node, because current node goes from 0 to n
+            inverted[node as usize].push((current_node, edge_id));
+        }
+    }
+
+    let down_first_out: Vec<EdgeId> = {
+        let degrees = inverted.iter().map(|neighbors| neighbors.len() as EdgeId);
+        degrees_to_first_out(degrees).collect()
+    };
+    debug_assert_eq!(down_first_out.len(), graph.num_nodes() as usize + 1);
+
+    let (down_head, down_up_edge_ids): (Vec<_>, Vec<_>) = inverted.into_iter().flat_map(|neighbors| neighbors.into_iter()).unzip();
+
+    OwnedGraph::new(down_first_out, down_head, down_up_edge_ids)
 }
 
 /// A struct containing the results of the second preprocessing phase.
@@ -263,4 +330,20 @@ impl<'c> Customized<'c> {
             FirstOutGraph::new(&self.cch.first_out[..], &self.cch.head[..], self.downward),
         )
     }
+}
+
+#[derive(Debug)]
+struct DirectedCCH {
+    forward_first_out: Vec<EdgeId>,
+    forward_head: Vec<NodeId>,
+    forward_tail: Vec<NodeId>,
+    backward_first_out: Vec<EdgeId>,
+    backward_head: Vec<NodeId>,
+    backward_tail: Vec<NodeId>,
+    node_order: NodeOrder,
+    forward_cch_edge_to_orig_arc: Vec<InRangeOption<EdgeId>>,
+    backward_cch_edge_to_orig_arc: Vec<InRangeOption<EdgeId>>,
+    elimination_tree: Vec<InRangeOption<NodeId>>,
+    forward_inverted: OwnedGraph,
+    backward_inverted: OwnedGraph,
 }
