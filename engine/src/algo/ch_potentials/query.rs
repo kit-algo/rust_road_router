@@ -1,5 +1,6 @@
 use super::*;
 use crate::algo::customizable_contraction_hierarchy::{query::stepped_elimination_tree::SteppedEliminationTree, *};
+use crate::algo::dijkstra::topo_dijkstra::TopoDijkstra;
 use crate::datastr::node_order::NodeOrder;
 use crate::datastr::rank_select_map::*;
 use crate::datastr::timestamped_vector::TimestampedVector;
@@ -7,8 +8,8 @@ use crate::util::in_range_option::InRangeOption;
 
 #[derive(Debug)]
 pub struct Server<'a> {
-    forward_dijkstra: SteppedDijkstra<OwnedGraph>,
-    backward_dijkstra: SteppedDijkstra<OwnedGraph>,
+    forward_dijkstra: TopoDijkstra<OwnedGraph>,
+    backward_graph: OwnedGraph,
     order: NodeOrder,
     core_size: usize,
     meeting_node: NodeId,
@@ -45,8 +46,8 @@ impl<'a> Server<'a> {
         let backward_elimination_tree = SteppedEliminationTree::new(backward_up_graph, cch.elimination_tree());
 
         Server {
-            forward_dijkstra: SteppedDijkstra::new(topocore.forward),
-            backward_dijkstra: SteppedDijkstra::new(topocore.backward),
+            forward_dijkstra: TopoDijkstra::new(topocore.forward),
+            backward_graph: topocore.backward,
             core_size: topocore.core_size,
             meeting_node: 0,
             stack: Vec::new(),
@@ -82,7 +83,7 @@ impl<'a> Server<'a> {
     fn border(&mut self, node: NodeId, in_core: &impl Fn(NodeId) -> bool) -> Vec<NodeId> {
         let mut border = Vec::new();
         self.visited.clear();
-        Self::dfs(self.backward_dijkstra.graph(), node, &mut self.visited, &mut |node| border.push(node), in_core);
+        Self::dfs(&self.backward_graph, node, &mut self.visited, &mut |node| border.push(node), in_core);
         border
     }
 
@@ -107,32 +108,23 @@ impl<'a> Server<'a> {
 
         let from = self.order.rank(from);
         let to = self.order.rank(to);
-        // initialize
-        let mut tentative_distance = INFINITY;
 
         // node ids were reordered so that core nodes are at the "front" of the order, that is come first
         // so we can check if a node is in core by checking if its id is smaller than the number of nodes in the core
         let in_core = {
-            let core_size = self.core_size;
-            move |node| (node as usize) < core_size
+            let core_size = self.core_size as NodeId;
+            move |node| node < core_size
         };
 
         self.border_nodes.clear();
         let border = self.border(to, &in_core);
-        let mut num_unsettled_border_nodes = border.len();
         for border_node in border {
             self.border_nodes.set(border_node as usize);
         }
 
         self.forward_dijkstra.initialize_query(Query { from, to });
-        self.backward_dijkstra.initialize_query(Query { from: to, to: from });
-
-        let mut settled_core_nodes = 0;
-        let mut settled_non_core_nodes = 0;
 
         let forward_dijkstra = &mut self.forward_dijkstra;
-        let backward_dijkstra = &mut self.backward_dijkstra;
-        let meeting_node = &mut self.meeting_node;
         let stack = &mut self.stack;
 
         let cch = &self.cch;
@@ -142,82 +134,47 @@ impl<'a> Server<'a> {
         let backward_elimination_tree = &self.backward_elimination_tree;
         let forward_cch_graph = &self.forward_cch_graph;
 
-        while let QueryProgress::Settled(State { node, distance: _dist }) = backward_dijkstra.next_step() {
-            if in_core(node) {
-                settled_core_nodes += 1;
-                if self.border_nodes.get(node as usize) {
-                    num_unsettled_border_nodes -= 1;
-                }
-            } else {
-                settled_non_core_nodes += 1;
-            }
-            #[cfg(feature = "chpot_visualize")]
-            {
-                let node = self.order.node(node);
-                println!(
-                    "var marker = L.marker([{}, {}], {{ icon: redIcon }}).addTo(map);",
-                    self.lat[node as usize], self.lng[node as usize]
-                );
-                println!("marker.bindPopup(\"id: {}<br>distance: {}\");", node, _dist);
-            };
-            if num_unsettled_border_nodes == 0 {
-                break;
-            }
-        }
+        let border_nodes = &self.border_nodes;
 
-        while let QueryProgress::Settled(State { distance, node }) = forward_dijkstra.next_step_with_potential(|node, distance| {
-            debug_assert!(distance < INFINITY);
-            Self::potential(
-                potentials,
-                forward_cch_graph,
-                backward_elimination_tree,
-                cch.node_order().rank(order.node(node)),
-                stack,
-            )
-            .map(|pot| distance + pot + if in_core(node) { INFINITY } else { 0 })
-        }) {
-            if in_core(node) {
-                settled_core_nodes += 1
-            } else {
-                settled_non_core_nodes += 1
-            }
-
-            #[cfg(feature = "chpot_visualize")]
-            {
-                let node_id = self.order.node(node) as usize;
-                println!(
-                    "var marker = L.marker([{}, {}], {{ icon: blueIcon }}).addTo(map);",
-                    self.lat[node_id], self.lng[node_id]
-                );
-                println!(
-                    "marker.bindPopup(\"id: {}<br>distance: {}<br>potential: {}\");",
-                    node_id,
-                    distance,
+        loop {
+            match forward_dijkstra.next_step_with_potential(
+                |node, distance| {
+                    debug_assert!(distance < INFINITY);
                     Self::potential(
                         potentials,
-                        forward_elimination_tree,
+                        forward_cch_graph,
                         backward_elimination_tree,
                         cch.node_order().rank(order.node(node)),
-                        stack
+                        stack,
                     )
-                );
-            };
-
-            if distance + backward_dijkstra.tentative_distance(node) < tentative_distance {
-                tentative_distance = distance + backward_dijkstra.tentative_distance(node);
-                *meeting_node = node;
+                    .map(|pot| distance + pot)
+                },
+                |tail, head| in_core(head) || !in_core(tail) || border_nodes.get(tail as usize),
+            ) {
+                QueryProgress::Settled(State { node: _node, .. }) => {
+                    #[cfg(feature = "chpot_visualize")]
+                    {
+                        let node_id = self.order.node(_node) as usize;
+                        println!(
+                            "var marker = L.marker([{}, {}], {{ icon: blueIcon }}).addTo(map);",
+                            self.lat[node_id], self.lng[node_id]
+                        );
+                        println!(
+                            "marker.bindPopup(\"id: {}<br>distance: {}<br>potential: {}\");",
+                            node_id,
+                            distance,
+                            Self::potential(
+                                potentials,
+                                forward_elimination_tree,
+                                backward_elimination_tree,
+                                cch.node_order().rank(order.node(_node)),
+                                stack
+                            )
+                        );
+                    };
+                }
+                QueryProgress::Done(result) => return result,
             }
-
-            if in_core(node) && self.border_nodes.get(node as usize) {
-                break;
-            }
-        }
-
-        // dbg!(settled_core_nodes, settled_non_core_nodes);
-
-        match tentative_distance {
-            INFINITY => None,
-            dist => Some(dist),
         }
     }
 
@@ -258,7 +215,7 @@ impl<'a> Server<'a> {
 
     fn path(&self) -> Vec<NodeId> {
         let mut path = Vec::new();
-        path.push(self.meeting_node);
+        path.push(self.forward_dijkstra.query().to);
 
         while *path.last().unwrap() != self.forward_dijkstra.query().from {
             let next = self.forward_dijkstra.predecessor(*path.last().unwrap());
@@ -267,23 +224,9 @@ impl<'a> Server<'a> {
 
         path.reverse();
 
-        while *path.last().unwrap() != self.backward_dijkstra.query().from {
-            let next = self.backward_dijkstra.predecessor(*path.last().unwrap());
-            path.push(next);
-        }
-
-        let mut core_nodes = 0;
-        let mut non_core_nodes = 0;
         for node in &mut path {
-            if (*node as usize) < self.core_size {
-                core_nodes += 1;
-            } else {
-                non_core_nodes += 1;
-            }
             *node = self.order.node(*node);
         }
-        // dbg!(core_nodes);
-        // dbg!(non_core_nodes);
 
         path
     }

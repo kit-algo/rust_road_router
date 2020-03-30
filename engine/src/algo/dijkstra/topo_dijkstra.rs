@@ -71,33 +71,37 @@ impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
     pub fn next_step(&mut self) -> QueryProgress<Weight> {
         match self.result {
             Some(result) => QueryProgress::Done(result),
-            None => self.settle_next_node(|_, dist| Some(dist)),
+            None => self.settle_next_node(|_, dist| Some(dist), |_, _| true),
         }
     }
 
-    pub fn next_step_with_potential(&mut self, potential: impl FnMut(NodeId, Weight) -> Option<Weight>) -> QueryProgress<Weight> {
+    pub fn next_step_with_potential(
+        &mut self,
+        potential: impl FnMut(NodeId, Weight) -> Option<Weight>,
+        relax_edge: impl FnMut(NodeId, NodeId) -> bool,
+    ) -> QueryProgress<Weight> {
         match self.result {
             Some(result) => QueryProgress::Done(result),
-            None => self.settle_next_node(potential),
+            None => self.settle_next_node(potential, relax_edge),
         }
     }
 
-    fn settle_next_node(&mut self, mut potential: impl FnMut(NodeId, Weight) -> Option<Weight>) -> QueryProgress<Weight> {
+    fn settle_next_node(
+        &mut self,
+        mut potential: impl FnMut(NodeId, Weight) -> Option<Weight>,
+        mut relax_edge: impl FnMut(NodeId, NodeId) -> bool,
+    ) -> QueryProgress<Weight> {
         let to = self.query.as_ref().expect("query was not initialized properly").to;
 
         // Examine the frontier with lower distance nodes first (min-heap)
-        if let Some(State {
-            node,
-            distance: _dist_with_pot,
-        }) = self.closest_node_priority_queue.pop()
-        {
+        if let Some(State { node, distance: dist_with_pot }) = self.closest_node_priority_queue.pop() {
             let distance = self.distances[node as usize];
 
             if node == to {
                 self.result = Some(Some(distance));
             }
 
-            if distance >= self.distances[to as usize] {
+            if dist_with_pot >= self.distances[to as usize] {
                 self.result = Some(Some(self.distances[to as usize]));
             }
 
@@ -116,7 +120,7 @@ impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
                     next_distance,
                 }) = chain.take()
                 {
-                    if next_distance < self.distances[next_node as usize] {
+                    if relax_edge(prev_node, next_node) && next_distance < self.distances[next_node as usize] {
                         let mut next_edge = None;
                         let mut endpoint = false;
                         debug_assert!(next_distance >= distance);

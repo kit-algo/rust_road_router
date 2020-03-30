@@ -16,6 +16,7 @@ use bmw_routing_engine::{
     datastr::{graph::*, node_order::*},
     io::Load,
     report::benchmark::*,
+    util::{False, True},
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -53,7 +54,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // let mut simple_server = DijkServer::new(graph);
 
-    let topocore = report_time("topocore preprocessing", || preprocess(&graph));
+    let topocore = report_time("topocore preprocessing", || preprocess::<_, True, False, False, False>(&graph));
     let mut topocore = {
         #[cfg(feature = "chpot_visualize")]
         {
