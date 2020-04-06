@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let travel_time = Vec::load_from(path.join("travel_time"))?;
 
     let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
-    let graph = graph.line_graph();
+    let graph = graph.line_graph(|_edge1_idx, _edge2_idx| Some(0));
 
     // use InertialFlowCutter with edge order (cut based) and separator reordering to obtain
     let cch_order = Vec::load_from(path.join("cch_exp_perm"))?;
