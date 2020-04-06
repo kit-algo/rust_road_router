@@ -12,8 +12,8 @@ use std::{cmp::Ordering, ops::Range};
 mod contraction;
 use contraction::*;
 mod customization;
-pub use customization::customize;
 pub use customization::ftd as ftd_cch;
+pub use customization::{customize, customize_directed};
 mod separator_decomposition;
 use separator_decomposition::*;
 mod reorder;
@@ -120,19 +120,6 @@ impl CCH {
             .collect()
     }
 
-    /// Borrow node order
-    pub fn node_order(&self) -> &NodeOrder {
-        &self.node_order
-    }
-
-    /// Get elimination tree (actually forest).
-    /// The tree is represented as a slice of length `n`.
-    /// The entry with index `x` contains the parent node in the tree of node `x`.
-    /// If there is no parent, `x` is a root node.
-    pub fn elimination_tree(&self) -> &[InRangeOption<NodeId>] {
-        &self.elimination_tree[..]
-    }
-
     /// Get the tail node for an edge id
     pub fn edge_id_to_tail(&self, edge_id: EdgeId) -> NodeId {
         self.tail[edge_id as usize]
@@ -174,45 +161,12 @@ impl CCH {
         self.head[range].iter().cloned()
     }
 
-    /// Check for a node pair and a weight if there is a corresponding lower triangle.
-    /// If so, return the id of the middle node and the weights of both lower edges.
-    pub fn unpack_arc(&self, from: NodeId, to: NodeId, weight: Weight, upward: &[Weight], downward: &[Weight]) -> Option<(NodeId, Weight, Weight)> {
-        // `inverted` contains the downward neighbors sorted ascending.
-        // We do a coordinated linear sweep over both neighborhoods.
-        // Whenever we find a common neighbor, we have a lower triangle.
-        let mut current_iter = self.inverted.neighbor_iter(from).peekable();
-        let mut other_iter = self.inverted.neighbor_iter(to).peekable();
-
-        while let (
-            Some(&Link {
-                node: lower_from_first,
-                weight: edge_from_first_id,
-            }),
-            Some(&Link {
-                node: lower_from_second,
-                weight: edge_from_second_id,
-            }),
-        ) = (current_iter.peek(), other_iter.peek())
-        {
-            match lower_from_first.cmp(&lower_from_second) {
-                Ordering::Less => current_iter.next(),
-                Ordering::Greater => other_iter.next(),
-                Ordering::Equal => {
-                    if downward[edge_from_first_id as usize] + upward[edge_from_second_id as usize] == weight {
-                        return Some((lower_from_first, downward[edge_from_first_id as usize], upward[edge_from_second_id as usize]));
-                    }
-
-                    current_iter.next();
-                    other_iter.next()
-                }
-            };
-        }
-
-        None
-    }
-
-    fn into_directed_cch(self) -> DirectedCCH {
+    /// Transform into a directed CCH which is more efficient
+    /// for turn expanded graphs because many edges can be removed.
+    pub fn into_directed_cch(self) -> DirectedCCH {
+        // identify arcs which are always infinity and can be removed
         let (forward, backward) = customization::always_infinity(&self).into_ch_graphs();
+
         let mut forward_first_out = Vec::with_capacity(self.first_out.len());
         forward_first_out.push(0);
         let mut forward_head = Vec::with_capacity(self.head.len());
@@ -308,39 +262,103 @@ fn inverted_with_orig_edge_ids_as_weights<'a>(graph: &'a (impl RandomLinkAccessG
     OwnedGraph::new(down_first_out, down_head, down_up_edge_ids)
 }
 
-/// A struct containing the results of the second preprocessing phase.
-#[derive(Debug)]
-pub struct Customized<'c> {
-    cch: &'c CCH,
-    upward: Vec<Weight>,
-    downward: Vec<Weight>,
+/// Trait for directed and undirected CCHs
+pub trait CCHT {
+    fn forward_first_out(&self) -> &[EdgeId];
+    fn backward_first_out(&self) -> &[EdgeId];
+    fn forward_head(&self) -> &[NodeId];
+    fn backward_head(&self) -> &[NodeId];
+    fn forward_inverted(&self) -> &OwnedGraph;
+    fn backward_inverted(&self) -> &OwnedGraph;
+
+    /// Get elimination tree (actually forest).
+    /// The tree is represented as a slice of length `n`.
+    /// The entry with index `x` contains the parent node in the tree of node `x`.
+    /// If there is no parent, `x` is a root node.
+    fn elimination_tree(&self) -> &[InRangeOption<NodeId>];
+
+    /// Borrow node order
+    fn node_order(&self) -> &NodeOrder;
+
+    /// Check for a node pair and a weight if there is a corresponding lower triangle.
+    /// If so, return the id of the middle node and the weights of both lower edges.
+    fn unpack_arc(&self, from: NodeId, to: NodeId, weight: Weight, upward: &[Weight], downward: &[Weight]) -> Option<(NodeId, Weight, Weight)> {
+        // `inverted` contains the downward neighbors sorted ascending.
+        // We do a coordinated linear sweep over both neighborhoods.
+        // Whenever we find a common neighbor, we have a lower triangle.
+        let mut current_iter = self.backward_inverted().neighbor_iter(from).peekable();
+        let mut other_iter = self.forward_inverted().neighbor_iter(to).peekable();
+
+        while let (
+            Some(&Link {
+                node: lower_from_first,
+                weight: edge_from_first_id,
+            }),
+            Some(&Link {
+                node: lower_from_second,
+                weight: edge_from_second_id,
+            }),
+        ) = (current_iter.peek(), other_iter.peek())
+        {
+            match lower_from_first.cmp(&lower_from_second) {
+                Ordering::Less => current_iter.next(),
+                Ordering::Greater => other_iter.next(),
+                Ordering::Equal => {
+                    if downward[edge_from_first_id as usize] + upward[edge_from_second_id as usize] == weight {
+                        return Some((lower_from_first, downward[edge_from_first_id as usize], upward[edge_from_second_id as usize]));
+                    }
+
+                    current_iter.next();
+                    other_iter.next()
+                }
+            };
+        }
+
+        None
+    }
 }
 
-impl<'c> Customized<'c> {
-    /// Decompose into an upward and a downward graph which could be used for a CH query.
-    #[allow(clippy::type_complexity)]
-    pub fn into_ch_graphs(
-        self,
-    ) -> (
-        FirstOutGraph<&'c [EdgeId], &'c [NodeId], Vec<Weight>>,
-        FirstOutGraph<&'c [EdgeId], &'c [NodeId], Vec<Weight>>,
-    ) {
-        (
-            FirstOutGraph::new(&self.cch.first_out[..], &self.cch.head[..], self.upward),
-            FirstOutGraph::new(&self.cch.first_out[..], &self.cch.head[..], self.downward),
-        )
+/// A struct containing all metric independent preprocessing data of CCHs.
+/// This includes on top of the chordal supergraph (the "contracted" graph),
+/// several other structures like the elimination tree, a mapping from cch edge ids to original edge ids and the inverted graph.
+impl CCHT for CCH {
+    fn forward_first_out(&self) -> &[EdgeId] {
+        &self.first_out[..]
+    }
+    fn backward_first_out(&self) -> &[EdgeId] {
+        &self.first_out[..]
+    }
+    fn forward_head(&self) -> &[NodeId] {
+        &self.head[..]
+    }
+    fn backward_head(&self) -> &[NodeId] {
+        &self.head[..]
+    }
+    fn forward_inverted(&self) -> &OwnedGraph {
+        &self.inverted
+    }
+    fn backward_inverted(&self) -> &OwnedGraph {
+        &self.inverted
+    }
+
+    fn node_order(&self) -> &NodeOrder {
+        &self.node_order
+    }
+
+    fn elimination_tree(&self) -> &[InRangeOption<NodeId>] {
+        &self.elimination_tree[..]
     }
 }
 
 /// A struct containing the results of the second preprocessing phase.
 #[derive(Debug)]
-pub struct CustomizedDirected<'c> {
-    cch: &'c DirectedCCH,
+pub struct Customized<'c, CCH> {
+    cch: &'c CCH,
     upward: Vec<Weight>,
     downward: Vec<Weight>,
 }
 
-impl<'c> CustomizedDirected<'c> {
+impl<'c, CCH: CCHT> Customized<'c, CCH> {
     /// Decompose into an upward and a downward graph which could be used for a CH query.
     #[allow(clippy::type_complexity)]
     pub fn into_ch_graphs(
@@ -350,8 +368,8 @@ impl<'c> CustomizedDirected<'c> {
         FirstOutGraph<&'c [EdgeId], &'c [NodeId], Vec<Weight>>,
     ) {
         (
-            FirstOutGraph::new(&self.cch.forward_first_out[..], &self.cch.forward_head[..], self.upward),
-            FirstOutGraph::new(&self.cch.backward_first_out[..], &self.cch.backward_head[..], self.downward),
+            FirstOutGraph::new(self.cch.forward_first_out(), self.cch.forward_head(), self.upward),
+            FirstOutGraph::new(self.cch.backward_first_out(), &self.cch.backward_head(), self.downward),
         )
     }
 }
@@ -388,5 +406,34 @@ impl DirectedCCH {
     /// Reconstruct the separators of the nested dissection order.
     pub fn separators(&self) -> SeparatorTree {
         SeparatorTree::new(&self.elimination_tree)
+    }
+}
+
+impl CCHT for DirectedCCH {
+    fn forward_first_out(&self) -> &[EdgeId] {
+        &self.forward_first_out[..]
+    }
+    fn backward_first_out(&self) -> &[EdgeId] {
+        &self.backward_first_out[..]
+    }
+    fn forward_head(&self) -> &[NodeId] {
+        &self.forward_head[..]
+    }
+    fn backward_head(&self) -> &[NodeId] {
+        &self.backward_head[..]
+    }
+    fn forward_inverted(&self) -> &OwnedGraph {
+        &self.forward_inverted
+    }
+    fn backward_inverted(&self) -> &OwnedGraph {
+        &self.backward_inverted
+    }
+
+    fn node_order(&self) -> &NodeOrder {
+        &self.node_order
+    }
+
+    fn elimination_tree(&self) -> &[InRangeOption<NodeId>] {
+        &self.elimination_tree[..]
     }
 }

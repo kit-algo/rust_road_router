@@ -1,7 +1,6 @@
 //! Elimination Tree path to root traversal while relaxing edges.
 
 use super::*;
-use crate::algo::customizable_contraction_hierarchy::CCH;
 use crate::as_slice::AsSlice;
 use crate::datastr::timestamped_vector::TimestampedVector;
 use crate::util::in_range_option::InRangeOption;
@@ -108,7 +107,7 @@ where
     WeightContainer: AsSlice<Weight>,
 {
     /// Unpack path from a start node (the meeting node of the CCH query), so that parent pointers point along the unpacked path.
-    pub fn unpack_path(&mut self, target: NodeId, forward: bool, cch: &CCH, other_weights: &[Weight]) {
+    pub fn unpack_path(&mut self, target: NodeId, forward: bool, cch: &dyn CCHT, other_weights: &[Weight]) {
         let origin = self.origin();
         let mut current = target;
         while current != origin {

@@ -98,7 +98,7 @@ where
     }
 }
 
-/// Parallelization of basic customization.
+/// Parallelization of basic directed customization.
 pub struct SeperatorBasedParallelDirectedCustomization<'a, T, F, G> {
     cch: &'a DirectedCCH,
     separators: SeparatorTree,

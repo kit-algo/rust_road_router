@@ -10,7 +10,7 @@ pub use crate::algo::customizable_contraction_hierarchy::ftd_cch::customize;
 mod floating_td_stepped_elimination_tree;
 use floating_td_stepped_elimination_tree::{QueryProgress, *};
 
-use crate::algo::customizable_contraction_hierarchy::CCH;
+use crate::algo::customizable_contraction_hierarchy::*;
 #[cfg(feature = "tdcch-query-detailed-timing")]
 use crate::benchmark::Timer;
 use crate::datastr::clearlist_vector::ClearlistVector;

@@ -26,7 +26,7 @@ pub struct Server<'a> {
     // The Dijkstra algo on the original graph
     dijkstra: TDSteppedDijkstra,
     // A CCH Server for each time window
-    samples: Vec<CCHServer<'a>>,
+    samples: Vec<CCHServer<'a, CCH>>,
     // The CCH, needed for NodeId translation
     cch_graph: &'a CCH,
     // marking edges in the subgraph we perform dijkstra on
