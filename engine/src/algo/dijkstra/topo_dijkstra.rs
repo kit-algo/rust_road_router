@@ -35,8 +35,8 @@ impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
             .map(|node| {
                 graph
                     .neighbor_iter(node as NodeId)
+                    .chain(reversed.neighbor_iter(node as NodeId))
                     .map(|l| l.node)
-                    .chain(reversed.neighbor_iter(node as NodeId).map(|l| l.node))
                     .collect::<Vec<NodeId>>()
                     .tap(|neighbors| neighbors.sort_unstable())
                     .tap(|neighbors| neighbors.dedup())
@@ -180,7 +180,7 @@ impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
                                     node: next_node,
                                 };
                                 if let Some(other) = self.closest_node_priority_queue.get(next.as_index()) {
-                                    assert!(other.distance >= next.distance);
+                                    debug_assert!(other.distance >= next.distance);
                                     self.closest_node_priority_queue.decrease_key(next);
                                 } else {
                                     self.closest_node_priority_queue.push(next);

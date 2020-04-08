@@ -140,10 +140,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         let ground_truth = cch_live_server.query(Query { from, to }).map(|res| res.distance());
         // let ground_truth = cch_static_server.distance(from, to);
 
-        if ground_truth.is_none() {
-            continue;
-        }
-
         query_count += 1;
 
         let lower_bound = cch_static_server.query(Query { from, to }).map(|res| res.distance());
