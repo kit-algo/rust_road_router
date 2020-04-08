@@ -13,14 +13,14 @@ pub struct Topocore {
 }
 
 #[derive(Debug)]
-struct UndirectedGraph<'a> {
-    ins: &'a [Vec<Link>],
-    outs: &'a [Vec<Link>],
+struct UndirectedGraph<'a, G, H> {
+    ins: &'a G,
+    outs: &'a H,
 }
 
-impl<'a> Graph for UndirectedGraph<'a> {
+impl<'a, G: Graph, H> Graph for UndirectedGraph<'a, G, H> {
     fn num_nodes(&self) -> usize {
-        self.ins.len()
+        self.ins.num_nodes()
     }
 
     fn num_arcs(&self) -> usize {
@@ -32,11 +32,11 @@ impl<'a> Graph for UndirectedGraph<'a> {
     }
 }
 
-impl<'a, 'b> LinkIterGraph<'a> for UndirectedGraph<'b> {
-    type Iter = std::iter::Chain<std::iter::Cloned<std::slice::Iter<'a, Link>>, std::iter::Cloned<std::slice::Iter<'a, Link>>>;
+impl<'a, 'b, G: LinkIterGraph<'a>, H: LinkIterGraph<'a>> LinkIterGraph<'a> for UndirectedGraph<'b, G, H> {
+    type Iter = std::iter::Chain<G::Iter, H::Iter>;
 
     fn neighbor_iter(&'a self, node: NodeId) -> Self::Iter {
-        self.ins[node as usize].iter().cloned().chain(self.outs[node as usize].iter().cloned())
+        self.ins.neighbor_iter(node).chain(self.outs.neighbor_iter(node))
     }
 }
 
@@ -89,16 +89,13 @@ pub fn preprocess<'c, Graph: for<'a> LinkIterGraph<'a>, ReorderSCC: Bool, Deg1: 
     if ReorderSCC::VALUE {
         to_contract.set_all();
 
-        let biggest = biconnected(&UndirectedGraph {
-            ins: &ins[..],
-            outs: &outs[..],
-        })
-        .into_iter()
-        .max_by_key(|edges| edges.len())
-        .unwrap();
+        let biggest = biconnected(&UndirectedGraph { ins: &reversed, outs: graph })
+            .into_iter()
+            .max_by_key(|edges| edges.len())
+            .unwrap();
         for (u, v) in biggest {
-            to_contract.unset(u as usize);
-            to_contract.unset(v as usize);
+            to_contract.unset(order.rank(u) as usize);
+            to_contract.unset(order.rank(v) as usize);
         }
     }
 
@@ -426,6 +423,78 @@ pub fn preprocess<'c, Graph: for<'a> LinkIterGraph<'a>, ReorderSCC: Bool, Deg1: 
         backward: OwnedGraph::new(backward_first_out, backward_head, backward_weight),
         order: new_order,
         core_size,
+    }
+}
+
+#[derive(Debug)]
+pub struct VirtualTopocore {
+    order: NodeOrder,
+    biggest_scc: usize,
+    deg2: usize,
+    deg3: usize,
+}
+
+#[allow(clippy::cognitive_complexity)]
+pub fn virtual_topocore<'c, Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> VirtualTopocore {
+    let order = dfs_pre_order(graph);
+    let n = graph.num_nodes();
+
+    let reversed = graph.reverse();
+
+    let symmetric_degrees = (0..graph.num_nodes())
+        .map(|node| {
+            graph
+                .neighbor_iter(node as NodeId)
+                .chain(reversed.neighbor_iter(node as NodeId))
+                .map(|l| l.node)
+                .collect::<Vec<NodeId>>()
+                .tap(|neighbors| neighbors.sort_unstable())
+                .tap(|neighbors| neighbors.dedup())
+                .len() as u8
+        })
+        .collect::<Vec<u8>>();
+
+    let biggest = biconnected(&UndirectedGraph { ins: &reversed, outs: graph })
+        .into_iter()
+        .max_by_key(|edges| edges.len())
+        .unwrap();
+
+    let mut biggest_scc = BitVec::new(n);
+    for (u, v) in biggest {
+        biggest_scc.set(u as usize);
+        biggest_scc.set(v as usize);
+    }
+
+    let mut new_order = Vec::with_capacity(n);
+
+    let mut biggest_scc_size = 0;
+
+    for &node in order.order() {
+        if biggest_scc.get(node as usize) {
+            new_order.push(node);
+            biggest_scc_size += 1;
+        }
+    }
+    new_order.sort_by(|&n1, &n2| {
+        if symmetric_degrees[n1 as usize] > 2 && symmetric_degrees[n2 as usize] > 2 {
+            std::cmp::Ordering::Equal
+        } else {
+            symmetric_degrees[n1 as usize].cmp(&symmetric_degrees[n2 as usize])
+        }
+    });
+    for &node in order.order() {
+        if !biggest_scc.get(node as usize) {
+            new_order.push(node);
+        }
+    }
+    let deg3 = new_order.iter().position(|&node| symmetric_degrees[node as usize] < 4).unwrap_or(n as usize);
+    let deg2 = new_order.iter().position(|&node| symmetric_degrees[node as usize] < 3).unwrap_or(n as usize);
+
+    VirtualTopocore {
+        order: NodeOrder::from_node_order(new_order),
+        biggest_scc: biggest_scc_size,
+        deg3,
+        deg2,
     }
 }
 
