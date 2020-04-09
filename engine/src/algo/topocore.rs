@@ -428,10 +428,46 @@ pub fn preprocess<'c, Graph: for<'a> LinkIterGraph<'a>, ReorderSCC: Bool, Deg1: 
 
 #[derive(Debug)]
 pub struct VirtualTopocore {
-    order: NodeOrder,
+    pub order: NodeOrder,
     biggest_scc: usize,
     deg2: usize,
     deg3: usize,
+    symmetric_degrees: Vec<u8>,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum NodeType {
+    OtherSCC(u8),
+    Deg2OrLess,
+    Deg3,
+    Deg4OrMore,
+}
+
+impl NodeType {
+    #[inline]
+    pub fn in_core(&self) -> bool {
+        if let NodeType::OtherSCC(_) = self {
+            false
+        } else {
+            true
+        }
+    }
+}
+
+impl VirtualTopocore {
+    #[inline]
+    pub fn node_type(&self, node: NodeId) -> NodeType {
+        let node = node as usize;
+        if node < self.deg3 {
+            NodeType::Deg4OrMore
+        } else if node < self.deg2 {
+            NodeType::Deg3
+        } else if node < self.biggest_scc {
+            NodeType::Deg2OrLess
+        } else {
+            NodeType::OtherSCC(self.symmetric_degrees[node - self.biggest_scc])
+        }
+    }
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -476,25 +512,30 @@ pub fn virtual_topocore<'c, Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> 
         }
     }
     new_order.sort_by(|&n1, &n2| {
-        if symmetric_degrees[n1 as usize] > 2 && symmetric_degrees[n2 as usize] > 2 {
+        if symmetric_degrees[n1 as usize] > 3 && symmetric_degrees[n2 as usize] > 3 {
             std::cmp::Ordering::Equal
         } else {
-            symmetric_degrees[n1 as usize].cmp(&symmetric_degrees[n2 as usize])
+            symmetric_degrees[n2 as usize].cmp(&symmetric_degrees[n1 as usize])
         }
     });
+    let mut other_sccs_symmetric_degrees = Vec::with_capacity(n - biggest_scc_size);
     for &node in order.order() {
         if !biggest_scc.get(node as usize) {
             new_order.push(node);
+            other_sccs_symmetric_degrees.push(symmetric_degrees[node as usize]);
         }
     }
     let deg3 = new_order.iter().position(|&node| symmetric_degrees[node as usize] < 4).unwrap_or(n as usize);
     let deg2 = new_order.iter().position(|&node| symmetric_degrees[node as usize] < 3).unwrap_or(n as usize);
+
+    dbg!(deg3, deg2, biggest_scc_size);
 
     VirtualTopocore {
         order: NodeOrder::from_node_order(new_order),
         biggest_scc: biggest_scc_size,
         deg3,
         deg2,
+        symmetric_degrees: other_sccs_symmetric_degrees,
     }
 }
 

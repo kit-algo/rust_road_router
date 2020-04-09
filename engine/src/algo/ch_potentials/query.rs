@@ -1,18 +1,12 @@
 use super::*;
 use crate::algo::customizable_contraction_hierarchy::{query::stepped_elimination_tree::SteppedEliminationTree, *};
 use crate::algo::dijkstra::topo_dijkstra::TopoDijkstra;
-use crate::datastr::node_order::NodeOrder;
-use crate::datastr::rank_select_map::*;
 use crate::datastr::timestamped_vector::TimestampedVector;
 use crate::util::in_range_option::InRangeOption;
 
 #[derive(Debug)]
 pub struct Server<'a> {
-    forward_dijkstra: TopoDijkstra<OwnedGraph>,
-    backward_graph: OwnedGraph,
-    order: NodeOrder,
-    core_size: usize,
-    meeting_node: NodeId,
+    forward_dijkstra: TopoDijkstra,
     stack: Vec<NodeId>,
 
     cch: &'a CCH,
@@ -20,9 +14,6 @@ pub struct Server<'a> {
     potentials: TimestampedVector<InRangeOption<Weight>>,
     forward_cch_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], Vec<Weight>>,
     backward_elimination_tree: SteppedEliminationTree<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], Vec<Weight>>>,
-    border_nodes: FastClearBitVec,
-
-    visited: FastClearBitVec,
 
     #[cfg(feature = "chpot_visualize")]
     lat: &[f32],
@@ -32,7 +23,7 @@ pub struct Server<'a> {
 
 impl<'a> Server<'a> {
     pub fn new<Graph>(
-        topocore: crate::algo::topocore::Topocore,
+        graph: Graph,
         cch: &'a CCH,
         lower_bound: &Graph,
         #[cfg(feature = "chpot_visualize")] lat: &[f32],
@@ -46,45 +37,18 @@ impl<'a> Server<'a> {
         let backward_elimination_tree = SteppedEliminationTree::new(backward_up_graph, cch.elimination_tree());
 
         Server {
-            forward_dijkstra: TopoDijkstra::new(topocore.forward),
-            backward_graph: topocore.backward,
-            core_size: topocore.core_size,
-            meeting_node: 0,
+            forward_dijkstra: TopoDijkstra::new(graph),
             stack: Vec::new(),
-            order: topocore.order,
             cch,
             forward_cch_graph: forward_up_graph,
             backward_elimination_tree,
             potentials: TimestampedVector::new(cch.num_nodes(), InRangeOption::new(None)),
-            border_nodes: FastClearBitVec::new(topocore.core_size),
-            visited: FastClearBitVec::new(cch.num_nodes()),
 
             #[cfg(feature = "chpot_visualize")]
             lat,
             #[cfg(feature = "chpot_visualize")]
             lng,
         }
-    }
-
-    fn dfs(graph: &OwnedGraph, node: NodeId, visited: &mut FastClearBitVec, border_callback: &mut impl FnMut(NodeId), in_core: &impl Fn(NodeId) -> bool) {
-        if visited.get(node as usize) {
-            return;
-        }
-        visited.set(node as usize);
-        if in_core(node) {
-            border_callback(node);
-            return;
-        }
-        for link in graph.neighbor_iter(node) {
-            Self::dfs(graph, link.node, visited, border_callback, in_core);
-        }
-    }
-
-    fn border(&mut self, node: NodeId, in_core: &impl Fn(NodeId) -> bool) -> Vec<NodeId> {
-        let mut border = Vec::new();
-        self.visited.clear();
-        Self::dfs(&self.backward_graph, node, &mut self.visited, &mut |node| border.push(node), in_core);
-        border
     }
 
     fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
@@ -106,51 +70,21 @@ impl<'a> Server<'a> {
             self.backward_elimination_tree.next_step();
         }
 
-        let from = self.order.rank(from);
-        let to = self.order.rank(to);
-
-        // node ids were reordered so that core nodes are at the "front" of the order, that is come first
-        // so we can check if a node is in core by checking if its id is smaller than the number of nodes in the core
-        let in_core = {
-            let core_size = self.core_size as NodeId;
-            move |node| node < core_size
-        };
-
-        self.border_nodes.clear();
-        let border = self.border(to, &in_core);
-        for border_node in border {
-            self.border_nodes.set(border_node as usize);
-        }
-
         self.forward_dijkstra.initialize_query(Query { from, to });
-
         let forward_dijkstra = &mut self.forward_dijkstra;
         let stack = &mut self.stack;
 
         let cch = &self.cch;
-        let order = &self.order;
 
         let potentials = &mut self.potentials;
         let backward_elimination_tree = &self.backward_elimination_tree;
         let forward_cch_graph = &self.forward_cch_graph;
 
-        let border_nodes = &self.border_nodes;
-
         loop {
-            match forward_dijkstra.next_step_with_potential(
-                |node, distance| {
-                    debug_assert!(distance < INFINITY);
-                    Self::potential(
-                        potentials,
-                        forward_cch_graph,
-                        backward_elimination_tree,
-                        cch.node_order().rank(order.node(node)),
-                        stack,
-                    )
-                    .map(|pot| distance + pot)
-                },
-                |tail, head| in_core(head) || !in_core(tail) || border_nodes.get(tail as usize),
-            ) {
+            match forward_dijkstra.next_step_with_potential(|node, distance| {
+                debug_assert!(distance < INFINITY);
+                Self::potential(potentials, forward_cch_graph, backward_elimination_tree, cch.node_order().rank(node), stack).map(|pot| distance + pot)
+            }) {
                 QueryProgress::Settled(State { node: _node, .. }) => {
                     #[cfg(feature = "chpot_visualize")]
                     {
@@ -223,10 +157,6 @@ impl<'a> Server<'a> {
         }
 
         path.reverse();
-
-        for node in &mut path {
-            *node = self.order.node(*node);
-        }
 
         path
     }

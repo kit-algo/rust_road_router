@@ -1,12 +1,16 @@
 //! Dijkstras algorithm with optimization for degree 2 chains
 
 use super::*;
-use crate::datastr::{index_heap::*, timestamped_vector::*};
-use crate::util::TapOps;
+use crate::algo::topocore::*;
+use crate::datastr::{index_heap::*, rank_select_map::FastClearBitVec, timestamped_vector::*};
 
 #[derive(Debug)]
-pub struct TopoDijkstra<Graph: for<'a> LinkIterGraph<'a>> {
-    graph: Graph,
+pub struct TopoDijkstra {
+    graph: OwnedGraph,
+    reversed: OwnedGraph,
+    virtual_topocore: VirtualTopocore,
+    visited: FastClearBitVec,
+    border_nodes: FastClearBitVec,
     distances: TimestampedVector<Weight>,
     predecessors: Vec<NodeId>,
     closest_node_priority_queue: IndexdMinHeap<State<Weight>>,
@@ -15,7 +19,6 @@ pub struct TopoDijkstra<Graph: for<'a> LinkIterGraph<'a>> {
     // first option: algorithm finished? second option: final result of algorithm
     #[allow(clippy::option_option)]
     result: Option<Option<Weight>>,
-    symmetric_degrees: Vec<u8>,
 }
 
 #[derive(Debug)]
@@ -25,38 +28,32 @@ struct ChainStep {
     next_distance: NodeId,
 }
 
-impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
-    pub fn new(graph: Graph) -> TopoDijkstra<Graph> {
+impl TopoDijkstra {
+    pub fn new<Graph: for<'a> LinkIterGraph<'a>>(graph: Graph) -> TopoDijkstra {
         let n = graph.num_nodes();
+        let virtual_topocore = virtual_topocore(&graph);
 
+        let graph = graph.permute_node_ids(&virtual_topocore.order);
         let reversed = graph.reverse();
-
-        let symmetric_degrees = (0..graph.num_nodes())
-            .map(|node| {
-                graph
-                    .neighbor_iter(node as NodeId)
-                    .chain(reversed.neighbor_iter(node as NodeId))
-                    .map(|l| l.node)
-                    .collect::<Vec<NodeId>>()
-                    .tap(|neighbors| neighbors.sort_unstable())
-                    .tap(|neighbors| neighbors.dedup())
-                    .len() as u8
-            })
-            .collect();
 
         TopoDijkstra {
             graph,
+            reversed,
+            virtual_topocore,
+            visited: FastClearBitVec::new(n),
+            border_nodes: FastClearBitVec::new(n),
             // initialize tentative distances to INFINITY
             distances: TimestampedVector::new(n, INFINITY),
             predecessors: vec![n as NodeId; n],
             closest_node_priority_queue: IndexdMinHeap::new(n),
             query: None,
             result: None,
-            symmetric_degrees,
         }
     }
 
-    pub fn initialize_query(&mut self, query: Query) {
+    pub fn initialize_query(&mut self, mut query: Query) {
+        query.from = self.virtual_topocore.order.rank(query.from);
+        query.to = self.virtual_topocore.order.rank(query.to);
         let from = query.from;
         // initialize
         self.query = Some(query);
@@ -66,31 +63,53 @@ impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
         self.distances[from as usize] = 0;
 
         self.closest_node_priority_queue.push(State { distance: 0, node: from });
+
+        self.border_nodes.clear();
+        let border = self.border(query.to);
+        for border_node in border {
+            self.border_nodes.set(border_node as usize);
+        }
+    }
+
+    fn dfs(graph: &OwnedGraph, node: NodeId, visited: &mut FastClearBitVec, border_callback: &mut impl FnMut(NodeId), in_core: &impl Fn(NodeId) -> bool) {
+        if visited.get(node as usize) {
+            return;
+        }
+        visited.set(node as usize);
+        if in_core(node) {
+            border_callback(node);
+            return;
+        }
+        for link in graph.neighbor_iter(node) {
+            Self::dfs(graph, link.node, visited, border_callback, in_core);
+        }
+    }
+
+    fn border(&mut self, node: NodeId) -> Vec<NodeId> {
+        let mut border = Vec::new();
+        self.visited.clear();
+        let virtual_topocore = &self.virtual_topocore;
+        Self::dfs(&self.reversed, node, &mut self.visited, &mut |node| border.push(node), &|node| {
+            virtual_topocore.node_type(node).in_core()
+        });
+        border
     }
 
     pub fn next_step(&mut self) -> QueryProgress<Weight> {
         match self.result {
             Some(result) => QueryProgress::Done(result),
-            None => self.settle_next_node(|_, dist| Some(dist), |_, _| true),
+            None => self.settle_next_node(|_, dist| Some(dist)),
         }
     }
 
-    pub fn next_step_with_potential(
-        &mut self,
-        potential: impl FnMut(NodeId, Weight) -> Option<Weight>,
-        relax_edge: impl FnMut(NodeId, NodeId) -> bool,
-    ) -> QueryProgress<Weight> {
+    pub fn next_step_with_potential(&mut self, potential: impl FnMut(NodeId, Weight) -> Option<Weight>) -> QueryProgress<Weight> {
         match self.result {
             Some(result) => QueryProgress::Done(result),
-            None => self.settle_next_node(potential, relax_edge),
+            None => self.settle_next_node(potential),
         }
     }
 
-    fn settle_next_node(
-        &mut self,
-        mut potential: impl FnMut(NodeId, Weight) -> Option<Weight>,
-        mut relax_edge: impl FnMut(NodeId, NodeId) -> bool,
-    ) -> QueryProgress<Weight> {
+    fn settle_next_node(&mut self, mut potential: impl FnMut(NodeId, Weight) -> Option<Weight>) -> QueryProgress<Weight> {
         let to = self.query.as_ref().expect("query was not initialized properly").to;
 
         // Examine the frontier with lower distance nodes first (min-heap)
@@ -120,20 +139,22 @@ impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
                     next_distance,
                 }) = chain.take()
                 {
-                    if relax_edge(prev_node, next_node) && next_distance < self.distances[next_node as usize] {
+                    if (self.in_core(next_node) || !self.in_core(prev_node) || self.border_nodes.get(prev_node as usize))
+                        && next_distance < self.distances[next_node as usize]
+                    {
                         let mut next_edge = None;
                         let mut endpoint = false;
                         debug_assert!(next_distance >= distance);
 
-                        match self.symmetric_degrees[next_node as usize] {
-                            2 => {
+                        match self.virtual_topocore.node_type(next_node) {
+                            NodeType::Deg2OrLess | NodeType::OtherSCC(2) => {
                                 for edge in self.graph.neighbor_iter(next_node) {
                                     if edge.node != prev_node {
                                         next_edge = Some(edge);
                                     }
                                 }
                             }
-                            3 => {
+                            NodeType::Deg3 | NodeType::OtherSCC(3) => {
                                 if had_deg_three
                                     || self.closest_node_priority_queue.contains_index(
                                         State {
@@ -157,7 +178,10 @@ impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
                                     }
                                 }
                             }
-                            d if d > 3 => {
+                            NodeType::Deg4OrMore => {
+                                endpoint = true;
+                            }
+                            NodeType::OtherSCC(d) if d > 3 => {
                                 endpoint = true;
                             }
                             _ => {}
@@ -173,8 +197,7 @@ impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
                                 next_distance: next_distance + next_edge.weight,
                             });
                         } else if endpoint {
-                            debug_assert!(self.symmetric_degrees[next_node as usize] > 2);
-                            if let Some(pot) = potential(next_node, next_distance) {
+                            if let Some(pot) = potential(self.virtual_topocore.order.node(next_node), next_distance) {
                                 let next = State {
                                     distance: pot,
                                     node: next_node,
@@ -208,23 +231,24 @@ impl<Graph: for<'a> LinkIterGraph<'a>> TopoDijkstra<Graph> {
         }
     }
 
+    fn in_core(&self, node: NodeId) -> bool {
+        self.virtual_topocore.node_type(node).in_core()
+    }
+
     pub fn tentative_distance(&self, node: NodeId) -> Weight {
-        self.distances[node as usize]
+        self.distances[self.virtual_topocore.order.rank(node) as usize]
     }
 
     pub fn predecessor(&self, node: NodeId) -> NodeId {
-        self.predecessors[node as usize]
+        self.virtual_topocore
+            .order
+            .node(self.predecessors[self.virtual_topocore.order.rank(node) as usize])
     }
 
     pub fn query(&self) -> Query {
-        self.query.unwrap()
-    }
-
-    pub fn graph(&self) -> &Graph {
-        &self.graph
-    }
-
-    pub fn queue(&self) -> &IndexdMinHeap<State<Weight>> {
-        &self.closest_node_priority_queue
+        let mut query = self.query.unwrap();
+        query.from = self.virtual_topocore.order.node(query.from);
+        query.to = self.virtual_topocore.order.node(query.to);
+        query
     }
 }

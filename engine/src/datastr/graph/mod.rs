@@ -85,6 +85,24 @@ pub trait LinkIterGraph<'a>: Graph {
 
         (OwnedGraph::from_adjancecy_lists(up), OwnedGraph::from_adjancecy_lists(down))
     }
+
+    /// Build an isomorph graph with node ids permutated according to the given order.
+    fn permute_node_ids(&'a self, order: &NodeOrder) -> OwnedGraph {
+        let mut first_out: Vec<EdgeId> = Vec::with_capacity(self.num_nodes() + 1);
+        first_out.push(0);
+        let mut head = Vec::with_capacity(self.num_arcs());
+        let mut weight = Vec::with_capacity(self.num_arcs());
+
+        for &node in order.order() {
+            first_out.push(first_out.last().unwrap() + self.degree(node) as NodeId);
+            for link in self.neighbor_iter(node) {
+                head.push(order.rank(link.node));
+                weight.push(link.weight);
+            }
+        }
+
+        OwnedGraph::new(first_out, head, weight)
+    }
 }
 
 /// Trait for graph data structures which allow iterating over outgoing links of a node and modifying the weights of those links.

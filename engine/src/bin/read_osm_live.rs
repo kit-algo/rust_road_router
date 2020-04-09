@@ -4,14 +4,12 @@ use bmw_routing_engine::{
     algo::{
         ch_potentials::query::Server as TopoServer,
         customizable_contraction_hierarchy::{query::Server, *},
-        topocore::*,
         *,
     },
     cli::CliErr,
     datastr::{graph::*, node_order::NodeOrder, rank_select_map::*},
     io::*,
     report::benchmark::*,
-    util::{False, True},
 };
 use std::{env, error::Error, fs::File, path::Path};
 
@@ -114,15 +112,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut cch_static_server = Server::new(customize(&cch, &graph));
     let mut cch_live_server = Server::new(customize(&cch, &live_graph));
 
-    let topocore = report_time("topocore preprocessing", || preprocess::<_, True, False, False, False>(&live_graph));
+    // let topocore = report_time("topocore preprocessing", || preprocess::<_, True, False, False, False>(&live_graph));
     let mut topocore = {
         #[cfg(feature = "chpot_visualize")]
         {
-            TopoServer::new(topocore, &cch, &graph, &lat, &lng)
+            TopoServer::new(live_graph.clone(), &cch, &graph, &lat, &lng)
         }
         #[cfg(not(feature = "chpot_visualize"))]
         {
-            TopoServer::new(topocore, &cch, &graph)
+            TopoServer::new(live_graph.clone(), &cch, &graph)
         }
     };
 
