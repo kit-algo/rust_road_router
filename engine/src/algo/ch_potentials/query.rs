@@ -81,9 +81,13 @@ impl<'a> Server<'a> {
         let forward_cch_graph = &self.forward_cch_graph;
 
         loop {
-            match forward_dijkstra
-                .next_step_with_potential(|node| Self::potential(potentials, forward_cch_graph, backward_elimination_tree, cch.node_order().rank(node), stack))
-            {
+            match forward_dijkstra.next_step_with_potential(|node| {
+                if cfg!(feature = "chpot-only-topo") {
+                    Some(0)
+                } else {
+                    Self::potential(potentials, forward_cch_graph, backward_elimination_tree, cch.node_order().rank(node), stack)
+                }
+            }) {
                 QueryProgress::Settled(State { node: _node, .. }) => {
                     #[cfg(feature = "chpot_visualize")]
                     {

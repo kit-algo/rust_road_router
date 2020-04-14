@@ -139,7 +139,7 @@ impl TopoDijkstra {
                     next_distance,
                 }) = chain.take()
                 {
-                    if (self.in_core(next_node) || !self.in_core(prev_node) || self.border_nodes.get(prev_node as usize))
+                    if (cfg!(feature = "chpot-no-scc") || self.in_core(next_node) || !self.in_core(prev_node) || self.border_nodes.get(prev_node as usize))
                         && next_distance < self.distances[next_node as usize]
                     {
                         let mut next_edge = None;
@@ -148,14 +148,19 @@ impl TopoDijkstra {
 
                         match self.virtual_topocore.node_type(next_node) {
                             NodeType::Deg2OrLess | NodeType::OtherSCC(2) => {
-                                for edge in self.graph.neighbor_iter(next_node) {
-                                    if edge.node != prev_node {
-                                        next_edge = Some(edge);
+                                if cfg!(feature = "chpot-no-deg2") {
+                                    endpoint = true;
+                                } else {
+                                    for edge in self.graph.neighbor_iter(next_node) {
+                                        if edge.node != prev_node {
+                                            next_edge = Some(edge);
+                                        }
                                     }
                                 }
                             }
                             NodeType::Deg3 | NodeType::OtherSCC(3) => {
-                                if had_deg_three
+                                if cfg!(feature = "chpot-no-deg3")
+                                    || had_deg_three
                                     || self.closest_node_priority_queue.contains_index(
                                         State {
                                             distance: next_distance,
