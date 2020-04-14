@@ -101,18 +101,18 @@ impl TDTopoDijkstra {
     pub fn next_step(&mut self) -> QueryProgress<Weight> {
         match self.result {
             Some(result) => QueryProgress::Done(result),
-            None => self.settle_next_node(|_, dist| Some(dist)),
+            None => self.settle_next_node(|_| Some(0)),
         }
     }
 
-    pub fn next_step_with_potential(&mut self, potential: impl FnMut(NodeId, Weight) -> Option<Weight>) -> QueryProgress<Weight> {
+    pub fn next_step_with_potential(&mut self, potential: impl FnMut(NodeId) -> Option<Weight>) -> QueryProgress<Weight> {
         match self.result {
             Some(result) => QueryProgress::Done(result),
             None => self.settle_next_node(potential),
         }
     }
 
-    fn settle_next_node(&mut self, mut potential: impl FnMut(NodeId, Weight) -> Option<Weight>) -> QueryProgress<Weight> {
+    fn settle_next_node(&mut self, mut potential: impl FnMut(NodeId) -> Option<Weight>) -> QueryProgress<Weight> {
         let to = self.query.as_ref().expect("query was not initialized properly").to;
 
         // Examine the frontier with lower distance nodes first (min-heap)
@@ -200,9 +200,9 @@ impl TDTopoDijkstra {
                                 next_distance: next_distance + self.graph.travel_time_function(next_edge.1).eval(next_distance),
                             });
                         } else if endpoint {
-                            if let Some(pot) = potential(self.virtual_topocore.order.node(next_node), next_distance) {
+                            if let Some(key) = potential(self.virtual_topocore.order.node(next_node)).map(|p| next_distance + p) {
                                 let next = State {
-                                    distance: pot,
+                                    distance: key,
                                     node: next_node,
                                 };
                                 if let Some(other) = self.closest_node_priority_queue.get(next.as_index()) {
