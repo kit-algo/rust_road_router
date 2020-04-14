@@ -5,18 +5,11 @@ use std::{env, error::Error, path::Path};
 use time::Duration;
 
 use bmw_routing_engine::{
-    algo::{
-        ch_potentials::query::Server as TopoServer,
-        customizable_contraction_hierarchy::*,
-        // query::dijkstra::Server as DijkServer,
-        topocore::preprocess,
-        *,
-    },
+    algo::{ch_potentials::query::Server as TopoServer, customizable_contraction_hierarchy::*, *},
     cli::CliErr,
     datastr::{graph::*, node_order::*},
     io::Load,
     report::benchmark::*,
-    util::{False, True},
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -54,15 +47,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // let mut simple_server = DijkServer::new(graph);
 
-    let topocore = report_time("topocore preprocessing", || preprocess::<_, True, False, False, False>(&graph));
     let mut topocore = {
         #[cfg(feature = "chpot_visualize")]
         {
-            TopoServer::new(topocore, &cch, &graph, &lat, &lng)
+            TopoServer::new(graph.clone(), &cch, &graph, &lat, &lng)
         }
         #[cfg(not(feature = "chpot_visualize"))]
         {
-            TopoServer::new(topocore, &cch, &graph)
+            TopoServer::new(graph.clone(), &cch, &graph)
         }
     };
 

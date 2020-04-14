@@ -3,7 +3,7 @@
 use std::{env, error::Error, path::Path};
 
 use bmw_routing_engine::{
-    algo::{ch_potentials::td_astar::Server, customizable_contraction_hierarchy::*, dijkstra::query::td_dijkstra::Server as DijkServer, *},
+    algo::{ch_potentials::td_query::Server, customizable_contraction_hierarchy::*, dijkstra::query::td_dijkstra::Server as DijkServer, *},
     cli::CliErr,
     datastr::{graph::time_dependent::*, node_order::NodeOrder},
     io::*,
@@ -89,7 +89,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let at = Vec::<u32>::load_from(path.join("source_time"))?;
         let to = Vec::load_from(path.join("target_node"))?;
 
-        let num_queries = 50;
+        let num_queries = 100;
 
         let mut dijkstra_time = Duration::zero();
         let mut astar_time = Duration::zero();
@@ -99,11 +99,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             dijkstra_time = dijkstra_time + time;
 
-            let (ea, time) = measure(|| server.distance(from, to, at).map(|dist| dist + at));
+            let (ea, time) = measure(|| server.query(TDQuery { from, to, departure: at }).map(|res| res.distance() + at));
 
             astar_time = astar_time + time;
 
-            assert_eq!(ground_truth, ea);
+            if ea != ground_truth {
+                eprintln!("WRONG: topo {:?} ground_truth {:?} ({} - {})", ea, ground_truth, from, to);
+                assert!(ground_truth < ea);
+            }
         }
         eprintln!("Dijkstra {}", dijkstra_time / (num_queries as i32));
         eprintln!("A* {}", astar_time / (num_queries as i32));

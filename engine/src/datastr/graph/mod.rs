@@ -95,7 +95,10 @@ pub trait LinkIterGraph<'a>: Graph {
 
         for &node in order.order() {
             first_out.push(first_out.last().unwrap() + self.degree(node) as NodeId);
-            for link in self.neighbor_iter(node) {
+            let mut links = self.neighbor_iter(node).collect::<Vec<_>>();
+            links.sort_unstable_by_key(|l| order.rank(l.node));
+
+            for link in links {
                 head.push(order.rank(link.node));
                 weight.push(link.weight);
             }

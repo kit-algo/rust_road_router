@@ -8,6 +8,7 @@ pub mod multicrit_dijkstra;
 pub mod query;
 pub mod stepped_dijkstra;
 pub mod td_stepped_dijkstra;
+pub mod td_topo_dijkstra;
 pub mod topo_dijkstra;
 
 /// Result of a single iteration

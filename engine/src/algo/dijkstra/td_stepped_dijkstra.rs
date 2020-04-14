@@ -40,7 +40,7 @@ impl TDSteppedDijkstra {
         self.closest_node_priority_queue.clear();
         self.distances.reset();
 
-        // Starte with origin
+        // Start with origin
         self.distances.set(from as usize, query.departure);
         self.closest_node_priority_queue.push(State {
             distance: query.departure,
@@ -71,7 +71,7 @@ impl TDSteppedDijkstra {
 
             // For each node we can reach, see if we can find a way with
             // a lower distance going through this node
-            for (&neighbor, edge_id) in self.graph.neighbor_and_edge_id_iter(node) {
+            for (neighbor, edge_id) in self.graph.neighbor_and_edge_id_iter(node) {
                 if check_edge(edge_id) {
                     let plf = self.graph.travel_time_function(edge_id);
                     let next_distance = distance + plf.eval(distance);

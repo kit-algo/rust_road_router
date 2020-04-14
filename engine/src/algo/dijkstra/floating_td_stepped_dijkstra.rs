@@ -40,7 +40,7 @@ impl FloatingTDSteppedDijkstra {
         if let Some(State { distance, node }) = self.closest_node_priority_queue.pop() {
             // For each node we can reach, see if we can find a way with
             // a lower distance going through this node
-            for (&neighbor, edge_id) in self.graph.neighbor_and_edge_id_iter(node) {
+            for (neighbor, edge_id) in self.graph.neighbor_and_edge_id_iter(node) {
                 if check_edge(edge_id) {
                     let plf = self.graph.travel_time_function(edge_id);
                     let next = State {
