@@ -62,6 +62,7 @@ impl<'a> Server<'a> {
             );
         };
         let mut num_queue_pops = 0;
+        let mut num_pot_evals = 0;
 
         self.potentials.reset();
         self.backward_elimination_tree.initialize_query(self.cch.node_order().rank(to));
@@ -84,6 +85,9 @@ impl<'a> Server<'a> {
                 if cfg!(feature = "chpot-only-topo") {
                     Some(0)
                 } else {
+                    if potentials[cch.node_order().rank(node) as usize].value().is_none() {
+                        num_pot_evals += 1;
+                    }
                     Self::potential(potentials, forward_cch_graph, backward_elimination_tree, cch.node_order().rank(node), stack)
                 }
             }) {
@@ -112,6 +116,7 @@ impl<'a> Server<'a> {
                 }
                 QueryProgress::Done(result) => {
                     report!("num_queue_pops", num_queue_pops);
+                    report!("num_pot_evals", num_pot_evals);
                     return result;
                 }
             }
