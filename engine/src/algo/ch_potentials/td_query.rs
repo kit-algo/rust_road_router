@@ -33,7 +33,7 @@ impl<'a> Server<'a> {
         let backward_elimination_tree = SteppedEliminationTree::new(backward_up_graph, cch.elimination_tree());
 
         Server {
-            forward_dijkstra: TDTopoDijkstra::new(graph),
+            forward_dijkstra: report_time_with_key("TDTopoDijkstra preprocessing", "topo_dijk_prepro", || TDTopoDijkstra::new(graph)),
             stack: Vec::new(),
             cch,
             forward_cch_graph: forward_up_graph,

@@ -18,6 +18,20 @@ pub fn report_time<Out, F: FnOnce() -> Out>(name: &str, f: F) -> Out {
     res
 }
 
+/// This function will measure how long it takes to execute the given lambda,
+/// print the time, report it under the given key and return the result of the lambda.
+pub fn report_time_with_key<Out, F: FnOnce() -> Out>(name: &str, key: &str, f: F) -> Out {
+    compiler_fence(SeqCst);
+    let start = time::now();
+    eprintln!("starting {}", name);
+    let res = f();
+    let t_passed = (time::now() - start).num_milliseconds();
+    compiler_fence(SeqCst);
+    eprintln!("{} done - took: {}ms", name, t_passed);
+    report!(format!("{}_running_time_ms", key), t_passed);
+    res
+}
+
 /// This function will measure how long it takes to execute the given lambda
 /// and return a tuple of the result of the lambda and a duration object.
 pub fn measure<Out, F: FnOnce() -> Out>(f: F) -> (Out, time::Duration) {

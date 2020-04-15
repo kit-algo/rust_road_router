@@ -19,6 +19,7 @@ pub mod report;
 pub mod algo;
 pub mod cli;
 pub mod datastr;
+pub mod experiments;
 pub mod export;
 pub mod import;
 pub mod io;

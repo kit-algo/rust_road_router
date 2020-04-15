@@ -125,7 +125,7 @@ where
 
     // respecting phase
     // copy metric weights to their respective edges in the CCH
-    report_time("CCH apply weights", || {
+    report_time_with_key("CCH apply weights", "respecting", || {
         upward_weights
             .par_iter_mut()
             .zip(downward_weights.par_iter_mut())
@@ -141,7 +141,7 @@ where
     });
 
     // execute customization
-    report_time("CCH Customization", || {
+    report_time_with_key("CCH Customization", "basic_customization", || {
         customization.customize(&mut upward_weights, &mut downward_weights, |cb| {
             // create workspace vectors for the scope of the customization
             UPWARD_WORKSPACE.set(&RefCell::new(vec![INFINITY; n as usize]), || {

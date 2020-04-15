@@ -1,6 +1,7 @@
 use super::*;
 use crate::datastr::node_order::NodeOrder;
 use crate::datastr::rank_select_map::*;
+use crate::report::*;
 use crate::util::{in_range_option::InRangeOption, Bool, TapOps};
 use std::cmp::{max, min};
 
@@ -528,7 +529,9 @@ pub fn virtual_topocore<'c, Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> 
     let deg3 = new_order.iter().position(|&node| symmetric_degrees[node as usize] < 4).unwrap_or(n as usize);
     let deg2 = new_order.iter().position(|&node| symmetric_degrees[node as usize] < 3).unwrap_or(n as usize);
 
-    dbg!(deg3, deg2, biggest_scc_size);
+    report!("biggest_scc_size", biggest_scc_size);
+    report!("deg2", deg2);
+    report!("deg3", deg3);
 
     VirtualTopocore {
         order: NodeOrder::from_node_order(new_order),
