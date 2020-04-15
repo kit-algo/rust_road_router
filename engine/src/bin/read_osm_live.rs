@@ -1,5 +1,6 @@
 // WIP: CH potentials for live traffic
-
+#[macro_use]
+extern crate bmw_routing_engine;
 use bmw_routing_engine::{
     algo::{
         ch_potentials::query::Server as TopoServer,
@@ -9,7 +10,7 @@ use bmw_routing_engine::{
     cli::CliErr,
     datastr::{graph::*, node_order::NodeOrder, rank_select_map::*},
     io::*,
-    report::benchmark::*,
+    report::*,
 };
 use std::{env, error::Error, fs::File, path::Path};
 
@@ -19,6 +20,14 @@ use rand::prelude::*;
 use time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
+    // let _reporter = enable_reporting();
+
+    report!("program", "chpot_live");
+    report!("start_time", format!("{}", time::now_utc().rfc822()));
+    report!("args", env::args().collect::<Vec<String>>());
+    let seed = Default::default();
+    report!("seed", seed);
+
     let mut args = env::args();
     args.next();
     let arg = &args.next().ok_or(CliErr("No graph directory arg given"))?;
@@ -90,6 +99,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
+    report!("graph", { "num_nodes": graph.num_nodes(), "num_arcs": graph.num_arcs() });
+    report!("live_traffic", { "num_modifications": total, "num_matched": found, "num_too_fast": too_fast });
+
+    let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
+
     dbg!(total, found, too_fast);
 
     let cch_order = Vec::load_from(path.join("cch_perm"))?;
@@ -112,6 +126,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut cch_static_server = Server::new(customize(&cch, &graph));
     let mut cch_live_server = Server::new(customize(&cch, &live_graph));
 
+    let core_ids = core_affinity::get_core_ids().unwrap();
+    core_affinity::set_for_current(core_ids[0]);
+
     // let topocore = report_time("topocore preprocessing", || preprocess::<_, True, False, False, False>(&live_graph));
     let mut topocore = {
         #[cfg(feature = "chpot_visualize")]
@@ -126,28 +143,37 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut query_count = 0;
     let mut live_count = 0;
-    let seed = Default::default();
     let mut rng = StdRng::from_seed(seed);
     let mut total_query_time = Duration::zero();
     let mut live_query_time = Duration::zero();
 
-    for i in 0..100 {
-        dbg!(i);
+    for _i in 0..100 {
+        let _query_ctxt = algo_runs_ctxt.push_collection_item();
         let from: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
         let to: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
         let ground_truth = cch_live_server.query(Query { from, to }).map(|res| res.distance());
-        // let ground_truth = cch_static_server.distance(from, to);
+
+        report!("from", from);
+        report!("to", to);
+        report!("ground_truth", ground_truth.unwrap_or(INFINITY));
 
         query_count += 1;
 
         let lower_bound = cch_static_server.query(Query { from, to }).map(|res| res.distance());
+        report!("lower_bound", lower_bound);
         let (mut res, time) = measure(|| topocore.query(Query { from, to }));
+        report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         let dist = res.as_ref().map(|res| res.distance());
+        report!("result", dist.unwrap_or(INFINITY));
         res.as_mut().map(|res| res.path());
         let live = lower_bound != ground_truth;
         eprintln!("live: {:?}", live);
         if live {
-            eprintln!("{}% length of static", ground_truth.unwrap() * 100 / lower_bound.unwrap());
+            if let Some(ground_truth) = ground_truth {
+                eprintln!("{}% length of static", ground_truth * 100 / lower_bound.unwrap());
+            } else {
+                eprintln!("Disconnected");
+            }
             live_query_time = live_query_time + time;
             live_count += 1;
         }

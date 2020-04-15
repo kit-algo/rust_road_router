@@ -2,6 +2,7 @@ use super::*;
 use crate::algo::customizable_contraction_hierarchy::{query::stepped_elimination_tree::SteppedEliminationTree, *};
 use crate::algo::dijkstra::topo_dijkstra::TopoDijkstra;
 use crate::datastr::timestamped_vector::TimestampedVector;
+use crate::report::*;
 use crate::util::in_range_option::InRangeOption;
 
 #[derive(Debug)]
@@ -52,6 +53,8 @@ impl<'a> Server<'a> {
     }
 
     fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
+        report!("algo", "CH Potentials Query");
+
         #[cfg(feature = "chpot_visualize")]
         {
             println!(
@@ -63,6 +66,7 @@ impl<'a> Server<'a> {
                 self.lat[to as usize], self.lng[to as usize]
             );
         };
+        let mut num_queue_pops = 0;
 
         self.potentials.reset();
         self.backward_elimination_tree.initialize_query(self.cch.node_order().rank(to));
@@ -89,6 +93,7 @@ impl<'a> Server<'a> {
                 }
             }) {
                 QueryProgress::Settled(State { node: _node, .. }) => {
+                    num_queue_pops += 1;
                     #[cfg(feature = "chpot_visualize")]
                     {
                         let node_id = self.order.node(_node) as usize;
@@ -110,7 +115,10 @@ impl<'a> Server<'a> {
                         );
                     };
                 }
-                QueryProgress::Done(result) => return result,
+                QueryProgress::Done(result) => {
+                    report!("num_queue_pops", num_queue_pops);
+                    return result;
+                }
             }
         }
     }
