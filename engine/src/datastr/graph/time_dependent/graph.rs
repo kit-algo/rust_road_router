@@ -85,6 +85,20 @@ impl Graph {
             ipp_travel_time,
         }
     }
+
+    /// Total number of interpolation points
+    pub fn num_ipps(&self) -> usize {
+        self.ipp_departure_time.len()
+    }
+
+    /// Number of edges with constant PLF
+    pub fn num_constant(&self) -> usize {
+        self.first_ipp_of_arc
+            .windows(2)
+            .map(|firsts| firsts[1] - firsts[0])
+            .filter(|&deg| deg == 1)
+            .count()
+    }
 }
 
 impl GraphTrait for Graph {

@@ -25,9 +25,10 @@ pub struct Server<'a> {
 
 impl<'a> Server<'a> {
     pub fn new(graph: TDGraph, cch: &'a CCH, #[cfg(feature = "chpot_visualize")] lat: &[f32], #[cfg(feature = "chpot_visualize")] lng: &[f32]) -> Server<'a> {
-        let lower_bound = (0..graph.num_arcs() as EdgeId)
+        let mut lower_bound = (0..graph.num_arcs() as EdgeId)
             .map(|edge_id| graph.travel_time_function(edge_id).lower_bound())
             .collect::<Vec<Weight>>();
+        unify_parallel_edges(&mut FirstOutGraph::new(graph.first_out(), graph.head(), &mut lower_bound[..]));
         let customized = customize(cch, &FirstOutGraph::new(graph.first_out(), graph.head(), lower_bound));
         let (forward_up_graph, backward_up_graph) = customized.into_ch_graphs();
         let backward_elimination_tree = SteppedEliminationTree::new(backward_up_graph, cch.elimination_tree());
