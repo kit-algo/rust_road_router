@@ -118,6 +118,7 @@ impl<'a> Server<'a> {
                 QueryProgress::Done(result) => {
                     report!("num_queue_pops", num_queue_pops);
                     report!("num_pot_evals", num_pot_evals);
+                    report!("num_relaxed_arcs", forward_dijkstra.num_relaxed_arcs());
                     return result;
                 }
             }

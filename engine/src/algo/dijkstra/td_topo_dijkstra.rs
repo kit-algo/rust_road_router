@@ -19,6 +19,7 @@ pub struct TDTopoDijkstra {
     // first option: algorithm finished? second option: final result of algorithm
     #[allow(clippy::option_option)]
     result: Option<Option<Weight>>,
+    num_relaxed_arcs: usize,
 }
 
 #[derive(Debug)]
@@ -48,6 +49,7 @@ impl TDTopoDijkstra {
             closest_node_priority_queue: IndexdMinHeap::new(n),
             query: None,
             result: None,
+            num_relaxed_arcs: 0,
         }
     }
 
@@ -60,6 +62,7 @@ impl TDTopoDijkstra {
         self.result = None;
         self.closest_node_priority_queue.clear();
         self.distances.reset();
+        self.num_relaxed_arcs = 0;
 
         self.distances.set(from as usize, query.departure);
         self.closest_node_priority_queue.push(State {
@@ -142,6 +145,8 @@ impl TDTopoDijkstra {
                     next_distance,
                 }) = chain.take()
                 {
+                    self.num_relaxed_arcs += 1;
+
                     if (cfg!(feature = "chpot-no-scc") || self.in_core(next_node) || !self.in_core(prev_node) || self.border_nodes.get(prev_node as usize))
                         && next_distance < self.distances[next_node as usize]
                     {
@@ -258,5 +263,9 @@ impl TDTopoDijkstra {
         query.from = self.virtual_topocore.order.node(query.from);
         query.to = self.virtual_topocore.order.node(query.to);
         query
+    }
+
+    pub fn num_relaxed_arcs(&self) -> usize {
+        self.num_relaxed_arcs
     }
 }
