@@ -1,4 +1,4 @@
-// Program to convert map data from HERE into RoutingKit data structures
+// Program to convert map data from HERE into a csv with a list of all relevant links and necessary info about each one.
 
 use std::{env, error::Error, path::Path};
 
