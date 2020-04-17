@@ -1,13 +1,13 @@
-// WIP: CH potentials for TD Routing.
+// TD Dijkstra baseline.
 
 use std::{env, error::Error, path::Path};
 #[macro_use]
 extern crate bmw_routing_engine;
 use bmw_routing_engine::{
-    algo::{ch_potentials::td_query::Server, customizable_contraction_hierarchy::*, *},
+    algo::{dijkstra::query::td_dijkstra::Server, *},
     cli::CliErr,
+    datastr::graph::time_dependent::*,
     datastr::graph::*,
-    datastr::{graph::time_dependent::*, node_order::NodeOrder},
     io::*,
     report::*,
 };
@@ -17,7 +17,7 @@ use time::Duration;
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting();
 
-    report!("program", "chpot_td");
+    report!("program", "td_dijkstra");
     report!("start_time", format!("{}", time::now_utc().rfc822()));
     report!("args", env::args().collect::<Vec<String>>());
 
@@ -41,25 +41,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
 
-    let cch_order = Vec::load_from(path.join("cch_perm"))?;
-    let cch_order = NodeOrder::from_node_order(cch_order);
-
-    let cch_build_ctxt = algo_runs_ctxt.push_collection_item();
-    let cch = contract(&graph, cch_order);
-    drop(cch_build_ctxt);
-    let cch_order = CCHReordering {
-        cch: &cch,
-        latitude: &[],
-        longitude: &[],
-    }
-    .reorder_for_seperator_based_customization();
-    let cch_build_ctxt = algo_runs_ctxt.push_collection_item();
-    let cch = contract(&graph, cch_order);
-    drop(cch_build_ctxt);
-
-    let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
-    let mut server = Server::new(graph, &cch);
-    drop(virtual_topocore_ctxt);
+    let mut server = Server::new(graph);
 
     let mut query_dir = None;
     let mut base_dir = Some(path);
@@ -81,9 +63,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         let at = Vec::<u32>::load_from(path.join("source_time"))?;
         let to = Vec::load_from(path.join("target_node"))?;
 
-        let num_queries = 100;
+        let num_queries = 1000;
 
-        let mut astar_time = Duration::zero();
+        let mut total_time = Duration::zero();
 
         for ((from, to), at) in from.into_iter().zip(to.into_iter()).zip(at.into_iter()).take(num_queries) {
             let _query_ctxt = algo_runs_ctxt.push_collection_item();
@@ -92,9 +74,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             let (ea, time) = measure(|| server.query(TDQuery { from, to, departure: at }).map(|res| res.distance() + at));
             report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
             report!("result", ea.unwrap_or(INFINITY));
-            astar_time = astar_time + time;
+            total_time = total_time + time;
         }
-        eprintln!("A* {}", astar_time / (num_queries as i32));
+        eprintln!("TD Dijkstra {}", total_time / (num_queries as i32));
     }
 
     Ok(())

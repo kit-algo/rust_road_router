@@ -18,16 +18,45 @@ impl Graph {
     pub fn new(
         first_out: Vec<EdgeId>,
         head: Vec<NodeId>,
-        first_ipp_of_arc: Vec<IPPIndex>,
+        mut first_ipp_of_arc: Vec<IPPIndex>,
         ipp_departure_time: Vec<Timestamp>,
         ipp_travel_time: Vec<Weight>,
     ) -> Self {
+        let mut new_ipp_departure_time = Vec::with_capacity(ipp_departure_time.len() + 2 * head.len());
+        let mut new_ipp_travel_time = Vec::with_capacity(ipp_departure_time.len() + 2 * head.len());
+
+        let mut added = 0;
+
+        for i in 0..head.len() {
+            let range = first_ipp_of_arc[i] as usize..first_ipp_of_arc[i + 1] as usize;
+            assert_ne!(range.start, range.end);
+
+            first_ipp_of_arc[i] += added;
+
+            if range.end - range.start > 1 {
+                if ipp_departure_time[range.start] != 0 {
+                    new_ipp_departure_time.push(0);
+                    new_ipp_travel_time.push(ipp_travel_time[range.start]);
+                    added += 1;
+                }
+                new_ipp_departure_time.extend(ipp_departure_time[range.clone()].iter().cloned());
+                new_ipp_travel_time.extend(ipp_travel_time[range.clone()].iter().cloned());
+                new_ipp_departure_time.push(period());
+                new_ipp_travel_time.push(ipp_travel_time[range.start]);
+                added += 1;
+            } else {
+                new_ipp_departure_time.push(0);
+                new_ipp_travel_time.push(ipp_travel_time[range.start]);
+            }
+        }
+        first_ipp_of_arc[head.len()] += added;
+
         Self {
             first_out,
             head,
             first_ipp_of_arc,
-            ipp_departure_time,
-            ipp_travel_time,
+            ipp_departure_time: new_ipp_departure_time,
+            ipp_travel_time: new_ipp_travel_time,
         }
     }
 
