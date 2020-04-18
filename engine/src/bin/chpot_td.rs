@@ -4,7 +4,11 @@ use std::{env, error::Error, path::Path};
 #[macro_use]
 extern crate bmw_routing_engine;
 use bmw_routing_engine::{
-    algo::{ch_potentials::td_query::Server, customizable_contraction_hierarchy::*, *},
+    algo::{
+        ch_potentials::{td_query::Server, CCHPotential},
+        customizable_contraction_hierarchy::*,
+        *,
+    },
     cli::CliErr,
     datastr::graph::*,
     datastr::{graph::time_dependent::*, node_order::NodeOrder},
@@ -57,8 +61,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     let cch = contract(&graph, cch_order);
     drop(cch_build_ctxt);
 
+    let mut lower_bound = (0..graph.num_arcs() as EdgeId)
+        .map(|edge_id| graph.travel_time_function(edge_id).lower_bound())
+        .collect::<Vec<Weight>>();
+    unify_parallel_edges(&mut FirstOutGraph::new(graph.first_out(), graph.head(), &mut lower_bound[..]));
+
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
-    let mut server = Server::new(graph, &cch);
+    let potential = CCHPotential::new(&cch, &FirstOutGraph::new(graph.first_out(), graph.head(), lower_bound));
+    let mut server = Server::new(graph, potential);
     drop(virtual_topocore_ctxt);
 
     let mut query_dir = None;

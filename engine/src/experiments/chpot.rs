@@ -1,6 +1,6 @@
 use crate::{
     algo::{
-        ch_potentials::query::Server as TopoServer,
+        ch_potentials::{query::Server as TopoServer, CCHPotential},
         customizable_contraction_hierarchy::{query::Server, *},
         *,
     },
@@ -75,11 +75,11 @@ pub fn run(
     let mut topocore = {
         #[cfg(feature = "chpot_visualize")]
         {
-            TopoServer::new(modified_graph.clone(), &cch, &graph, &lat, &lng)
+            TopoServer::new(modified_graph.clone(), CCHPotential::new(&cch, &graph), &lat, &lng)
         }
         #[cfg(not(feature = "chpot_visualize"))]
         {
-            TopoServer::new(modified_graph.clone(), &cch, &graph)
+            TopoServer::new(modified_graph.clone(), CCHPotential::new(&cch, &graph))
         }
     };
     drop(virtual_topocore_ctxt);
