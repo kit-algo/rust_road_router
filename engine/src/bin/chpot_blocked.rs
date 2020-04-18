@@ -24,16 +24,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     {
         let _exp_ctx = exps_ctxt.push_collection_item();
-        report!("experiment", "perfect");
-
-        bmw_routing_engine::experiments::chpot::run(path, |_graph, _travel_time| Ok(()))?;
-    }
-
-    {
-        let _exp_ctx = exps_ctxt.push_collection_item();
         report!("experiment", "no_tunnels");
 
-        bmw_routing_engine::experiments::chpot::run(path, |_graph, travel_time| {
+        bmw_routing_engine::experiments::chpot::run(path, |_graph, _rng, travel_time| {
             for (weight, &category) in travel_time.iter_mut().zip(arc_category.iter()) {
                 if (category & TUNNEL_BIT) != 0 {
                     *weight = INFINITY;
@@ -48,39 +41,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         let _exp_ctx = exps_ctxt.push_collection_item();
         report!("experiment", "no_highways");
 
-        bmw_routing_engine::experiments::chpot::run(path, |_graph, travel_time| {
+        bmw_routing_engine::experiments::chpot::run(path, |_graph, _rng, travel_time| {
             for (weight, &category) in travel_time.iter_mut().zip(arc_category.iter()) {
                 if (category & FREEWAY_BIT) != 0 {
                     *weight = INFINITY;
                 }
-            }
-
-            Ok(())
-        })?;
-    }
-
-    {
-        let _exp_ctx = exps_ctxt.push_collection_item();
-        report!("experiment", "avoid_highways");
-
-        bmw_routing_engine::experiments::chpot::run(path, |_graph, travel_time| {
-            for (weight, &category) in travel_time.iter_mut().zip(arc_category.iter()) {
-                if (category & FREEWAY_BIT) != 0 {
-                    *weight *= 3;
-                }
-            }
-
-            Ok(())
-        })?;
-    }
-
-    {
-        let _exp_ctx = exps_ctxt.push_collection_item();
-        report!("experiment", "weight_increase");
-
-        bmw_routing_engine::experiments::chpot::run(path, |_graph, travel_time| {
-            for (weight, _category) in travel_time.iter_mut().zip(arc_category.iter()) {
-                *weight = *weight * 21 / 20;
             }
 
             Ok(())

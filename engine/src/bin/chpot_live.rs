@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &args.next().ok_or(CliErr("No live data directory arg given"))?;
     let live_dir = Path::new(arg);
 
-    bmw_routing_engine::experiments::chpot::run(path, |graph, live_travel_time| {
+    bmw_routing_engine::experiments::chpot::run(path, |graph, _rng, live_travel_time| {
         let mut total = 0;
         let mut found = 0;
         let mut too_fast = 0;

@@ -113,7 +113,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let at = Vec::<u32>::load_from(path.join("source_time"))?;
         let to = Vec::load_from(path.join("target_node"))?;
 
-        let num_queries = 100;
+        let num_queries = 1000;
 
         let mut astar_time = Duration::zero();
 
@@ -121,7 +121,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let _query_ctxt = algo_runs_ctxt.push_collection_item();
             report!("from", from);
             report!("to", to);
-            let (ea, time) = measure(|| server.query(TDQuery { from, to, departure: at }).map(|res| res.distance() + at));
+            let (ea, time) = measure(|| server.query(TDQuery { from, to, departure: at }).map(|res| res.distance()));
             report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
             report!("result", ea.unwrap_or(INFINITY));
             report!("lower_bound", server.lower_bound(from).unwrap_or(INFINITY));

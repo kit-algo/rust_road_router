@@ -1,7 +1,7 @@
 use crate::{
     algo::{
         ch_potentials::{query::Server as TopoServer, *},
-        customizable_contraction_hierarchy::{query::Server, *},
+        customizable_contraction_hierarchy::*,
         *,
     },
     datastr::{graph::*, node_order::NodeOrder},
@@ -15,10 +15,11 @@ use time::Duration;
 
 pub fn run(
     path: &Path,
-    modify_travel_time: impl FnOnce(&FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>, &mut [Weight]) -> Result<(), Box<dyn Error>>,
+    modify_travel_time: impl FnOnce(&FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>, &mut StdRng, &mut [Weight]) -> Result<(), Box<dyn Error>>,
 ) -> Result<(), Box<dyn Error>> {
     let seed = Default::default();
     report!("seed", seed);
+    let mut rng = StdRng::from_seed(seed);
 
     let first_out = Vec::<NodeId>::load_from(path.join("first_out"))?;
     let head = Vec::<EdgeId>::load_from(path.join("head"))?;
@@ -36,7 +37,7 @@ pub fn run(
 
     report!("graph", { "num_nodes": graph.num_nodes(), "num_arcs": graph.num_arcs() });
 
-    modify_travel_time(&graph, &mut modified_travel_time)?;
+    modify_travel_time(&graph, &mut rng, &mut modified_travel_time)?;
     let mut modified_graph = FirstOutGraph::new(&first_out[..], &head[..], &mut modified_travel_time[..]);
     unify_parallel_edges(&mut modified_graph);
     drop(modified_graph);
@@ -100,10 +101,9 @@ pub fn run(
     drop(virtual_topocore_ctxt);
 
     let mut query_count = 0;
-    let mut rng = StdRng::from_seed(seed);
     let mut total_query_time = Duration::zero();
 
-    for _i in 0..100 {
+    for _i in 0..10000 {
         let _query_ctxt = algo_runs_ctxt.push_collection_item();
         let from: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
         let to: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
