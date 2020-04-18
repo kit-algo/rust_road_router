@@ -97,6 +97,10 @@ impl<P: Potential> Server<P> {
 
         path
     }
+
+    pub fn lower_bound(&mut self, node: NodeId) -> Option<Weight> {
+        self.potential.potential(node)
+    }
 }
 
 pub struct PathServerWrapper<'s, P>(&'s Server<P>);

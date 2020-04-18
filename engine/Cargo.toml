@@ -22,6 +22,7 @@ chpot-only-topo = []
 chpot-no-deg2 = []
 chpot-no-deg3 = []
 chpot-no-scc = []
+chpot-cch = []
 report-to-stderr = []
 detailed-stats = []
 

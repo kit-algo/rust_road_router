@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     algo::customizable_contraction_hierarchy::{query::stepped_elimination_tree::SteppedEliminationTree, *},
-    datastr::timestamped_vector::TimestampedVector,
+    datastr::{node_order::*, timestamped_vector::TimestampedVector},
     util::in_range_option::InRangeOption,
 };
 
@@ -81,6 +81,78 @@ impl<'a> Potential for CCHPotential<'a> {
         }
 
         let dist = self.potentials[node as usize].value().unwrap();
+        if dist < INFINITY {
+            Some(dist)
+        } else {
+            None
+        }
+    }
+
+    fn num_pot_evals(&self) -> usize {
+        self.num_pot_evals
+    }
+}
+
+#[derive(Debug)]
+pub struct CHPotential {
+    order: NodeOrder,
+    potentials: TimestampedVector<InRangeOption<Weight>>,
+    forward: OwnedGraph,
+    backward_dijkstra: SteppedDijkstra<OwnedGraph>,
+    num_pot_evals: usize,
+}
+
+impl CHPotential {
+    pub fn new(forward: OwnedGraph, backward: OwnedGraph, order: NodeOrder) -> Self {
+        let n = forward.num_nodes();
+        Self {
+            order,
+            potentials: TimestampedVector::new(n, InRangeOption::new(None)),
+            forward,
+            backward_dijkstra: SteppedDijkstra::new(backward),
+            num_pot_evals: 0,
+        }
+    }
+
+    fn potential_internal(
+        potentials: &mut TimestampedVector<InRangeOption<Weight>>,
+        forward: &OwnedGraph,
+        backward: &SteppedDijkstra<OwnedGraph>,
+        node: NodeId,
+    ) -> Weight {
+        if let Some(pot) = potentials[node as usize].value() {
+            return pot;
+        }
+
+        let min_by_up = forward
+            .neighbor_iter(node)
+            .map(|edge| edge.weight + Self::potential_internal(potentials, forward, backward, edge.node))
+            .min()
+            .unwrap_or(INFINITY);
+
+        potentials[node as usize] = InRangeOption::new(Some(std::cmp::min(backward.tentative_distance(node), min_by_up)));
+
+        potentials[node as usize].value().unwrap()
+    }
+}
+
+impl Potential for CHPotential {
+    fn init(&mut self, target: NodeId) {
+        self.potentials.reset();
+        self.backward_dijkstra.initialize_query(Query {
+            from: self.order.rank(target),
+            to: std::u32::MAX,
+        });
+        while let QueryProgress::Settled(_) = self.backward_dijkstra.next_step() {}
+    }
+
+    fn potential(&mut self, node: NodeId) -> Option<Weight> {
+        let node = self.order.rank(node);
+        if self.potentials[node as usize].value().is_none() {
+            self.num_pot_evals += 1;
+        }
+        let dist = Self::potential_internal(&mut self.potentials, &self.forward, &self.backward_dijkstra, node);
+
         if dist < INFINITY {
             Some(dist)
         } else {

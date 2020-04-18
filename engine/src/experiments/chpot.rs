@@ -1,6 +1,6 @@
 use crate::{
     algo::{
-        ch_potentials::{query::Server as TopoServer, CCHPotential},
+        ch_potentials::{query::Server as TopoServer, *},
         customizable_contraction_hierarchy::{query::Server, *},
         *,
     },
@@ -37,8 +37,15 @@ pub fn run(
     report!("graph", { "num_nodes": graph.num_nodes(), "num_arcs": graph.num_arcs() });
 
     modify_travel_time(&graph, &mut modified_travel_time)?;
+    let mut modified_graph = FirstOutGraph::new(&first_out[..], &head[..], &mut modified_travel_time[..]);
+    unify_parallel_edges(&mut modified_graph);
+    drop(modified_graph);
+    let modified_graph = FirstOutGraph::new(&first_out[..], &head[..], &modified_travel_time[..]);
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
+
+    let core_ids = core_affinity::get_core_ids().unwrap();
+    core_affinity::set_for_current(core_ids[0]);
 
     let cch_order = Vec::load_from(path.join("cch_perm"))?;
     let cch_order = NodeOrder::from_node_order(cch_order);
@@ -56,77 +63,68 @@ pub fn run(
     let cch = contract(&graph, cch_order);
     drop(cch_build_ctxt);
 
-    let mut modified_graph = FirstOutGraph::new(&first_out[..], &head[..], &mut modified_travel_time[..]);
-    unify_parallel_edges(&mut modified_graph);
-    drop(modified_graph);
-    let modified_graph = FirstOutGraph::new(&first_out[..], &head[..], &modified_travel_time[..]);
-
-    let cch_custom_ctxt = algo_runs_ctxt.push_collection_item();
-    let mut cch_static_server = Server::new(customize(&cch, &graph));
-    drop(cch_custom_ctxt);
-    let cch_custom_ctxt = algo_runs_ctxt.push_collection_item();
-    let mut cch_live_server = Server::new(customize(&cch, &modified_graph));
-    drop(cch_custom_ctxt);
-
-    let core_ids = core_affinity::get_core_ids().unwrap();
-    core_affinity::set_for_current(core_ids[0]);
+    let potential = {
+        #[cfg(feature = "chpot-cch")]
+        {
+            let _potential_ctxt = algo_runs_ctxt.push_collection_item();
+            CCHPotential::new(&cch, &graph)
+        }
+        #[cfg(not(feature = "chpot-cch"))]
+        {
+            let forward_first_out = Vec::<EdgeId>::load_from(path.join("lower_bound_ch/forward_first_out"))?;
+            let forward_head = Vec::<NodeId>::load_from(path.join("lower_bound_ch/forward_head"))?;
+            let forward_weight = Vec::<Weight>::load_from(path.join("lower_bound_ch/forward_weight"))?;
+            let backward_first_out = Vec::<EdgeId>::load_from(path.join("lower_bound_ch/backward_first_out"))?;
+            let backward_head = Vec::<NodeId>::load_from(path.join("lower_bound_ch/backward_head"))?;
+            let backward_weight = Vec::<Weight>::load_from(path.join("lower_bound_ch/backward_weight"))?;
+            let order = NodeOrder::from_node_order(Vec::<NodeId>::load_from(path.join("lower_bound_ch/order"))?);
+            CHPotential::new(
+                OwnedGraph::new(forward_first_out, forward_head, forward_weight),
+                OwnedGraph::new(backward_first_out, backward_head, backward_weight),
+                order,
+            )
+        }
+    };
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
     let mut topocore = {
         #[cfg(feature = "chpot_visualize")]
         {
-            TopoServer::new(modified_graph.clone(), CCHPotential::new(&cch, &graph), &lat, &lng)
+            TopoServer::new(modified_graph.clone(), potential, &lat, &lng)
         }
         #[cfg(not(feature = "chpot_visualize"))]
         {
-            TopoServer::new(modified_graph.clone(), CCHPotential::new(&cch, &graph))
+            TopoServer::new(modified_graph.clone(), potential)
         }
     };
     drop(virtual_topocore_ctxt);
 
     let mut query_count = 0;
-    let mut live_count = 0;
     let mut rng = StdRng::from_seed(seed);
     let mut total_query_time = Duration::zero();
-    let mut live_query_time = Duration::zero();
 
     for _i in 0..100 {
         let _query_ctxt = algo_runs_ctxt.push_collection_item();
         let from: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
         let to: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
-        let ground_truth = cch_live_server.query(Query { from, to }).map(|res| res.distance());
 
         report!("from", from);
         report!("to", to);
-        report!("ground_truth", ground_truth.unwrap_or(INFINITY));
 
         query_count += 1;
 
-        let lower_bound = cch_static_server.query(Query { from, to }).map(|res| res.distance());
-        report!("lower_bound", lower_bound.unwrap_or(INFINITY));
         let (mut res, time) = measure(|| topocore.query(Query { from, to }));
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         let dist = res.as_ref().map(|res| res.distance());
         report!("result", dist.unwrap_or(INFINITY));
         res.as_mut().map(|res| res.path());
-        let live = lower_bound != ground_truth;
-        if live {
-            live_query_time = live_query_time + time;
-            live_count += 1;
-        }
-        if dist != ground_truth {
-            eprintln!("topo {:?} ground_truth {:?} ({} - {})", dist, ground_truth, from, to);
-            assert!(ground_truth < dist);
-        }
+        report!("lower_bound", topocore.lower_bound(from).unwrap_or(INFINITY));
 
         total_query_time = total_query_time + time;
     }
 
     if query_count > 0 {
         eprintln!("Avg. query time {}", total_query_time / (query_count as i32))
-    };
-    if live_count > 0 {
-        eprintln!("Avg. live query time {}", live_query_time / (live_count as i32))
     };
 
     Ok(())
