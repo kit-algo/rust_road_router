@@ -7,7 +7,7 @@ use std::{env, error::Error, path::Path};
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting();
 
-    report!("program", "chpot_blocked");
+    report!("program", "chpot_simulated_live");
     report!("start_time", format!("{}", time::now_utc().rfc822()));
     report!("args", env::args().collect::<Vec<String>>());
 

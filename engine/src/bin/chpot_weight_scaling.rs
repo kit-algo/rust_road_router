@@ -6,7 +6,7 @@ use std::{env, error::Error, path::Path};
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting();
 
-    report!("program", "chpot_blocked");
+    report!("program", "chpot_weight_scaling");
     report!("start_time", format!("{}", time::now_utc().rfc822()));
     report!("args", env::args().collect::<Vec<String>>());
 
@@ -24,6 +24,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     {
         let _exp_ctx = exps_ctxt.push_collection_item();
         report!("experiment", "weight_scale");
+        report!("factor", factor);
 
         bmw_routing_engine::experiments::chpot::run(path, |_graph, _rng, travel_time| {
             for weight in travel_time.iter_mut() {
