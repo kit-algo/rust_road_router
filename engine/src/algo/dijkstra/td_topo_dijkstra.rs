@@ -72,8 +72,11 @@ impl TDTopoDijkstra {
 
         self.border_nodes.clear();
         let border = self.border(query.to);
-        for border_node in border {
+        for &border_node in &border {
             self.border_nodes.set(border_node as usize);
+        }
+        if border.is_empty() {
+            self.result = Some(None);
         }
     }
 
