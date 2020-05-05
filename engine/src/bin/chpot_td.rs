@@ -48,21 +48,23 @@ fn main() -> Result<(), Box<dyn Error>> {
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[0]);
 
-    let cch_order = Vec::load_from(path.join("cch_perm"))?;
-    let cch_order = NodeOrder::from_node_order(cch_order);
+    #[cfg(feature = "chpot-cch")]
+    let cch = {
+        let cch_order = Vec::load_from(path.join("cch_perm"))?;
+        let cch_order = NodeOrder::from_node_order(cch_order);
 
-    let cch_build_ctxt = algo_runs_ctxt.push_collection_item();
-    let cch = contract(&graph, cch_order);
-    drop(cch_build_ctxt);
-    let cch_order = CCHReordering {
-        cch: &cch,
-        latitude: &[],
-        longitude: &[],
-    }
-    .reorder_for_seperator_based_customization();
-    let cch_build_ctxt = algo_runs_ctxt.push_collection_item();
-    let cch = contract(&graph, cch_order);
-    drop(cch_build_ctxt);
+        let cch_build_ctxt = algo_runs_ctxt.push_collection_item();
+        let cch = contract(&graph, cch_order);
+        drop(cch_build_ctxt);
+        let cch_order = CCHReordering {
+            cch: &cch,
+            latitude: &[],
+            longitude: &[],
+        }
+        .reorder_for_seperator_based_customization();
+        let _cch_build_ctxt = algo_runs_ctxt.push_collection_item();
+        contract(&graph, cch_order)
+    };
 
     let potential = {
         #[cfg(feature = "chpot-cch")]
@@ -113,7 +115,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let at = Vec::<u32>::load_from(path.join("source_time"))?;
         let to = Vec::load_from(path.join("target_node"))?;
 
-        let num_queries = 1000;
+        let num_queries = bmw_routing_engine::experiments::chpot::NUM_QUERIES;
 
         let mut astar_time = Duration::zero();
 
