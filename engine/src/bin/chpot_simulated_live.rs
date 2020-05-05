@@ -19,7 +19,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let distance = Vec::<Weight>::load_from(path.join("geo_distance"))?;
     let travel_time = Vec::<Weight>::load_from(path.join("travel_time"))?;
 
-    let speed: Vec<_> = distance.iter().zip(travel_time.iter()).map(|(dist, tt)| dist / tt).collect();
+    let speed: Vec<_> = distance
+        .iter()
+        .zip(travel_time.iter())
+        .map(|(&dist, &tt)| if tt == 0 { 0 } else { dist / tt })
+        .collect();
     let max_speed = *speed.iter().max().unwrap();
     let mut max_speed_idxs = Vec::new();
     for (i, &speed) in speed.iter().enumerate() {
