@@ -24,7 +24,7 @@ use kdtree::kdtree::{Kdtree, KdtreePointTrait};
 
 use bmw_routing_engine::{
     algo::{
-        customizable_contraction_hierarchy::{self, customize as cch_customize, query::Server},
+        customizable_contraction_hierarchy::{self, contract, customize as cch_customize, query::Server, CCHReordering},
         *,
     },
     cli::CliErr,
@@ -200,7 +200,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let link_id_mapping = BitVec::load_from(path.join("link_id_mapping"))?;
     let link_id_mapping = InvertableRankSelectMap::new(RankSelectMap::new(link_id_mapping));
     let here_rank_to_link_id = Vec::load_from(path.join("here_rank_to_link_id"))?;
-    let cch_order = Vec::load_from(path.join("cch_perm"))?;
+    let cch_order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm"))?);
 
     // all further preprocessing happening asynchronous
     thread::spawn(move || {
@@ -210,7 +210,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let link_id_to_tail_mapper = LinkIdToTailMapper::new(&graph);
 
-        let cch = customizable_contraction_hierarchy::contract(&graph, NodeOrder::from_node_order(cch_order));
+        let cch = contract(&graph, cch_order);
+        let cch_order = CCHReordering {
+            cch: &cch,
+            latitude: &[],
+            longitude: &[],
+        }
+        .reorder_for_seperator_based_customization();
+        let cch = contract(&graph, cch_order);
 
         let server = Arc::new(Mutex::new(Server::new(cch_customize(&cch, &graph))));
 
