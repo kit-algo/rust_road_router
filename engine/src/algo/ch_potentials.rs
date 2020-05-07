@@ -164,3 +164,34 @@ impl Potential for CHPotential {
         self.num_pot_evals
     }
 }
+
+#[derive(Debug)]
+pub struct TurnExpandedPotential<Potential> {
+    potential: Potential,
+    tail: Vec<NodeId>,
+}
+
+impl<P> TurnExpandedPotential<P> {
+    pub fn new(graph: &dyn Graph, potential: P) -> Self {
+        let mut tail = Vec::with_capacity(graph.num_arcs());
+        for node in 0..graph.num_nodes() {
+            for _ in 0..graph.degree(node as NodeId) {
+                tail.push(node as NodeId);
+            }
+        }
+
+        Self { potential, tail }
+    }
+}
+
+impl<P: Potential> Potential for TurnExpandedPotential<P> {
+    fn init(&mut self, target: NodeId) {
+        self.potential.init(self.tail[target as usize])
+    }
+    fn potential(&mut self, node: NodeId) -> Option<Weight> {
+        self.potential.potential(self.tail[node as usize])
+    }
+    fn num_pot_evals(&self) -> usize {
+        self.potential.num_pot_evals()
+    }
+}
