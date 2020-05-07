@@ -63,3 +63,75 @@ pub trait TapOps: Sized {
 }
 
 impl<T> TapOps for T where T: Sized {}
+
+#[derive(Debug)]
+pub struct Slcs<'a, I, T> {
+    first_elem: &'a [I],
+    elements: &'a [T],
+}
+
+impl<'a, I, T> Slcs<'a, I, T> {
+    pub fn new(first_elem: &'a [I], elements: &'a [T]) -> Self {
+        Slcs { first_elem, elements }
+    }
+}
+
+impl<'a, I, T> Slcs<'a, I, T>
+where
+    usize: TryFrom<I>,
+    <usize as std::convert::TryFrom<I>>::Error: std::fmt::Debug,
+    I: Copy,
+{
+    pub fn range(&self, idx: usize) -> std::ops::Range<usize> {
+        usize::try_from(self.first_elem[idx]).unwrap()..usize::try_from(self.first_elem[idx + 1]).unwrap()
+    }
+}
+
+use std::convert::TryFrom;
+
+impl<'a, I, T> std::ops::Index<usize> for Slcs<'a, I, T>
+where
+    usize: TryFrom<I>,
+    <usize as std::convert::TryFrom<I>>::Error: std::fmt::Debug,
+    I: Copy,
+{
+    type Output = [T];
+    fn index(&self, idx: usize) -> &<Self as std::ops::Index<usize>>::Output {
+        &self.elements[usize::try_from(self.first_elem[idx]).unwrap()..usize::try_from(self.first_elem[idx + 1]).unwrap()]
+    }
+}
+
+#[derive(Debug)]
+pub struct SlcsMut<'a, I, T> {
+    first_elem: &'a [I],
+    elements: &'a mut [T],
+}
+
+impl<'a, I, T> SlcsMut<'a, I, T> {
+    pub fn new(first_elem: &'a [I], elements: &'a mut [T]) -> Self {
+        SlcsMut { first_elem, elements }
+    }
+}
+
+impl<'a, I, T> std::ops::Index<usize> for SlcsMut<'a, I, T>
+where
+    usize: TryFrom<I>,
+    <usize as std::convert::TryFrom<I>>::Error: std::fmt::Debug,
+    I: Copy,
+{
+    type Output = [T];
+    fn index(&self, idx: usize) -> &<Self as std::ops::Index<usize>>::Output {
+        &self.elements[usize::try_from(self.first_elem[idx]).unwrap()..usize::try_from(self.first_elem[idx + 1]).unwrap()]
+    }
+}
+
+impl<'a, I, T> std::ops::IndexMut<usize> for SlcsMut<'a, I, T>
+where
+    usize: TryFrom<I>,
+    <usize as std::convert::TryFrom<I>>::Error: std::fmt::Debug,
+    I: Copy,
+{
+    fn index_mut(&mut self, idx: usize) -> &mut <Self as std::ops::Index<usize>>::Output {
+        &mut self.elements[usize::try_from(self.first_elem[idx]).unwrap()..usize::try_from(self.first_elem[idx + 1]).unwrap()]
+    }
+}

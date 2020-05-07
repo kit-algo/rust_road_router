@@ -5,16 +5,16 @@ pub mod stepped_elimination_tree;
 use stepped_elimination_tree::SteppedEliminationTree;
 
 #[derive(Debug)]
-pub struct Server<'a> {
+pub struct Server<'a, CCH> {
     forward: SteppedEliminationTree<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], Vec<Weight>>>,
     backward: SteppedEliminationTree<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], Vec<Weight>>>,
-    cch_graph: &'a CCH,
+    cch: &'a CCH,
     tentative_distance: Weight,
     meeting_node: NodeId,
 }
 
-impl<'a> Server<'a> {
-    pub fn new(customized: Customized<'a>) -> Server<'a> {
+impl<'a, CCH: CCHT> Server<'a, CCH> {
+    pub fn new(customized: Customized<'a, CCH>) -> Self {
         let cch = customized.cch;
         let (forward, backward) = customized.into_ch_graphs();
         let forward = SteppedEliminationTree::new(forward, cch.elimination_tree());
@@ -23,21 +23,21 @@ impl<'a> Server<'a> {
         Server {
             forward,
             backward,
-            cch_graph: cch,
+            cch,
             tentative_distance: INFINITY,
             meeting_node: 0,
         }
     }
 
     // Update the metric using a new customization result
-    pub fn update(&mut self, mut customized: Customized<'a>) {
+    pub fn update(&mut self, mut customized: Customized<'a, CCH>) {
         self.forward.graph_mut().swap_weights(&mut customized.upward);
         self.backward.graph_mut().swap_weights(&mut customized.downward);
     }
 
     fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
-        let from = self.cch_graph.node_order().rank(from);
-        let to = self.cch_graph.node_order().rank(to);
+        let from = self.cch.node_order().rank(from);
+        let to = self.cch.node_order().rank(to);
 
         // initialize
         self.tentative_distance = INFINITY;
@@ -66,10 +66,8 @@ impl<'a> Server<'a> {
 
     fn path(&mut self) -> Vec<NodeId> {
         // unpack shortcuts so that parant pointers already point along the completely unpacked path
-        self.forward
-            .unpack_path(self.meeting_node, true, self.cch_graph, self.backward.graph().weight());
-        self.backward
-            .unpack_path(self.meeting_node, true, self.cch_graph, self.forward.graph().weight());
+        self.forward.unpack_path(self.meeting_node, true, self.cch, self.backward.graph().weight());
+        self.backward.unpack_path(self.meeting_node, true, self.cch, self.forward.graph().weight());
 
         let mut path = Vec::new();
         path.push(self.meeting_node);
@@ -85,16 +83,16 @@ impl<'a> Server<'a> {
         }
 
         for node in &mut path {
-            *node = self.cch_graph.node_order().node(*node);
+            *node = self.cch.node_order().node(*node);
         }
 
         path
     }
 }
 
-pub struct PathServerWrapper<'s, 'a>(&'s mut Server<'a>);
+pub struct PathServerWrapper<'s, 'a, CCH>(&'s mut Server<'a, CCH>);
 
-impl<'s, 'a> PathServer for PathServerWrapper<'s, 'a> {
+impl<'s, 'a, CCH: CCHT> PathServer for PathServerWrapper<'s, 'a, CCH> {
     type NodeInfo = NodeId;
 
     fn path(&mut self) -> Vec<Self::NodeInfo> {
@@ -102,8 +100,8 @@ impl<'s, 'a> PathServer for PathServerWrapper<'s, 'a> {
     }
 }
 
-impl<'s, 'a: 's> QueryServer<'s> for Server<'a> {
-    type P = PathServerWrapper<'s, 'a>;
+impl<'s, 'a: 's, CCH: CCHT> QueryServer<'s> for Server<'a, CCH> {
+    type P = PathServerWrapper<'s, 'a, CCH>;
 
     fn query(&'s mut self, query: Query) -> Option<QueryResult<Self::P, Weight>> {
         self.distance(query.from, query.to)

@@ -152,4 +152,29 @@ pub trait RandomLinkAccessGraph: Graph {
             end: range.end as usize,
         }
     }
+
+    /// Build the line graph (the turn expanded graph).
+    /// The callback should return the turn costs between the two links
+    /// with the given ids and `None` if the turn is forbidden.
+    fn line_graph(&self, turn_costs: impl Fn(EdgeId, EdgeId) -> Option<Weight>) -> OwnedGraph {
+        let mut first_out = Vec::with_capacity(self.num_arcs() + 1);
+        first_out.push(0);
+        let mut head = Vec::new();
+        let mut weight = Vec::new();
+        let mut num_turns = 0;
+
+        for edge_id in 0..self.num_arcs() {
+            let link = self.link(edge_id as EdgeId);
+            for next_link_id in self.neighbor_edge_indices(link.node) {
+                if let Some(turn_cost) = turn_costs(edge_id as EdgeId, next_link_id) {
+                    head.push(next_link_id);
+                    weight.push(link.weight + turn_cost);
+                    num_turns += 1;
+                }
+            }
+            first_out.push(num_turns as EdgeId);
+        }
+
+        OwnedGraph::new(first_out, head, weight)
+    }
 }
