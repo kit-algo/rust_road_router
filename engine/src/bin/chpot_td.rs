@@ -7,6 +7,7 @@ use bmw_routing_engine::{
     algo::{
         ch_potentials::{td_query::Server, *},
         customizable_contraction_hierarchy::*,
+        dijkstra::query::td_dijkstra::Server as DijkServer,
         *,
     },
     cli::CliErr,
@@ -95,7 +96,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
-    let mut server = Server::new(graph, potential);
+    let mut server = Server::new(graph.clone(), potential);
     drop(virtual_topocore_ctxt);
 
     let mut query_dir = None;
@@ -119,7 +120,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let mut astar_time = Duration::zero();
 
-        for ((from, to), at) in from.into_iter().zip(to.into_iter()).zip(at.into_iter()).take(num_queries) {
+        for ((&from, &to), &at) in from.iter().zip(to.iter()).zip(at.iter()).take(num_queries) {
             let _query_ctxt = algo_runs_ctxt.push_collection_item();
             report!("from", from);
             report!("to", to);
@@ -130,6 +131,19 @@ fn main() -> Result<(), Box<dyn Error>> {
             astar_time = astar_time + time;
         }
         eprintln!("A* {}", astar_time / (num_queries as i32));
+
+        let num_queries = bmw_routing_engine::experiments::NUM_DIJKSTRA_QUERIES;
+
+        let mut server = DijkServer::new(graph);
+
+        for ((&from, &to), &at) in from.iter().zip(to.iter()).zip(at.iter()).take(num_queries) {
+            let _query_ctxt = algo_runs_ctxt.push_collection_item();
+            report!("from", from);
+            report!("to", to);
+            let (ea, time) = measure(|| server.query(TDQuery { from, to, departure: at }).map(|res| res.distance()));
+            report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+            report!("result", ea.unwrap_or(INFINITY));
+        }
     }
 
     Ok(())

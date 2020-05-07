@@ -35,4 +35,12 @@ fn main() {
         println!("cargo:rustc-cfg=override_chpot_num_queries");
     }
     println!("cargo:rerun-if-env-changed=CHPOT_NUM_QUERIES");
+
+    if let Ok(val) = env::var("NUM_DIJKSTRA_QUERIES") {
+        let dest_path = Path::new(&out_dir).join("NUM_DIJKSTRA_QUERIES");
+        let mut f = File::create(&dest_path).unwrap();
+        f.write_all(val.as_bytes()).unwrap();
+        println!("cargo:rustc-cfg=override_num_dijkstra_queries");
+    }
+    println!("cargo:rerun-if-env-changed=NUM_DIJKSTRA_QUERIES");
 }

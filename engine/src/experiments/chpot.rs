@@ -2,6 +2,7 @@ use crate::{
     algo::{
         ch_potentials::{query::Server as TopoServer, *},
         customizable_contraction_hierarchy::*,
+        dijkstra::query::dijkstra::Server as DijkServer,
         *,
     },
     datastr::{graph::*, node_order::NodeOrder},
@@ -135,6 +136,24 @@ pub fn run(
     if query_count > 0 {
         eprintln!("Avg. query time {}", total_query_time / (query_count as i32))
     };
+
+    let mut server = DijkServer::new(modified_graph);
+
+    for _i in 0..super::NUM_DIJKSTRA_QUERIES {
+        let _query_ctxt = algo_runs_ctxt.push_collection_item();
+        let from: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
+        let to: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
+
+        report!("from", from);
+        report!("to", to);
+
+        query_count += 1;
+
+        let (res, time) = measure(|| server.query(Query { from, to }));
+        report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        let dist = res.as_ref().map(|res| res.distance());
+        report!("result", dist.unwrap_or(INFINITY));
+    }
 
     Ok(())
 }
