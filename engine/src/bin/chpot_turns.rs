@@ -92,7 +92,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         contract(&graph, cch_order)
     };
 
-    let potential = {
+    let potential = TurnExpandedPotential::new(&graph, {
         #[cfg(feature = "chpot-cch")]
         {
             let _potential_ctxt = algo_runs_ctxt.push_collection_item();
@@ -113,7 +113,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 order,
             )
         }
-    };
+    });
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
     let mut topocore = {
