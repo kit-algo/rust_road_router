@@ -126,8 +126,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             report!("to", to);
             let (ea, time) = measure(|| server.query(TDQuery { from, to, departure: at }).map(|res| res.distance()));
             report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-            report!("result", ea.unwrap_or(INFINITY));
-            report!("lower_bound", server.lower_bound(from).unwrap_or(INFINITY));
+            report!("result", ea);
+            report!("lower_bound", server.lower_bound(from));
             astar_time = astar_time + time;
         }
         eprintln!("A* {}", astar_time / (num_queries as i32));
@@ -142,7 +142,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             report!("to", to);
             let (ea, time) = measure(|| server.query(TDQuery { from, to, departure: at }).map(|res| res.distance()));
             report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-            report!("result", ea.unwrap_or(INFINITY));
+            report!("result", ea);
         }
     }
 

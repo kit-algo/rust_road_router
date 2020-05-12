@@ -37,6 +37,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let head = Vec::load_from(path.join("head"))?;
     let travel_time = Vec::load_from(path.join("travel_time"))?;
 
+    #[cfg(feature = "chpot_visualize")]
+    let lat = Vec::<f32>::load_from(path.join("latitude"))?;
+    #[cfg(feature = "chpot_visualize")]
+    let lng = Vec::<f32>::load_from(path.join("longitude"))?;
+
     let forbidden_turn_from_arc = Vec::<EdgeId>::load_from(path.join("forbidden_turn_from_arc"))?;
     let forbidden_turn_to_arc = Vec::<EdgeId>::load_from(path.join("forbidden_turn_to_arc"))?;
 
@@ -131,22 +136,23 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut query_count = 0;
     let mut total_query_time = Duration::zero();
 
+    let n = exp_graph.num_nodes();
     for _i in 0..bmw_routing_engine::experiments::chpot::NUM_QUERIES {
         let _query_ctxt = algo_runs_ctxt.push_collection_item();
-        let from: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
-        let to: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
+        let from: NodeId = rng.gen_range(0, n as NodeId);
+        let to: NodeId = rng.gen_range(0, n as NodeId);
 
-        report!("from", from);
-        report!("to", to);
+        let (mut res, time) = measure(|| topocore.query(Query { from, to }));
 
         query_count += 1;
 
-        let (mut res, time) = measure(|| topocore.query(Query { from, to }));
+        report!("from", from);
+        report!("to", to);
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         let dist = res.as_ref().map(|res| res.distance());
-        report!("result", dist.unwrap_or(INFINITY));
+        report!("result", dist);
         res.as_mut().map(|res| res.path());
-        report!("lower_bound", topocore.lower_bound(from).unwrap_or(INFINITY));
+        report!("lower_bound", topocore.lower_bound(from));
 
         total_query_time = total_query_time + time;
     }
@@ -159,8 +165,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     for _i in 0..bmw_routing_engine::experiments::NUM_DIJKSTRA_QUERIES {
         let _query_ctxt = algo_runs_ctxt.push_collection_item();
-        let from: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
-        let to: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
+        let from: NodeId = rng.gen_range(0, n as NodeId);
+        let to: NodeId = rng.gen_range(0, n as NodeId);
 
         report!("from", from);
         report!("to", to);
@@ -170,7 +176,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let (res, time) = measure(|| server.query(Query { from, to }));
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         let dist = res.as_ref().map(|res| res.distance());
-        report!("result", dist.unwrap_or(INFINITY));
+        report!("result", dist);
     }
 
     Ok(())

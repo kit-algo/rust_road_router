@@ -126,9 +126,9 @@ pub fn run(
         let (mut res, time) = measure(|| topocore.query(Query { from, to }));
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         let dist = res.as_ref().map(|res| res.distance());
-        report!("result", dist.unwrap_or(INFINITY));
+        report!("result", dist);
         res.as_mut().map(|res| res.path());
-        report!("lower_bound", topocore.lower_bound(from).unwrap_or(INFINITY));
+        report!("lower_bound", topocore.lower_bound(from));
 
         total_query_time = total_query_time + time;
     }
@@ -152,7 +152,7 @@ pub fn run(
         let (res, time) = measure(|| server.query(Query { from, to }));
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         let dist = res.as_ref().map(|res| res.distance());
-        report!("result", dist.unwrap_or(INFINITY));
+        report!("result", dist);
     }
 
     Ok(())
