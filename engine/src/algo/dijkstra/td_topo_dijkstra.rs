@@ -78,9 +78,31 @@ impl TDTopoDijkstra {
         if border.is_empty() {
             self.result = Some(None);
         }
+        if self.in_core(query.to) {
+            let mut counter = 0;
+            self.visited.clear();
+            Self::dfs(&self.reversed, query.to, &mut self.visited, &mut |_| {}, &mut |_| {
+                if counter < 100 {
+                    counter += 1;
+                    false
+                } else {
+                    true
+                }
+            });
+
+            if counter < 100 {
+                self.result = Some(None);
+            }
+        }
     }
 
-    fn dfs(graph: &OwnedGraph, node: NodeId, visited: &mut FastClearBitVec, border_callback: &mut impl FnMut(NodeId), in_core: &impl Fn(NodeId) -> bool) {
+    fn dfs(
+        graph: &OwnedGraph,
+        node: NodeId,
+        visited: &mut FastClearBitVec,
+        border_callback: &mut impl FnMut(NodeId),
+        in_core: &mut impl FnMut(NodeId) -> bool,
+    ) {
         if visited.get(node as usize) {
             return;
         }
@@ -98,7 +120,7 @@ impl TDTopoDijkstra {
         let mut border = Vec::new();
         self.visited.clear();
         let virtual_topocore = &self.virtual_topocore;
-        Self::dfs(&self.reversed, node, &mut self.visited, &mut |node| border.push(node), &|node| {
+        Self::dfs(&self.reversed, node, &mut self.visited, &mut |node| border.push(node), &mut |node| {
             virtual_topocore.node_type(node).in_core()
         });
         border
