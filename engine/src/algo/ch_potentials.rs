@@ -56,9 +56,8 @@ impl<'a> Potential for CCHPotential<'a> {
 
     fn potential(&mut self, node: NodeId) -> Option<u32> {
         let node = self.cch.node_order().rank(node);
-        if self.potentials[node as usize].value().is_none() {
-            self.num_pot_evals += 1;
-        }
+        self.num_pot_evals += 1;
+
         let mut cur_node = node;
         while self.potentials[cur_node as usize].value().is_none() {
             self.stack.push(cur_node);
@@ -138,6 +137,7 @@ impl CHPotential {
 
 impl Potential for CHPotential {
     fn init(&mut self, target: NodeId) {
+        self.num_pot_evals = 0;
         self.potentials.reset();
         self.backward_dijkstra.initialize_query(Query {
             from: self.order.rank(target),
@@ -148,9 +148,8 @@ impl Potential for CHPotential {
 
     fn potential(&mut self, node: NodeId) -> Option<Weight> {
         let node = self.order.rank(node);
-        if self.potentials[node as usize].value().is_none() {
-            self.num_pot_evals += 1;
-        }
+        self.num_pot_evals += 1;
+
         let dist = Self::potential_internal(&mut self.potentials, &self.forward, &self.backward_dijkstra, node);
 
         if dist < INFINITY {
