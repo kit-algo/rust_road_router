@@ -24,7 +24,7 @@ use kdtree::kdtree::{Kdtree, KdtreePointTrait};
 
 use bmw_routing_engine::{
     algo::{
-        customizable_contraction_hierarchy::{self, contract, customize as cch_customize, query::Server, CCHReordering},
+        customizable_contraction_hierarchy::{contract, customize as cch_customize, query::Server, CCHReordering},
         *,
     },
     cli::CliErr,
