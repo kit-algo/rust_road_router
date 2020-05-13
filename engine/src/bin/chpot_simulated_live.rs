@@ -19,18 +19,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let distance = Vec::<Weight>::load_from(path.join("geo_distance"))?;
     let travel_time = Vec::<Weight>::load_from(path.join("travel_time"))?;
 
-    let speed: Vec<_> = distance
-        .iter()
-        .zip(travel_time.iter())
-        .map(|(&dist, &tt)| if tt == 0 { 0 } else { dist / tt })
-        .collect();
-    let max_speed = *speed.iter().max().unwrap();
-    let mut max_speed_idxs = Vec::new();
-    for (i, &speed) in speed.iter().enumerate() {
-        if speed == max_speed {
-            max_speed_idxs.push(i);
-        }
-    }
+    let mut max_speed_idxs = (0..travel_time.len()).collect::<Vec<_>>();
+    max_speed_idxs.sort_unstable_by_key(|&idx| if travel_time[idx] == 0 { 0 } else { distance[idx] * 36 / travel_time[idx] });
+    max_speed_idxs.reverse();
+    max_speed_idxs.resize(std::cmp::min(100000, max_speed_idxs.len()), 0);
 
     let mut exps_ctxt = push_collection_context("experiments".to_string());
 
