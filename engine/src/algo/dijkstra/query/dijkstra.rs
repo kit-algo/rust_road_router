@@ -1,4 +1,5 @@
 use super::*;
+use crate::report::*;
 
 #[derive(Debug)]
 pub struct Server<Graph: for<'a> LinkIterGraph<'a>> {
@@ -13,6 +14,8 @@ impl<Graph: for<'a> LinkIterGraph<'a>> Server<Graph> {
     }
 
     fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
+        report!("algo", "Dijkstra Query");
+
         self.dijkstra.initialize_query(Query { from, to });
 
         loop {

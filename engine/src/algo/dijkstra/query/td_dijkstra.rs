@@ -1,6 +1,7 @@
 use super::*;
 use crate::algo::dijkstra::td_stepped_dijkstra::TDSteppedDijkstra;
 use crate::datastr::graph::time_dependent::*;
+use crate::report::*;
 
 #[derive(Debug)]
 pub struct Server {
@@ -15,6 +16,8 @@ impl Server {
     }
 
     fn distance(&mut self, from: NodeId, to: NodeId, departure: Timestamp) -> Option<Weight> {
+        report!("algo", "TD Dijkstra Query");
+
         self.dijkstra.initialize_query(TDQuery { from, to, departure });
 
         loop {
