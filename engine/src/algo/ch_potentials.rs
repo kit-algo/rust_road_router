@@ -56,10 +56,10 @@ impl<'a> Potential for CCHPotential<'a> {
 
     fn potential(&mut self, node: NodeId) -> Option<u32> {
         let node = self.cch.node_order().rank(node);
-        self.num_pot_evals += 1;
 
         let mut cur_node = node;
         while self.potentials[cur_node as usize].value().is_none() {
+            self.num_pot_evals += 1;
             self.stack.push(cur_node);
             if let Some(parent) = self.backward_elimination_tree.parent(cur_node).value() {
                 cur_node = parent;
@@ -118,14 +118,16 @@ impl CHPotential {
         forward: &OwnedGraph,
         backward: &SteppedDijkstra<OwnedGraph>,
         node: NodeId,
+        num_pot_evals: &mut usize,
     ) -> Weight {
         if let Some(pot) = potentials[node as usize].value() {
             return pot;
         }
+        *num_pot_evals += 1;
 
         let min_by_up = forward
             .neighbor_iter(node)
-            .map(|edge| edge.weight + Self::potential_internal(potentials, forward, backward, edge.node))
+            .map(|edge| edge.weight + Self::potential_internal(potentials, forward, backward, edge.node, num_pot_evals))
             .min()
             .unwrap_or(INFINITY);
 
@@ -148,9 +150,8 @@ impl Potential for CHPotential {
 
     fn potential(&mut self, node: NodeId) -> Option<Weight> {
         let node = self.order.rank(node);
-        self.num_pot_evals += 1;
 
-        let dist = Self::potential_internal(&mut self.potentials, &self.forward, &self.backward_dijkstra, node);
+        let dist = Self::potential_internal(&mut self.potentials, &self.forward, &self.backward_dijkstra, node, &mut self.num_pot_evals);
 
         if dist < INFINITY {
             Some(dist)

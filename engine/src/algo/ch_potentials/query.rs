@@ -43,6 +43,8 @@ impl<P: Potential> Server<P> {
             );
         };
         let mut num_queue_pops = 0;
+        let mut num_queue_pushs = 0;
+        let mut prev_queue_size = 1;
 
         self.forward_dijkstra.initialize_query(Query { from, to });
         self.potential.init(to);
@@ -59,6 +61,8 @@ impl<P: Potential> Server<P> {
             }) {
                 QueryProgress::Settled(State { node: _node, .. }) => {
                     num_queue_pops += 1;
+                    num_queue_pushs += forward_dijkstra.queue().len() + 1 - prev_queue_size;
+                    prev_queue_size = forward_dijkstra.queue().len();
                     #[cfg(feature = "chpot_visualize")]
                     {
                         let node_id = self.order.node(_node) as usize;
@@ -76,6 +80,7 @@ impl<P: Potential> Server<P> {
                 }
                 QueryProgress::Done(result) => {
                     report!("num_queue_pops", num_queue_pops);
+                    report!("num_queue_pushs", num_queue_pushs);
                     report!("num_pot_evals", potential.num_pot_evals());
                     report!("num_relaxed_arcs", self.forward_dijkstra.num_relaxed_arcs());
                     return result;

@@ -293,4 +293,8 @@ impl TDTopoDijkstra {
     pub fn num_relaxed_arcs(&self) -> usize {
         self.num_relaxed_arcs
     }
+
+    pub fn queue(&self) -> &IndexdMinHeap<State<Weight>> {
+        &self.closest_node_priority_queue
+    }
 }
