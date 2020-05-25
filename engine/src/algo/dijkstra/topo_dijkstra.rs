@@ -10,7 +10,6 @@ pub struct TopoDijkstra {
     reversed: OwnedGraph,
     virtual_topocore: VirtualTopocore,
     visited: FastClearBitVec,
-    border_nodes: FastClearBitVec,
     distances: TimestampedVector<Weight>,
     predecessors: Vec<NodeId>,
     closest_node_priority_queue: IndexdMinHeap<State<Weight>>,
@@ -19,6 +18,7 @@ pub struct TopoDijkstra {
     // first option: algorithm finished? second option: final result of algorithm
     #[allow(clippy::option_option)]
     result: Option<Option<Weight>>,
+    border_node: NodeId,
     num_relaxed_arcs: usize,
 }
 
@@ -42,7 +42,6 @@ impl TopoDijkstra {
             reversed,
             virtual_topocore,
             visited: FastClearBitVec::new(n),
-            border_nodes: FastClearBitVec::new(n),
             // initialize tentative distances to INFINITY
             distances: TimestampedVector::new(n, INFINITY),
             predecessors: vec![n as NodeId; n],
@@ -50,6 +49,7 @@ impl TopoDijkstra {
             query: None,
             result: None,
             num_relaxed_arcs: 0,
+            border_node: 0,
         }
     }
 
@@ -67,14 +67,14 @@ impl TopoDijkstra {
 
         self.closest_node_priority_queue.push(State { distance: 0, node: from });
 
-        self.border_nodes.clear();
         let border = self.border(query.to);
-        for &border_node in &border {
-            self.border_nodes.set(border_node as usize);
-        }
-        if border.is_empty() {
+        if let Some(border_node) = border {
+            self.border_node = border_node;
+        } else {
             self.result = Some(None);
+            return;
         }
+
         if self.in_core(query.to) {
             let mut counter = 0;
             self.visited.clear();
@@ -113,13 +113,20 @@ impl TopoDijkstra {
         }
     }
 
-    fn border(&mut self, node: NodeId) -> Vec<NodeId> {
-        let mut border = Vec::new();
+    fn border(&mut self, node: NodeId) -> Option<NodeId> {
+        let mut border = None;
         self.visited.clear();
         let virtual_topocore = &self.virtual_topocore;
-        Self::dfs(&self.reversed, node, &mut self.visited, &mut |node| border.push(node), &mut |node| {
-            virtual_topocore.node_type(node).in_core()
-        });
+        Self::dfs(
+            &self.reversed,
+            node,
+            &mut self.visited,
+            &mut |node| {
+                let prev = border.replace(node);
+                debug_assert_eq!(prev, None);
+            },
+            &mut |node| virtual_topocore.node_type(node).in_core(),
+        );
         border
     }
 
@@ -140,8 +147,17 @@ impl TopoDijkstra {
     fn settle_next_node(&mut self, mut potential: impl FnMut(NodeId) -> Option<Weight>) -> QueryProgress<Weight> {
         let to = self.query.as_ref().expect("query was not initialized properly").to;
 
+        let mut next_node = None;
+
+        while let Some(State { node, distance: dist_with_pot }) = self.closest_node_priority_queue.pop() {
+            if !(dist_with_pot > self.distances[self.border_node as usize] + potential(self.border_node).unwrap() && self.in_core(node)) {
+                next_node = Some(State { node, distance: dist_with_pot });
+                break;
+            }
+        }
+
         // Examine the frontier with lower distance nodes first (min-heap)
-        if let Some(State { node, distance: dist_with_pot }) = self.closest_node_priority_queue.pop() {
+        if let Some(State { node, distance: dist_with_pot }) = next_node {
             let distance = self.distances[node as usize];
 
             if node == to {
@@ -169,7 +185,7 @@ impl TopoDijkstra {
                 {
                     self.num_relaxed_arcs += 1;
 
-                    if (cfg!(feature = "chpot-no-scc") || self.in_core(next_node) || !self.in_core(prev_node) || self.border_nodes.get(prev_node as usize))
+                    if (cfg!(feature = "chpot-no-scc") || self.in_core(next_node) || !self.in_core(prev_node) || self.border_node == prev_node)
                         && next_distance < self.distances[next_node as usize]
                     {
                         let mut next_edge = None;
