@@ -153,7 +153,9 @@ impl TDTopoDijkstra {
         let mut next_node = None;
 
         while let Some(State { node, distance: dist_with_pot }) = self.closest_node_priority_queue.pop() {
-            if !(dist_with_pot > self.distances[self.border_node as usize] + potential(self.border_node).unwrap() && self.in_core(node)) {
+            if !(dist_with_pot > self.distances[self.border_node as usize] + potential(self.virtual_topocore.order.node(self.border_node)).unwrap()
+                && self.in_core(node))
+            {
                 next_node = Some(State { node, distance: dist_with_pot });
                 break;
             }
@@ -278,7 +280,10 @@ impl TDTopoDijkstra {
                 }
             }
 
-            QueryProgress::Settled(State { distance, node })
+            QueryProgress::Settled(State {
+                distance,
+                node: self.virtual_topocore.order.node(node),
+            })
         } else {
             self.result = Some(None);
             QueryProgress::Done(None)
