@@ -1,9 +1,10 @@
 #[macro_use]
 extern crate bmw_routing_engine;
+#[cfg(feature = "chpot-cch")]
+use bmw_routing_engine::algo::customizable_contraction_hierarchy::*;
 use bmw_routing_engine::{
     algo::{
         ch_potentials::{query::Server as TopoServer, *},
-        customizable_contraction_hierarchy::*,
         dijkstra::query::dijkstra::Server as DijkServer,
         *,
     },

@@ -1,7 +1,8 @@
+#[cfg(feature = "chpot-cch")]
+use crate::algo::customizable_contraction_hierarchy::*;
 use crate::{
     algo::{
         ch_potentials::{query::Server as TopoServer, *},
-        customizable_contraction_hierarchy::*,
         dijkstra::query::dijkstra::Server as DijkServer,
         *,
     },

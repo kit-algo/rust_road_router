@@ -3,10 +3,11 @@
 use std::{env, error::Error, path::Path};
 #[macro_use]
 extern crate bmw_routing_engine;
+#[cfg(feature = "chpot-cch")]
+use bmw_routing_engine::algo::customizable_contraction_hierarchy::*;
 use bmw_routing_engine::{
     algo::{
         ch_potentials::{td_query::Server, *},
-        customizable_contraction_hierarchy::*,
         dijkstra::query::td_dijkstra::Server as DijkServer,
         *,
     },
