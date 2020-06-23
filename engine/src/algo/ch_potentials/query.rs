@@ -63,9 +63,13 @@ impl<P: Potential> Server<P> {
                     num_queue_pops += 1;
                     num_queue_pushs += forward_dijkstra.queue().len() + 1 - prev_queue_size;
                     prev_queue_size = forward_dijkstra.queue().len();
+                    #[cfg(feature = "chpot-print-node-order")]
+                    {
+                        println!("{}", _node);
+                    }
                     #[cfg(feature = "chpot_visualize")]
                     {
-                        let node_id = self.order.node(_node) as usize;
+                        let node_id = _node as usize;
                         println!(
                             "var marker = L.marker([{}, {}], {{ icon: blueIcon }}).addTo(map);",
                             self.lat[node_id], self.lng[node_id]
