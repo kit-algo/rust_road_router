@@ -49,7 +49,7 @@ impl Ord for NonNan {
 /// Util function to chain unchainable function calls.
 ///
 /// ```
-/// # use bmw_routing_engine::util::TapOps;
+/// # use rust_road_router::util::TapOps;
 /// assert_eq!(vec![2,7,4].tap(|slf| slf.sort()).tap(|slf| slf.pop()), vec![2,4]);
 /// ```
 pub trait TapOps: Sized {

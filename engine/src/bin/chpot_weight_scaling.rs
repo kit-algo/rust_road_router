@@ -1,6 +1,6 @@
 #[macro_use]
-extern crate bmw_routing_engine;
-use bmw_routing_engine::{cli::CliErr, datastr::graph::*, report::*};
+extern crate rust_road_router;
+use rust_road_router::{cli::CliErr, datastr::graph::*, report::*};
 use std::{env, error::Error, path::Path};
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -26,7 +26,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         report!("experiment", "weight_scale");
         report!("factor", factor);
 
-        bmw_routing_engine::experiments::chpot::run(path, |_graph, _rng, travel_time| {
+        rust_road_router::experiments::chpot::run(path, |_graph, _rng, travel_time| {
             for weight in travel_time.iter_mut() {
                 *weight = (*weight as f64 * factor) as Weight;
             }

@@ -2,7 +2,7 @@
 
 use std::{env, error::Error};
 
-use bmw_routing_engine::{cli::CliErr, datastr::node_order::NodeOrder, io::*};
+use rust_road_router::{cli::CliErr, datastr::node_order::NodeOrder, io::*};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args();

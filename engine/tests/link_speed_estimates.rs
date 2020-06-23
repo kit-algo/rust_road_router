@@ -1,6 +1,6 @@
-extern crate bmw_routing_engine;
+extern crate rust_road_router;
 
-use bmw_routing_engine::link_speed_estimates::*;
+use rust_road_router::link_speed_estimates::*;
 
 #[test]
 fn check_for_empty_errors() {

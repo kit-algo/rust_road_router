@@ -7,7 +7,7 @@
 //! # Examples
 //!
 //! ```
-//! use bmw_routing_engine::datastr::index_heap::{Indexing, IndexdMinHeap};
+//! use rust_road_router::datastr::index_heap::{Indexing, IndexdMinHeap};
 //!
 //! #[derive(Copy, Clone, Eq, PartialEq, Debug, Ord, PartialOrd)]
 //! pub struct State {

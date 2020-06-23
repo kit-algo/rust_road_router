@@ -1,7 +1,7 @@
 [package]
-name = "bmw_routing_engine"
+name = "rust_road_router"
 version = "0.1.0"
-authors = ["Tim 'S.D.Eagle' Zeitz <dev.tim.zeitz@gmail.com>"]
+authors = ["Tim 'tim3z' Zeitz <dev.tim.zeitz@gmail.com>"]
 edition = "2018"
 build = "build.rs"
 

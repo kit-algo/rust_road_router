@@ -1,6 +1,6 @@
 // Utility to gather some stats over CATCHUp customization output.
 
-use bmw_routing_engine::{cli::CliErr, io::*};
+use rust_road_router::{cli::CliErr, io::*};
 use std::{env, error::Error, path::Path};
 
 fn main() -> Result<(), Box<dyn Error>> {

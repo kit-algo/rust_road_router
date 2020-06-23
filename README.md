@@ -1,4 +1,5 @@
-This workspace contains all the code related to the routing engine created during the BMW - KIT project.
+# Rust routing framework and toolkit
+
 There are two crates.
 The engine which is a library containing several routing algorithms and utilities for working with routing data.
 The server crate builds on the engine library and provides and HTTP interface for answering routing queries.

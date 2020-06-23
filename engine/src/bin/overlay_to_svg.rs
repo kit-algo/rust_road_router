@@ -4,7 +4,7 @@
 
 use std::{env, error::Error, path::Path};
 
-use bmw_routing_engine::{
+use rust_road_router::{
     algo::contraction_hierarchy,
     cli::CliErr,
     datastr::{graph::*, node_order::*},

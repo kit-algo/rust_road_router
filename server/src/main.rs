@@ -22,7 +22,7 @@ use rocket_contrib::json::Json;
 
 use kdtree::kdtree::{Kdtree, KdtreePointTrait};
 
-use bmw_routing_engine::{
+use rust_road_router::{
     algo::{
         customizable_contraction_hierarchy::{contract, customize as cch_customize, query::Server, CCHReordering},
         *,

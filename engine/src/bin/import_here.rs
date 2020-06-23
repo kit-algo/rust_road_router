@@ -2,7 +2,7 @@
 
 use std::{env, error::Error, path::Path, str::FromStr};
 
-use bmw_routing_engine::{
+use rust_road_router::{
     cli::CliErr,
     import::here::{csv_source::CSVSource, read_graph},
     io::*,

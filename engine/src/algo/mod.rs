@@ -36,7 +36,7 @@ pub struct TDQuery<T: Copy> {
 /// This works fine:
 ///
 /// ```
-/// # use bmw_routing_engine::algo::*;
+/// # use rust_road_router::algo::*;
 /// fn fine(mut server: impl for<'s> QueryServer<'s>) {
 ///     let mut result = server.query(Query { from: 0, to: 1 }).unwrap();
 ///     dbg!(result.distance());
@@ -51,7 +51,7 @@ pub struct TDQuery<T: Copy> {
 /// This will fail to compile:
 ///
 /// ```compile_fail
-/// # use bmw_routing_engine::algo::*;
+/// # use rust_road_router::algo::*;
 /// fn fine(mut server: impl for<'s> QueryServer<'s>) {
 ///     let mut result = server.query(Query { from: 0, to: 1 }).unwrap();
 ///     dbg!(result.distance());

@@ -4,8 +4,8 @@
 use std::{env, error::Error, path::Path};
 
 #[macro_use]
-extern crate bmw_routing_engine;
-use bmw_routing_engine::{
+extern crate rust_road_router;
+use rust_road_router::{
     algo::{catchup::Server, customizable_contraction_hierarchy::*, *},
     cli::CliErr,
     datastr::{

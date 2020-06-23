@@ -1,8 +1,8 @@
 #[macro_use]
-extern crate bmw_routing_engine;
+extern crate rust_road_router;
 #[cfg(feature = "chpot-cch")]
-use bmw_routing_engine::algo::customizable_contraction_hierarchy::*;
-use bmw_routing_engine::{
+use rust_road_router::algo::customizable_contraction_hierarchy::*;
+use rust_road_router::{
     algo::{
         ch_potentials::{query::Server as TopoServer, *},
         dijkstra::query::dijkstra::Server as DijkServer,
@@ -138,7 +138,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut total_query_time = Duration::zero();
 
     let n = exp_graph.num_nodes();
-    for _i in 0..bmw_routing_engine::experiments::chpot::NUM_QUERIES {
+    for _i in 0..rust_road_router::experiments::chpot::NUM_QUERIES {
         let _query_ctxt = algo_runs_ctxt.push_collection_item();
         let from: NodeId = rng.gen_range(0, n as NodeId);
         let to: NodeId = rng.gen_range(0, n as NodeId);
@@ -164,7 +164,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut server = DijkServer::new(exp_graph);
 
-    for _i in 0..bmw_routing_engine::experiments::NUM_DIJKSTRA_QUERIES {
+    for _i in 0..rust_road_router::experiments::NUM_DIJKSTRA_QUERIES {
         let _query_ctxt = algo_runs_ctxt.push_collection_item();
         let from: NodeId = rng.gen_range(0, n as NodeId);
         let to: NodeId = rng.gen_range(0, n as NodeId);

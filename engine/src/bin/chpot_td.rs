@@ -2,10 +2,10 @@
 
 use std::{env, error::Error, path::Path};
 #[macro_use]
-extern crate bmw_routing_engine;
+extern crate rust_road_router;
 #[cfg(feature = "chpot-cch")]
-use bmw_routing_engine::algo::customizable_contraction_hierarchy::*;
-use bmw_routing_engine::{
+use rust_road_router::algo::customizable_contraction_hierarchy::*;
+use rust_road_router::{
     algo::{
         ch_potentials::{td_query::Server, *},
         dijkstra::query::td_dijkstra::Server as DijkServer,
@@ -117,7 +117,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let at = Vec::<u32>::load_from(path.join("source_time"))?;
         let to = Vec::load_from(path.join("target_node"))?;
 
-        let num_queries = bmw_routing_engine::experiments::chpot::NUM_QUERIES;
+        let num_queries = rust_road_router::experiments::chpot::NUM_QUERIES;
 
         let mut astar_time = Duration::zero();
 
@@ -133,7 +133,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         eprintln!("A* {}", astar_time / (num_queries as i32));
 
-        let num_queries = bmw_routing_engine::experiments::NUM_DIJKSTRA_QUERIES;
+        let num_queries = rust_road_router::experiments::NUM_DIJKSTRA_QUERIES;
 
         let mut server = DijkServer::new(graph);
 

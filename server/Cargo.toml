@@ -1,11 +1,11 @@
 [package]
-name = "bmw_routing_server"
+name = "server"
 version = "0.1.0"
 authors = ["Tim \"S.D.Eagle\" Zeitz <dev.tim.zeitz@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-bmw_routing_engine = { path = "../engine" }
+rust_road_router = { path = "../engine" }
 rocket = "^0.4.0"
 serde = "^1.0.5"
 serde_derive = "^1.0.5"

@@ -1,6 +1,6 @@
 // Plot a subgraph within given geographic boundaries to a SVG.
 
-use bmw_routing_engine::{cli::CliErr, datastr::graph::*, io::*};
+use rust_road_router::{cli::CliErr, datastr::graph::*, io::*};
 use std::{env, error::Error, path::Path};
 
 fn main() -> Result<(), Box<dyn Error>> {

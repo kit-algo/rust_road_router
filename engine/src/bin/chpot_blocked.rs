@@ -1,6 +1,6 @@
 #[macro_use]
-extern crate bmw_routing_engine;
-use bmw_routing_engine::{cli::CliErr, datastr::graph::*, io::*, report::*};
+extern crate rust_road_router;
+use rust_road_router::{cli::CliErr, datastr::graph::*, io::*, report::*};
 use std::{env, error::Error, path::Path};
 
 const TUNNEL_BIT: u8 = 1;
@@ -26,7 +26,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let _exp_ctx = exps_ctxt.push_collection_item();
         report!("experiment", "no_tunnels");
 
-        bmw_routing_engine::experiments::chpot::run(path, |_graph, _rng, travel_time| {
+        rust_road_router::experiments::chpot::run(path, |_graph, _rng, travel_time| {
             for (weight, &category) in travel_time.iter_mut().zip(arc_category.iter()) {
                 if (category & TUNNEL_BIT) != 0 {
                     *weight = INFINITY;
@@ -41,7 +41,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let _exp_ctx = exps_ctxt.push_collection_item();
         report!("experiment", "no_highways");
 
-        bmw_routing_engine::experiments::chpot::run(path, |_graph, _rng, travel_time| {
+        rust_road_router::experiments::chpot::run(path, |_graph, _rng, travel_time| {
             for (weight, &category) in travel_time.iter_mut().zip(arc_category.iter()) {
                 if (category & FREEWAY_BIT) != 0 {
                     *weight = INFINITY;

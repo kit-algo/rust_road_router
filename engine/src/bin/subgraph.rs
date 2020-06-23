@@ -1,6 +1,6 @@
 // Utility to extract a subgraph limited to a geographic bounding box.
 
-use bmw_routing_engine::{
+use rust_road_router::{
     cli::CliErr,
     datastr::{graph::*, rank_select_map::*},
     io::*,

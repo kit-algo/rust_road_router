@@ -1,7 +1,7 @@
 #[macro_use]
-extern crate bmw_routing_engine;
-use bmw_routing_engine::{cli::CliErr, datastr::graph::*, io::*, report::*};
+extern crate rust_road_router;
 use rand::seq::SliceRandom;
+use rust_road_router::{cli::CliErr, datastr::graph::*, io::*, report::*};
 use std::{env, error::Error, path::Path};
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -30,7 +30,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let _exp_ctx = exps_ctxt.push_collection_item();
         report!("experiment", "random_times_2");
 
-        bmw_routing_engine::experiments::chpot::run(path, |_graph, rng, travel_time| {
+        rust_road_router::experiments::chpot::run(path, |_graph, rng, travel_time| {
             for idx in rand::seq::index::sample(rng, travel_time.len(), 1000).iter() {
                 travel_time[idx] *= 2;
             }
@@ -43,7 +43,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let _exp_ctx = exps_ctxt.push_collection_item();
         report!("experiment", "random_times_10");
 
-        bmw_routing_engine::experiments::chpot::run(path, |_graph, rng, travel_time| {
+        rust_road_router::experiments::chpot::run(path, |_graph, rng, travel_time| {
             for idx in rand::seq::index::sample(rng, travel_time.len(), 1000).iter() {
                 travel_time[idx] *= 10;
             }
@@ -56,7 +56,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let _exp_ctx = exps_ctxt.push_collection_item();
         report!("experiment", "fastest_times_2");
 
-        bmw_routing_engine::experiments::chpot::run(path, |_graph, rng, travel_time| {
+        rust_road_router::experiments::chpot::run(path, |_graph, rng, travel_time| {
             max_speed_idxs.shuffle(rng);
             for &idx in max_speed_idxs.iter().take(1000) {
                 travel_time[idx] *= 2;
@@ -70,7 +70,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let _exp_ctx = exps_ctxt.push_collection_item();
         report!("experiment", "fastest_times_10");
 
-        bmw_routing_engine::experiments::chpot::run(path, |_graph, rng, travel_time| {
+        rust_road_router::experiments::chpot::run(path, |_graph, rng, travel_time| {
             max_speed_idxs.shuffle(rng);
             for &idx in max_speed_idxs.iter().take(1000) {
                 travel_time[idx] *= 10;

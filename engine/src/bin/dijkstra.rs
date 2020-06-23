@@ -1,6 +1,6 @@
 #[macro_use]
-extern crate bmw_routing_engine;
-use bmw_routing_engine::{algo::*, cli::CliErr, datastr::graph::*, io::*, report::*};
+extern crate rust_road_router;
+use rust_road_router::{algo::*, cli::CliErr, datastr::graph::*, io::*, report::*};
 use std::{env, error::Error, path::Path};
 
 use rand::prelude::*;
@@ -31,7 +31,7 @@ pub fn main() -> Result<(), Box<dyn Error>> {
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
 
-    let mut server = bmw_routing_engine::algo::dijkstra::query::dijkstra::Server::new(graph.clone());
+    let mut server = rust_road_router::algo::dijkstra::query::dijkstra::Server::new(graph.clone());
 
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[0]);

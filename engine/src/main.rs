@@ -1,6 +1,6 @@
 use std::{env, error::Error, path::Path, sync::Arc};
 
-use bmw_routing_engine::{
+use rust_road_router::{
     algo::{
         contraction_hierarchy::{self, query::Server as CHServer, ContractionHierarchy},
         dijkstra::query::{bidirectional_dijkstra::Server as BiDijkServer, dijkstra::Server as DijkServer},

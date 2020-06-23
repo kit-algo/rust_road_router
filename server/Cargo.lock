@@ -35,7 +35,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "bmw_routing_engine"
+name = "rust_road_router"
 version = "0.1.0"
 dependencies = [
  "csv 1.0.0-beta.5 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -46,10 +46,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "bmw_routing_server"
+name = "server"
 version = "0.1.0"
 dependencies = [
- "bmw_routing_engine 0.1.0",
+ "rust_road_router 0.1.0",
  "rocket 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "rocket_codegen 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "rocket_contrib 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)",

@@ -1,4 +1,4 @@
-use bmw_routing_engine::{algo::dijkstra::query::dijkstra::Server as DijkServer, cli::CliErr, datastr::graph::*, io::*};
+use rust_road_router::{algo::dijkstra::query::dijkstra::Server as DijkServer, cli::CliErr, datastr::graph::*, io::*};
 
 use std::{env, error::Error, path::Path};
 

@@ -8,7 +8,7 @@
 //! # Example
 //!
 //! ```no_run
-//! # use bmw_routing_engine::io::*;
+//! # use rust_road_router::io::*;
 //!
 //! let head = Vec::<u32>::load_from("head_file_name")?;
 //! let lat = Vec::<f32>::load_from("node_latitude_file_name")?;

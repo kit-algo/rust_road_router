@@ -15,8 +15,8 @@ RUN pacman -Sy --noconfirm rustup cmake gcc make intel-tbb; \
 RUN mkdir -p lib/InertialFlowCutter/build/ && cd lib/InertialFlowCutter/build/ && cmake -DCMAKE_BUILD_TYPE=Release -DUSE_KAHIP=OFF .. && make console && cd ../../..
 
 # Install any needed dependencies and compile
-RUN cargo build --release -p bmw_routing_engine --bin import_here
-RUN cargo build --release -p bmw_routing_server --bin bmw_routing_server
+RUN cargo build --release -p rust_road_router --bin import_here
+RUN cargo build --release -p server --bin server
 
 # Make port 80 available to the world outside this container
 EXPOSE 80
