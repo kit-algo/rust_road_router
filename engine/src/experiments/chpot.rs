@@ -129,7 +129,7 @@ pub fn run(
         let dist = res.as_ref().map(|res| res.distance());
         report!("result", dist);
         res.as_mut().map(|res| res.path());
-        report!("lower_bound", res.as_mut().map(|res| res.lower_bound(from)).flatten());
+        report!("lower_bound", res.as_mut().map(|res| res.data().lower_bound(from)).flatten());
 
         total_query_time = total_query_time + time;
     }

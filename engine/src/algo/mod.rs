@@ -98,7 +98,7 @@ where
     }
 
     /// Get reference to object which allows to access additional query specific data
-    pub fn data(&mut self) -> &P {
+    pub fn data(&mut self) -> &mut P {
         &mut self.path_server
     }
 }

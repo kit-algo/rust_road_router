@@ -119,7 +119,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let dist = res.as_ref().map(|res| res.distance());
             report!("result", dist);
             res.as_mut().map(|res| res.path());
-            report!("lower_bound", topocore.lower_bound(from));
+            report!("lower_bound", res.as_mut().map(|res| res.data().lower_bound(from)).flatten());
         });
     }
 
