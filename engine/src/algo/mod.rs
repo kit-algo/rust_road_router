@@ -96,6 +96,11 @@ where
     pub fn path(&mut self) -> Vec<P::NodeInfo> {
         self.path_server.path()
     }
+
+    /// Get reference to object which allows to access additional query specific data
+    pub fn data(&mut self) -> &P {
+        &mut self.path_server
+    }
 }
 
 /// Trait for query algorithm servers.

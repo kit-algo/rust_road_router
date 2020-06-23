@@ -106,19 +106,40 @@ impl<P: Potential> Server<P> {
 
         path
     }
-
-    pub fn lower_bound(&mut self, node: NodeId) -> Option<Weight> {
-        self.potential.potential(node)
-    }
 }
 
-pub struct PathServerWrapper<'s, P>(&'s Server<P>);
+pub struct PathServerWrapper<'s, P>(&'s mut Server<P>);
 
 impl<'s, P: Potential> PathServer for PathServerWrapper<'s, P> {
     type NodeInfo = NodeId;
 
     fn path(&mut self) -> Vec<Self::NodeInfo> {
         Server::path(self.0)
+    }
+}
+
+impl<'s, P: Potential> PathServerWrapper<'s, P> {
+    /// Print path with debug info as js to stdout.
+    pub fn debug_path(&mut self, lat: &[f32], lng: &[f32]) {
+        for node in self.path() {
+            println!(
+                "var marker = L.marker([{}, {}], {{ icon: blackIcon }}).addTo(map);",
+                lat[node as usize], lng[node as usize]
+            );
+            let dist = self.0.forward_dijkstra.tentative_distance(node);
+            let pot = self.lower_bound(node).unwrap_or(INFINITY);
+            println!(
+                "marker.bindPopup(\"id: {}<br>distance: {}<br>lower_bound: {}<br>sum: {}\");",
+                node,
+                dist / 1000,
+                pot / 1000,
+                (pot + dist) / 1000
+            );
+        }
+    }
+
+    pub fn lower_bound(&mut self, node: NodeId) -> Option<Weight> {
+        self.0.potential.potential(node)
     }
 }
 
