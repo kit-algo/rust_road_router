@@ -18,8 +18,8 @@
 <script type="text/javascript">
 var map = null;
 var current_event_idx = 0;
+var events = [];
 </script>
-<script src="events.js"></script>
 <script type="text/javascript">
 state = _.map(events, () => Object.create({}));
 
@@ -43,5 +43,6 @@ map.on('keypress', (event) => {
   }
 });
 </script>
+<script src="events.js"></script>
 </body>
 </html>

@@ -66,7 +66,7 @@ fn prepare_weights<Graph>(cch: &CCH, upward_weights: &mut [Weight], downward_wei
 where
     Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph + Sync,
 {
-    report_time("CCH apply weights", || {
+    report_time_with_key("CCH apply weights", "respecting", || {
         upward_weights
             .par_iter_mut()
             .zip(downward_weights.par_iter_mut())
@@ -86,7 +86,7 @@ fn prepare_weights_directed<Graph>(cch: &DirectedCCH, upward_weights: &mut [Weig
 where
     Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph + Sync,
 {
-    report_time("CCH apply weights", || {
+    report_time_with_key("CCH apply weights", "respecting", || {
         upward_weights
             .par_iter_mut()
             .zip(cch.forward_cch_edge_to_orig_arc.par_iter())
@@ -107,7 +107,7 @@ where
 }
 
 fn prepare_zero_weights(cch: &CCH, upward_weights: &mut [Weight], downward_weights: &mut [Weight]) {
-    report_time("CCH apply weights", || {
+    report_time_with_key("CCH apply weights", "respecting", || {
         upward_weights
             .par_iter_mut()
             .zip(downward_weights.par_iter_mut())
@@ -223,7 +223,7 @@ fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weig
     let customization = SeperatorBasedParallelCustomization::new(cch, customize, customize);
 
     // execute customization
-    report_time("CCH Customization", || {
+    report_time_with_key("CCH Customization", "basic_customization", || {
         customization.customize(&mut upward_weights, &mut downward_weights, |cb| {
             // create workspace vectors for the scope of the customization
             UPWARD_WORKSPACE.set(&RefCell::new(vec![INFINITY; n as usize]), || {
@@ -371,7 +371,7 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
     let customization = SeperatorBasedParallelDirectedCustomization::new(cch, customize, customize);
 
     // execute customization
-    report_time("CCH Customization", || {
+    report_time_with_key("CCH Customization", "basic_customization", || {
         customization.customize(&mut upward_weights, &mut downward_weights, |cb| {
             // create workspace vectors for the scope of the customization
             UPWARD_WORKSPACE.set(&RefCell::new(vec![INFINITY; n as usize]), || {

@@ -80,9 +80,9 @@ impl Graph {
     }
 
     /// Outgoing edge iterator
-    pub fn neighbor_and_edge_id_iter(&self, node: NodeId) -> impl Iterator<Item = (&NodeId, EdgeId)> {
+    pub fn neighbor_and_edge_id_iter(&self, node: NodeId) -> impl Iterator<Item = (NodeId, EdgeId)> + '_ {
         let range = self.neighbor_edge_indices_usize(node);
-        self.head[range].iter().zip(self.neighbor_edge_indices(node))
+        self.head[range].iter().cloned().zip(self.neighbor_edge_indices(node))
     }
 
     pub fn first_out(&self) -> &[EdgeId] {
@@ -137,6 +137,11 @@ impl GraphTrait for Graph {
 
     fn num_arcs(&self) -> usize {
         self.head.len()
+    }
+
+    fn degree(&self, node: NodeId) -> usize {
+        let node = node as usize;
+        (self.first_out[node + 1] - self.first_out[node]) as usize
     }
 }
 

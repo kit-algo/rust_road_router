@@ -1,8 +1,8 @@
 use super::*;
 use crate::datastr::node_order::NodeOrder;
 use crate::datastr::rank_select_map::*;
-use crate::util::in_range_option::InRangeOption;
-use crate::util::TapOps;
+use crate::report::*;
+use crate::util::{in_range_option::InRangeOption, Bool, TapOps};
 use std::cmp::{max, min};
 
 #[derive(Debug)]
@@ -14,31 +14,35 @@ pub struct Topocore {
 }
 
 #[derive(Debug)]
-struct UndirectedGraph<'a> {
-    ins: &'a [Vec<Link>],
-    outs: &'a [Vec<Link>],
+struct UndirectedGraph<'a, G, H> {
+    ins: &'a G,
+    outs: &'a H,
 }
 
-impl<'a> Graph for UndirectedGraph<'a> {
+impl<'a, G: Graph, H> Graph for UndirectedGraph<'a, G, H> {
     fn num_nodes(&self) -> usize {
-        self.ins.len()
+        self.ins.num_nodes()
     }
 
     fn num_arcs(&self) -> usize {
         unimplemented!()
     }
+
+    fn degree(&self, _node: NodeId) -> usize {
+        unimplemented!()
+    }
 }
 
-impl<'a, 'b> LinkIterGraph<'a> for UndirectedGraph<'b> {
-    type Iter = std::iter::Chain<std::iter::Cloned<std::slice::Iter<'a, Link>>, std::iter::Cloned<std::slice::Iter<'a, Link>>>;
+impl<'a, 'b, G: LinkIterGraph<'a>, H: LinkIterGraph<'a>> LinkIterGraph<'a> for UndirectedGraph<'b, G, H> {
+    type Iter = std::iter::Chain<G::Iter, H::Iter>;
 
     fn neighbor_iter(&'a self, node: NodeId) -> Self::Iter {
-        self.ins[node as usize].iter().cloned().chain(self.outs[node as usize].iter().cloned())
+        self.ins.neighbor_iter(node).chain(self.outs.neighbor_iter(node))
     }
 }
 
 #[allow(clippy::cognitive_complexity)]
-pub fn preprocess<'c, Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> Topocore {
+pub fn preprocess<'c, Graph: for<'a> LinkIterGraph<'a>, ReorderSCC: Bool, Deg1: Bool, Deg2: Bool, Deg3: Bool>(graph: &Graph) -> Topocore {
     let order = dfs_pre_order(graph);
 
     let n = graph.num_nodes();
@@ -81,110 +85,81 @@ pub fn preprocess<'c, Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> Topoco
         .collect();
 
     let mut to_contract = BitVec::new(n);
-    to_contract.set_all();
     let mut queue = Vec::new();
 
-    let biggest = biconnected(&UndirectedGraph {
-        ins: &ins[..],
-        outs: &outs[..],
-    })
-    .into_iter()
-    .max_by_key(|edges| edges.len())
-    .unwrap();
-    for (u, v) in biggest {
-        to_contract.unset(u as usize);
-        to_contract.unset(v as usize);
+    if ReorderSCC::VALUE {
+        to_contract.set_all();
+
+        let biggest = biconnected(&UndirectedGraph { ins: &reversed, outs: graph })
+            .into_iter()
+            .max_by_key(|edges| edges.len())
+            .unwrap();
+        for (u, v) in biggest {
+            to_contract.unset(order.rank(u) as usize);
+            to_contract.unset(order.rank(v) as usize);
+        }
     }
 
     let deg_zero_or_one = |node_outs: &Vec<Link>, node_ins: &Vec<Link>| {
         node_outs.is_empty() || node_ins.is_empty() || (node_outs.len() == 1 && node_ins.len() == 1 && node_outs[0].node == node_ins[0].node)
     };
 
-    for node in 0..n {
-        if !to_contract.get(node) {
-            outs[node].retain(|link| !to_contract.get(link.node as usize));
-            ins[node].retain(|link| !to_contract.get(link.node as usize));
-        }
-    }
-
-    for node in 0..n {
-        if !to_contract.get(node) {
-            for &Link { node: neighbor, .. } in outs[node].iter().chain(&ins[node]) {
-                debug_assert!(!to_contract.get(neighbor as usize));
-            }
-        }
-    }
-
-    for node in 0..n {
-        if deg_zero_or_one(&outs[node], &ins[node]) && !to_contract.get(node) {
-            to_contract.set(node);
-            queue.push(node);
-        }
-    }
-
-    while let Some(node) = queue.pop() {
-        for &Link { node: head, .. } in &outs[node] {
-            let head_ins = &mut ins[head as usize];
-            let pos = head_ins.iter().position(|&Link { node: tail, .. }| tail == node as NodeId).unwrap();
-            head_ins.swap_remove(pos);
-
-            if deg_zero_or_one(&outs[head as usize], head_ins) && !to_contract.get(head as usize) {
-                to_contract.set(head as usize);
-                queue.push(head as usize);
+    if Deg1::VALUE {
+        for node in 0..n {
+            if !to_contract.get(node) {
+                outs[node].retain(|link| !to_contract.get(link.node as usize));
+                ins[node].retain(|link| !to_contract.get(link.node as usize));
             }
         }
 
-        for &Link { node: head, .. } in &ins[node] {
-            let head_outs = &mut outs[head as usize];
-            let pos = head_outs.iter().position(|&Link { node: tail, .. }| tail == node as NodeId).unwrap();
-            head_outs.swap_remove(pos);
+        for node in 0..n {
+            if !to_contract.get(node) {
+                for &Link { node: neighbor, .. } in outs[node].iter().chain(&ins[node]) {
+                    debug_assert!(!to_contract.get(neighbor as usize));
+                }
+            }
+        }
 
-            if deg_zero_or_one(head_outs, &ins[head as usize]) && !to_contract.get(head as usize) {
-                to_contract.set(head as usize);
-                queue.push(head as usize);
+        for node in 0..n {
+            if deg_zero_or_one(&outs[node], &ins[node]) && !to_contract.get(node) {
+                to_contract.set(node);
+                queue.push(node);
+            }
+        }
+
+        while let Some(node) = queue.pop() {
+            for &Link { node: head, .. } in &outs[node] {
+                let head_ins = &mut ins[head as usize];
+                let pos = head_ins.iter().position(|&Link { node: tail, .. }| tail == node as NodeId).unwrap();
+                head_ins.swap_remove(pos);
+
+                if deg_zero_or_one(&outs[head as usize], head_ins) && !to_contract.get(head as usize) {
+                    to_contract.set(head as usize);
+                    queue.push(head as usize);
+                }
+            }
+
+            for &Link { node: head, .. } in &ins[node] {
+                let head_outs = &mut outs[head as usize];
+                let pos = head_outs.iter().position(|&Link { node: tail, .. }| tail == node as NodeId).unwrap();
+                head_outs.swap_remove(pos);
+
+                if deg_zero_or_one(head_outs, &ins[head as usize]) && !to_contract.get(head as usize) {
+                    to_contract.set(head as usize);
+                    queue.push(head as usize);
+                }
+            }
+        }
+
+        for node in 0..n {
+            if !to_contract.get(node) {
+                debug_assert!(!deg_zero_or_one(&outs[node], &ins[node]));
+                for &Link { node: neighbor, .. } in outs[node].iter().chain(&ins[node]) {
+                    debug_assert!(!to_contract.get(neighbor as usize));
+                }
             }
         }
     }
-
-    for node in 0..n {
-        if !to_contract.get(node) {
-            debug_assert!(!deg_zero_or_one(&outs[node], &ins[node]));
-            for &Link { node: neighbor, .. } in outs[node].iter().chain(&ins[node]) {
-                debug_assert!(!to_contract.get(neighbor as usize));
-            }
-        }
-    }
-
-    let deg_two = |node_outs: &Vec<Link>, node_ins: &Vec<Link>| match (&node_outs[..], &node_ins[..]) {
-        (&[_], &[_]) => true,
-        (&[Link { node: out_node, .. }], &[Link { node: in1, .. }, Link { node: in2, .. }]) => out_node == in1 || out_node == in2,
-        (&[Link { node: out1, .. }, Link { node: out2, .. }], &[Link { node: in_node, .. }]) => in_node == out1 || in_node == out2,
-        (&[Link { node: out1, .. }, Link { node: out2, .. }], &[Link { node: in1, .. }, Link { node: in2, .. }]) => {
-            max(out1, out2) == max(in1, in2) && min(out1, out2) == min(in1, in2)
-        }
-        _ => false,
-    };
-
-    let deg_two_neighbors = |node_outs: &Vec<Link>, node_ins: &Vec<Link>| match (&node_outs[..], &node_ins[..]) {
-        (&[Link { node: out_node, .. }], &[Link { node: in_node, .. }]) => (out_node, in_node),
-        (&[Link { node: _out_node, .. }], &[Link { node: in1, .. }, Link { node: in2, .. }]) => (in1, in2),
-        (&[Link { node: out1, .. }, Link { node: out2, .. }], &[Link { node: _in_node, .. }]) => (out1, out2),
-        (&[Link { node: out1, .. }, Link { node: out2, .. }], &[Link { node: _in1, .. }, Link { node: _in2, .. }]) => (max(out1, out2), min(out1, out2)),
-        _ => panic!("called neighbors on none deg 2 node"),
-    };
-
-    let deg_two_weights = |other: NodeId, node_outs: &Vec<Link>, node_ins: &Vec<Link>| {
-        (
-            node_outs
-                .iter()
-                .find(|&&Link { node: head, .. }| head == other)
-                .map(|&Link { weight, .. }| weight),
-            node_ins
-                .iter()
-                .find(|&&Link { node: head, .. }| head == other)
-                .map(|&Link { weight, .. }| weight),
-        )
-    };
 
     let insert_or_decrease = |links: &mut Vec<Link>, target: NodeId, weight: Weight| {
         if let Some(link) = links.iter_mut().find(|&&mut Link { node, .. }| node == target) {
@@ -194,170 +169,205 @@ pub fn preprocess<'c, Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> Topoco
         }
     };
 
-    for node in 0..n {
-        if !to_contract.get(node) && deg_two(&outs[node], &ins[node]) {
-            debug_assert!(!deg_zero_or_one(&outs[node], &ins[node]));
-            to_contract.set(node);
-
-            let mut prev = node;
-            let mut next = outs[node][0].node as usize;
-            while !deg_zero_or_one(&outs[next], &ins[next]) && deg_two(&outs[next as usize], &ins[next as usize]) && !to_contract.get(next) {
-                to_contract.set(next);
-                let (first, second) = deg_two_neighbors(&outs[next], &ins[next]);
-                if prev as NodeId == first {
-                    prev = next as usize;
-                    next = second as usize;
-                } else {
-                    prev = next as usize;
-                    next = first as usize;
-                }
+    if Deg2::VALUE {
+        let deg_two = |node_outs: &Vec<Link>, node_ins: &Vec<Link>| match (&node_outs[..], &node_ins[..]) {
+            (&[_], &[_]) => true,
+            (&[Link { node: out_node, .. }], &[Link { node: in1, .. }, Link { node: in2, .. }]) => out_node == in1 || out_node == in2,
+            (&[Link { node: out1, .. }, Link { node: out2, .. }], &[Link { node: in_node, .. }]) => in_node == out1 || in_node == out2,
+            (&[Link { node: out1, .. }, Link { node: out2, .. }], &[Link { node: in1, .. }, Link { node: in2, .. }]) => {
+                max(out1, out2) == max(in1, in2) && min(out1, out2) == min(in1, in2)
             }
+            _ => false,
+        };
 
-            debug_assert!(!deg_zero_or_one(&outs[next], &ins[next]));
-            debug_assert!(!to_contract.get(next)); // isolated cycle
+        let deg_two_neighbors = |node_outs: &Vec<Link>, node_ins: &Vec<Link>| match (&node_outs[..], &node_ins[..]) {
+            (&[Link { node: out_node, .. }], &[Link { node: in_node, .. }]) => (out_node, in_node),
+            (&[Link { node: _out_node, .. }], &[Link { node: in1, .. }, Link { node: in2, .. }]) => (in1, in2),
+            (&[Link { node: out1, .. }, Link { node: out2, .. }], &[Link { node: _in_node, .. }]) => (out1, out2),
+            (&[Link { node: out1, .. }, Link { node: out2, .. }], &[Link { node: _in1, .. }, Link { node: _in2, .. }]) => (max(out1, out2), min(out1, out2)),
+            _ => panic!("called neighbors on none deg 2 node"),
+        };
 
-            let end1 = next;
-            let end1_prev = prev;
-            std::mem::swap(&mut next, &mut prev);
+        let deg_two_weights = |other: NodeId, node_outs: &Vec<Link>, node_ins: &Vec<Link>| {
+            (
+                node_outs
+                    .iter()
+                    .find(|&&Link { node: head, .. }| head == other)
+                    .map(|&Link { weight, .. }| weight),
+                node_ins
+                    .iter()
+                    .find(|&&Link { node: head, .. }| head == other)
+                    .map(|&Link { weight, .. }| weight),
+            )
+        };
 
-            let (mut forward, mut backward) = deg_two_weights(next as NodeId, &outs[prev], &ins[prev]);
-
-            while !deg_zero_or_one(&outs[next], &ins[next]) && deg_two(&outs[next as usize], &ins[next as usize]) {
-                to_contract.set(next);
-                let (first, second) = deg_two_neighbors(&outs[next], &ins[next]);
-                if prev as NodeId == first {
-                    prev = next as usize;
-                    next = second as usize;
-                } else {
-                    prev = next as usize;
-                    next = first as usize;
-                }
-
-                let (next_forward, next_backward) = deg_two_weights(next as NodeId, &outs[prev], &ins[prev]);
-                forward = forward.and_then(|forward| next_forward.map(|next_forward| forward + next_forward));
-                backward = backward.and_then(|backward| next_backward.map(|next_backward| backward + next_backward));
-            }
-            let end2 = next;
-
-            if let Some(pos) = outs[end1].iter().position(|&Link { node: head, .. }| head == end1_prev as NodeId) {
-                outs[end1].swap_remove(pos);
-            }
-            debug_assert_eq!(outs[end1].iter().position(|&Link { node: head, .. }| head == end1_prev as NodeId), None);
-            if let Some(pos) = ins[end1].iter().position(|&Link { node: head, .. }| head == end1_prev as NodeId) {
-                ins[end1].swap_remove(pos);
-            }
-            debug_assert_eq!(ins[end1].iter().position(|&Link { node: head, .. }| head == end1_prev as NodeId), None);
-
-            if let Some(pos) = outs[next].iter().position(|&Link { node: head, .. }| head == prev as NodeId) {
-                outs[next].swap_remove(pos);
-            }
-            debug_assert_eq!(outs[next].iter().position(|&Link { node: head, .. }| head == prev as NodeId), None);
-            if let Some(pos) = ins[next].iter().position(|&Link { node: head, .. }| head == prev as NodeId) {
-                ins[next].swap_remove(pos);
-            }
-            debug_assert_eq!(ins[next].iter().position(|&Link { node: head, .. }| head == prev as NodeId), None);
-
-            if let Some(weight) = forward {
-                if end1 != end2 {
-                    insert_or_decrease(&mut outs[end1], end2 as NodeId, weight);
-                    insert_or_decrease(&mut ins[end2], end1 as NodeId, weight);
-                }
-            }
-            if let Some(weight) = backward {
-                if end1 != end2 {
-                    insert_or_decrease(&mut ins[end1], end2 as NodeId, weight);
-                    insert_or_decrease(&mut outs[end2], end1 as NodeId, weight);
-                }
-            }
-
-            debug_assert!(!to_contract.get(end1));
-            for &Link { node: neighbor, .. } in outs[end1].iter().chain(&ins[end1]) {
-                debug_assert!(
-                    !to_contract.get(neighbor as usize),
-                    "{} {} {} {} {} {}",
-                    end1,
-                    end1_prev,
-                    neighbor,
-                    end2,
-                    prev,
-                    node
-                );
-            }
-            debug_assert!(!to_contract.get(end2));
-            for &Link { node: neighbor, .. } in outs[end2].iter().chain(&ins[end2]) {
-                debug_assert!(!to_contract.get(neighbor as usize));
-            }
-        }
-    }
-
-    for node in 0..n {
-        if !to_contract.get(node) {
-            for &Link { node: neighbor, .. } in outs[node].iter().chain(&ins[node]) {
-                debug_assert!(!to_contract.get(neighbor as usize));
-            }
-        }
-    }
-
-    let neighborhood = |node_outs: &Vec<Link>, node_ins: &Vec<Link>| {
-        node_outs
-            .iter()
-            .chain(node_ins.iter())
-            .map(|&Link { node, .. }| node)
-            .collect::<Vec<_>>()
-            .tap(|neighborhood| neighborhood.sort())
-            .tap(|neighborhood| neighborhood.dedup())
-    };
-
-    for node in 0..n {
-        if !to_contract.get(node) {
-            let neighbors = neighborhood(&outs[node], &ins[node]);
-            if neighbors.len() == 3 && neighbors.iter().all(|&neighbor| !to_contract.get(neighbor as usize)) {
+        for node in 0..n {
+            if !to_contract.get(node) && deg_two(&outs[node], &ins[node]) {
+                debug_assert!(!deg_zero_or_one(&outs[node], &ins[node]));
                 to_contract.set(node);
-                queue.push(node);
-            }
-        }
-    }
 
-    while let Some(node) = queue.pop() {
-        let mut node_out = Vec::new();
-        let mut node_in = Vec::new();
-        std::mem::swap(&mut node_out, &mut outs[node]);
-        std::mem::swap(&mut node_in, &mut ins[node]);
+                let mut prev = node;
+                let mut next = outs[node][0].node as usize;
+                while !deg_zero_or_one(&outs[next], &ins[next]) && deg_two(&outs[next as usize], &ins[next as usize]) && !to_contract.get(next) {
+                    to_contract.set(next);
+                    let (first, second) = deg_two_neighbors(&outs[next], &ins[next]);
+                    if prev as NodeId == first {
+                        prev = next as usize;
+                        next = second as usize;
+                    } else {
+                        prev = next as usize;
+                        next = first as usize;
+                    }
+                }
 
-        for &Link { node: head, .. } in &node_out {
-            let pos = ins[head as usize].iter().position(|&Link { node: tail, .. }| tail == node as NodeId).unwrap();
-            ins[head as usize].swap_remove(pos);
-        }
-        for &Link { node: head, .. } in &node_in {
-            let pos = outs[head as usize].iter().position(|&Link { node: tail, .. }| tail == node as NodeId).unwrap();
-            outs[head as usize].swap_remove(pos);
-        }
+                debug_assert!(!deg_zero_or_one(&outs[next], &ins[next]));
+                debug_assert!(!to_contract.get(next)); // isolated cycle
 
-        for &Link {
-            node: head,
-            weight: first_weight,
-        } in &node_out
-        {
-            for &Link {
-                node: tail,
-                weight: second_weight,
-            } in &node_in
-            {
-                if head != tail {
-                    insert_or_decrease(&mut outs[tail as usize], head, first_weight + second_weight);
-                    insert_or_decrease(&mut ins[head as usize], tail, first_weight + second_weight);
+                let end1 = next;
+                let end1_prev = prev;
+                std::mem::swap(&mut next, &mut prev);
+
+                let (mut forward, mut backward) = deg_two_weights(next as NodeId, &outs[prev], &ins[prev]);
+
+                while !deg_zero_or_one(&outs[next], &ins[next]) && deg_two(&outs[next as usize], &ins[next as usize]) {
+                    to_contract.set(next);
+                    let (first, second) = deg_two_neighbors(&outs[next], &ins[next]);
+                    if prev as NodeId == first {
+                        prev = next as usize;
+                        next = second as usize;
+                    } else {
+                        prev = next as usize;
+                        next = first as usize;
+                    }
+
+                    let (next_forward, next_backward) = deg_two_weights(next as NodeId, &outs[prev], &ins[prev]);
+                    forward = forward.and_then(|forward| next_forward.map(|next_forward| forward + next_forward));
+                    backward = backward.and_then(|backward| next_backward.map(|next_backward| backward + next_backward));
+                }
+                let end2 = next;
+
+                if let Some(pos) = outs[end1].iter().position(|&Link { node: head, .. }| head == end1_prev as NodeId) {
+                    outs[end1].swap_remove(pos);
+                }
+                debug_assert_eq!(outs[end1].iter().position(|&Link { node: head, .. }| head == end1_prev as NodeId), None);
+                if let Some(pos) = ins[end1].iter().position(|&Link { node: head, .. }| head == end1_prev as NodeId) {
+                    ins[end1].swap_remove(pos);
+                }
+                debug_assert_eq!(ins[end1].iter().position(|&Link { node: head, .. }| head == end1_prev as NodeId), None);
+
+                if let Some(pos) = outs[next].iter().position(|&Link { node: head, .. }| head == prev as NodeId) {
+                    outs[next].swap_remove(pos);
+                }
+                debug_assert_eq!(outs[next].iter().position(|&Link { node: head, .. }| head == prev as NodeId), None);
+                if let Some(pos) = ins[next].iter().position(|&Link { node: head, .. }| head == prev as NodeId) {
+                    ins[next].swap_remove(pos);
+                }
+                debug_assert_eq!(ins[next].iter().position(|&Link { node: head, .. }| head == prev as NodeId), None);
+
+                if let Some(weight) = forward {
+                    if end1 != end2 {
+                        insert_or_decrease(&mut outs[end1], end2 as NodeId, weight);
+                        insert_or_decrease(&mut ins[end2], end1 as NodeId, weight);
+                    }
+                }
+                if let Some(weight) = backward {
+                    if end1 != end2 {
+                        insert_or_decrease(&mut ins[end1], end2 as NodeId, weight);
+                        insert_or_decrease(&mut outs[end2], end1 as NodeId, weight);
+                    }
+                }
+
+                debug_assert!(!to_contract.get(end1));
+                for &Link { node: neighbor, .. } in outs[end1].iter().chain(&ins[end1]) {
+                    debug_assert!(
+                        !to_contract.get(neighbor as usize),
+                        "{} {} {} {} {} {}",
+                        end1,
+                        end1_prev,
+                        neighbor,
+                        end2,
+                        prev,
+                        node
+                    );
+                }
+                debug_assert!(!to_contract.get(end2));
+                for &Link { node: neighbor, .. } in outs[end2].iter().chain(&ins[end2]) {
+                    debug_assert!(!to_contract.get(neighbor as usize));
                 }
             }
         }
 
-        std::mem::swap(&mut node_out, &mut outs[node]);
-        std::mem::swap(&mut node_in, &mut ins[node]);
+        for node in 0..n {
+            if !to_contract.get(node) {
+                for &Link { node: neighbor, .. } in outs[node].iter().chain(&ins[node]) {
+                    debug_assert!(!to_contract.get(neighbor as usize));
+                }
+            }
+        }
     }
 
-    for node in 0..n {
-        if !to_contract.get(node) {
-            for &Link { node: neighbor, .. } in outs[node].iter().chain(&ins[node]) {
-                debug_assert!(!to_contract.get(neighbor as usize));
+    if Deg3::VALUE {
+        let neighborhood = |node_outs: &Vec<Link>, node_ins: &Vec<Link>| {
+            node_outs
+                .iter()
+                .chain(node_ins.iter())
+                .map(|&Link { node, .. }| node)
+                .collect::<Vec<_>>()
+                .tap(|neighborhood| neighborhood.sort())
+                .tap(|neighborhood| neighborhood.dedup())
+        };
+
+        for node in 0..n {
+            if !to_contract.get(node) {
+                let neighbors = neighborhood(&outs[node], &ins[node]);
+                if neighbors.len() == 3 && neighbors.iter().all(|&neighbor| !to_contract.get(neighbor as usize)) {
+                    to_contract.set(node);
+                    queue.push(node);
+                }
+            }
+        }
+
+        while let Some(node) = queue.pop() {
+            let mut node_out = Vec::new();
+            let mut node_in = Vec::new();
+            std::mem::swap(&mut node_out, &mut outs[node]);
+            std::mem::swap(&mut node_in, &mut ins[node]);
+
+            for &Link { node: head, .. } in &node_out {
+                let pos = ins[head as usize].iter().position(|&Link { node: tail, .. }| tail == node as NodeId).unwrap();
+                ins[head as usize].swap_remove(pos);
+            }
+            for &Link { node: head, .. } in &node_in {
+                let pos = outs[head as usize].iter().position(|&Link { node: tail, .. }| tail == node as NodeId).unwrap();
+                outs[head as usize].swap_remove(pos);
+            }
+
+            for &Link {
+                node: head,
+                weight: first_weight,
+            } in &node_out
+            {
+                for &Link {
+                    node: tail,
+                    weight: second_weight,
+                } in &node_in
+                {
+                    if head != tail {
+                        insert_or_decrease(&mut outs[tail as usize], head, first_weight + second_weight);
+                        insert_or_decrease(&mut ins[head as usize], tail, first_weight + second_weight);
+                    }
+                }
+            }
+
+            std::mem::swap(&mut node_out, &mut outs[node]);
+            std::mem::swap(&mut node_in, &mut ins[node]);
+        }
+
+        for node in 0..n {
+            if !to_contract.get(node) {
+                for &Link { node: neighbor, .. } in outs[node].iter().chain(&ins[node]) {
+                    debug_assert!(!to_contract.get(neighbor as usize));
+                }
             }
         }
     }
@@ -414,6 +424,122 @@ pub fn preprocess<'c, Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> Topoco
         backward: OwnedGraph::new(backward_first_out, backward_head, backward_weight),
         order: new_order,
         core_size,
+    }
+}
+
+#[derive(Debug)]
+pub struct VirtualTopocore {
+    pub order: NodeOrder,
+    biggest_scc: usize,
+    deg2: usize,
+    deg3: usize,
+    symmetric_degrees: Vec<u8>,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum NodeType {
+    OtherSCC(u8),
+    Deg2OrLess,
+    Deg3,
+    Deg4OrMore,
+}
+
+impl NodeType {
+    #[inline]
+    pub fn in_core(&self) -> bool {
+        if let NodeType::OtherSCC(_) = self {
+            false
+        } else {
+            true
+        }
+    }
+}
+
+impl VirtualTopocore {
+    #[inline]
+    pub fn node_type(&self, node: NodeId) -> NodeType {
+        let node = node as usize;
+        if node < self.deg3 {
+            NodeType::Deg4OrMore
+        } else if node < self.deg2 {
+            NodeType::Deg3
+        } else if node < self.biggest_scc {
+            NodeType::Deg2OrLess
+        } else {
+            NodeType::OtherSCC(self.symmetric_degrees[node - self.biggest_scc])
+        }
+    }
+}
+
+#[allow(clippy::cognitive_complexity)]
+pub fn virtual_topocore<'c, Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph) -> VirtualTopocore {
+    let order = dfs_pre_order(graph);
+    let n = graph.num_nodes();
+
+    let reversed = graph.reverse();
+
+    let symmetric_degrees = (0..graph.num_nodes())
+        .map(|node| {
+            graph
+                .neighbor_iter(node as NodeId)
+                .chain(reversed.neighbor_iter(node as NodeId))
+                .filter(|l| l.weight < INFINITY)
+                .map(|l| l.node)
+                .collect::<Vec<NodeId>>()
+                .tap(|neighbors| neighbors.sort_unstable())
+                .tap(|neighbors| neighbors.dedup())
+                .len() as u8
+        })
+        .collect::<Vec<u8>>();
+
+    let biggest = biconnected(&UndirectedGraph { ins: &reversed, outs: graph })
+        .into_iter()
+        .max_by_key(|edges| edges.len())
+        .unwrap();
+
+    let mut biggest_scc = BitVec::new(n);
+    for (u, v) in biggest {
+        biggest_scc.set(u as usize);
+        biggest_scc.set(v as usize);
+    }
+
+    let mut new_order = Vec::with_capacity(n);
+
+    let mut biggest_scc_size = 0;
+
+    for &node in order.order() {
+        if biggest_scc.get(node as usize) {
+            new_order.push(node);
+            biggest_scc_size += 1;
+        }
+    }
+    new_order.sort_by(|&n1, &n2| {
+        if symmetric_degrees[n1 as usize] > 3 && symmetric_degrees[n2 as usize] > 3 {
+            std::cmp::Ordering::Equal
+        } else {
+            symmetric_degrees[n2 as usize].cmp(&symmetric_degrees[n1 as usize])
+        }
+    });
+    let mut other_sccs_symmetric_degrees = Vec::with_capacity(n - biggest_scc_size);
+    for &node in order.order() {
+        if !biggest_scc.get(node as usize) {
+            new_order.push(node);
+            other_sccs_symmetric_degrees.push(symmetric_degrees[node as usize]);
+        }
+    }
+    let deg3 = new_order.iter().position(|&node| symmetric_degrees[node as usize] < 4).unwrap_or(n as usize);
+    let deg2 = new_order.iter().position(|&node| symmetric_degrees[node as usize] < 3).unwrap_or(n as usize);
+
+    report!("biggest_scc_size", biggest_scc_size);
+    report!("deg2", deg2);
+    report!("deg3", deg3);
+
+    VirtualTopocore {
+        order: NodeOrder::from_node_order(new_order),
+        biggest_scc: biggest_scc_size,
+        deg3,
+        deg2,
+        symmetric_degrees: other_sccs_symmetric_degrees,
     }
 }
 

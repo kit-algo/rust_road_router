@@ -35,6 +35,7 @@ pub struct Link {
 pub trait Graph {
     fn num_nodes(&self) -> usize;
     fn num_arcs(&self) -> usize;
+    fn degree(&self, node: NodeId) -> usize;
 }
 
 /// Trait for graph data structures which allow iterating over outgoing links of a node.
@@ -83,6 +84,27 @@ pub trait LinkIterGraph<'a>: Graph {
         }
 
         (OwnedGraph::from_adjancecy_lists(up), OwnedGraph::from_adjancecy_lists(down))
+    }
+
+    /// Build an isomorph graph with node ids permutated according to the given order.
+    fn permute_node_ids(&'a self, order: &NodeOrder) -> OwnedGraph {
+        let mut first_out: Vec<EdgeId> = Vec::with_capacity(self.num_nodes() + 1);
+        first_out.push(0);
+        let mut head = Vec::with_capacity(self.num_arcs());
+        let mut weight = Vec::with_capacity(self.num_arcs());
+
+        for &node in order.order() {
+            first_out.push(first_out.last().unwrap() + self.degree(node) as NodeId);
+            let mut links = self.neighbor_iter(node).collect::<Vec<_>>();
+            links.sort_unstable_by_key(|l| order.rank(l.node));
+
+            for link in links {
+                head.push(order.rank(link.node));
+                weight.push(link.weight);
+            }
+        }
+
+        OwnedGraph::new(first_out, head, weight)
     }
 }
 
@@ -134,7 +156,7 @@ pub trait RandomLinkAccessGraph: Graph {
     /// Build the line graph (the turn expanded graph).
     /// The callback should return the turn costs between the two links
     /// with the given ids and `None` if the turn is forbidden.
-    fn line_graph(&self, turn_costs: impl Fn(EdgeId, EdgeId) -> Option<Weight>) -> OwnedGraph {
+    fn line_graph(&self, mut turn_costs: impl FnMut(EdgeId, EdgeId) -> Option<Weight>) -> OwnedGraph {
         let mut first_out = Vec::with_capacity(self.num_arcs() + 1);
         first_out.push(0);
         let mut head = Vec::new();

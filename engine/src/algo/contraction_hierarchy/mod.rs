@@ -326,6 +326,10 @@ impl<'a> Graph for ForwardWrapper<'a> {
     fn num_arcs(&self) -> usize {
         unimplemented!()
     }
+
+    fn degree(&self, _node: NodeId) -> usize {
+        unimplemented!()
+    }
 }
 
 impl<'a> Graph for BackwardWrapper<'a> {
@@ -334,6 +338,10 @@ impl<'a> Graph for BackwardWrapper<'a> {
     }
 
     fn num_arcs(&self) -> usize {
+        unimplemented!()
+    }
+
+    fn degree(&self, _node: NodeId) -> usize {
         unimplemented!()
     }
 }

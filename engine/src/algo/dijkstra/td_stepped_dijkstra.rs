@@ -40,7 +40,7 @@ impl TDSteppedDijkstra {
         self.closest_node_priority_queue.clear();
         self.distances.reset();
 
-        // Starte with origin
+        // Start with origin
         self.distances.set(from as usize, query.departure);
         self.closest_node_priority_queue.push(State {
             distance: query.departure,
@@ -48,14 +48,14 @@ impl TDSteppedDijkstra {
         });
     }
 
-    pub fn next_step<F: Fn(EdgeId) -> bool, G: FnMut(NodeId) -> Weight>(&mut self, check_edge: F, potential: G) -> QueryProgress<Weight> {
+    pub fn next_step<F: Fn(EdgeId) -> bool, G: FnMut(NodeId) -> Option<Weight>>(&mut self, check_edge: F, potential: G) -> QueryProgress<Weight> {
         match self.result {
             Some(result) => QueryProgress::Done(result),
             None => self.settle_next_node(check_edge, potential),
         }
     }
 
-    fn settle_next_node<F: Fn(EdgeId) -> bool, G: FnMut(NodeId) -> Weight>(&mut self, check_edge: F, mut potential: G) -> QueryProgress<Weight> {
+    fn settle_next_node<F: Fn(EdgeId) -> bool, G: FnMut(NodeId) -> Option<Weight>>(&mut self, check_edge: F, mut potential: G) -> QueryProgress<Weight> {
         let to = self.query().to;
 
         // Examine the frontier with lower distance nodes first (min-heap)
@@ -71,7 +71,7 @@ impl TDSteppedDijkstra {
 
             // For each node we can reach, see if we can find a way with
             // a lower distance going through this node
-            for (&neighbor, edge_id) in self.graph.neighbor_and_edge_id_iter(node) {
+            for (neighbor, edge_id) in self.graph.neighbor_and_edge_id_iter(node) {
                 if check_edge(edge_id) {
                     let plf = self.graph.travel_time_function(edge_id);
                     let next_distance = distance + plf.eval(distance);
@@ -80,14 +80,13 @@ impl TDSteppedDijkstra {
                         self.distances.set(neighbor as usize, next_distance);
                         self.predecessors[neighbor as usize] = node;
 
-                        let next = State {
-                            distance: next_distance + potential(neighbor),
-                            node: neighbor,
-                        };
-                        if self.closest_node_priority_queue.contains_index(next.as_index()) {
-                            self.closest_node_priority_queue.decrease_key(next);
-                        } else {
-                            self.closest_node_priority_queue.push(next);
+                        if let Some(key) = potential(neighbor).map(|p| next_distance + p) {
+                            let next = State { distance: key, node: neighbor };
+                            if self.closest_node_priority_queue.contains_index(next.as_index()) {
+                                self.closest_node_priority_queue.decrease_key(next);
+                            } else {
+                                self.closest_node_priority_queue.push(next);
+                            }
                         }
                     }
                 }

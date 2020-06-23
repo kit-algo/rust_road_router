@@ -1,9 +1,12 @@
 use super::*;
-use crate::{algo::dijkstra::topo_dijkstra::TopoDijkstra, report::*};
+
+use crate::algo::dijkstra::td_topo_dijkstra::TDTopoDijkstra;
+use crate::datastr::graph::time_dependent::*;
+use crate::report::*;
 
 #[derive(Debug)]
 pub struct Server<P> {
-    forward_dijkstra: TopoDijkstra,
+    forward_dijkstra: TDTopoDijkstra,
     potential: P,
 
     #[cfg(feature = "chpot_visualize")]
@@ -13,12 +16,9 @@ pub struct Server<P> {
 }
 
 impl<P: Potential> Server<P> {
-    pub fn new<Graph>(graph: Graph, potential: P, #[cfg(feature = "chpot_visualize")] lat: &[f32], #[cfg(feature = "chpot_visualize")] lng: &[f32]) -> Self
-    where
-        Graph: for<'b> LinkIterGraph<'b> + RandomLinkAccessGraph + Sync,
-    {
-        Server {
-            forward_dijkstra: report_time_with_key("TopoDijkstra preprocessing", "topo_dijk_prepro", || TopoDijkstra::new(graph)),
+    pub fn new(graph: TDGraph, potential: P, #[cfg(feature = "chpot_visualize")] lat: &[f32], #[cfg(feature = "chpot_visualize")] lng: &[f32]) -> Self {
+        Self {
+            forward_dijkstra: report_time_with_key("TDTopoDijkstra preprocessing", "topo_dijk_prepro", || TDTopoDijkstra::new(graph)),
             potential,
 
             #[cfg(feature = "chpot_visualize")]
@@ -28,8 +28,8 @@ impl<P: Potential> Server<P> {
         }
     }
 
-    fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
-        report!("algo", "CH Potentials Query");
+    fn distance(&mut self, from: NodeId, to: NodeId, departure: Timestamp) -> Option<Weight> {
+        report!("algo", "CH Potentials TD Query");
 
         #[cfg(feature = "chpot_visualize")]
         {
@@ -46,7 +46,7 @@ impl<P: Potential> Server<P> {
         let mut num_queue_pushs = 0;
         let mut prev_queue_size = 1;
 
-        self.forward_dijkstra.initialize_query(Query { from, to });
+        self.forward_dijkstra.initialize_query(TDQuery { from, to, departure });
         self.potential.init(to);
         let forward_dijkstra = &mut self.forward_dijkstra;
         let potential = &mut self.potential;
@@ -63,13 +63,9 @@ impl<P: Potential> Server<P> {
                     num_queue_pops += 1;
                     num_queue_pushs += forward_dijkstra.queue().len() + 1 - prev_queue_size;
                     prev_queue_size = forward_dijkstra.queue().len();
-                    #[cfg(feature = "chpot-print-node-order")]
-                    {
-                        println!("{}", _node);
-                    }
                     #[cfg(feature = "chpot_visualize")]
                     {
-                        let node_id = _node as usize;
+                        let node_id = self.order.node(_node) as usize;
                         println!(
                             "var marker = L.marker([{}, {}], {{ icon: blueIcon }}).addTo(map);",
                             self.lat[node_id], self.lng[node_id]
@@ -86,7 +82,7 @@ impl<P: Potential> Server<P> {
                     report!("num_queue_pops", num_queue_pops);
                     report!("num_queue_pushs", num_queue_pushs);
                     report!("num_pot_evals", potential.num_pot_evals());
-                    report!("num_relaxed_arcs", self.forward_dijkstra.num_relaxed_arcs());
+                    report!("num_relaxed_arcs", forward_dijkstra.num_relaxed_arcs());
                     return result;
                 }
             }
@@ -106,9 +102,13 @@ impl<P: Potential> Server<P> {
 
         path
     }
+
+    pub fn lower_bound(&mut self, node: NodeId) -> Option<Weight> {
+        self.potential.potential(node)
+    }
 }
 
-pub struct PathServerWrapper<'s, P>(&'s mut Server<P>);
+pub struct PathServerWrapper<'s, P>(&'s Server<P>);
 
 impl<'s, P: Potential> PathServer for PathServerWrapper<'s, P> {
     type NodeInfo = NodeId;
@@ -118,36 +118,11 @@ impl<'s, P: Potential> PathServer for PathServerWrapper<'s, P> {
     }
 }
 
-impl<'s, P: Potential> PathServerWrapper<'s, P> {
-    /// Print path with debug info as js to stdout.
-    pub fn debug_path(&mut self, lat: &[f32], lng: &[f32]) {
-        for node in self.path() {
-            println!(
-                "var marker = L.marker([{}, {}], {{ icon: blackIcon }}).addTo(map);",
-                lat[node as usize], lng[node as usize]
-            );
-            let dist = self.0.forward_dijkstra.tentative_distance(node);
-            let pot = self.lower_bound(node).unwrap_or(INFINITY);
-            println!(
-                "marker.bindPopup(\"id: {}<br>distance: {}<br>lower_bound: {}<br>sum: {}\");",
-                node,
-                dist / 1000,
-                pot / 1000,
-                (pot + dist) / 1000
-            );
-        }
-    }
-
-    pub fn lower_bound(&mut self, node: NodeId) -> Option<Weight> {
-        self.0.potential.potential(node)
-    }
-}
-
-impl<'s, P: Potential + 's> QueryServer<'s> for Server<P> {
+impl<'s, P: Potential + 's> TDQueryServer<'s, Timestamp, Weight> for Server<P> {
     type P = PathServerWrapper<'s, P>;
 
-    fn query(&'s mut self, query: Query) -> Option<QueryResult<Self::P, Weight>> {
-        self.distance(query.from, query.to)
+    fn query(&'s mut self, query: TDQuery<Timestamp>) -> Option<QueryResult<Self::P, Weight>> {
+        self.distance(query.from, query.to, query.departure)
             .map(move |distance| QueryResult::new(distance, PathServerWrapper(self)))
     }
 }

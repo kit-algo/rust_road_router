@@ -96,6 +96,7 @@ impl<'a, Graph: for<'b> LinkIterGraph<'b>> ContractionGraph<'a, Graph> {
                 let old_node_id = node_order.node(node);
                 let edges = graph
                     .neighbor_iter(old_node_id)
+                    .filter(|Link { node: neighbor, .. }| old_node_id != *neighbor)
                     .map(|Link { node: neighbor, .. }| {
                         debug_assert_ne!(old_node_id, neighbor);
                         node_order.rank(neighbor)

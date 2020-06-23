@@ -86,7 +86,7 @@ impl<'a> Server<'a> {
 
         loop {
             let active_edges = &self.active_edges;
-            match self.dijkstra.next_step(|edge_id| active_edges[edge_id as usize], |_| 0) {
+            match self.dijkstra.next_step(|edge_id| active_edges[edge_id as usize], |_| Some(0)) {
                 QueryProgress::Settled(_) => continue,
                 QueryProgress::Done(result) => return result,
             }

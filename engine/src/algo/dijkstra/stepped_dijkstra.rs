@@ -72,18 +72,18 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
     pub fn next_step(&mut self) -> QueryProgress<Weight> {
         match self.result {
             Some(result) => QueryProgress::Done(result),
-            None => self.settle_next_node(|_, dist| Some(dist)),
+            None => self.settle_next_node(|_| Some(0)),
         }
     }
 
-    pub fn next_step_with_potential(&mut self, potential: impl FnMut(NodeId, Weight) -> Option<Weight>) -> QueryProgress<Weight> {
+    pub fn next_step_with_potential(&mut self, potential: impl FnMut(NodeId) -> Option<Weight>) -> QueryProgress<Weight> {
         match self.result {
             Some(result) => QueryProgress::Done(result),
             None => self.settle_next_node(potential),
         }
     }
 
-    fn settle_next_node(&mut self, mut potential: impl FnMut(NodeId, Weight) -> Option<Weight>) -> QueryProgress<Weight> {
+    fn settle_next_node(&mut self, mut potential: impl FnMut(NodeId) -> Option<Weight>) -> QueryProgress<Weight> {
         let to = self.query.as_ref().expect("query was not initialized properly").to;
 
         // Examine the frontier with lower distance nodes first (min-heap)
@@ -110,9 +110,9 @@ impl<Graph: for<'a> LinkIterGraph<'a>> SteppedDijkstra<Graph> {
                     self.distances.set(edge.node as usize, next_distance);
                     self.predecessors[edge.node as usize] = node;
 
-                    if let Some(pot) = potential(edge.node, next_distance) {
+                    if let Some(key) = potential(edge.node).map(|pot| pot + next_distance) {
                         let next = State {
-                            distance: pot,
+                            distance: key,
                             node: edge.node,
                         };
                         if self.closest_node_priority_queue.contains_index(next.as_index()) {
