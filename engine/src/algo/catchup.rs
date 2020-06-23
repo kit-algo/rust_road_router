@@ -11,12 +11,12 @@ mod floating_td_stepped_elimination_tree;
 use floating_td_stepped_elimination_tree::{QueryProgress, *};
 
 use crate::algo::customizable_contraction_hierarchy::*;
-#[cfg(feature = "tdcch-query-detailed-timing")]
-use crate::benchmark::Timer;
 use crate::datastr::clearlist_vector::ClearlistVector;
 use crate::datastr::graph::floating_time_dependent::*;
 use crate::datastr::index_heap::{IndexdMinHeap, Indexing};
 use crate::datastr::rank_select_map::{BitVec, FastClearBitVec};
+#[cfg(feature = "tdcch-query-detailed-timing")]
+use crate::report::benchmark::Timer;
 
 /// Query server struct for CATCHUp.
 /// Implements the common query trait.
