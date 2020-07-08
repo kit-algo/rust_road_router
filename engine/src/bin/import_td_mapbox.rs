@@ -94,7 +94,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let mut profile: Vec<_> = tts
                         .windows(2)
                         .flat_map(|points| {
-                            if points[1].0 > points[0].1 && points[1].0 - points[0].1 > points[0].0 {
+                            if points[0].1 != points[1].1 && points[1].0 > points[0].1 && points[1].0 - points[0].1 > points[0].0 {
                                 vec![points[0], (points[1].0 - points[0].1, points[0].1)]
                             } else {
                                 vec![points[0]]
