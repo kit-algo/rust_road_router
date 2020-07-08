@@ -41,9 +41,11 @@ impl Graph {
                 }
                 new_ipp_departure_time.extend(ipp_departure_time[range.clone()].iter().cloned());
                 new_ipp_travel_time.extend(ipp_travel_time[range.clone()].iter().cloned());
-                new_ipp_departure_time.push(period());
-                new_ipp_travel_time.push(ipp_travel_time[range.start]);
-                added += 1;
+                if *new_ipp_departure_time.last().unwrap() != period() {
+                    new_ipp_departure_time.push(period());
+                    new_ipp_travel_time.push(ipp_travel_time[range.start]);
+                    added += 1;
+                }
             } else {
                 new_ipp_departure_time.push(0);
                 new_ipp_travel_time.push(ipp_travel_time[range.start]);
