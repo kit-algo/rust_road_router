@@ -18,10 +18,15 @@ use rust_road_router::{
     report::*,
 };
 
+use rand::prelude::*;
 use time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting();
+
+    let seed = Default::default();
+    report!("seed", seed);
+    let mut rng = StdRng::from_seed(seed);
 
     report!("program", "chpot_td");
     report!("start_time", format!("{}", time::now_utc().rfc822()));
@@ -42,6 +47,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     report!("unprocessed_graph", { "num_nodes": first_out.len() - 1, "num_arcs": head.len(), "num_ipps": ipp_departure_time.len() });
 
     let graph = TDGraph::new(first_out, head, first_ipp_of_arc, ipp_departure_time, ipp_travel_time);
+
+    let n = graph.num_nodes();
 
     report!("graph", { "num_nodes": graph.num_nodes(), "num_arcs": graph.num_arcs(), "num_ipps": graph.num_ipps(), "num_constant_ttfs": graph.num_constant() });
 
@@ -100,52 +107,48 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut server = Server::new(graph.clone(), potential);
     drop(virtual_topocore_ctxt);
 
-    let mut query_dir = None;
-    let mut base_dir = Some(path);
+    let num_queries = rust_road_router::experiments::chpot::NUM_QUERIES;
 
-    while let Some(base) = base_dir {
-        if base.join("uniform_queries").exists() {
-            query_dir = Some(base.join("uniform_queries"));
-            break;
-        } else {
-            base_dir = base.parent();
-        }
+    let mut astar_time = Duration::zero();
+
+    for _i in 0..num_queries {
+        let _query_ctxt = algo_runs_ctxt.push_collection_item();
+        let from: NodeId = rng.gen_range(0, n as NodeId);
+        let to: NodeId = rng.gen_range(0, n as NodeId);
+        let at: NodeId = rng.gen_range(0, period() as Timestamp);
+
+        report!("from", from);
+        report!("to", to);
+        report!("at", at);
+        let (ea, time) = measure(|| server.query(TDQuery { from, to, departure: at }).map(|res| res.distance()));
+        report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        report!("result", ea);
+        report!("lower_bound", server.lower_bound(from));
+        astar_time = astar_time + time;
     }
+    eprintln!("A* {}", astar_time / (num_queries as i32));
 
-    if let Some(path) = query_dir {
-        let from = Vec::load_from(path.join("source_node"))?;
-        let at = Vec::<u32>::load_from(path.join("source_time"))?;
-        let to = Vec::load_from(path.join("target_node"))?;
+    let num_queries = rust_road_router::experiments::NUM_DIJKSTRA_QUERIES;
 
-        let num_queries = rust_road_router::experiments::chpot::NUM_QUERIES;
+    let mut server = DijkServer::new(graph);
 
-        let mut astar_time = Duration::zero();
+    let mut dijkstra_time = Duration::zero();
 
-        for ((&from, &to), &at) in from.iter().zip(to.iter()).zip(at.iter()).take(num_queries) {
-            let _query_ctxt = algo_runs_ctxt.push_collection_item();
-            report!("from", from);
-            report!("to", to);
-            let (ea, time) = measure(|| server.query(TDQuery { from, to, departure: at }).map(|res| res.distance()));
-            report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-            report!("result", ea);
-            report!("lower_bound", server.lower_bound(from));
-            astar_time = astar_time + time;
-        }
-        eprintln!("A* {}", astar_time / (num_queries as i32));
+    for _i in 0..num_queries {
+        let _query_ctxt = algo_runs_ctxt.push_collection_item();
+        let from: NodeId = rng.gen_range(0, n as NodeId);
+        let to: NodeId = rng.gen_range(0, n as NodeId);
+        let at: NodeId = rng.gen_range(0, period() as Timestamp);
 
-        let num_queries = rust_road_router::experiments::NUM_DIJKSTRA_QUERIES;
-
-        let mut server = DijkServer::new(graph);
-
-        for ((&from, &to), &at) in from.iter().zip(to.iter()).zip(at.iter()).take(num_queries) {
-            let _query_ctxt = algo_runs_ctxt.push_collection_item();
-            report!("from", from);
-            report!("to", to);
-            let (ea, time) = measure(|| server.query(TDQuery { from, to, departure: at }).map(|res| res.distance()));
-            report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-            report!("result", ea);
-        }
+        report!("from", from);
+        report!("to", to);
+        report!("at", at);
+        let (ea, time) = measure(|| server.query(TDQuery { from, to, departure: at }).map(|res| res.distance()));
+        report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        report!("result", ea);
+        dijkstra_time = dijkstra_time + time;
     }
+    eprintln!("Dijk* {}", dijkstra_time / (num_queries as i32));
 
     Ok(())
 }
