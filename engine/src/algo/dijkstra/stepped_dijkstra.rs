@@ -11,7 +11,7 @@ pub struct Trash {
 }
 
 #[derive(Debug)]
-pub struct SteppedDijkstra<Graph: for<'a> LinkIterGraph<'a>> {
+pub struct SteppedDijkstra<Graph> {
     graph: Graph,
     distances: TimestampedVector<Weight>,
     predecessors: Vec<NodeId>,

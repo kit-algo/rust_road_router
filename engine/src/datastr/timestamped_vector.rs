@@ -7,7 +7,7 @@ use std::ops::{Index, IndexMut};
 /// The elements can be modified through the index traits.
 /// Other modifications are not permitted.
 #[derive(Debug)]
-pub struct TimestampedVector<T: Clone> {
+pub struct TimestampedVector<T> {
     data: Vec<T>,
     // timestamp for current iteration. Up to date values will have this one
     current: u32,

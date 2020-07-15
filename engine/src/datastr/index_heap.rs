@@ -48,7 +48,7 @@ pub trait Indexing {
 /// Only the methods necessary for dijkstras algorithm are implemented.
 /// In addition, `increase_key` and `decrease_key` methods are available.
 #[derive(Debug)]
-pub struct IndexdMinHeap<T: Ord + Indexing> {
+pub struct IndexdMinHeap<T> {
     positions: Vec<usize>,
     data: Vec<T>,
 }
