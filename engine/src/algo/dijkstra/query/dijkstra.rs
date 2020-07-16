@@ -1,15 +1,16 @@
 use super::*;
 use crate::report::*;
+use generic_dijkstra::GenericDijkstra;
 
-#[derive(Debug)]
-pub struct Server<Graph: for<'a> LinkIterGraph<'a>> {
-    dijkstra: SteppedDijkstra<Graph>,
+pub struct Server<Graph> {
+    dijkstra: GenericDijkstra<Link, Graph, Weight, generic_dijkstra::DefaultOps>,
+    // dijkstra: SteppedDijkstra<Graph>,
 }
 
 impl<Graph: for<'a> LinkIterGraph<'a>> Server<Graph> {
     pub fn new(graph: Graph) -> Server<Graph> {
         Server {
-            dijkstra: SteppedDijkstra::new(graph),
+            dijkstra: GenericDijkstra::new(graph),
         }
     }
 
@@ -18,19 +19,21 @@ impl<Graph: for<'a> LinkIterGraph<'a>> Server<Graph> {
 
         self.dijkstra.initialize_query(Query { from, to });
 
-        loop {
-            match self.dijkstra.next_step() {
-                QueryProgress::Settled(_) => continue,
-                QueryProgress::Done(result) => return result,
-            }
+        while let Some(_) = self.dijkstra.next_step() {}
+
+        let dist = *self.dijkstra.tentative_distance(to);
+        if dist < INFINITY {
+            Some(dist)
+        } else {
+            None
         }
     }
 
-    fn path(&self) -> Vec<NodeId> {
+    fn path(&self, query: Query) -> Vec<NodeId> {
         let mut path = Vec::new();
-        path.push(self.dijkstra.query().to);
+        path.push(query.to);
 
-        while *path.last().unwrap() != self.dijkstra.query().from {
+        while *path.last().unwrap() != query.from {
             let next = self.dijkstra.predecessor(*path.last().unwrap());
             path.push(next);
         }
@@ -50,31 +53,31 @@ impl<Graph: for<'a> LinkIterGraph<'a>> Server<Graph> {
         });
 
         let mut i: usize = 0;
-        while let QueryProgress::Settled(State { distance, node }) = self.dijkstra.next_step() {
+        while let Some(node) = self.dijkstra.next_step() {
             i += 1;
             if (i & (i - 1)) == 0 {
                 // power of two
-                callback(node, distance, i.trailing_zeros() as usize);
+                callback(node, *self.dijkstra.tentative_distance(node), i.trailing_zeros() as usize);
             }
         }
     }
 
-    pub fn one_to_all(&mut self, from: NodeId) -> PathServerWrapper<Graph> {
+    pub fn one_to_all(&mut self, from: NodeId) -> ServerWrapper<Graph> {
         self.query(Query {
             from,
             to: self.dijkstra.graph().num_nodes() as NodeId,
         });
-        PathServerWrapper(self)
+        ServerWrapper(self)
     }
 }
 
-pub struct PathServerWrapper<'s, G: for<'a> LinkIterGraph<'a>>(&'s Server<G>);
+pub struct PathServerWrapper<'s, G: for<'a> LinkIterGraph<'a>>(&'s Server<G>, Query);
 
 impl<'s, G: for<'a> LinkIterGraph<'a>> PathServer for PathServerWrapper<'s, G> {
     type NodeInfo = NodeId;
 
     fn path(&mut self) -> Vec<Self::NodeInfo> {
-        Server::path(self.0)
+        Server::path(self.0, self.1)
     }
 }
 
@@ -92,7 +95,15 @@ impl<'s, G: for<'a> LinkIterGraph<'a>> PathServerWrapper<'s, G> {
     }
 
     pub fn distance(&self, node: NodeId) -> Weight {
-        self.0.dijkstra.tentative_distance(node)
+        *self.0.dijkstra.tentative_distance(node)
+    }
+}
+
+pub struct ServerWrapper<'s, G: for<'a> LinkIterGraph<'a>>(&'s Server<G>);
+
+impl<'s, G: for<'a> LinkIterGraph<'a>> ServerWrapper<'s, G> {
+    pub fn distance(&self, node: NodeId) -> Weight {
+        *self.0.dijkstra.tentative_distance(node)
     }
 }
 
@@ -101,6 +112,6 @@ impl<'s, G: 's + for<'a> LinkIterGraph<'a>> QueryServer<'s> for Server<G> {
 
     fn query(&'s mut self, query: Query) -> Option<QueryResult<Self::P, Weight>> {
         self.distance(query.from, query.to)
-            .map(move |distance| QueryResult::new(distance, PathServerWrapper(self)))
+            .map(move |distance| QueryResult::new(distance, PathServerWrapper(self, query)))
     }
 }

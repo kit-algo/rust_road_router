@@ -38,6 +38,18 @@ pub trait Graph {
     fn degree(&self, node: NodeId) -> usize;
 }
 
+pub trait TemplLinkIterGraph<'a, L>: Graph {
+    type Iter: Iterator<Item = L> + 'a;
+    fn link_iter(&'a self, node: NodeId) -> Self::Iter;
+}
+
+impl<'a, G: LinkIterGraph<'a>> TemplLinkIterGraph<'a, Link> for G {
+    type Iter = <Self as LinkIterGraph<'a>>::Iter;
+    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+        self.neighbor_iter(node)
+    }
+}
+
 /// Trait for graph data structures which allow iterating over outgoing links of a node.
 pub trait LinkIterGraph<'a>: Graph {
     /// Type of the outgoing neighbor iterator.

@@ -12,11 +12,29 @@ pub mod dijkstra;
 pub mod time_dependent_sampling;
 pub mod topocore;
 
+pub trait GenQuery<Label> {
+    fn from(&self) -> NodeId;
+    fn to(&self) -> NodeId;
+    fn initial_state(&self) -> Label;
+}
+
 /// Simply a source-target pair
 #[derive(Debug, Clone, Copy)]
 pub struct Query {
     pub from: NodeId,
     pub to: NodeId,
+}
+
+impl GenQuery<Weight> for Query {
+    fn from(&self) -> NodeId {
+        self.from
+    }
+    fn to(&self) -> NodeId {
+        self.to
+    }
+    fn initial_state(&self) -> Weight {
+        0
+    }
 }
 
 /// A source-target pair with a departure time.

@@ -4,6 +4,7 @@ use super::*;
 use crate::datastr::index_heap::Indexing;
 
 pub mod floating_td_stepped_dijkstra;
+pub mod generic_dijkstra;
 pub mod multicrit_dijkstra;
 pub mod query;
 pub mod stepped_dijkstra;
