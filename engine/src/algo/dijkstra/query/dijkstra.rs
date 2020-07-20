@@ -3,8 +3,7 @@ use crate::report::*;
 use generic_dijkstra::GenericDijkstra;
 
 pub struct Server<Graph> {
-    dijkstra: GenericDijkstra<Link, Graph, Weight, generic_dijkstra::DefaultOps>,
-    // dijkstra: SteppedDijkstra<Graph>,
+    dijkstra: GenericDijkstra<Weight, generic_dijkstra::DefaultOps, Graph>,
 }
 
 impl<Graph: for<'a> LinkIterGraph<'a>> Server<Graph> {

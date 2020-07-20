@@ -176,3 +176,17 @@ impl RandomLinkAccessGraph for Graph {
         (self.first_out[node as usize] as EdgeId)..(self.first_out[(node + 1) as usize] as EdgeId)
     }
 }
+
+impl crate::algo::dijkstra::generic_dijkstra::Lnk for (NodeId, EdgeId) {
+    fn head(&self) -> NodeId {
+        self.0
+    }
+}
+
+impl<'a> LinkIterable<'a, (NodeId, EdgeId)> for Graph {
+    type Iter = std::iter::Zip<std::iter::Cloned<std::slice::Iter<'a, NodeId>>, std::ops::Range<EdgeId>>;
+    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+        let range = self.neighbor_edge_indices_usize(node);
+        self.head[range].iter().cloned().zip(self.neighbor_edge_indices(node))
+    }
+}

@@ -46,6 +46,18 @@ pub struct TDQuery<T: Copy> {
     pub departure: T,
 }
 
+impl<T: Copy> GenQuery<T> for TDQuery<T> {
+    fn from(&self) -> NodeId {
+        self.from
+    }
+    fn to(&self) -> NodeId {
+        self.to
+    }
+    fn initial_state(&self) -> T {
+        self.departure
+    }
+}
+
 /// Generic container for query results.
 /// Contains a distance and allows fetching the actual path.
 /// Since queries usually modify the state of the internal algorithm data structures,

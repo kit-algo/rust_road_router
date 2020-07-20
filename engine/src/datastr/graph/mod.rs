@@ -38,12 +38,12 @@ pub trait Graph {
     fn degree(&self, node: NodeId) -> usize;
 }
 
-pub trait TemplLinkIterGraph<'a, L>: Graph {
-    type Iter: Iterator<Item = L> + 'a;
+pub trait LinkIterable<'a, Link>: Graph {
+    type Iter: Iterator<Item = Link> + 'a;
     fn link_iter(&'a self, node: NodeId) -> Self::Iter;
 }
 
-impl<'a, G: LinkIterGraph<'a>> TemplLinkIterGraph<'a, Link> for G {
+impl<'a, G: for<'b> LinkIterGraph<'b>> LinkIterable<'a, Link> for G {
     type Iter = <Self as LinkIterGraph<'a>>::Iter;
     fn link_iter(&'a self, node: NodeId) -> Self::Iter {
         self.neighbor_iter(node)
