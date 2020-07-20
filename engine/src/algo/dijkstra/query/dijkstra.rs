@@ -71,7 +71,7 @@ impl<Graph: for<'a> LinkIterGraph<'a>> Server<Graph> {
     }
 }
 
-pub struct PathServerWrapper<'s, G: for<'a> LinkIterGraph<'a>>(&'s Server<G>, Query);
+pub struct PathServerWrapper<'s, G>(&'s Server<G>, Query);
 
 impl<'s, G: for<'a> LinkIterGraph<'a>> PathServer for PathServerWrapper<'s, G> {
     type NodeInfo = NodeId;
@@ -99,7 +99,7 @@ impl<'s, G: for<'a> LinkIterGraph<'a>> PathServerWrapper<'s, G> {
     }
 }
 
-pub struct ServerWrapper<'s, G: for<'a> LinkIterGraph<'a>>(&'s Server<G>);
+pub struct ServerWrapper<'s, G>(&'s Server<G>);
 
 impl<'s, G: for<'a> LinkIterGraph<'a>> ServerWrapper<'s, G> {
     pub fn distance(&self, node: NodeId) -> Weight {
