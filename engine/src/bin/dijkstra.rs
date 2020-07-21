@@ -40,7 +40,7 @@ pub fn main() -> Result<(), Box<dyn Error>> {
     let mut rng = StdRng::from_seed(seed);
     let mut total_query_time = Duration::zero();
 
-    for _i in 0..1000 {
+    for _i in 0..rust_road_router::experiments::NUM_DIJKSTRA_QUERIES {
         let _query_ctxt = algo_runs_ctxt.push_collection_item();
         let from: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
         let to: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
