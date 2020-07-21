@@ -45,6 +45,7 @@ pub trait LinkIterable<'a, Link>: Graph {
 
 impl<'a, G: for<'b> LinkIterGraph<'b>> LinkIterable<'a, Link> for G {
     type Iter = <Self as LinkIterGraph<'a>>::Iter;
+    #[inline(always)]
     fn link_iter(&'a self, node: NodeId) -> Self::Iter {
         self.neighbor_iter(node)
     }

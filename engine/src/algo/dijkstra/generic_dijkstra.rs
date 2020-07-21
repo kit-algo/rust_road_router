@@ -8,6 +8,7 @@ pub trait Lnk {
 }
 
 impl Lnk for Link {
+    #[inline(always)]
     fn head(&self) -> NodeId {
         self.node
     }
@@ -37,15 +38,13 @@ impl<G> DijkstraOps<Weight, G> for DefaultOps {
     type Arc = Link;
     type LinkResult = Weight;
 
+    #[inline(always)]
     fn link(&mut self, _graph: &G, label: &Weight, link: &Link) -> Self::LinkResult {
         label + link.weight
     }
 
+    #[inline(always)]
     fn merge(&mut self, label: &mut Weight, linked: Self::LinkResult) -> bool {
-        // let min = std::cmp::min(*label, linked);
-        // std::mem::swap(label, &mut min);
-        // min != label
-
         if linked < *label {
             *label = linked;
             return true;
@@ -121,7 +120,7 @@ where
     }
 
     fn settle_next_node(&mut self) -> Option<NodeId> {
-        if let Some(State { node, distance }) = self.queue.pop() {
+        self.queue.pop().map(|State { node, distance }| {
             if node == self.to {
                 self.settled_target = true;
             }
@@ -144,10 +143,8 @@ where
                 }
             }
 
-            Some(node)
-        } else {
-            None
-        }
+            node
+        })
     }
 
     pub fn tentative_distance(&self, node: NodeId) -> &Label {

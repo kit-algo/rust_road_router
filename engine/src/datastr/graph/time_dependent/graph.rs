@@ -185,6 +185,7 @@ impl crate::algo::dijkstra::generic_dijkstra::Lnk for (NodeId, EdgeId) {
 
 impl<'a> LinkIterable<'a, (NodeId, EdgeId)> for Graph {
     type Iter = std::iter::Zip<std::iter::Cloned<std::slice::Iter<'a, NodeId>>, std::ops::Range<EdgeId>>;
+    #[inline(always)]
     fn link_iter(&'a self, node: NodeId) -> Self::Iter {
         let range = self.neighbor_edge_indices_usize(node);
         self.head[range].iter().cloned().zip(self.neighbor_edge_indices(node))

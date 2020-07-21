@@ -70,15 +70,13 @@ impl DijkstraOps<Weight, TDGraph> for TDDijkstraOps {
     type LinkResult = Weight;
     type Arc = (NodeId, EdgeId);
 
+    #[inline(always)]
     fn link(&mut self, graph: &TDGraph, label: &Weight, link: &Self::Arc) -> Self::LinkResult {
         label + graph.travel_time_function(link.1).eval(*label)
     }
 
+    #[inline(always)]
     fn merge(&mut self, label: &mut Weight, linked: Self::LinkResult) -> bool {
-        // let min = std::cmp::min(*label, linked);
-        // std::mem::swap(label, &mut min);
-        // min != label
-
         if linked < *label {
             *label = linked;
             return true;
