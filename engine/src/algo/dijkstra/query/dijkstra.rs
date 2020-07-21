@@ -15,17 +15,15 @@ impl<Graph: for<'a> LinkIterGraph<'a>> Server<Graph> {
 
     fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
         report!("algo", "Dijkstra Query");
-
         self.dijkstra.initialize_query(Query { from, to });
 
-        while let Some(_) = self.dijkstra.next_step() {}
-
-        let dist = *self.dijkstra.tentative_distance(to);
-        if dist < INFINITY {
-            Some(dist)
-        } else {
-            None
+        while let Some(node) = self.dijkstra.next() {
+            if node == to {
+                return Some(*self.dijkstra.tentative_distance(node));
+            }
         }
+
+        None
     }
 
     fn path(&self, query: Query) -> Vec<NodeId> {
@@ -52,7 +50,7 @@ impl<Graph: for<'a> LinkIterGraph<'a>> Server<Graph> {
         });
 
         let mut i: usize = 0;
-        while let Some(node) = self.dijkstra.next_step() {
+        while let Some(node) = self.dijkstra.next() {
             i += 1;
             if (i & (i - 1)) == 0 {
                 // power of two

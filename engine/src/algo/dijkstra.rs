@@ -3,12 +3,9 @@
 use super::*;
 use crate::datastr::index_heap::Indexing;
 
-pub mod floating_td_stepped_dijkstra;
 pub mod generic_dijkstra;
-pub mod multicrit_dijkstra;
 pub mod query;
 pub mod stepped_dijkstra;
-pub mod td_stepped_dijkstra;
 pub mod td_topo_dijkstra;
 pub mod topo_dijkstra;
 
@@ -46,5 +43,15 @@ impl<W> Indexing for State<W> {
     #[inline]
     fn as_index(&self) -> usize {
         self.node as usize
+    }
+}
+
+pub trait Label {
+    fn neutral() -> Self;
+}
+
+impl Label for Weight {
+    fn neutral() -> Self {
+        INFINITY
     }
 }

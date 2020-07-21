@@ -16,17 +16,15 @@ impl Server {
 
     fn distance(&mut self, from: NodeId, to: NodeId, departure: Timestamp) -> Option<Weight> {
         report!("algo", "TD Dijkstra Query");
-
         self.dijkstra.initialize_query(TDQuery { from, to, departure });
 
-        while let Some(_) = self.dijkstra.next_step() {}
-
-        let dist = *self.dijkstra.tentative_distance(to);
-        if dist < INFINITY {
-            Some(dist)
-        } else {
-            None
+        while let Some(node) = self.dijkstra.next() {
+            if node == to {
+                return Some(*self.dijkstra.tentative_distance(node) - departure);
+            }
         }
+
+        None
     }
 
     fn path(&self, query: TDQuery<Weight>) -> Vec<(NodeId, Weight)> {
@@ -64,7 +62,7 @@ impl<'s> TDQueryServer<'s, Timestamp, Weight> for Server {
     }
 }
 
-struct TDDijkstraOps();
+pub struct TDDijkstraOps();
 
 impl DijkstraOps<Weight, TDGraph> for TDDijkstraOps {
     type LinkResult = Weight;

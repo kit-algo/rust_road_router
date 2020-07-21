@@ -12,7 +12,7 @@ use super::*;
 use crate::{
     algo::{
         customizable_contraction_hierarchy::{customize, query::Server as CCHServer, CCH},
-        dijkstra::td_stepped_dijkstra::TDSteppedDijkstra,
+        dijkstra::{generic_dijkstra::*, query::td_dijkstra::TDDijkstraOps},
     },
     datastr::{graph::time_dependent::*, graph::RandomLinkAccessGraph, timestamped_vector::TimestampedVector},
 };
@@ -21,14 +21,11 @@ use std::ops::Range;
 
 /// Query server struct for TD-S.
 /// Implements the common query trait.
-#[derive(Debug)]
 pub struct Server<'a> {
     // The Dijkstra algo on the original graph
-    dijkstra: TDSteppedDijkstra,
+    dijkstra: GenericDijkstra<Weight, TDDijkstraOps, TDGraph>,
     // A CCH Server for each time window
     samples: Vec<CCHServer<'a, CCH>>,
-    // The CCH, needed for NodeId translation
-    cch_graph: &'a CCH,
     // marking edges in the subgraph we perform dijkstra on
     active_edges: TimestampedVector<bool>,
 }
@@ -62,9 +59,8 @@ impl<'a> Server<'a> {
 
         Server {
             active_edges: TimestampedVector::new(graph.num_arcs(), false),
-            dijkstra: TDSteppedDijkstra::new(graph),
+            dijkstra: GenericDijkstra::new(graph),
             samples,
-            cch_graph: cch,
         }
     }
 
@@ -84,20 +80,21 @@ impl<'a> Server<'a> {
         // dijkstra on subgraph
         self.dijkstra.initialize_query(TDQuery { from, to, departure });
 
-        loop {
-            let active_edges = &self.active_edges;
-            match self.dijkstra.next_step(|edge_id| active_edges[edge_id as usize], |_| Some(0)) {
-                QueryProgress::Settled(_) => continue,
-                QueryProgress::Done(result) => return result,
+        let active_edges = &self.active_edges;
+        while let Some(node) = self.dijkstra.next_filtered_edges(|&(_, edge_id)| active_edges[edge_id as usize]) {
+            if node == to {
+                return Some(*self.dijkstra.tentative_distance(node) - departure);
             }
         }
+
+        None
     }
 
-    fn path(&self) -> Vec<NodeId> {
+    fn path(&self, query: TDQuery<Weight>) -> Vec<NodeId> {
         let mut path = Vec::new();
-        path.push(self.dijkstra.query().to);
+        path.push(query.to);
 
-        while *path.last().unwrap() != self.dijkstra.query().from {
+        while *path.last().unwrap() != query.from {
             let next = self.dijkstra.predecessor(*path.last().unwrap());
             path.push(next);
         }
@@ -108,13 +105,13 @@ impl<'a> Server<'a> {
     }
 }
 
-pub struct PathServerWrapper<'s, 'a>(&'s Server<'a>);
+pub struct PathServerWrapper<'s, 'a>(&'s Server<'a>, TDQuery<Weight>);
 
 impl<'s, 'a> PathServer for PathServerWrapper<'s, 'a> {
     type NodeInfo = NodeId;
 
     fn path(&mut self) -> Vec<Self::NodeInfo> {
-        Server::path(self.0)
+        Server::path(self.0, self.1)
     }
 }
 
@@ -123,6 +120,6 @@ impl<'s, 'a: 's> TDQueryServer<'s, Timestamp, Weight> for Server<'a> {
 
     fn query(&'s mut self, query: TDQuery<Timestamp>) -> Option<QueryResult<Self::P, Weight>> {
         self.distance(query.from, query.to, query.departure)
-            .map(move |distance| QueryResult::new(distance, PathServerWrapper(self)))
+            .map(move |distance| QueryResult::new(distance, PathServerWrapper(self, query)))
     }
 }

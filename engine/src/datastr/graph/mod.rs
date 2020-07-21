@@ -22,12 +22,29 @@ pub type Weight = u32;
 /// Set to `u32::MAX / 2` so that `INFINITY + x` for `x <= INFINITY` does not overflow.
 pub const INFINITY: Weight = std::u32::MAX / 2;
 
+pub trait Arc {
+    fn head(&self) -> NodeId;
+}
+
 /// Simple struct for weighted links.
 /// No behaviour, just a pure data struct.
 #[derive(Debug, Copy, Clone)]
 pub struct Link {
     pub node: NodeId,
     pub weight: Weight,
+}
+
+impl Arc for Link {
+    #[inline(always)]
+    fn head(&self) -> NodeId {
+        self.node
+    }
+}
+
+impl Arc for (NodeId, EdgeId) {
+    fn head(&self) -> NodeId {
+        self.0
+    }
 }
 
 /// Base trait for graphs.
