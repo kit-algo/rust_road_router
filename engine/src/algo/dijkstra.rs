@@ -5,7 +5,6 @@ use crate::datastr::index_heap::Indexing;
 
 pub mod generic_dijkstra;
 pub mod query;
-pub mod stepped_dijkstra;
 pub mod td_topo_dijkstra;
 pub mod topo_dijkstra;
 

@@ -69,6 +69,23 @@ where
         }
     }
 
+    /// For CH preprocessing we reuse the distance array and the queue to reduce allocations.
+    /// This method creates an algo struct from recycled data.
+    /// The counterpart is the `recycle` method.
+    pub fn from_recycled(graph: Graph, recycled: Trash<Label>) -> Self {
+        let n = graph.num_nodes();
+        assert!(recycled.distances.len() >= n);
+        assert!(recycled.predecessors.len() >= n);
+
+        Self {
+            graph,
+            distances: recycled.distances,
+            predecessors: recycled.predecessors,
+            queue: recycled.queue,
+            ops: Default::default(),
+        }
+    }
+
     pub fn initialize_query(&mut self, query: impl GenQuery<Label>) {
         let from = query.from();
         // initialize
@@ -82,14 +99,12 @@ where
         });
     }
 
-    pub fn next(&mut self) -> Option<NodeId> {
-        self.settle_next_node(|_| true)
-    }
-
+    #[inline]
     pub fn next_filtered_edges(&mut self, edge_predicate: impl FnMut(&Ops::Arc) -> bool) -> Option<NodeId> {
         self.settle_next_node(edge_predicate)
     }
 
+    #[inline]
     fn settle_next_node(&mut self, mut edge_predicate: impl FnMut(&Ops::Arc) -> bool) -> Option<NodeId> {
         self.queue.pop().map(|State { node, distance }| {
             for link in self.graph.link_iter(node) {
@@ -131,4 +146,38 @@ where
     pub fn queue(&self) -> &IndexdMinHeap<State<Label>> {
         &self.queue
     }
+
+    /// For CH preprocessing we reuse the distance array and the queue to reduce allocations.
+    /// This method decomposes this algo struct for later reuse.
+    /// The counterpart is `from_recycled`
+    pub fn recycle(self) -> Trash<Label> {
+        Trash {
+            distances: self.distances,
+            predecessors: self.predecessors,
+            queue: self.queue,
+        }
+    }
+}
+
+impl<Label, Ops, Graph> Iterator for GenericDijkstra<Label, Ops, Graph>
+where
+    Ops: DijkstraOps<Label, Graph> + Default,
+    Graph: for<'a> LinkIterable<'a, Ops::Arc>,
+    Label: Clone + Ord + super::Label,
+    Ops::Arc: Arc,
+{
+    type Item = NodeId;
+
+    #[inline]
+    fn next(&mut self) -> Option<NodeId> {
+        self.settle_next_node(|_| true)
+    }
+}
+
+pub type StandardDijkstra<G> = GenericDijkstra<Weight, DefaultOps, G>;
+
+pub struct Trash<Label> {
+    distances: TimestampedVector<Label>,
+    predecessors: Vec<NodeId>,
+    queue: IndexdMinHeap<State<Label>>,
 }

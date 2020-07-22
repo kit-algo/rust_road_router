@@ -7,10 +7,9 @@
 
 use super::*;
 
-#[derive(Debug)]
 pub struct Server {
-    forward_dijkstra: SteppedDijkstra<OwnedGraph>,
-    backward_dijkstra: SteppedDijkstra<OwnedGraph>,
+    forward_dijkstra: StandardDijkstra<OwnedGraph>,
+    backward_dijkstra: StandardDijkstra<OwnedGraph>,
     tentative_distance: Weight,
     meeting_node: NodeId,
     shortcut_middle_nodes: Option<(Vec<NodeId>, Vec<NodeId>)>,
@@ -20,8 +19,8 @@ pub struct Server {
 impl Server {
     pub fn new(ch: ContractionHierarchy, order: NodeOrder) -> Server {
         Server {
-            forward_dijkstra: SteppedDijkstra::new(ch.forward),
-            backward_dijkstra: SteppedDijkstra::new(ch.backward),
+            forward_dijkstra: StandardDijkstra::new(ch.forward),
+            backward_dijkstra: StandardDijkstra::new(ch.backward),
             tentative_distance: INFINITY,
             meeting_node: 0,
             shortcut_middle_nodes: ch.middle_nodes,
@@ -47,42 +46,36 @@ impl Server {
         // compare tentative distance to both directions progress individually rather than the sum!
         while (self.tentative_distance > forward_progress || self.tentative_distance > backward_progress) && !(forward_done && backward_done) {
             if backward_done || (forward_progress <= backward_progress && !forward_done) {
-                match self.forward_dijkstra.next_step() {
-                    QueryProgress::Settled(State { distance, node }) => {
-                        forward_progress = distance;
-                        if distance + self.backward_dijkstra.tentative_distance(node) < self.tentative_distance {
-                            self.tentative_distance = distance + self.backward_dijkstra.tentative_distance(node);
-                            self.meeting_node = node;
-                        }
+                if let Some(node) = self.forward_dijkstra.next() {
+                    let distance = *self.forward_dijkstra.tentative_distance(node);
+                    forward_progress = distance;
+
+                    if distance + self.backward_dijkstra.tentative_distance(node) < self.tentative_distance {
+                        self.tentative_distance = distance + self.backward_dijkstra.tentative_distance(node);
+                        self.meeting_node = node;
                     }
-                    QueryProgress::Done(Some(distance)) => {
+
+                    if node == to {
                         forward_done = true;
-                        forward_progress = distance;
-                        if distance < self.tentative_distance {
-                            self.tentative_distance = distance;
-                            self.meeting_node = to;
-                        }
                     }
-                    QueryProgress::Done(None) => forward_done = true,
+                } else {
+                    forward_done = true;
                 }
             } else {
-                match self.backward_dijkstra.next_step() {
-                    QueryProgress::Settled(State { distance, node }) => {
-                        backward_progress = distance;
-                        if distance + self.forward_dijkstra.tentative_distance(node) < self.tentative_distance {
-                            self.tentative_distance = distance + self.forward_dijkstra.tentative_distance(node);
-                            self.meeting_node = node;
-                        }
+                if let Some(node) = self.backward_dijkstra.next() {
+                    let distance = *self.backward_dijkstra.tentative_distance(node);
+                    backward_progress = distance;
+
+                    if distance + self.forward_dijkstra.tentative_distance(node) < self.tentative_distance {
+                        self.tentative_distance = distance + self.forward_dijkstra.tentative_distance(node);
+                        self.meeting_node = node;
                     }
-                    QueryProgress::Done(Some(distance)) => {
+
+                    if node == from {
                         backward_done = true;
-                        backward_progress = distance;
-                        if distance < self.tentative_distance {
-                            self.tentative_distance = distance;
-                            self.meeting_node = from;
-                        }
                     }
-                    QueryProgress::Done(None) => backward_done = true,
+                } else {
+                    backward_done = true;
                 }
             }
         }
@@ -95,14 +88,14 @@ impl Server {
 
     // Ugly path unpacking.
     // Should probably switch to something similar as in CCH query, which utilizes the parent pointers in the dijkstra struct.
-    fn path(&self) -> Vec<NodeId> {
+    fn path(&self, query: Query) -> Vec<NodeId> {
         use std::collections::LinkedList;
 
         let &(ref forward_middle_nodes, ref backward_middle_nodes) = self.shortcut_middle_nodes.as_ref().unwrap();
         let mut forwad_path = LinkedList::new();
         forwad_path.push_front(self.meeting_node);
 
-        while *forwad_path.front().unwrap() != self.forward_dijkstra.query().from {
+        while *forwad_path.front().unwrap() != query.from {
             let next = self.forward_dijkstra.predecessor(*forwad_path.front().unwrap());
             let mut shortcut_stack = vec![next];
 
@@ -121,7 +114,7 @@ impl Server {
         let mut backward_path = LinkedList::new();
         backward_path.push_back(self.meeting_node);
 
-        while *backward_path.back().unwrap() != self.backward_dijkstra.query().from {
+        while *backward_path.back().unwrap() != query.to {
             let next = self.backward_dijkstra.predecessor(*backward_path.back().unwrap());
             let mut shortcut_stack = vec![next];
 
@@ -148,13 +141,13 @@ impl Server {
     }
 }
 
-pub struct PathServerWrapper<'s>(&'s Server);
+pub struct PathServerWrapper<'s>(&'s Server, Query);
 
 impl<'s> PathServer for PathServerWrapper<'s> {
     type NodeInfo = NodeId;
 
     fn path(&mut self) -> Vec<Self::NodeInfo> {
-        Server::path(self.0)
+        Server::path(self.0, self.1)
     }
 }
 
@@ -163,6 +156,6 @@ impl<'s> QueryServer<'s> for Server {
 
     fn query(&'s mut self, query: Query) -> Option<QueryResult<Self::P, Weight>> {
         self.distance(query.from, query.to)
-            .map(move |distance| QueryResult::new(distance, PathServerWrapper(self)))
+            .map(move |distance| QueryResult::new(distance, PathServerWrapper(self, query)))
     }
 }

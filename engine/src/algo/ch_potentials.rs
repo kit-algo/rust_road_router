@@ -1,6 +1,9 @@
 use super::*;
 use crate::{
-    algo::customizable_contraction_hierarchy::{query::stepped_elimination_tree::SteppedEliminationTree, *},
+    algo::{
+        customizable_contraction_hierarchy::{query::stepped_elimination_tree::SteppedEliminationTree, *},
+        dijkstra::generic_dijkstra::*,
+    },
     datastr::{node_order::*, timestamped_vector::TimestampedVector},
     util::in_range_option::InRangeOption,
 };
@@ -92,12 +95,11 @@ impl<'a> Potential for CCHPotential<'a> {
     }
 }
 
-#[derive(Debug)]
 pub struct CHPotential {
     order: NodeOrder,
     potentials: TimestampedVector<InRangeOption<Weight>>,
     forward: OwnedGraph,
-    backward_dijkstra: SteppedDijkstra<OwnedGraph>,
+    backward_dijkstra: StandardDijkstra<OwnedGraph>,
     num_pot_evals: usize,
 }
 
@@ -108,7 +110,7 @@ impl CHPotential {
             order,
             potentials: TimestampedVector::new(n, InRangeOption::new(None)),
             forward,
-            backward_dijkstra: SteppedDijkstra::new(backward),
+            backward_dijkstra: StandardDijkstra::new(backward),
             num_pot_evals: 0,
         }
     }
@@ -116,7 +118,7 @@ impl CHPotential {
     fn potential_internal(
         potentials: &mut TimestampedVector<InRangeOption<Weight>>,
         forward: &OwnedGraph,
-        backward: &SteppedDijkstra<OwnedGraph>,
+        backward: &StandardDijkstra<OwnedGraph>,
         node: NodeId,
         num_pot_evals: &mut usize,
     ) -> Weight {
@@ -131,7 +133,7 @@ impl CHPotential {
             .min()
             .unwrap_or(INFINITY);
 
-        potentials[node as usize] = InRangeOption::new(Some(std::cmp::min(backward.tentative_distance(node), min_by_up)));
+        potentials[node as usize] = InRangeOption::new(Some(std::cmp::min(*backward.tentative_distance(node), min_by_up)));
 
         potentials[node as usize].value().unwrap()
     }
@@ -145,7 +147,7 @@ impl Potential for CHPotential {
             from: self.order.rank(target),
             to: std::u32::MAX,
         });
-        while let QueryProgress::Settled(_) = self.backward_dijkstra.next_step() {}
+        while let Some(_) = self.backward_dijkstra.next() {}
     }
 
     fn potential(&mut self, node: NodeId) -> Option<Weight> {

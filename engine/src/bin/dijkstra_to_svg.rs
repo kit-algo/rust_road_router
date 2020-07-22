@@ -3,10 +3,7 @@
 use std::{env, error::Error, path::Path};
 
 use rust_road_router::{
-    algo::{
-        dijkstra::{stepped_dijkstra::*, *},
-        Query,
-    },
+    algo::{dijkstra::generic_dijkstra::*, Query},
     cli::CliErr,
     datastr::graph::*,
     io::Load,
@@ -69,14 +66,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     println!("</g>");
 
-    let mut dijkstra = SteppedDijkstra::new(graph.clone());
+    let mut dijkstra = StandardDijkstra::new(graph.clone());
     dijkstra.initialize_query(Query {
         from: start_node as NodeId,
         to: std::u32::MAX,
     });
 
     let mut counter = 0;
-    while let QueryProgress::Settled(State { node, .. }) = dijkstra.next_step() {
+    for node in dijkstra {
         if counter > 500 {
             break;
         }

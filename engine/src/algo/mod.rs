@@ -2,7 +2,7 @@
 
 use crate::datastr::graph::*;
 
-use self::dijkstra::{stepped_dijkstra::SteppedDijkstra, QueryProgress, State};
+use self::dijkstra::{QueryProgress, State};
 
 pub mod catchup;
 pub mod ch_potentials;

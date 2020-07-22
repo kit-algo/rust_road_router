@@ -1,9 +1,9 @@
 use super::*;
+use crate::algo::dijkstra::generic_dijkstra::*;
 
-#[derive(Debug)]
 pub struct Server<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>> {
-    pub forward_dijkstra: SteppedDijkstra<G>,
-    pub backward_dijkstra: SteppedDijkstra<H>,
+    pub forward_dijkstra: StandardDijkstra<G>,
+    pub backward_dijkstra: StandardDijkstra<H>,
     pub tentative_distance: Weight,
     pub meeting_node: NodeId,
 }
@@ -13,8 +13,8 @@ impl<G: for<'a> LinkIterGraph<'a>> Server<G, OwnedGraph> {
         let reversed = graph.reverse();
 
         Server {
-            forward_dijkstra: SteppedDijkstra::new(graph),
-            backward_dijkstra: SteppedDijkstra::new(reversed),
+            forward_dijkstra: StandardDijkstra::new(graph),
+            backward_dijkstra: StandardDijkstra::new(reversed),
             tentative_distance: INFINITY,
             meeting_node: 0,
         }
@@ -38,32 +38,34 @@ impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>> Server<G, H> {
 
         while forward_progress + backward_progress < self.tentative_distance && forward_progress + backward_progress < maximum_distance {
             if forward_progress <= backward_progress {
-                match self.forward_dijkstra.next_step() {
-                    QueryProgress::Settled(State { distance, node }) => {
-                        forward_progress = distance;
-                        if distance + self.backward_dijkstra.tentative_distance(node) < self.tentative_distance {
-                            self.tentative_distance = distance + self.backward_dijkstra.tentative_distance(node);
-                            self.meeting_node = node;
-                        }
-                    }
-                    QueryProgress::Done(result) => {
+                if let Some(node) = self.forward_dijkstra.next() {
+                    let distance = *self.forward_dijkstra.tentative_distance(node);
+                    if node == to {
                         self.meeting_node = to;
-                        return result;
+                        return Some(distance);
                     }
+                    forward_progress = distance;
+                    if distance + self.backward_dijkstra.tentative_distance(node) < self.tentative_distance {
+                        self.tentative_distance = distance + self.backward_dijkstra.tentative_distance(node);
+                        self.meeting_node = node;
+                    }
+                } else {
+                    return None;
                 }
             } else {
-                match self.backward_dijkstra.next_step() {
-                    QueryProgress::Settled(State { distance, node }) => {
-                        backward_progress = distance;
-                        if distance + self.forward_dijkstra.tentative_distance(node) < self.tentative_distance {
-                            self.tentative_distance = distance + self.forward_dijkstra.tentative_distance(node);
-                            self.meeting_node = node;
-                        }
-                    }
-                    QueryProgress::Done(result) => {
+                if let Some(node) = self.backward_dijkstra.next() {
+                    let distance = *self.backward_dijkstra.tentative_distance(node);
+                    if node == from {
                         self.meeting_node = from;
-                        return result;
+                        return Some(distance);
                     }
+                    backward_progress = distance;
+                    if distance + self.forward_dijkstra.tentative_distance(node) < self.tentative_distance {
+                        self.tentative_distance = distance + self.forward_dijkstra.tentative_distance(node);
+                        self.meeting_node = node;
+                    }
+                } else {
+                    return None;
                 }
             }
         }
@@ -74,18 +76,18 @@ impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>> Server<G, H> {
         }
     }
 
-    fn path(&self) -> Vec<NodeId> {
+    fn path(&self, query: Query) -> Vec<NodeId> {
         let mut path = Vec::new();
         path.push(self.meeting_node);
 
-        while *path.last().unwrap() != self.forward_dijkstra.query().from {
+        while *path.last().unwrap() != query.from {
             let next = self.forward_dijkstra.predecessor(*path.last().unwrap());
             path.push(next);
         }
 
         path.reverse();
 
-        while *path.last().unwrap() != self.backward_dijkstra.query().from {
+        while *path.last().unwrap() != query.to {
             let next = self.backward_dijkstra.predecessor(*path.last().unwrap());
             path.push(next);
         }
@@ -94,13 +96,13 @@ impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>> Server<G, H> {
     }
 }
 
-pub struct PathServerWrapper<'s, G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>>(&'s Server<G, H>);
+pub struct PathServerWrapper<'s, G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>>(&'s Server<G, H>, Query);
 
 impl<'s, G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>> PathServer for PathServerWrapper<'s, G, H> {
     type NodeInfo = NodeId;
 
     fn path(&mut self) -> Vec<Self::NodeInfo> {
-        Server::path(self.0)
+        Server::path(self.0, self.1)
     }
 }
 
@@ -109,6 +111,6 @@ impl<'s, G: 's + for<'a> LinkIterGraph<'a>, H: 's + for<'a> LinkIterGraph<'a>> Q
 
     fn query(&'s mut self, query: Query) -> Option<QueryResult<Self::P, Weight>> {
         self.distance(query.from, query.to)
-            .map(move |distance| QueryResult::new(distance, PathServerWrapper(self)))
+            .map(move |distance| QueryResult::new(distance, PathServerWrapper(self, query)))
     }
 }
