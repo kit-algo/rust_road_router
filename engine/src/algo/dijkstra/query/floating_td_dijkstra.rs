@@ -109,7 +109,14 @@ impl Default for FlTDDijkstraOps {
 }
 
 impl Label for Timestamp {
+    type Key = Self;
+
     fn neutral() -> Self {
         Timestamp::NEVER
+    }
+
+    #[inline(always)]
+    fn key(&self) -> Self::Key {
+        *self
     }
 }

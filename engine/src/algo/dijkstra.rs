@@ -46,11 +46,20 @@ impl<W> Indexing for State<W> {
 }
 
 pub trait Label {
+    type Key;
     fn neutral() -> Self;
+    fn key(&self) -> Self::Key;
 }
 
 impl Label for Weight {
+    type Key = Self;
+
     fn neutral() -> Self {
         INFINITY
+    }
+
+    #[inline(always)]
+    fn key(&self) -> Self::Key {
+        *self
     }
 }

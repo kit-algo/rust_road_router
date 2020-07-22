@@ -38,12 +38,12 @@ impl Default for DefaultOps {
     }
 }
 
-pub struct GenericDijkstra<Label, Ops, Graph> {
+pub struct GenericDijkstra<Label: super::Label, Ops, Graph> {
     graph: Graph,
 
     distances: TimestampedVector<Label>,
     predecessors: Vec<NodeId>,
-    queue: IndexdMinHeap<State<Label>>,
+    queue: IndexdMinHeap<State<Label::Key>>,
 
     ops: Ops,
 }
@@ -52,7 +52,8 @@ impl<Label, Ops, Graph> GenericDijkstra<Label, Ops, Graph>
 where
     Ops: DijkstraOps<Label, Graph> + Default,
     Graph: for<'a> LinkIterable<'a, Ops::Arc>,
-    Label: Clone + Ord + super::Label,
+    Label: Clone + super::Label,
+    Label::Key: Ord,
     Ops::Arc: Arc,
 {
     pub fn new(graph: Graph) -> Self {
@@ -90,13 +91,11 @@ where
         let from = query.from();
         // initialize
         self.queue.clear();
-        self.distances.reset();
-        self.distances[from as usize] = query.initial_state();
+        let init = query.initial_state();
+        self.queue.push(State { key: init.key(), node: from });
 
-        self.queue.push(State {
-            key: query.initial_state(),
-            node: from,
-        });
+        self.distances.reset();
+        self.distances[from as usize] = init;
     }
 
     #[inline]
@@ -106,16 +105,16 @@ where
 
     #[inline]
     fn settle_next_node(&mut self, mut edge_predicate: impl FnMut(&Ops::Arc) -> bool) -> Option<NodeId> {
-        self.queue.pop().map(|State { node, key }| {
+        self.queue.pop().map(|State { node, .. }| {
             for link in self.graph.link_iter(node) {
                 if edge_predicate(&link) {
-                    let linked = self.ops.link(&self.graph, &key, &link);
+                    let linked = self.ops.link(&self.graph, &self.distances[node as usize], &link);
 
                     if self.ops.merge(&mut self.distances[link.head() as usize], linked) {
                         self.predecessors[link.head() as usize] = node;
 
                         let next = State {
-                            key: self.distances[link.head() as usize].clone(),
+                            key: self.distances[link.head() as usize].key(),
                             node: link.head(),
                         };
                         if self.queue.contains_index(next.as_index()) {
@@ -143,7 +142,7 @@ where
         &self.graph
     }
 
-    pub fn queue(&self) -> &IndexdMinHeap<State<Label>> {
+    pub fn queue(&self) -> &IndexdMinHeap<State<Label::Key>> {
         &self.queue
     }
 
@@ -163,7 +162,8 @@ impl<Label, Ops, Graph> Iterator for GenericDijkstra<Label, Ops, Graph>
 where
     Ops: DijkstraOps<Label, Graph> + Default,
     Graph: for<'a> LinkIterable<'a, Ops::Arc>,
-    Label: Clone + Ord + super::Label,
+    Label: Clone + super::Label,
+    Label::Key: Ord,
     Ops::Arc: Arc,
 {
     type Item = NodeId;
@@ -176,8 +176,8 @@ where
 
 pub type StandardDijkstra<G> = GenericDijkstra<Weight, DefaultOps, G>;
 
-pub struct Trash<Label> {
+pub struct Trash<Label: super::Label> {
     distances: TimestampedVector<Label>,
     predecessors: Vec<NodeId>,
-    queue: IndexdMinHeap<State<Label>>,
+    queue: IndexdMinHeap<State<Label::Key>>,
 }
