@@ -310,7 +310,7 @@ impl<'a> Server<'a> {
         let lower_bounds_to_target = &mut self.lower_bounds_to_target;
 
         self.closest_node_priority_queue.push(State {
-            distance: departure_time + tentative_distance.0,
+            key: departure_time + tentative_distance.0,
             node: self.from,
         });
 
@@ -364,7 +364,7 @@ impl<'a> Server<'a> {
 
                     let next_ea = distance + time;
                     let next = State {
-                        distance: next_ea + lower,
+                        key: next_ea + lower,
                         node: next_on_path,
                     };
 
@@ -429,7 +429,7 @@ impl<'a> Server<'a> {
 
                         let next_ea = distance + time;
                         let next = State {
-                            distance: next_ea + lower,
+                            key: next_ea + lower,
                             node: next_on_path,
                         };
 

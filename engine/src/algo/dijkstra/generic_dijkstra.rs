@@ -94,7 +94,7 @@ where
         self.distances[from as usize] = query.initial_state();
 
         self.queue.push(State {
-            distance: query.initial_state(),
+            key: query.initial_state(),
             node: from,
         });
     }
@@ -106,16 +106,16 @@ where
 
     #[inline]
     fn settle_next_node(&mut self, mut edge_predicate: impl FnMut(&Ops::Arc) -> bool) -> Option<NodeId> {
-        self.queue.pop().map(|State { node, distance }| {
+        self.queue.pop().map(|State { node, key }| {
             for link in self.graph.link_iter(node) {
                 if edge_predicate(&link) {
-                    let linked = self.ops.link(&self.graph, &distance, &link);
+                    let linked = self.ops.link(&self.graph, &key, &link);
 
                     if self.ops.merge(&mut self.distances[link.head() as usize], linked) {
                         self.predecessors[link.head() as usize] = node;
 
                         let next = State {
-                            distance: self.distances[link.head() as usize].clone(),
+                            key: self.distances[link.head() as usize].clone(),
                             node: link.head(),
                         };
                         if self.queue.contains_index(next.as_index()) {

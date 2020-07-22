@@ -66,7 +66,7 @@ impl TDTopoDijkstra {
 
         self.distances.set(from as usize, query.departure);
         self.closest_node_priority_queue.push(State {
-            distance: query.departure,
+            key: query.departure,
             node: from,
         });
 
@@ -152,17 +152,17 @@ impl TDTopoDijkstra {
 
         let mut next_node = None;
 
-        while let Some(State { node, distance: dist_with_pot }) = self.closest_node_priority_queue.pop() {
+        while let Some(State { node, key: dist_with_pot }) = self.closest_node_priority_queue.pop() {
             if !(dist_with_pot > self.distances[self.border_node as usize] + potential(self.virtual_topocore.order.node(self.border_node)).unwrap()
                 && self.in_core(node))
             {
-                next_node = Some(State { node, distance: dist_with_pot });
+                next_node = Some(State { node, key: dist_with_pot });
                 break;
             }
         }
 
         // Examine the frontier with lower distance nodes first (min-heap)
-        if let Some(State { node, distance: dist_with_pot }) = next_node {
+        if let Some(State { node, key: dist_with_pot }) = next_node {
             let distance = self.distances[node as usize];
 
             if node == to {
@@ -214,7 +214,7 @@ impl TDTopoDijkstra {
                                     || had_deg_three
                                     || self.closest_node_priority_queue.contains_index(
                                         State {
-                                            distance: next_distance,
+                                            key: next_distance,
                                             node: next_node,
                                         }
                                         .as_index(),
@@ -254,12 +254,9 @@ impl TDTopoDijkstra {
                             });
                         } else if endpoint {
                             if let Some(key) = potential(self.virtual_topocore.order.node(next_node)).map(|p| next_distance + p) {
-                                let next = State {
-                                    distance: key,
-                                    node: next_node,
-                                };
+                                let next = State { key, node: next_node };
                                 if let Some(other) = self.closest_node_priority_queue.get(next.as_index()) {
-                                    debug_assert!(other.distance >= next.distance);
+                                    debug_assert!(other.key >= next.key);
                                     self.closest_node_priority_queue.decrease_key(next);
                                 } else {
                                     self.closest_node_priority_queue.push(next);
@@ -281,7 +278,7 @@ impl TDTopoDijkstra {
             }
 
             QueryProgress::Settled(State {
-                distance,
+                key: distance,
                 node: self.virtual_topocore.order.node(node),
             })
         } else {

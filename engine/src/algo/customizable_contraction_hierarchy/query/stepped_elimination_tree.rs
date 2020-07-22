@@ -54,18 +54,18 @@ impl<'b, Graph: for<'a> LinkIterGraph<'a>> SteppedEliminationTree<'b, Graph> {
             // a lower distance going through this node
             for edge in self.graph.neighbor_iter(node) {
                 let next = State {
-                    distance: distance + edge.weight,
+                    key: distance + edge.weight,
                     node: edge.node,
                 };
 
-                if next.distance < self.distances[next.node as usize] {
+                if next.key < self.distances[next.node as usize] {
                     // Relaxation, we have now found a better way
-                    self.distances.set(next.node as usize, next.distance);
+                    self.distances.set(next.node as usize, next.key);
                     self.predecessors[next.node as usize] = node;
                 }
             }
 
-            QueryProgress::Settled(State { distance, node })
+            QueryProgress::Settled(State { key: distance, node })
         } else {
             QueryProgress::Done(None) // TODO
         }

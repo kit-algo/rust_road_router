@@ -51,9 +51,9 @@ impl<'a, CCH: CCHT> Server<'a, CCH> {
         }
 
         // walk up backward elimination tree while updating tentative distances
-        while let QueryProgress::Settled(State { distance, node }) = self.backward.next_step() {
-            if distance + self.forward.tentative_distance(node) < self.tentative_distance {
-                self.tentative_distance = distance + self.forward.tentative_distance(node);
+        while let QueryProgress::Settled(State { key, node }) = self.backward.next_step() {
+            if key + self.forward.tentative_distance(node) < self.tentative_distance {
+                self.tentative_distance = key + self.forward.tentative_distance(node);
                 self.meeting_node = node;
             }
         }
