@@ -49,7 +49,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 lng[node], lat[node], lng[node], lat[node]
             );
 
-            for link in up.neighbor_iter(node_order.rank(node as NodeId)) {
+            for link in up.link_iter(node_order.rank(node as NodeId)) {
                 let link_node = node_order.node(link.node) as usize;
                 if in_bounding_box(link_node) {
                     println!(
@@ -59,7 +59,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
             }
 
-            for link in down.neighbor_iter(node_order.rank(node as NodeId)) {
+            for link in down.link_iter(node_order.rank(node as NodeId)) {
                 let link_node = node_order.node(link.node) as usize;
                 if in_bounding_box(link_node) {
                     println!(

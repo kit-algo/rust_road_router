@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut edge_id = 0;
     for node in 0..graph.num_nodes() {
-        for link in graph.neighbor_iter(node as NodeId) {
+        for link in graph.link_iter(node as NodeId) {
             let (here_link_id, direction) = link_id_mapper.local_to_here_link_id(edge_id);
             let direction = match direction {
                 LinkDirection::FromRef => 'F',

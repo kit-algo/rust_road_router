@@ -108,7 +108,7 @@ impl TopoDijkstra {
             border_callback(node);
             return;
         }
-        for link in graph.neighbor_iter(node) {
+        for link in graph.link_iter(node) {
             Self::dfs(graph, link.node, visited, border_callback, in_core);
         }
     }
@@ -170,7 +170,7 @@ impl TopoDijkstra {
                 self.result = Some(Some(self.distances[to as usize]));
             }
 
-            for edge in self.graph.neighbor_iter(node) {
+            for edge in self.graph.link_iter(node) {
                 let mut chain = Some(ChainStep {
                     prev_node: node,
                     next_node: edge.node,
@@ -199,7 +199,7 @@ impl TopoDijkstra {
                                 if cfg!(feature = "chpot-no-deg2") {
                                     endpoint = true;
                                 } else {
-                                    for edge in self.graph.neighbor_iter(next_node) {
+                                    for edge in self.graph.link_iter(next_node) {
                                         if edge.node != prev_node {
                                             next_edge = Some(edge);
                                         }
@@ -220,7 +220,7 @@ impl TopoDijkstra {
                                     endpoint = true;
                                 } else {
                                     had_deg_three = true;
-                                    for edge in self.graph.neighbor_iter(next_node) {
+                                    for edge in self.graph.link_iter(next_node) {
                                         if edge.node != prev_node {
                                             if next_edge.is_none() {
                                                 next_edge = Some(edge);

@@ -56,31 +56,23 @@ pub trait Graph {
 }
 
 pub trait LinkIterable<'a, Link>: Graph {
-    type Iter: Iterator<Item = Link> + 'a;
-    fn link_iter(&'a self, node: NodeId) -> Self::Iter;
-}
-
-impl<'a, G: for<'b> LinkIterGraph<'b>> LinkIterable<'a, Link> for G {
-    type Iter = <Self as LinkIterGraph<'a>>::Iter;
-    #[inline(always)]
-    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
-        self.neighbor_iter(node)
-    }
-}
-
-/// Trait for graph data structures which allow iterating over outgoing links of a node.
-pub trait LinkIterGraph<'a>: Graph {
     /// Type of the outgoing neighbor iterator.
-    /// Currently fixed to Links, but this could be generalized relatively easily
-    /// (though it would be difficult to specify bounds on the Link type, because currently we can't
-    /// extract associated types from higher ranked trait bounds. Concrete types work fine though).
-    /// Whats less easy is the lifetime bound, which currently has to come from a lifetime param of the trait.
-    /// This can be fixed once we have GATs https://github.com/rust-lang/rfcs/pull/1598
     type Iter: Iterator<Item = Link> + 'a;
 
     /// Get a iterator over the outgoing links of the given node.
-    fn neighbor_iter(&'a self, node: NodeId) -> Self::Iter;
+    fn link_iter(&'a self, node: NodeId) -> Self::Iter;
+}
 
+// impl<'a, G: for<'b> LinkIterGraph<'b>> LinkIterable<'a, Link> for G {
+//     type Iter = <Self as LinkIterGraph<'a>>::Iter;
+//     #[inline(always)]
+//     fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+//         self.neighbor_iter(node)
+//     }
+// }
+
+/// Trait for graph data structures which allow iterating over outgoing links of a node.
+pub trait LinkIterGraph<'a>: LinkIterable<'a, Link> {
     /// Create a new graph with all edges reversed
     fn reverse(&'a self) -> OwnedGraph {
         // vector of adjacency lists for the reverse graph
@@ -88,7 +80,7 @@ pub trait LinkIterGraph<'a>: Graph {
 
         // iterate over all edges and insert them in the reversed structure
         for node in 0..(self.num_nodes() as NodeId) {
-            for Link { node: neighbor, weight } in self.neighbor_iter(node) {
+            for Link { node: neighbor, weight } in self.link_iter(node) {
                 reversed[neighbor as usize].push(Link { node, weight });
             }
         }
@@ -104,7 +96,7 @@ pub trait LinkIterGraph<'a>: Graph {
 
         // iterate over all edges and insert them in the reversed structure
         for node in 0..(self.num_nodes() as NodeId) {
-            for Link { node: neighbor, weight } in self.neighbor_iter(node) {
+            for Link { node: neighbor, weight } in self.link_iter(node) {
                 if order.rank(node) < order.rank(neighbor) {
                     up[node as usize].push(Link { node: neighbor, weight });
                 } else {
@@ -125,7 +117,7 @@ pub trait LinkIterGraph<'a>: Graph {
 
         for &node in order.order() {
             first_out.push(first_out.last().unwrap() + self.degree(node) as NodeId);
-            let mut links = self.neighbor_iter(node).collect::<Vec<_>>();
+            let mut links = self.link_iter(node).collect::<Vec<_>>();
             links.sort_unstable_by_key(|l| order.rank(l.node));
 
             for link in links {
@@ -137,6 +129,8 @@ pub trait LinkIterGraph<'a>: Graph {
         OwnedGraph::new(first_out, head, weight)
     }
 }
+
+impl<'a, G: for<'b> LinkIterable<'b, Link>> LinkIterGraph<'a> for G {}
 
 /// Trait for graph data structures which allow iterating over outgoing links of a node and modifying the weights of those links.
 pub trait MutWeightLinkIterGraph<'a>: Graph {

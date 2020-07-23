@@ -79,7 +79,7 @@ impl CCH {
         let cch_edge_to_orig_arc = (0..n)
             .flat_map(|node| {
                 let node_order = &node_order;
-                contracted_graph.neighbor_iter(node).map(move |Link { node: neighbor, .. }| {
+                contracted_graph.link_iter(node).map(move |Link { node: neighbor, .. }| {
                     (
                         InRangeOption::new(original_graph.edge_index(node_order.node(node), node_order.node(neighbor))),
                         InRangeOption::new(original_graph.edge_index(node_order.node(neighbor), node_order.node(node))),
@@ -115,7 +115,7 @@ impl CCH {
 
     fn build_elimination_tree(graph: &OwnedGraph) -> Vec<InRangeOption<NodeId>> {
         (0..graph.num_nodes())
-            .map(|node_id| graph.neighbor_iter(node_id as NodeId).map(|l| l.node).min())
+            .map(|node_id| graph.link_iter(node_id as NodeId).map(|l| l.node).min())
             .map(InRangeOption::new)
             .collect()
     }
@@ -176,14 +176,14 @@ impl CCH {
 
         for node in 0..self.num_nodes() as NodeId {
             let orig_arcs = &self.cch_edge_to_orig_arc[self.neighbor_edge_indices_usize(node)];
-            for (link, &(forward_orig_arc, _)) in forward.neighbor_iter(node).zip(orig_arcs.iter()) {
+            for (link, &(forward_orig_arc, _)) in forward.link_iter(node).zip(orig_arcs.iter()) {
                 if link.weight < INFINITY {
                     forward_head.push(link.node);
                     forward_cch_edge_to_orig_arc.push(forward_orig_arc);
                     forward_edge_counter += 1;
                 }
             }
-            for (link, &(_, backward_orig_arc)) in backward.neighbor_iter(node).zip(orig_arcs.iter()) {
+            for (link, &(_, backward_orig_arc)) in backward.link_iter(node).zip(orig_arcs.iter()) {
                 if link.weight < INFINITY {
                     backward_head.push(link.node);
                     backward_cch_edge_to_orig_arc.push(backward_orig_arc);
@@ -244,7 +244,7 @@ impl Graph for CCH {
 fn inverted_with_orig_edge_ids_as_weights<'a>(graph: &'a (impl RandomLinkAccessGraph + LinkIterGraph<'a>)) -> OwnedGraph {
     let mut inverted = vec![Vec::new(); graph.num_nodes()];
     for current_node in 0..(graph.num_nodes() as NodeId) {
-        for (Link { node, .. }, edge_id) in graph.neighbor_iter(current_node).zip(graph.neighbor_edge_indices(current_node)) {
+        for (Link { node, .. }, edge_id) in graph.link_iter(current_node).zip(graph.neighbor_edge_indices(current_node)) {
             // the heads of inverted will be sorted ascending for each node, because current node goes from 0 to n
             inverted[node as usize].push((current_node, edge_id));
         }
@@ -285,8 +285,8 @@ pub trait CCHT {
         // `inverted` contains the downward neighbors sorted ascending.
         // We do a coordinated linear sweep over both neighborhoods.
         // Whenever we find a common neighbor, we have a lower triangle.
-        let mut current_iter = self.backward_inverted().neighbor_iter(from).peekable();
-        let mut other_iter = self.forward_inverted().neighbor_iter(to).peekable();
+        let mut current_iter = self.backward_inverted().link_iter(from).peekable();
+        let mut other_iter = self.forward_inverted().link_iter(to).peekable();
 
         while let (
             Some(&Link {

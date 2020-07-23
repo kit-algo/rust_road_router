@@ -111,7 +111,7 @@ impl ContractionGraph {
         let nodes = {
             let outs = (0..n).map(|node| {
                 graph
-                    .neighbor_iter(order.node(node as NodeId))
+                    .link_iter(order.node(node as NodeId))
                     .filter(|&Link { node: head, .. }| head != order.node(node as NodeId))
                     .map(|Link { node, weight }| {
                         (
@@ -127,7 +127,7 @@ impl ContractionGraph {
             let reversed = graph.reverse();
             let ins = (0..n).map(|node| {
                 reversed
-                    .neighbor_iter(order.node(node as NodeId))
+                    .link_iter(order.node(node as NodeId))
                     .filter(|&Link { node: head, .. }| head != order.node(node as NodeId))
                     .map(|Link { node, weight }| {
                         (
@@ -373,10 +373,10 @@ impl<'a> Iterator for LinkMappingIterator<'a> {
     }
 }
 
-impl<'a, 'b> LinkIterGraph<'b> for ForwardWrapper<'a> {
+impl<'a, 'b> LinkIterable<'b, Link> for ForwardWrapper<'a> {
     type Iter = LinkMappingIterator<'b>;
 
-    fn neighbor_iter(&'b self, node: NodeId) -> Self::Iter {
+    fn link_iter(&'b self, node: NodeId) -> Self::Iter {
         LinkMappingIterator {
             iter: self.graph.nodes[node as usize].outgoing.iter(),
             offset: self.graph.id_offset,
@@ -384,10 +384,10 @@ impl<'a, 'b> LinkIterGraph<'b> for ForwardWrapper<'a> {
     }
 }
 
-impl<'a, 'b> LinkIterGraph<'b> for BackwardWrapper<'a> {
+impl<'a, 'b> LinkIterable<'b, Link> for BackwardWrapper<'a> {
     type Iter = LinkMappingIterator<'b>;
 
-    fn neighbor_iter(&'b self, node: NodeId) -> Self::Iter {
+    fn link_iter(&'b self, node: NodeId) -> Self::Iter {
         LinkMappingIterator {
             iter: self.graph.nodes[node as usize].incoming.iter(),
             offset: self.graph.id_offset,

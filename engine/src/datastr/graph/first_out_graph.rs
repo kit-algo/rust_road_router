@@ -140,7 +140,7 @@ where
     }
 }
 
-impl<'a, FirstOutContainer, HeadContainer, WeightContainer> LinkIterGraph<'a> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+impl<'a, FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<'a, Link> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
 where
     FirstOutContainer: AsSlice<EdgeId>,
     HeadContainer: AsSlice<NodeId>,
@@ -150,7 +150,7 @@ where
     type Iter = std::iter::Map<std::iter::Zip<std::slice::Iter<'a, NodeId>, std::slice::Iter<'a, Weight>>, fn((&NodeId, &Weight)) -> Link>;
 
     #[inline]
-    fn neighbor_iter(&'a self, node: NodeId) -> Self::Iter {
+    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
         let range = self.neighbor_edge_indices_usize(node);
         self.head()[range.clone()]
             .iter()
@@ -188,9 +188,10 @@ where
         }
     }
 
+    // TODO only iterate over heads
     fn edge_index(&self, from: NodeId, to: NodeId) -> Option<EdgeId> {
         let first_out = self.first_out()[from as usize] as usize;
-        self.neighbor_iter(from)
+        self.link_iter(from)
             .enumerate()
             .find(|&(_, Link { node, .. })| node == to)
             .map(|(i, _)| (first_out + i) as EdgeId)

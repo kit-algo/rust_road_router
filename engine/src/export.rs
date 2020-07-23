@@ -10,7 +10,7 @@ pub fn write_graph_to_gr<G: for<'a> LinkIterGraph<'a>>(graph: &G, filename: &str
     writeln!(&mut file, "p sp {} {}", graph.num_nodes(), graph.num_arcs())?;
 
     for i in 0..graph.num_nodes() {
-        for Link { node, weight } in graph.neighbor_iter(i as NodeId) {
+        for Link { node, weight } in graph.link_iter(i as NodeId) {
             writeln!(&mut file, "a {} {} {}", i + 1, node + 1, weight)?;
         }
     }

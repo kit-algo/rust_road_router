@@ -52,7 +52,7 @@ impl<'b, Graph: for<'a> LinkIterGraph<'a>> SteppedEliminationTree<'b, Graph> {
 
             // For each node we can reach, see if we can find a way with
             // a lower distance going through this node
-            for edge in self.graph.neighbor_iter(node) {
+            for edge in self.graph.link_iter(node) {
                 let next = State {
                     key: distance + edge.weight,
                     node: edge.node,
