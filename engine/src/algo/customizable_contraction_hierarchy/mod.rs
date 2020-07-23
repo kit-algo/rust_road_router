@@ -21,7 +21,7 @@ pub use reorder::*;
 pub mod query;
 
 /// Execute first phase, that is metric independent preprocessing.
-pub fn contract<Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph>(graph: &Graph, node_order: NodeOrder) -> CCH {
+pub fn contract<Graph: for<'a> LinkIterable<'a, NodeId> + RandomLinkAccessGraph>(graph: &Graph, node_order: NodeOrder) -> CCH {
     CCH::new(ContractionGraph::new(graph, node_order).contract())
 }
 
@@ -48,12 +48,12 @@ impl Deconstruct for CCH {
 }
 
 #[derive(Debug)]
-pub struct CCHReconstrctor<'g, Graph: for<'a> LinkIterGraph<'a>> {
+pub struct CCHReconstrctor<'g, Graph> {
     pub original_graph: &'g Graph,
     pub node_order: NodeOrder,
 }
 
-impl<'g, Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph> ReconstructPrepared<CCH> for CCHReconstrctor<'g, Graph> {
+impl<'g, Graph: RandomLinkAccessGraph> ReconstructPrepared<CCH> for CCHReconstrctor<'g, Graph> {
     fn reconstruct_with(self, loader: Loader) -> std::io::Result<CCH> {
         let head: Vec<NodeId> = loader.load("cch_head")?;
         let m = head.len();
@@ -64,13 +64,13 @@ impl<'g, Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph> ReconstructPr
 }
 
 impl CCH {
-    fn new<Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph>(contracted_graph: ContractedGraph<Graph>) -> CCH {
+    fn new<Graph: RandomLinkAccessGraph>(contracted_graph: ContractedGraph<Graph>) -> CCH {
         let (cch, order, orig) = contracted_graph.decompose();
         Self::new_from(orig, order, cch)
     }
 
     // this method creates all the other structures from the contracted graph
-    fn new_from<Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph>(original_graph: &Graph, node_order: NodeOrder, contracted_graph: OwnedGraph) -> Self {
+    fn new_from<Graph: RandomLinkAccessGraph>(original_graph: &Graph, node_order: NodeOrder, contracted_graph: OwnedGraph) -> Self {
         let elimination_tree = Self::build_elimination_tree(&contracted_graph);
         let n = contracted_graph.num_nodes() as NodeId;
         let m = contracted_graph.num_arcs();
@@ -79,7 +79,7 @@ impl CCH {
         let cch_edge_to_orig_arc = (0..n)
             .flat_map(|node| {
                 let node_order = &node_order;
-                contracted_graph.link_iter(node).map(move |Link { node: neighbor, .. }| {
+                LinkIterable::<Link>::link_iter(&contracted_graph, node).map(move |Link { node: neighbor, .. }| {
                     (
                         InRangeOption::new(original_graph.edge_index(node_order.node(node), node_order.node(neighbor))),
                         InRangeOption::new(original_graph.edge_index(node_order.node(neighbor), node_order.node(node))),
@@ -115,7 +115,7 @@ impl CCH {
 
     fn build_elimination_tree(graph: &OwnedGraph) -> Vec<InRangeOption<NodeId>> {
         (0..graph.num_nodes())
-            .map(|node_id| graph.link_iter(node_id as NodeId).map(|l| l.node).min())
+            .map(|node_id| LinkIterable::<NodeId>::link_iter(graph, node_id as NodeId).min())
             .map(InRangeOption::new)
             .collect()
     }
@@ -176,14 +176,14 @@ impl CCH {
 
         for node in 0..self.num_nodes() as NodeId {
             let orig_arcs = &self.cch_edge_to_orig_arc[self.neighbor_edge_indices_usize(node)];
-            for (link, &(forward_orig_arc, _)) in forward.link_iter(node).zip(orig_arcs.iter()) {
+            for (link, &(forward_orig_arc, _)) in LinkIterable::<Link>::link_iter(&forward, node).zip(orig_arcs.iter()) {
                 if link.weight < INFINITY {
                     forward_head.push(link.node);
                     forward_cch_edge_to_orig_arc.push(forward_orig_arc);
                     forward_edge_counter += 1;
                 }
             }
-            for (link, &(_, backward_orig_arc)) in backward.link_iter(node).zip(orig_arcs.iter()) {
+            for (link, &(_, backward_orig_arc)) in LinkIterable::<Link>::link_iter(&backward, node).zip(orig_arcs.iter()) {
                 if link.weight < INFINITY {
                     backward_head.push(link.node);
                     backward_cch_edge_to_orig_arc.push(backward_orig_arc);
@@ -285,8 +285,8 @@ pub trait CCHT {
         // `inverted` contains the downward neighbors sorted ascending.
         // We do a coordinated linear sweep over both neighborhoods.
         // Whenever we find a common neighbor, we have a lower triangle.
-        let mut current_iter = self.backward_inverted().link_iter(from).peekable();
-        let mut other_iter = self.forward_inverted().link_iter(to).peekable();
+        let mut current_iter = LinkIterable::<Link>::link_iter(self.backward_inverted(), from).peekable();
+        let mut other_iter = LinkIterable::<Link>::link_iter(self.forward_inverted(), to).peekable();
 
         while let (
             Some(&Link {

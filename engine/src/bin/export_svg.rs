@@ -34,7 +34,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" class=\"node\" />",
                 lng[node], lat[node], lng[node], lat[node]
             );
-            for link in graph.link_iter(node as NodeId) {
+            for link in LinkIterable::<Link>::link_iter(&graph, node as NodeId) {
                 if in_bounding_box(link.node as usize) {
                     println!(
                         "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" class=\"arc\" />",

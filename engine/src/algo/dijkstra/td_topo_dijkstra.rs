@@ -111,7 +111,7 @@ impl TDTopoDijkstra {
             border_callback(node);
             return;
         }
-        for link in graph.link_iter(node) {
+        for link in LinkIterable::<Link>::link_iter(graph, node) {
             Self::dfs(graph, link.node, visited, border_callback, in_core);
         }
     }

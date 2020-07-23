@@ -72,7 +72,7 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> CustomizedGra
                     for Link {
                         node: low_node,
                         weight: first_edge_id,
-                    } in cch.inverted.link_iter(current_node)
+                    } in LinkIterable::<Link>::link_iter(&cch.inverted, current_node)
                     {
                         let first_down_weight: &Shortcut = &downward_weights[first_edge_id as usize - offset];
                         let first_up_weight: &Shortcut = &upward_weights[first_edge_id as usize - offset];
@@ -412,8 +412,8 @@ where
                         let mut triangles = Vec::new();
 
                         // downward edges from both endpoints of the current edge
-                        let mut current_iter = cch.inverted.link_iter(current_node as NodeId).peekable();
-                        let mut other_iter = cch.inverted.link_iter(node as NodeId).peekable();
+                        let mut current_iter = LinkIterable::<Link>::link_iter(&cch.inverted, current_node as NodeId).peekable();
+                        let mut other_iter = LinkIterable::<Link>::link_iter(&cch.inverted, node as NodeId).peekable();
 
                         while let (
                             Some(Link {
@@ -465,7 +465,7 @@ where
             );
 
             // free up space - we will never need the explicit functions again during customization
-            for Link { weight: edge_id, .. } in cch.inverted.link_iter(current_node as NodeId) {
+            for Link { weight: edge_id, .. } in LinkIterable::<Link>::link_iter(&cch.inverted, current_node as NodeId) {
                 upward[edge_id as usize - edge_offset].clear_plf();
                 downward[edge_id as usize - edge_offset].clear_plf();
             }

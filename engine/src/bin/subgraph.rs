@@ -55,7 +55,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             new_lat.push(lat[node]);
             new_lng.push(lng[node]);
 
-            for link in graph.link_iter(node as NodeId) {
+            for link in LinkIterable::<Link>::link_iter(&graph, node as NodeId) {
                 if in_bounding_box(link.node as usize) {
                     *new_first_out.last_mut().unwrap() += 1;
                     new_head.push(id_map.get(link.node as usize).unwrap() as u32);

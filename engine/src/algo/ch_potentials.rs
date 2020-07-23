@@ -72,9 +72,7 @@ impl<'a> Potential for CCHPotential<'a> {
         }
 
         while let Some(node) = self.stack.pop() {
-            let min_by_up = self
-                .forward_cch_graph
-                .link_iter(node)
+            let min_by_up = LinkIterable::<Link>::link_iter(&self.forward_cch_graph, node)
                 .map(|edge| edge.weight + self.potentials[edge.node as usize].value().unwrap())
                 .min()
                 .unwrap_or(INFINITY);
@@ -127,8 +125,7 @@ impl CHPotential {
         }
         *num_pot_evals += 1;
 
-        let min_by_up = forward
-            .link_iter(node)
+        let min_by_up = LinkIterable::<Link>::link_iter(forward, node)
             .map(|edge| edge.weight + Self::potential_internal(potentials, forward, backward, edge.node, num_pot_evals))
             .min()
             .unwrap_or(INFINITY);

@@ -15,7 +15,7 @@ pub struct Server<P> {
 impl<P: Potential> Server<P> {
     pub fn new<Graph>(graph: Graph, potential: P, #[cfg(feature = "chpot_visualize")] lat: &[f32], #[cfg(feature = "chpot_visualize")] lng: &[f32]) -> Self
     where
-        Graph: for<'b> LinkIterGraph<'b> + RandomLinkAccessGraph + Sync,
+        Graph: for<'b> LinkIterGraph<'b> + for<'b> LinkIterable<'b, NodeId> + RandomLinkAccessGraph + Sync,
     {
         Server {
             forward_dijkstra: report_time_with_key("TopoDijkstra preprocessing", "topo_dijk_prepro", || TopoDijkstra::new(graph)),

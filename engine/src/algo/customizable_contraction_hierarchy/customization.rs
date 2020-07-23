@@ -167,7 +167,7 @@ fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weig
                     for Link {
                         node: low_node,
                         weight: first_edge_id,
-                    } in cch.inverted.link_iter(current_node)
+                    } in LinkIterable::<Link>::link_iter(&cch.inverted, current_node)
                     {
                         let first_down_weight = downward_weights[first_edge_id as usize - offset];
                         let first_up_weight = upward_weights[first_edge_id as usize - offset];
@@ -285,7 +285,7 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
                     for Link {
                         node: low_node,
                         weight: first_edge_id,
-                    } in cch.backward_inverted.link_iter(current_node)
+                    } in LinkIterable::<Link>::link_iter(&cch.backward_inverted, current_node)
                     {
                         let first_down_weight = downward_weights[first_edge_id as usize - downward_offset];
                         let mut low_up_edges = cch.forward().range(low_node as usize);
@@ -322,7 +322,7 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
                     for Link {
                         node: low_node,
                         weight: first_edge_id,
-                    } in cch.forward_inverted.link_iter(current_node)
+                    } in LinkIterable::<Link>::link_iter(&cch.forward_inverted, current_node)
                     {
                         let first_up_weight = upward_weights[first_edge_id as usize - upward_offset];
                         let mut low_up_edges = cch.backward().range(low_node as usize);

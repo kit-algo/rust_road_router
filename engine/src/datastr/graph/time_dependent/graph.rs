@@ -147,13 +147,21 @@ impl GraphTrait for Graph {
     }
 }
 
-// TODO remove
+// TODO get rid
 impl<'a> LinkIterable<'a, Link> for Graph {
     type Iter = std::iter::Map<std::slice::Iter<'a, NodeId>, fn(&NodeId) -> Link>;
 
     fn link_iter(&'a self, node: NodeId) -> Self::Iter {
         let range = self.neighbor_edge_indices_usize(node);
         self.head[range].iter().map(|&head| Link { node: head, weight: 0 })
+    }
+}
+
+impl<'a> LinkIterable<'a, NodeId> for Graph {
+    type Iter = std::iter::Cloned<std::slice::Iter<'a, NodeId>>;
+
+    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+        self.head[self.neighbor_edge_indices_usize(node)].iter().cloned()
     }
 }
 

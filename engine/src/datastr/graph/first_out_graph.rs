@@ -159,7 +159,21 @@ where
     }
 }
 
-impl<'a, FirstOutContainer, HeadContainer, WeightContainer> MutWeightLinkIterGraph<'a> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+impl<'a, FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<'a, NodeId> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+where
+    FirstOutContainer: AsSlice<EdgeId>,
+    HeadContainer: AsSlice<NodeId>,
+    WeightContainer: AsSlice<Weight>,
+{
+    type Iter = std::iter::Cloned<std::slice::Iter<'a, NodeId>>;
+
+    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+        self.head()[self.neighbor_edge_indices_usize(node)].iter().cloned()
+    }
+}
+
+impl<'a, FirstOutContainer, HeadContainer, WeightContainer> MutLinkIterable<'a, (&'a NodeId, &'a mut Weight)>
+    for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
 where
     FirstOutContainer: AsSlice<EdgeId>,
     HeadContainer: AsSlice<NodeId>,
@@ -168,7 +182,7 @@ where
     type Iter = std::iter::Zip<std::slice::Iter<'a, NodeId>, std::slice::IterMut<'a, Weight>>;
 
     #[inline]
-    fn mut_weight_link_iter(&'a mut self, node: NodeId) -> Self::Iter {
+    fn link_iter_mut(&'a mut self, node: NodeId) -> Self::Iter {
         let range = self.neighbor_edge_indices_usize(node);
         self.head.as_slice()[range.clone()].iter().zip(self.weight.as_mut_slice()[range].iter_mut())
     }
@@ -188,13 +202,10 @@ where
         }
     }
 
-    // TODO only iterate over heads
     fn edge_index(&self, from: NodeId, to: NodeId) -> Option<EdgeId> {
-        let first_out = self.first_out()[from as usize] as usize;
-        self.link_iter(from)
-            .enumerate()
-            .find(|&(_, Link { node, .. })| node == to)
-            .map(|(i, _)| (first_out + i) as EdgeId)
+        let first_out = self.first_out()[from as usize];
+        let range = self.neighbor_edge_indices_usize(from);
+        self.head()[range].iter().position(|&head| head == to).map(|pos| pos as EdgeId + first_out)
     }
 
     #[inline]

@@ -63,13 +63,13 @@ pub trait LinkIterable<'a, Link>: Graph {
     fn link_iter(&'a self, node: NodeId) -> Self::Iter;
 }
 
-// impl<'a, G: for<'b> LinkIterGraph<'b>> LinkIterable<'a, Link> for G {
-//     type Iter = <Self as LinkIterGraph<'a>>::Iter;
-//     #[inline(always)]
-//     fn link_iter(&'a self, node: NodeId) -> Self::Iter {
-//         self.neighbor_iter(node)
-//     }
-// }
+pub trait MutLinkIterable<'a, Link>: Graph {
+    /// Type of the outgoing neighbor iterator.
+    type Iter: Iterator<Item = Link> + 'a;
+
+    /// Get a iterator over the outgoing links of the given node.
+    fn link_iter_mut(&'a mut self, node: NodeId) -> Self::Iter;
+}
 
 /// Trait for graph data structures which allow iterating over outgoing links of a node.
 pub trait LinkIterGraph<'a>: LinkIterable<'a, Link> {
@@ -132,28 +132,20 @@ pub trait LinkIterGraph<'a>: LinkIterable<'a, Link> {
 
 impl<'a, G: for<'b> LinkIterable<'b, Link>> LinkIterGraph<'a> for G {}
 
-/// Trait for graph data structures which allow iterating over outgoing links of a node and modifying the weights of those links.
-pub trait MutWeightLinkIterGraph<'a>: Graph {
-    /// Type of the outgoing neighbor iterator.
-    type Iter: Iterator<Item = (&'a NodeId, &'a mut Weight)> + 'a;
-    /// Get a iterator with mutable weights over the outgoing links of the given node.
-    fn mut_weight_link_iter(&'a mut self, node: NodeId) -> Self::Iter;
-}
-
 /// Utility function for preprocessing graphs with parallel edges.
 /// Will ensure, that all parallel edges have the lowest weight.
 /// Currently used to preprocess OSM graphs before CCH customization
 /// because the respecting will not necessarily use the parallel edge with the lowest weight.
-pub fn unify_parallel_edges<G: for<'a> MutWeightLinkIterGraph<'a>>(graph: &mut G) {
+pub fn unify_parallel_edges<G: for<'a> MutLinkIterable<'a, (&'a NodeId, &'a mut Weight)>>(graph: &mut G) {
     let mut weight_cache = vec![INFINITY; graph.num_nodes()];
     for node in 0..graph.num_nodes() {
-        for (&node, weight) in graph.mut_weight_link_iter(node as NodeId) {
+        for (&node, weight) in graph.link_iter_mut(node as NodeId) {
             weight_cache[node as usize] = std::cmp::min(weight_cache[node as usize], *weight);
         }
-        for (&node, weight) in graph.mut_weight_link_iter(node as NodeId) {
+        for (&node, weight) in graph.link_iter_mut(node as NodeId) {
             *weight = weight_cache[node as usize];
         }
-        for (&node, _weight) in graph.mut_weight_link_iter(node as NodeId) {
+        for (&node, _weight) in graph.link_iter_mut(node as NodeId) {
             weight_cache[node as usize] = INFINITY;
         }
     }
