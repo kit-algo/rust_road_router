@@ -4,7 +4,7 @@ use crate::datastr::graph::time_dependent::*;
 use crate::report::*;
 
 pub struct Server {
-    dijkstra: GenericDijkstra<Weight, TDDijkstraOps, TDGraph>,
+    dijkstra: GenericDijkstra<TDDijkstraOps, TDGraph>,
 }
 
 impl Server {
@@ -64,7 +64,8 @@ impl<'s> TDQueryServer<'s, Timestamp, Weight> for Server {
 
 pub struct TDDijkstraOps();
 
-impl DijkstraOps<Weight, TDGraph> for TDDijkstraOps {
+impl DijkstraOps<TDGraph> for TDDijkstraOps {
+    type Label = Weight;
     type LinkResult = Weight;
     type Arc = (NodeId, EdgeId);
 

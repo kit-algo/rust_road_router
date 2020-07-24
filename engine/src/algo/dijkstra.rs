@@ -46,7 +46,7 @@ impl<W> Indexing for State<W> {
 }
 
 pub trait Label {
-    type Key;
+    type Key: Ord;
     fn neutral() -> Self;
     fn key(&self) -> Self::Key;
 }

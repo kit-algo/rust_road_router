@@ -3,17 +3,19 @@
 use super::*;
 use crate::datastr::{index_heap::*, timestamped_vector::*};
 
-pub trait DijkstraOps<Label, Graph> {
-    type Arc;
+pub trait DijkstraOps<Graph> {
+    type Label: super::Label + Clone;
+    type Arc: Arc;
     type LinkResult;
 
-    fn link(&mut self, graph: &Graph, label: &Label, link: &Self::Arc) -> Self::LinkResult;
-    fn merge(&mut self, label: &mut Label, linked: Self::LinkResult) -> bool;
+    fn link(&mut self, graph: &Graph, label: &Self::Label, link: &Self::Arc) -> Self::LinkResult;
+    fn merge(&mut self, label: &mut Self::Label, linked: Self::LinkResult) -> bool;
 }
 
 pub struct DefaultOps();
 
-impl<G> DijkstraOps<Weight, G> for DefaultOps {
+impl<G> DijkstraOps<G> for DefaultOps {
+    type Label = Weight;
     type Arc = Link;
     type LinkResult = Weight;
 
@@ -38,23 +40,20 @@ impl Default for DefaultOps {
     }
 }
 
-pub struct GenericDijkstra<Label: super::Label, Ops, Graph> {
+pub struct GenericDijkstra<Ops: DijkstraOps<Graph>, Graph> {
     graph: Graph,
 
-    distances: TimestampedVector<Label>,
+    distances: TimestampedVector<Ops::Label>,
     predecessors: Vec<NodeId>,
-    queue: IndexdMinHeap<State<Label::Key>>,
+    queue: IndexdMinHeap<State<<Ops::Label as super::Label>::Key>>,
 
     ops: Ops,
 }
 
-impl<Label, Ops, Graph> GenericDijkstra<Label, Ops, Graph>
+impl<Ops, Graph> GenericDijkstra<Ops, Graph>
 where
-    Ops: DijkstraOps<Label, Graph> + Default,
+    Ops: DijkstraOps<Graph> + Default,
     Graph: for<'a> LinkIterable<'a, Ops::Arc>,
-    Label: Clone + super::Label,
-    Label::Key: Ord,
-    Ops::Arc: Arc,
 {
     pub fn new(graph: Graph) -> Self {
         let n = graph.num_nodes();
@@ -73,7 +72,7 @@ where
     /// For CH preprocessing we reuse the distance array and the queue to reduce allocations.
     /// This method creates an algo struct from recycled data.
     /// The counterpart is the `recycle` method.
-    pub fn from_recycled(graph: Graph, recycled: Trash<Label>) -> Self {
+    pub fn from_recycled(graph: Graph, recycled: Trash<Ops::Label>) -> Self {
         let n = graph.num_nodes();
         assert!(recycled.distances.len() >= n);
         assert!(recycled.predecessors.len() >= n);
@@ -87,7 +86,7 @@ where
         }
     }
 
-    pub fn initialize_query(&mut self, query: impl GenQuery<Label>) {
+    pub fn initialize_query(&mut self, query: impl GenQuery<Ops::Label>) {
         let from = query.from();
         // initialize
         self.queue.clear();
@@ -130,7 +129,7 @@ where
         })
     }
 
-    pub fn tentative_distance(&self, node: NodeId) -> &Label {
+    pub fn tentative_distance(&self, node: NodeId) -> &Ops::Label {
         &self.distances[node as usize]
     }
 
@@ -142,14 +141,14 @@ where
         &self.graph
     }
 
-    pub fn queue(&self) -> &IndexdMinHeap<State<Label::Key>> {
+    pub fn queue(&self) -> &IndexdMinHeap<State<<Ops::Label as super::Label>::Key>> {
         &self.queue
     }
 
     /// For CH preprocessing we reuse the distance array and the queue to reduce allocations.
     /// This method decomposes this algo struct for later reuse.
     /// The counterpart is `from_recycled`
-    pub fn recycle(self) -> Trash<Label> {
+    pub fn recycle(self) -> Trash<Ops::Label> {
         Trash {
             distances: self.distances,
             predecessors: self.predecessors,
@@ -158,13 +157,10 @@ where
     }
 }
 
-impl<Label, Ops, Graph> Iterator for GenericDijkstra<Label, Ops, Graph>
+impl<Ops, Graph> Iterator for GenericDijkstra<Ops, Graph>
 where
-    Ops: DijkstraOps<Label, Graph> + Default,
+    Ops: DijkstraOps<Graph> + Default,
     Graph: for<'a> LinkIterable<'a, Ops::Arc>,
-    Label: Clone + super::Label,
-    Label::Key: Ord,
-    Ops::Arc: Arc,
 {
     type Item = NodeId;
 
@@ -174,7 +170,7 @@ where
     }
 }
 
-pub type StandardDijkstra<G> = GenericDijkstra<Weight, DefaultOps, G>;
+pub type StandardDijkstra<G> = GenericDijkstra<DefaultOps, G>;
 
 pub struct Trash<Label: super::Label> {
     distances: TimestampedVector<Label>,
