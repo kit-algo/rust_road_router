@@ -18,6 +18,7 @@ pub struct GenTopoDijkstra<Ops: DijkstraOps<Graph>, Graph> {
     border_node: NodeId,
 
     num_relaxed_arcs: usize,
+    num_queue_pushs: usize,
 
     ops: Ops,
 }
@@ -57,6 +58,7 @@ where
             queue: IndexdMinHeap::new(n),
 
             num_relaxed_arcs: 0,
+            num_queue_pushs: 0,
             border_node: 0,
 
             ops: Default::default(),
@@ -68,6 +70,7 @@ where
         let to = self.virtual_topocore.order.rank(query.to());
         // initialize
         self.num_relaxed_arcs = 0;
+        self.num_queue_pushs = 0;
 
         self.queue.clear();
         let init = query.initial_state();
@@ -246,6 +249,7 @@ where
                                     debug_assert!(other.key >= next.key);
                                     self.queue.decrease_key(next);
                                 } else {
+                                    self.num_queue_pushs += 1;
                                     self.queue.push(next);
                                 }
                             }
@@ -291,7 +295,7 @@ where
     }
 
     pub fn num_queue_pushs(&self) -> usize {
-        unimplemented!()
+        self.num_queue_pushs
     }
 }
 
