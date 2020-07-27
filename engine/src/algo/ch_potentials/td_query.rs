@@ -1,12 +1,12 @@
 use super::*;
 
 use crate::algo::dijkstra::gen_topo_dijkstra::*;
-use crate::algo::dijkstra::query::td_dijkstra::TDDijkstraOps;
+use crate::algo::dijkstra::Label;
 use crate::datastr::graph::time_dependent::*;
 use crate::report::*;
 
-pub struct Server<P> {
-    forward_dijkstra: GenTopoDijkstra<TDDijkstraOps, TDGraph>,
+pub struct Server<P, Ops: DijkstraOps<Graph>, Graph> {
+    forward_dijkstra: GenTopoDijkstra<Ops, Graph>,
     potential: P,
 
     #[cfg(feature = "chpot_visualize")]
@@ -15,10 +15,18 @@ pub struct Server<P> {
     lng: &[f32],
 }
 
-impl<P: Potential> Server<P> {
-    pub fn new(graph: TDGraph, potential: P, #[cfg(feature = "chpot_visualize")] lat: &[f32], #[cfg(feature = "chpot_visualize")] lng: &[f32]) -> Self {
+impl<P: Potential, Ops: DijkstraOps<Graph, Label = Timestamp>, Graph> Server<P, Ops, Graph>
+where
+    <Ops::Label as Label>::Key: std::ops::Add<Output = <Ops::Label as Label>::Key>,
+    Graph: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, Ops::Arc>,
+{
+    pub fn new<G>(graph: G, potential: P, ops: Ops, #[cfg(feature = "chpot_visualize")] lat: &[f32], #[cfg(feature = "chpot_visualize")] lng: &[f32]) -> Self
+    where
+        G: for<'a> LinkIterable<'a, NodeId>,
+        Graph: BuildPermutated<G>,
+    {
         Self {
-            forward_dijkstra: report_time_with_key("TDTopoDijkstra preprocessing", "topo_dijk_prepro", || GenTopoDijkstra::new(graph)),
+            forward_dijkstra: report_time_with_key("TDTopoDijkstra preprocessing", "topo_dijk_prepro", || GenTopoDijkstra::new_with_ops(graph, ops)),
             potential,
 
             #[cfg(feature = "chpot_visualize")]
@@ -28,8 +36,11 @@ impl<P: Potential> Server<P> {
         }
     }
 
-    fn distance(&mut self, from: NodeId, to: NodeId, departure: Timestamp) -> Option<Weight> {
+    fn distance(&mut self, query: impl GenQuery<Ops::Label>) -> Option<Weight> {
         report!("algo", "CH Potentials TD Query");
+
+        let to = query.to();
+        let departure = query.initial_state();
 
         #[cfg(feature = "chpot_visualize")]
         {
@@ -44,7 +55,7 @@ impl<P: Potential> Server<P> {
         };
         let mut num_queue_pops = 0;
 
-        self.forward_dijkstra.initialize_query(TDQuery { from, to, departure });
+        self.forward_dijkstra.initialize_query(query);
         self.potential.init(to);
         let forward_dijkstra = &mut self.forward_dijkstra;
         let potential = &mut self.potential;
@@ -113,9 +124,14 @@ impl<P: Potential> Server<P> {
     }
 }
 
-pub struct PathServerWrapper<'s, P>(&'s Server<P>, TDQuery<Timestamp>);
+pub struct PathServerWrapper<'s, P, O: DijkstraOps<G, Label = Timestamp>, G>(&'s Server<P, O, G>, TDQuery<Timestamp>);
 
-impl<'s, P: Potential> PathServer for PathServerWrapper<'s, P> {
+impl<'s, P, O, G> PathServer for PathServerWrapper<'s, P, O, G>
+where
+    P: Potential,
+    O: DijkstraOps<G, Label = Timestamp>,
+    G: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, O::Arc>,
+{
     type NodeInfo = NodeId;
 
     fn path(&mut self) -> Vec<Self::NodeInfo> {
@@ -123,11 +139,16 @@ impl<'s, P: Potential> PathServer for PathServerWrapper<'s, P> {
     }
 }
 
-impl<'s, P: Potential + 's> TDQueryServer<'s, Timestamp, Weight> for Server<P> {
-    type P = PathServerWrapper<'s, P>;
+impl<'s, P: 's, O: 's, G: 's> TDQueryServer<'s, Timestamp, Weight> for Server<P, O, G>
+where
+    P: Potential,
+    O: DijkstraOps<G, Label = Timestamp>,
+    G: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, O::Arc>,
+{
+    type P = PathServerWrapper<'s, P, O, G>;
 
     fn query(&'s mut self, query: TDQuery<Timestamp>) -> Option<QueryResult<Self::P, Weight>> {
-        self.distance(query.from, query.to, query.departure)
+        self.distance(query)
             .map(move |distance| QueryResult::new(distance, PathServerWrapper(self, query)))
     }
 }

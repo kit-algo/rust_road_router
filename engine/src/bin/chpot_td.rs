@@ -8,7 +8,7 @@ use rust_road_router::algo::customizable_contraction_hierarchy::*;
 use rust_road_router::{
     algo::{
         ch_potentials::{td_query::Server, *},
-        dijkstra::query::td_dijkstra::Server as DijkServer,
+        dijkstra::query::td_dijkstra::{Server as DijkServer, TDDijkstraOps},
         *,
     },
     cli::CliErr,
@@ -104,7 +104,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
-    let mut server = Server::new(graph.clone(), potential);
+    let mut server = Server::new(graph.clone(), potential, TDDijkstraOps::default());
     drop(virtual_topocore_ctxt);
 
     let num_queries = rust_road_router::experiments::chpot::NUM_QUERIES;

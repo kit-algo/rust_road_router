@@ -32,11 +32,20 @@ struct ChainStep<LinkResult> {
 
 impl<Ops, Graph> GenTopoDijkstra<Ops, Graph>
 where
-    Ops: DijkstraOps<Graph> + Default,
+    Ops: DijkstraOps<Graph>,
     <Ops::Label as super::Label>::Key: std::ops::Add<Output = <Ops::Label as super::Label>::Key>,
     Graph: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, Ops::Arc>,
 {
     pub fn new<G>(graph: G) -> Self
+    where
+        G: for<'a> LinkIterable<'a, NodeId>,
+        Graph: BuildPermutated<G>,
+        Ops: Default,
+    {
+        Self::new_with_ops(graph, Default::default())
+    }
+
+    pub fn new_with_ops<G>(graph: G, ops: Ops) -> Self
     where
         G: for<'a> LinkIterable<'a, NodeId>,
         Graph: BuildPermutated<G>,
@@ -61,7 +70,7 @@ where
             num_queue_pushs: 0,
             border_node: 0,
 
-            ops: Default::default(),
+            ops,
         }
     }
 
@@ -142,17 +151,21 @@ where
         border
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn next_step(&mut self) -> Option<NodeId> {
         self.settle_next_node(|_| Some(Neutral()))
     }
 
-    #[inline]
-    pub fn next_step_with_potential(&mut self, potential: impl FnMut(NodeId) -> Option<<Ops::Label as super::Label>::Key>) -> Option<NodeId> {
+    #[inline(always)]
+    pub fn next_step_with_potential<P, O>(&mut self, potential: P) -> Option<NodeId>
+    where
+        P: FnMut(NodeId) -> Option<O>,
+        O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
+    {
         self.settle_next_node(potential)
     }
 
-    #[inline]
+    #[inline(always)]
     fn settle_next_node<P, O>(&mut self, mut potential: P) -> Option<NodeId>
     where
         P: FnMut(NodeId) -> Option<O>,
@@ -308,7 +321,7 @@ where
 
 pub type StandardTopoDijkstra<G> = GenTopoDijkstra<DefaultOps, G>;
 
-struct Neutral();
+pub struct Neutral();
 
 impl<T> std::ops::Add<T> for Neutral {
     type Output = T;
