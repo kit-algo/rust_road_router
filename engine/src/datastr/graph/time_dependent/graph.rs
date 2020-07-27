@@ -1,5 +1,6 @@
 use super::*;
 use crate::datastr::graph::Graph as GraphTrait;
+use crate::util::in_range_option::*;
 
 type IPPIndex = u32;
 
@@ -181,6 +182,103 @@ impl BuildPermutated<Graph> for Graph {
             first_ipp_of_arc,
             ipp_departure_time,
             ipp_travel_time,
+        }
+    }
+}
+
+pub struct LiveTDGraph {
+    graph: Graph,
+    soon: Timestamp,
+    live: Vec<InRangeOption<Weight>>,
+}
+
+impl LiveTDGraph {
+    pub fn new(graph: Graph, soon: Timestamp, live: Vec<InRangeOption<Weight>>) -> Self {
+        LiveTDGraph { graph, soon, live }
+    }
+
+    pub fn eval(&self, edge_id: EdgeId, t: Timestamp) -> Weight {
+        let ttf = self.graph.travel_time_function(edge_id);
+        let predicted = ttf.eval(t);
+        if let Some(live) = self.live[edge_id as usize].value() {
+            if t < self.soon {
+                live
+            } else {
+                if ttf.eval(self.soon) < live {
+                    std::cmp::max((live + self.soon).saturating_sub(t), predicted)
+                } else {
+                    std::cmp::min(live.saturating_add(t) - self.soon, predicted)
+                }
+            }
+        } else {
+            predicted
+        }
+    }
+}
+
+impl crate::datastr::graph::Graph for LiveTDGraph {
+    fn num_nodes(&self) -> usize {
+        self.graph.num_nodes()
+    }
+    fn num_arcs(&self) -> usize {
+        self.graph.num_arcs()
+    }
+    fn degree(&self, node: NodeId) -> usize {
+        self.graph.degree(node)
+    }
+}
+
+impl<'a> LinkIterable<'a, NodeId> for LiveTDGraph {
+    type Iter = <Graph as LinkIterable<'a, NodeId>>::Iter;
+
+    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+        LinkIterable::<NodeId>::link_iter(&self.graph, node)
+    }
+}
+impl<'a> LinkIterable<'a, (NodeId, EdgeId)> for LiveTDGraph {
+    type Iter = <Graph as LinkIterable<'a, (NodeId, EdgeId)>>::Iter;
+
+    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+        LinkIterable::<(NodeId, EdgeId)>::link_iter(&self.graph, node)
+    }
+}
+
+impl BuildPermutated<LiveTDGraph> for LiveTDGraph {
+    fn permutated(graph: &LiveTDGraph, order: &NodeOrder) -> Self {
+        let mut first_out: Vec<EdgeId> = Vec::with_capacity(graph.num_nodes() + 1);
+        first_out.push(0);
+        let mut head = Vec::with_capacity(graph.num_arcs());
+        let mut live = Vec::with_capacity(graph.num_arcs());
+        let mut first_ipp_of_arc = Vec::<IPPIndex>::with_capacity(graph.num_arcs());
+        first_ipp_of_arc.push(0);
+        let mut ipp_departure_time = Vec::<Timestamp>::with_capacity(graph.graph.ipp_departure_time.len());
+        let mut ipp_travel_time = Vec::<Weight>::with_capacity(graph.graph.ipp_travel_time.len());
+
+        for &node in order.order() {
+            first_out.push(first_out.last().unwrap() + graph.degree(node) as NodeId);
+            let mut links = graph.graph.neighbor_and_edge_id_iter(node).collect::<Vec<_>>();
+            links.sort_unstable_by_key(|&(head, _)| order.rank(head));
+
+            for (h, e) in links {
+                head.push(order.rank(h));
+                live.push(graph.live[e as usize]);
+                let ipp_range = graph.graph.first_ipp_of_arc[e as usize] as usize..graph.graph.first_ipp_of_arc[e as usize + 1] as usize;
+                first_ipp_of_arc.push(first_ipp_of_arc.last().unwrap() + (ipp_range.end - ipp_range.start) as IPPIndex);
+                ipp_departure_time.extend_from_slice(&graph.graph.ipp_departure_time[ipp_range.clone()]);
+                ipp_travel_time.extend_from_slice(&graph.graph.ipp_travel_time[ipp_range]);
+            }
+        }
+
+        LiveTDGraph {
+            graph: Graph {
+                first_out,
+                head,
+                first_ipp_of_arc,
+                ipp_departure_time,
+                ipp_travel_time,
+            },
+            soon: graph.soon,
+            live,
         }
     }
 }
