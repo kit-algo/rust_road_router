@@ -68,7 +68,7 @@ pub fn preprocess<'c, Graph: for<'a> LinkIterGraph<'a> + for<'a> LinkIterable<'a
                 .tap(|neighbors| neighbors.dedup_by(|a, b| a.node == b.node))
         })
         .collect();
-    let reversed = graph.reverse();
+    let reversed = OwnedGraph::reversed(graph);
     let mut ins: Vec<Vec<Link>> = (0..n)
         .map(|rank| {
             let node = order.node(rank as NodeId);
@@ -472,18 +472,18 @@ impl VirtualTopocore {
 }
 
 #[allow(clippy::cognitive_complexity)]
-pub fn virtual_topocore<'c, Graph: for<'a> LinkIterGraph<'a> + for<'a> LinkIterable<'a, NodeId>>(graph: &Graph) -> VirtualTopocore {
+pub fn virtual_topocore<'c, Graph: for<'a> LinkIterable<'a, NodeId>>(graph: &Graph) -> VirtualTopocore {
     let order = dfs_pre_order(graph);
     let n = graph.num_nodes();
 
-    let reversed = graph.reverse();
+    let reversed = UnweightedOwnedGraph::reversed(graph);
 
     let symmetric_degrees = (0..graph.num_nodes())
         .map(|node| {
-            LinkIterable::<Link>::link_iter(graph, node as NodeId)
-                .chain(LinkIterable::<Link>::link_iter(&reversed, node as NodeId))
-                .filter(|l| l.weight < INFINITY)
-                .map(|l| l.node)
+            graph
+                .link_iter(node as NodeId)
+                .chain(reversed.link_iter(node as NodeId))
+                // .filter(|l| l.weight < INFINITY) TODO
                 .collect::<Vec<NodeId>>()
                 .tap(|neighbors| neighbors.sort_unstable())
                 .tap(|neighbors| neighbors.dedup())

@@ -63,12 +63,6 @@ where
         FirstOutGraph { first_out, head, weight }
     }
 
-    /// Get the number of outgoing arcs for a node
-    pub fn degree(&self, node: NodeId) -> usize {
-        let range = self.neighbor_edge_indices_usize(node);
-        range.end - range.start
-    }
-
     /// Decompose the graph into its three seperate data containers
     pub fn decompose(self) -> (FirstOutContainer, HeadContainer, WeightContainer) {
         (self.first_out, self.head, self.weight)
@@ -104,6 +98,44 @@ impl OwnedGraph {
             .into_iter()
             .flat_map(|neighbors| neighbors.into_iter().map(|Link { node, weight }| (node, weight)))
             .unzip();
+
+        OwnedGraph::new(first_out, head, weight)
+    }
+}
+
+impl<G: for<'a> LinkIterable<'a, Link>> BuildReversed<G> for OwnedGraph {
+    fn reversed(graph: &G) -> Self {
+        // vector of adjacency lists for the reverse graph
+        let mut reversed: Vec<Vec<Link>> = (0..graph.num_nodes()).map(|_| Vec::<Link>::new()).collect();
+
+        // iterate over all edges and insert them in the reversed structure
+        for node in 0..(graph.num_nodes() as NodeId) {
+            for Link { node: neighbor, weight } in graph.link_iter(node) {
+                reversed[neighbor as usize].push(Link { node, weight });
+            }
+        }
+
+        OwnedGraph::from_adjancecy_lists(reversed)
+    }
+}
+
+impl<G: for<'a> LinkIterable<'a, Link>> BuildPermutated<G> for OwnedGraph {
+    fn permutated(graph: &G, order: &NodeOrder) -> Self {
+        let mut first_out: Vec<EdgeId> = Vec::with_capacity(graph.num_nodes() + 1);
+        first_out.push(0);
+        let mut head = Vec::with_capacity(graph.num_arcs());
+        let mut weight = Vec::with_capacity(graph.num_arcs());
+
+        for &node in order.order() {
+            first_out.push(first_out.last().unwrap() + graph.degree(node) as NodeId);
+            let mut links = graph.link_iter(node).collect::<Vec<_>>();
+            links.sort_unstable_by_key(|l| order.rank(l.node));
+
+            for link in links {
+                head.push(order.rank(link.node));
+                weight.push(link.weight);
+            }
+        }
 
         OwnedGraph::new(first_out, head, weight)
     }
@@ -211,6 +243,140 @@ where
     #[inline]
     fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {
         (self.first_out()[node as usize] as EdgeId)..(self.first_out()[(node + 1) as usize] as EdgeId)
+    }
+}
+
+/// Container struct for the collections of an unweighted graph.
+/// Genric over the types of the data collections.
+/// Anything that can be dereferenced to a slice works.
+/// Both owned (`Vec<T>`, `Box<[T]>`) and shared (`Rc<[T]>`, `Arc<[T])>`) or borrowed (slices) data is possible.
+#[derive(Debug, Clone)]
+pub struct UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
+where
+    FirstOutContainer: AsSlice<EdgeId>,
+    HeadContainer: AsSlice<NodeId>,
+{
+    // index of first edge of each node +1 entry in the end
+    first_out: FirstOutContainer,
+    // the node ids to which each edge points
+    head: HeadContainer,
+}
+
+impl<FirstOutContainer, HeadContainer> UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
+where
+    FirstOutContainer: AsSlice<EdgeId>,
+    HeadContainer: AsSlice<NodeId>,
+{
+    /// Borrow a slice of the first_out data
+    pub fn first_out(&self) -> &[EdgeId] {
+        self.first_out.as_slice()
+    }
+    /// Borrow a slice of the head data
+    pub fn head(&self) -> &[NodeId] {
+        self.head.as_slice()
+    }
+
+    /// Create a new `FirstOutGraph` from the three containers.
+    pub fn new(first_out: FirstOutContainer, head: HeadContainer) -> Self {
+        assert!(first_out.as_slice().len() < <NodeId>::max_value() as usize);
+        assert!(head.as_slice().len() < <EdgeId>::max_value() as usize);
+        assert_eq!(*first_out.as_slice().first().unwrap(), 0);
+        assert_eq!(*first_out.as_slice().last().unwrap() as usize, head.as_slice().len());
+
+        Self { first_out, head }
+    }
+
+    /// Decompose the graph into its seperate data containers
+    pub fn decompose(self) -> (FirstOutContainer, HeadContainer) {
+        (self.first_out, self.head)
+    }
+}
+
+impl<FirstOutContainer, HeadContainer> Graph for UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
+where
+    FirstOutContainer: AsSlice<EdgeId>,
+    HeadContainer: AsSlice<NodeId>,
+{
+    fn num_nodes(&self) -> usize {
+        self.first_out().len() - 1
+    }
+
+    fn num_arcs(&self) -> usize {
+        self.head().len()
+    }
+
+    fn degree(&self, node: NodeId) -> usize {
+        let node = node as usize;
+        (self.first_out()[node + 1] - self.first_out()[node]) as usize
+    }
+}
+
+impl<'a, FirstOutContainer, HeadContainer> LinkIterable<'a, NodeId> for UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
+where
+    FirstOutContainer: AsSlice<EdgeId>,
+    HeadContainer: AsSlice<NodeId>,
+{
+    type Iter = std::iter::Cloned<std::slice::Iter<'a, NodeId>>;
+
+    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+        self.head()[self.neighbor_edge_indices_usize(node)].iter().cloned()
+    }
+}
+
+impl<FirstOutContainer, HeadContainer> RandomLinkAccessGraph for UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
+where
+    FirstOutContainer: AsSlice<EdgeId>,
+    HeadContainer: AsSlice<NodeId>,
+{
+    #[inline]
+    fn link(&self, edge_id: EdgeId) -> Link {
+        Link {
+            node: self.head()[edge_id as usize],
+            weight: 0,
+        }
+    }
+
+    fn edge_index(&self, from: NodeId, to: NodeId) -> Option<EdgeId> {
+        let first_out = self.first_out()[from as usize];
+        let range = self.neighbor_edge_indices_usize(from);
+        self.head()[range].iter().position(|&head| head == to).map(|pos| pos as EdgeId + first_out)
+    }
+
+    #[inline]
+    fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {
+        (self.first_out()[node as usize] as EdgeId)..(self.first_out()[(node + 1) as usize] as EdgeId)
+    }
+}
+
+pub type UnweightedOwnedGraph = UnweightedFirstOutGraph<Vec<EdgeId>, Vec<NodeId>>;
+
+impl UnweightedOwnedGraph {
+    pub fn from_adjancecy_lists(adjancecy_lists: Vec<Vec<NodeId>>) -> Self {
+        // create first_out array by doing a prefix sum over the adjancecy list sizes
+        let first_out = {
+            let degrees = adjancecy_lists.iter().map(|neighbors| neighbors.len() as EdgeId);
+            degrees_to_first_out(degrees).collect()
+        };
+
+        let head = adjancecy_lists.into_iter().flat_map(|neighbors| neighbors.into_iter()).collect();
+
+        Self::new(first_out, head)
+    }
+}
+
+impl<G: for<'a> LinkIterable<'a, NodeId>> BuildReversed<G> for UnweightedOwnedGraph {
+    fn reversed(graph: &G) -> Self {
+        // vector of adjacency lists for the reverse graph
+        let mut reversed: Vec<Vec<NodeId>> = (0..graph.num_nodes()).map(|_| Vec::<NodeId>::new()).collect();
+
+        // iterate over all edges and insert them in the reversed structure
+        for node in 0..(graph.num_nodes() as NodeId) {
+            for neighbor in graph.link_iter(node) {
+                reversed[neighbor as usize].push(node);
+            }
+        }
+
+        Self::from_adjancecy_lists(reversed)
     }
 }
 

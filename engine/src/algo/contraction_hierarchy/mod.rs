@@ -124,7 +124,7 @@ impl ContractionGraph {
                     })
                     .collect()
             });
-            let reversed = graph.reverse();
+            let reversed = OwnedGraph::reversed(graph);
             let ins = (0..n).map(|node| {
                 LinkIterable::<Link>::link_iter(&reversed, order.node(node as NodeId))
                     .filter(|&Link { node: head, .. }| head != order.node(node as NodeId))

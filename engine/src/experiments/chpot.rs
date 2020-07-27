@@ -99,7 +99,7 @@ pub fn run(
     };
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
-    let mut topocore = {
+    let mut topocore: TopoServer<_, OwnedGraph> = {
         #[cfg(feature = "chpot_visualize")]
         {
             TopoServer::new(modified_graph.clone(), potential, &lat, &lng)

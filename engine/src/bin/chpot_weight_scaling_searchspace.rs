@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let travel_time = Vec::load_from(path.join("travel_time"))?;
 
     let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
-    let reversed = graph.reverse();
+    let reversed = OwnedGraph::reversed(&graph);
 
     let n = graph.num_nodes();
 

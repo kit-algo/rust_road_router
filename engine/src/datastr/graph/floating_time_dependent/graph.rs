@@ -147,16 +147,6 @@ impl GraphTrait for Graph {
     }
 }
 
-// TODO remove
-// impl<'a> LinkIterable<'a, Link> for Graph {
-//     type Iter = std::iter::Map<std::slice::Iter<'a, NodeId>, fn(&NodeId) -> Link>;
-
-//     fn link_iter(&'a self, node: NodeId) -> Self::Iter {
-//         let range = self.neighbor_edge_indices_usize(node);
-//         self.head[range].iter().map(|&head| Link { node: head, weight: 0 })
-//     }
-// }
-
 impl RandomLinkAccessGraph for Graph {
     fn link(&self, edge_id: EdgeId) -> Link {
         Link {

@@ -85,38 +85,6 @@ impl Graph {
         &self.head[..]
     }
 
-    pub fn permute_node_ids(&self, order: &NodeOrder) -> Self {
-        let mut first_out: Vec<EdgeId> = Vec::with_capacity(self.num_nodes() + 1);
-        first_out.push(0);
-        let mut head = Vec::with_capacity(self.num_arcs());
-        let mut first_ipp_of_arc = Vec::<IPPIndex>::with_capacity(self.num_arcs());
-        first_ipp_of_arc.push(0);
-        let mut ipp_departure_time = Vec::<Timestamp>::with_capacity(self.ipp_departure_time.len());
-        let mut ipp_travel_time = Vec::<Weight>::with_capacity(self.ipp_travel_time.len());
-
-        for &node in order.order() {
-            first_out.push(first_out.last().unwrap() + self.degree(node) as NodeId);
-            let mut links = self.neighbor_and_edge_id_iter(node).collect::<Vec<_>>();
-            links.sort_unstable_by_key(|&(head, _)| order.rank(head));
-
-            for (h, e) in links {
-                head.push(order.rank(h));
-                let ipp_range = self.first_ipp_of_arc[e as usize] as usize..self.first_ipp_of_arc[e as usize + 1] as usize;
-                first_ipp_of_arc.push(first_ipp_of_arc.last().unwrap() + (ipp_range.end - ipp_range.start) as IPPIndex);
-                ipp_departure_time.extend_from_slice(&self.ipp_departure_time[ipp_range.clone()]);
-                ipp_travel_time.extend_from_slice(&self.ipp_travel_time[ipp_range]);
-            }
-        }
-
-        Graph {
-            first_out,
-            head,
-            first_ipp_of_arc,
-            ipp_departure_time,
-            ipp_travel_time,
-        }
-    }
-
     /// Total number of interpolation points
     pub fn num_ipps(&self) -> usize {
         self.ipp_departure_time.len()
@@ -144,16 +112,6 @@ impl GraphTrait for Graph {
     fn degree(&self, node: NodeId) -> usize {
         let node = node as usize;
         (self.first_out[node + 1] - self.first_out[node]) as usize
-    }
-}
-
-// TODO get rid
-impl<'a> LinkIterable<'a, Link> for Graph {
-    type Iter = std::iter::Map<std::slice::Iter<'a, NodeId>, fn(&NodeId) -> Link>;
-
-    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
-        let range = self.neighbor_edge_indices_usize(node);
-        self.head[range].iter().map(|&head| Link { node: head, weight: 0 })
     }
 }
 
@@ -190,5 +148,39 @@ impl<'a> LinkIterable<'a, (NodeId, EdgeId)> for Graph {
     fn link_iter(&'a self, node: NodeId) -> Self::Iter {
         let range = self.neighbor_edge_indices_usize(node);
         self.head[range].iter().cloned().zip(self.neighbor_edge_indices(node))
+    }
+}
+
+impl BuildPermutated<Graph> for Graph {
+    fn permutated(graph: &Graph, order: &NodeOrder) -> Self {
+        let mut first_out: Vec<EdgeId> = Vec::with_capacity(graph.num_nodes() + 1);
+        first_out.push(0);
+        let mut head = Vec::with_capacity(graph.num_arcs());
+        let mut first_ipp_of_arc = Vec::<IPPIndex>::with_capacity(graph.num_arcs());
+        first_ipp_of_arc.push(0);
+        let mut ipp_departure_time = Vec::<Timestamp>::with_capacity(graph.ipp_departure_time.len());
+        let mut ipp_travel_time = Vec::<Weight>::with_capacity(graph.ipp_travel_time.len());
+
+        for &node in order.order() {
+            first_out.push(first_out.last().unwrap() + graph.degree(node) as NodeId);
+            let mut links = graph.neighbor_and_edge_id_iter(node).collect::<Vec<_>>();
+            links.sort_unstable_by_key(|&(head, _)| order.rank(head));
+
+            for (h, e) in links {
+                head.push(order.rank(h));
+                let ipp_range = graph.first_ipp_of_arc[e as usize] as usize..graph.first_ipp_of_arc[e as usize + 1] as usize;
+                first_ipp_of_arc.push(first_ipp_of_arc.last().unwrap() + (ipp_range.end - ipp_range.start) as IPPIndex);
+                ipp_departure_time.extend_from_slice(&graph.ipp_departure_time[ipp_range.clone()]);
+                ipp_travel_time.extend_from_slice(&graph.ipp_travel_time[ipp_range]);
+            }
+        }
+
+        Graph {
+            first_out,
+            head,
+            first_ipp_of_arc,
+            ipp_departure_time,
+            ipp_travel_time,
+        }
     }
 }

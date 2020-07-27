@@ -3,10 +3,9 @@
 use super::*;
 use crate::datastr::index_heap::Indexing;
 
+pub mod gen_topo_dijkstra;
 pub mod generic_dijkstra;
 pub mod query;
-pub mod td_topo_dijkstra;
-pub mod topo_dijkstra;
 
 /// Result of a single iteration
 #[derive(Debug, Clone)]

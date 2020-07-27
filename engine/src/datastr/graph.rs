@@ -10,7 +10,7 @@ pub mod floating_time_dependent;
 pub mod link_id_to_tail_mapper;
 pub mod time_dependent;
 
-pub use self::first_out_graph::{FirstOutGraph, OwnedGraph};
+pub use self::first_out_graph::{FirstOutGraph, OwnedGraph, UnweightedFirstOutGraph, UnweightedOwnedGraph};
 
 /// Node ids are 32bit unsigned ints
 pub type NodeId = u32;
@@ -73,21 +73,6 @@ pub trait MutLinkIterable<'a, Link>: Graph {
 
 /// Trait for graph data structures which allow iterating over outgoing links of a node.
 pub trait LinkIterGraph<'a>: LinkIterable<'a, Link> {
-    /// Create a new graph with all edges reversed
-    fn reverse(&'a self) -> OwnedGraph {
-        // vector of adjacency lists for the reverse graph
-        let mut reversed: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new()).collect();
-
-        // iterate over all edges and insert them in the reversed structure
-        for node in 0..(self.num_nodes() as NodeId) {
-            for Link { node: neighbor, weight } in self.link_iter(node) {
-                reversed[neighbor as usize].push(Link { node, weight });
-            }
-        }
-
-        OwnedGraph::from_adjancecy_lists(reversed)
-    }
-
     /// Split the graph in an upward graph of outgoing edges and a
     /// downward graph of incoming edges based on the node order passed.
     fn ch_split(&'a self, order: &NodeOrder) -> (OwnedGraph, OwnedGraph) {
@@ -106,27 +91,6 @@ pub trait LinkIterGraph<'a>: LinkIterable<'a, Link> {
         }
 
         (OwnedGraph::from_adjancecy_lists(up), OwnedGraph::from_adjancecy_lists(down))
-    }
-
-    /// Build an isomorph graph with node ids permutated according to the given order.
-    fn permute_node_ids(&'a self, order: &NodeOrder) -> OwnedGraph {
-        let mut first_out: Vec<EdgeId> = Vec::with_capacity(self.num_nodes() + 1);
-        first_out.push(0);
-        let mut head = Vec::with_capacity(self.num_arcs());
-        let mut weight = Vec::with_capacity(self.num_arcs());
-
-        for &node in order.order() {
-            first_out.push(first_out.last().unwrap() + self.degree(node) as NodeId);
-            let mut links = self.link_iter(node).collect::<Vec<_>>();
-            links.sort_unstable_by_key(|l| order.rank(l.node));
-
-            for link in links {
-                head.push(order.rank(link.node));
-                weight.push(link.weight);
-            }
-        }
-
-        OwnedGraph::new(first_out, head, weight)
     }
 }
 
@@ -193,4 +157,18 @@ pub trait RandomLinkAccessGraph: Graph {
 
         OwnedGraph::new(first_out, head, weight)
     }
+}
+
+/// Generic Trait for building reversed graphs.
+/// Type setup similar to `FromIter` for `std::iter::collect`.
+pub trait BuildReversed<G> {
+    /// Create a new graph with all edges reversed
+    fn reversed(graph: &G) -> Self;
+}
+
+/// Generic Trait for building permutated graphs.
+/// Type setup similar to `FromIter` for `std::iter::collect`.
+pub trait BuildPermutated<G> {
+    /// Build an isomorph graph with node ids permutated according to the given order.
+    fn permutated(graph: &G, order: &NodeOrder) -> Self;
 }

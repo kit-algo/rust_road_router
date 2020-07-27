@@ -10,7 +10,7 @@ pub struct Server<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>> {
 
 impl<G: for<'a> LinkIterGraph<'a>> Server<G, OwnedGraph> {
     pub fn new(graph: G) -> Server<G, OwnedGraph> {
-        let reversed = graph.reverse();
+        let reversed = OwnedGraph::reversed(&graph);
 
         Server {
             forward_dijkstra: StandardDijkstra::new(graph),
