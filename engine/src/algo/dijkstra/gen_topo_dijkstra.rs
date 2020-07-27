@@ -142,19 +142,26 @@ where
         border
     }
 
-    // pub fn next_step(&mut self) -> Option<NodeId> {
-    //     self.settle_next_node(|_| Some(0))
-    // }
+    #[inline]
+    pub fn next_step(&mut self) -> Option<NodeId> {
+        self.settle_next_node(|_| Some(Neutral()))
+    }
 
+    #[inline]
     pub fn next_step_with_potential(&mut self, potential: impl FnMut(NodeId) -> Option<<Ops::Label as super::Label>::Key>) -> Option<NodeId> {
         self.settle_next_node(potential)
     }
 
-    fn settle_next_node(&mut self, mut potential: impl FnMut(NodeId) -> Option<<Ops::Label as super::Label>::Key>) -> Option<NodeId> {
+    #[inline]
+    fn settle_next_node<P, O>(&mut self, mut potential: P) -> Option<NodeId>
+    where
+        P: FnMut(NodeId) -> Option<O>,
+        O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
+    {
         let mut next_node = None;
 
         while let Some(State { node, key: dist_with_pot }) = self.queue.pop() {
-            if !(dist_with_pot > self.distances[self.border_node as usize].key() + potential(self.virtual_topocore.order.node(self.border_node)).unwrap()
+            if !(dist_with_pot > potential(self.virtual_topocore.order.node(self.border_node)).unwrap() + self.distances[self.border_node as usize].key()
                 && self.in_core(node))
             {
                 next_node = Some(State { node, key: dist_with_pot });
@@ -243,7 +250,7 @@ where
                                 next_distance: self.ops.link(&self.graph, next_distance, &next_edge),
                             });
                         } else if endpoint {
-                            if let Some(key) = potential(self.virtual_topocore.order.node(next_node)).map(|p| next_distance.key() + p) {
+                            if let Some(key) = potential(self.virtual_topocore.order.node(next_node)).map(|p| p + next_distance.key()) {
                                 let next = State { key, node: next_node };
                                 if let Some(other) = self.queue.get(next.as_index()) {
                                     debug_assert!(other.key >= next.key);
@@ -300,3 +307,13 @@ where
 }
 
 pub type StandardTopoDijkstra<G> = GenTopoDijkstra<DefaultOps, G>;
+
+struct Neutral();
+
+impl<T> std::ops::Add<T> for Neutral {
+    type Output = T;
+
+    fn add(self, rhs: T) -> Self::Output {
+        rhs
+    }
+}
