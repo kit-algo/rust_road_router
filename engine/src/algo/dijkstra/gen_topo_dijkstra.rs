@@ -180,7 +180,7 @@ where
                 {
                     self.num_relaxed_arcs += 1;
 
-                    if (cfg!(feature = "chpot-no-scc") || self.in_core(next_node) || !self.in_core(prev_node) || self.border_node == prev_node)
+                    if (cfg!(feature = "chpot-no-bcc") || self.in_core(next_node) || !self.in_core(prev_node) || self.border_node == prev_node)
                         && self.ops.merge(&mut self.distances[next_node as usize], next_distance)
                     {
                         let next_distance = &self.distances[next_node as usize];
@@ -189,7 +189,7 @@ where
                         // debug_assert!(next_distance >= distance);
 
                         match self.virtual_topocore.node_type(next_node) {
-                            NodeType::Deg2OrLess | NodeType::OtherSCC(2) => {
+                            NodeType::Deg2OrLess | NodeType::OtherBCC(2) => {
                                 if cfg!(feature = "chpot-no-deg2") {
                                     endpoint = true;
                                 } else {
@@ -200,7 +200,7 @@ where
                                     }
                                 }
                             }
-                            NodeType::Deg3 | NodeType::OtherSCC(3) => {
+                            NodeType::Deg3 | NodeType::OtherBCC(3) => {
                                 if cfg!(feature = "chpot-no-deg3")
                                     || had_deg_three
                                     || self.queue.contains_index(
@@ -228,7 +228,7 @@ where
                             NodeType::Deg4OrMore => {
                                 endpoint = true;
                             }
-                            NodeType::OtherSCC(d) if d > 3 => {
+                            NodeType::OtherBCC(d) if d > 3 => {
                                 endpoint = true;
                             }
                             _ => {}

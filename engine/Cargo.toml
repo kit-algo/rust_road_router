@@ -1,7 +1,7 @@
 [package]
 name = "rust_road_router"
 version = "0.1.0"
-authors = ["Tim 'tim3z' Zeitz <dev.tim.zeitz@gmail.com>"]
+authors = ["Tim 'tim3z' Zeitz <mail@tim3z.net>"]
 edition = "2018"
 build = "build.rs"
 
@@ -22,7 +22,7 @@ chpot-print-node-order = []
 chpot-only-topo = []
 chpot-no-deg2 = []
 chpot-no-deg3 = []
-chpot-no-scc = []
+chpot-no-bcc = []
 chpot-cch = []
 report-to-stderr = []
 detailed-stats = []

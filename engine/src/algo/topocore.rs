@@ -42,7 +42,7 @@ impl<'a, 'b, L, G: LinkIterable<'a, L>, H: LinkIterable<'a, L>> LinkIterable<'a,
 }
 
 #[allow(clippy::cognitive_complexity)]
-pub fn preprocess<'c, Graph: for<'a> LinkIterGraph<'a> + for<'a> LinkIterable<'a, NodeId>, ReorderSCC: Bool, Deg1: Bool, Deg2: Bool, Deg3: Bool>(
+pub fn preprocess<'c, Graph: for<'a> LinkIterGraph<'a> + for<'a> LinkIterable<'a, NodeId>, ReorderBCC: Bool, Deg1: Bool, Deg2: Bool, Deg3: Bool>(
     graph: &Graph,
 ) -> Topocore {
     let order = dfs_pre_order(graph);
@@ -87,7 +87,7 @@ pub fn preprocess<'c, Graph: for<'a> LinkIterGraph<'a> + for<'a> LinkIterable<'a
     let mut to_contract = BitVec::new(n);
     let mut queue = Vec::new();
 
-    if ReorderSCC::VALUE {
+    if ReorderBCC::VALUE {
         to_contract.set_all();
 
         let biggest = biconnected(&UndirectedGraph { ins: &reversed, outs: graph })
@@ -430,7 +430,7 @@ pub fn preprocess<'c, Graph: for<'a> LinkIterGraph<'a> + for<'a> LinkIterable<'a
 #[derive(Debug)]
 pub struct VirtualTopocore {
     pub order: NodeOrder,
-    biggest_scc: usize,
+    biggest_bcc: usize,
     deg2: usize,
     deg3: usize,
     symmetric_degrees: Vec<u8>,
@@ -438,7 +438,7 @@ pub struct VirtualTopocore {
 
 #[derive(Debug, PartialEq)]
 pub enum NodeType {
-    OtherSCC(u8),
+    OtherBCC(u8),
     Deg2OrLess,
     Deg3,
     Deg4OrMore,
@@ -447,7 +447,7 @@ pub enum NodeType {
 impl NodeType {
     #[inline]
     pub fn in_core(&self) -> bool {
-        if let NodeType::OtherSCC(_) = self {
+        if let NodeType::OtherBCC(_) = self {
             false
         } else {
             true
@@ -463,10 +463,10 @@ impl VirtualTopocore {
             NodeType::Deg4OrMore
         } else if node < self.deg2 {
             NodeType::Deg3
-        } else if node < self.biggest_scc {
+        } else if node < self.biggest_bcc {
             NodeType::Deg2OrLess
         } else {
-            NodeType::OtherSCC(self.symmetric_degrees[node - self.biggest_scc])
+            NodeType::OtherBCC(self.symmetric_degrees[node - self.biggest_bcc])
         }
     }
 }
@@ -496,20 +496,20 @@ pub fn virtual_topocore<'c, Graph: for<'a> LinkIterable<'a, NodeId>>(graph: &Gra
         .max_by_key(|edges| edges.len())
         .unwrap();
 
-    let mut biggest_scc = BitVec::new(n);
+    let mut biggest_bcc = BitVec::new(n);
     for (u, v) in biggest {
-        biggest_scc.set(u as usize);
-        biggest_scc.set(v as usize);
+        biggest_bcc.set(u as usize);
+        biggest_bcc.set(v as usize);
     }
 
     let mut new_order = Vec::with_capacity(n);
 
-    let mut biggest_scc_size = 0;
+    let mut biggest_bcc_size = 0;
 
     for &node in order.order() {
-        if biggest_scc.get(node as usize) {
+        if biggest_bcc.get(node as usize) {
             new_order.push(node);
-            biggest_scc_size += 1;
+            biggest_bcc_size += 1;
         }
     }
     new_order.sort_by(|&n1, &n2| {
@@ -519,26 +519,26 @@ pub fn virtual_topocore<'c, Graph: for<'a> LinkIterable<'a, NodeId>>(graph: &Gra
             symmetric_degrees[n2 as usize].cmp(&symmetric_degrees[n1 as usize])
         }
     });
-    let mut other_sccs_symmetric_degrees = Vec::with_capacity(n - biggest_scc_size);
+    let mut other_bccs_symmetric_degrees = Vec::with_capacity(n - biggest_bcc_size);
     for &node in order.order() {
-        if !biggest_scc.get(node as usize) {
+        if !biggest_bcc.get(node as usize) {
             new_order.push(node);
-            other_sccs_symmetric_degrees.push(symmetric_degrees[node as usize]);
+            other_bccs_symmetric_degrees.push(symmetric_degrees[node as usize]);
         }
     }
     let deg3 = new_order.iter().position(|&node| symmetric_degrees[node as usize] < 4).unwrap_or(n as usize);
     let deg2 = new_order.iter().position(|&node| symmetric_degrees[node as usize] < 3).unwrap_or(n as usize);
 
-    report!("biggest_scc_size", biggest_scc_size);
+    report!("biggest_bcc_size", biggest_bcc_size);
     report!("deg2", deg2);
     report!("deg3", deg3);
 
     VirtualTopocore {
         order: NodeOrder::from_node_order(new_order),
-        biggest_scc: biggest_scc_size,
+        biggest_bcc: biggest_bcc_size,
         deg3,
         deg2,
-        symmetric_degrees: other_sccs_symmetric_degrees,
+        symmetric_degrees: other_bccs_symmetric_degrees,
     }
 }
 
