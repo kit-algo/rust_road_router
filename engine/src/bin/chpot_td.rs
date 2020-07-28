@@ -148,7 +148,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         report!("result", ea);
         dijkstra_time = dijkstra_time + time;
     }
-    eprintln!("Dijk* {}", dijkstra_time / (num_queries as i32));
+    if num_queries > 0 {
+        eprintln!("Dijk* {}", dijkstra_time / (num_queries as i32));
+    }
 
     Ok(())
 }

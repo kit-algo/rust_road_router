@@ -139,7 +139,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    let now = 15 * 3600 * 100 + 41 * 60 * 1000;
+    let now = 15 * 3600 * 1000 + 41 * 60 * 1000;
     let soon = now + 3600 * 1000;
     let graph = LiveTDGraph::new(graph, soon, live);
 
@@ -180,12 +180,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         let _query_ctxt = algo_runs_ctxt.push_collection_item();
         let from: NodeId = rng.gen_range(0, n as NodeId);
         let to: NodeId = rng.gen_range(0, n as NodeId);
-        let at: NodeId = rng.gen_range(0, period() as Timestamp);
+        // let at: NodeId = rng.gen_range(0, period() as Timestamp);
 
         report!("from", from);
         report!("to", to);
-        report!("at", at);
-        let (ea, time) = measure(|| server.query(TDQuery { from, to, departure: at }).map(|res| res.distance()));
+        report!("at", now);
+        let (ea, time) = measure(|| server.query(TDQuery { from, to, departure: now }).map(|res| res.distance()));
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         report!("result", ea);
         report!("lower_bound", server.lower_bound(from));

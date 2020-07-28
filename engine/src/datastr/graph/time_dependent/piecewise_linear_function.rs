@@ -11,6 +11,7 @@ pub struct PiecewiseLinearFunction<'a> {
 
 impl<'a> PiecewiseLinearFunction<'a> {
     /// Create from two slices and make sure certain invariants hold.
+    #[inline(always)]
     pub fn new(departure_time: &'a [Timestamp], travel_time: &'a [Weight]) -> PiecewiseLinearFunction<'a> {
         debug_assert_eq!(departure_time.len(), travel_time.len());
         debug_assert!(!departure_time.is_empty());
@@ -43,6 +44,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     /// Evaluate function at an arbitrary point in time
+    #[inline(always)]
     pub fn eval(&self, departure: Timestamp) -> Weight {
         self.evaluate(departure % period())
     }
@@ -53,6 +55,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     /// Evaluate for a point in time within period!
+    #[inline(always)]
     pub(super) fn evaluate(&self, departure: Timestamp) -> Weight {
         debug_assert!(departure <= period());
         if self.departure_time.len() <= 2 {

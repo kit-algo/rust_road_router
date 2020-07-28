@@ -1,5 +1,5 @@
 use super::*;
-use crate::{algo::dijkstra::gen_topo_dijkstra::*, report::*};
+use crate::algo::dijkstra::gen_topo_dijkstra::*;
 
 pub struct Server<P, G> {
     forward_dijkstra: StandardTopoDijkstra<G>,

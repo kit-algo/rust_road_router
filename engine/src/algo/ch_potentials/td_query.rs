@@ -1,9 +1,7 @@
 use super::*;
 
 use crate::algo::dijkstra::gen_topo_dijkstra::*;
-use crate::algo::dijkstra::Label;
 use crate::datastr::graph::time_dependent::*;
-use crate::report::*;
 
 pub struct Server<P, Ops: DijkstraOps<Graph>, Graph> {
     forward_dijkstra: GenTopoDijkstra<Ops, Graph>,
@@ -17,7 +15,6 @@ pub struct Server<P, Ops: DijkstraOps<Graph>, Graph> {
 
 impl<P: Potential, Ops: DijkstraOps<Graph, Label = Timestamp>, Graph> Server<P, Ops, Graph>
 where
-    <Ops::Label as Label>::Key: std::ops::Add<Output = <Ops::Label as Label>::Key>,
     Graph: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, Ops::Arc>,
 {
     pub fn new<G>(graph: G, potential: P, ops: Ops, #[cfg(feature = "chpot_visualize")] lat: &[f32], #[cfg(feature = "chpot_visualize")] lng: &[f32]) -> Self

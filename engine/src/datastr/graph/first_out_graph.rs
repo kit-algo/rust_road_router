@@ -410,7 +410,7 @@ mod tests {
         //                   +---------------+
         //
         let expected = FirstOutGraph::new(vec![0, 1, 3, 4, 6, 8, 8], vec![3, 0, 2, 0, 1, 2, 2, 3], vec![7, 1, 1, 10, 2, 3, 1, 2]);
-        let reversed = graph.reverse();
+        let reversed = OwnedGraph::reversed(&graph);
 
         assert_eq!(reversed.first_out, expected.first_out);
         assert_eq!(reversed.head, expected.head);

@@ -64,6 +64,7 @@ impl Graph {
     }
 
     /// Borrow an individual travel time function.
+    #[inline(always)]
     pub fn travel_time_function(&self, edge_id: EdgeId) -> PiecewiseLinearFunction {
         let edge_id = edge_id as usize;
         PiecewiseLinearFunction::new(
@@ -119,6 +120,7 @@ impl GraphTrait for Graph {
 impl<'a> LinkIterable<'a, NodeId> for Graph {
     type Iter = std::iter::Cloned<std::slice::Iter<'a, NodeId>>;
 
+    #[inline(always)]
     fn link_iter(&'a self, node: NodeId) -> Self::Iter {
         self.head[self.neighbor_edge_indices_usize(node)].iter().cloned()
     }
@@ -138,6 +140,7 @@ impl RandomLinkAccessGraph for Graph {
         self.head[range].iter().position(|&head| head == to).map(|pos| pos as EdgeId + first_out)
     }
 
+    #[inline(always)]
     fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {
         (self.first_out[node as usize] as EdgeId)..(self.first_out[(node + 1) as usize] as EdgeId)
     }

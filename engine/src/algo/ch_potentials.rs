@@ -5,6 +5,7 @@ use crate::{
         dijkstra::generic_dijkstra::*,
     },
     datastr::{node_order::*, timestamped_vector::TimestampedVector},
+    report::*,
     util::in_range_option::InRangeOption,
 };
 
@@ -192,5 +193,47 @@ impl<P: Potential> Potential for TurnExpandedPotential<P> {
     }
     fn num_pot_evals(&self) -> usize {
         self.potential.num_pot_evals()
+    }
+}
+
+pub struct BaselinePotential {
+    dijkstra: StandardDijkstra<OwnedGraph>,
+    num_pot_evals: usize,
+}
+
+impl BaselinePotential {
+    pub fn new<G>(graph: &G) -> Self
+    where
+        OwnedGraph: BuildReversed<G>,
+    {
+        Self {
+            dijkstra: StandardDijkstra::new(OwnedGraph::reversed(&graph)),
+            num_pot_evals: 0,
+        }
+    }
+}
+
+impl Potential for BaselinePotential {
+    fn init(&mut self, target: NodeId) {
+        self.num_pot_evals = 0;
+        report_time_with_key("BaselinePotential init", "baseline_pot_init", || {
+            self.dijkstra.initialize_query(Query {
+                from: target,
+                to: self.dijkstra.graph().num_nodes() as NodeId,
+            });
+            while let Some(_) = self.dijkstra.next() {}
+        })
+    }
+
+    fn potential(&mut self, node: NodeId) -> Option<Weight> {
+        if *self.dijkstra.tentative_distance(node) < INFINITY {
+            Some(*self.dijkstra.tentative_distance(node))
+        } else {
+            None
+        }
+    }
+
+    fn num_pot_evals(&self) -> usize {
+        self.num_pot_evals
     }
 }

@@ -125,6 +125,7 @@ pub trait RandomLinkAccessGraph: Graph {
     fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId>;
 
     /// Get the range of edge ids which make up the outgoing edges of `node` as a `Range<usize>`
+    #[inline(always)]
     fn neighbor_edge_indices_usize(&self, node: NodeId) -> Range<usize> {
         let range = self.neighbor_edge_indices(node);
         Range {
