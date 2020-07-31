@@ -139,7 +139,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    let now = 15 * 3600 * 1000 + 41 * 60 * 1000;
+    // let now = 15 * 3600 * 1000 + 41 * 60 * 1000;
+    let now = 12 * 3600 * 1000;
     let soon = now + 3600 * 1000;
     let graph = LiveTDGraph::new(graph, soon, live);
 
