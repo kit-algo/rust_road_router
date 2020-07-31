@@ -42,6 +42,7 @@ impl Arc for Link {
 }
 
 impl Arc for (NodeId, EdgeId) {
+    #[inline(always)]
     fn head(&self) -> NodeId {
         self.0
     }
