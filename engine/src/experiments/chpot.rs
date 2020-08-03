@@ -33,9 +33,9 @@ pub fn run(
     let first_out = Vec::<NodeId>::load_from(path.join("first_out"))?;
     let head = Vec::<EdgeId>::load_from(path.join("head"))?;
     let mut travel_time = Vec::<EdgeId>::load_from(path.join("travel_time"))?;
-    #[cfg(feature = "chpot_visualize")]
+    #[cfg(feature = "chpot-visualize")]
     let lat = Vec::<f32>::load_from(path.join("latitude"))?;
-    #[cfg(feature = "chpot_visualize")]
+    #[cfg(feature = "chpot-visualize")]
     let lng = Vec::<f32>::load_from(path.join("longitude"))?;
     let mut modified_travel_time = travel_time.clone();
 
@@ -110,11 +110,11 @@ pub fn run(
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
     let mut topocore: TopoServer<_, OwnedGraph> = {
-        #[cfg(feature = "chpot_visualize")]
+        #[cfg(feature = "chpot-visualize")]
         {
             TopoServer::new(modified_graph.clone(), potential, &lat, &lng)
         }
-        #[cfg(not(feature = "chpot_visualize"))]
+        #[cfg(not(feature = "chpot-visualize"))]
         {
             TopoServer::new(modified_graph.clone(), potential)
         }

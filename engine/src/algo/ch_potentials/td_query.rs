@@ -7,9 +7,9 @@ pub struct Server<P, Ops: DijkstraOps<Graph>, Graph> {
     forward_dijkstra: GenTopoDijkstra<Ops, Graph>,
     potential: P,
 
-    #[cfg(feature = "chpot_visualize")]
+    #[cfg(feature = "chpot-visualize")]
     lat: &[f32],
-    #[cfg(feature = "chpot_visualize")]
+    #[cfg(feature = "chpot-visualize")]
     lng: &[f32],
 }
 
@@ -17,7 +17,7 @@ impl<P: Potential, Ops: DijkstraOps<Graph, Label = Timestamp>, Graph> Server<P, 
 where
     Graph: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, Ops::Arc>,
 {
-    pub fn new<G>(graph: G, potential: P, ops: Ops, #[cfg(feature = "chpot_visualize")] lat: &[f32], #[cfg(feature = "chpot_visualize")] lng: &[f32]) -> Self
+    pub fn new<G>(graph: G, potential: P, ops: Ops, #[cfg(feature = "chpot-visualize")] lat: &[f32], #[cfg(feature = "chpot-visualize")] lng: &[f32]) -> Self
     where
         G: for<'a> LinkIterable<'a, NodeId>,
         Graph: BuildPermutated<G>,
@@ -26,9 +26,9 @@ where
             forward_dijkstra: report_time_with_key("TDTopoDijkstra preprocessing", "topo_dijk_prepro", || GenTopoDijkstra::new_with_ops(graph, ops)),
             potential,
 
-            #[cfg(feature = "chpot_visualize")]
+            #[cfg(feature = "chpot-visualize")]
             lat,
-            #[cfg(feature = "chpot_visualize")]
+            #[cfg(feature = "chpot-visualize")]
             lng,
         }
     }
@@ -39,7 +39,7 @@ where
         let to = query.to();
         let departure = query.initial_state();
 
-        #[cfg(feature = "chpot_visualize")]
+        #[cfg(feature = "chpot-visualize")]
         {
             println!(
                 "L.marker([{}, {}], {{ title: \"from\", icon: blackIcon }}).addTo(map);",
@@ -65,7 +65,7 @@ where
             }
         }) {
             num_queue_pops += 1;
-            #[cfg(feature = "chpot_visualize")]
+            #[cfg(feature = "chpot-visualize")]
             {
                 let node_id = self.order.node(_node) as usize;
                 println!(
