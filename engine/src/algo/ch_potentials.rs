@@ -237,3 +237,30 @@ impl Potential for BaselinePotential {
         self.num_pot_evals
     }
 }
+
+#[derive(Debug)]
+pub struct RecyclingPotential<Potential> {
+    potential: Potential,
+    target: Option<NodeId>,
+}
+
+impl<P> RecyclingPotential<P> {
+    pub fn new(potential: P) -> Self {
+        Self { potential, target: None }
+    }
+}
+
+impl<P: Potential> Potential for RecyclingPotential<P> {
+    fn init(&mut self, target: NodeId) {
+        if self.target != Some(target) {
+            self.potential.init(target);
+            self.target = Some(target);
+        }
+    }
+    fn potential(&mut self, node: NodeId) -> Option<Weight> {
+        self.potential.potential(node)
+    }
+    fn num_pot_evals(&self) -> usize {
+        self.potential.num_pot_evals()
+    }
+}

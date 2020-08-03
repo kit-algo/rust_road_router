@@ -92,7 +92,9 @@ impl Reporter {
         match &mut self.current {
             CurrentReportingContext::Object(object) => {
                 let prev = object.insert(key, val);
-                assert_eq!(prev, None);
+                if !cfg!(feature = "report-allow-override") {
+                    assert!(prev.is_none());
+                }
             }
             CurrentReportingContext::Collection(_) => {
                 panic!("Cannot report value on collection");

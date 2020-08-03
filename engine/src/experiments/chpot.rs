@@ -97,6 +97,16 @@ pub fn run(
             )
         }
     };
+    let potential = {
+        #[cfg(feature = "chpot-oracle")]
+        {
+            RecyclingPotential::new(potential)
+        }
+        #[cfg(not(feature = "chpot-oracle"))]
+        {
+            potential
+        }
+    };
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
     let mut topocore: TopoServer<_, OwnedGraph> = {
@@ -118,6 +128,11 @@ pub fn run(
         let _query_ctxt = algo_runs_ctxt.push_collection_item();
         let from: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
         let to: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
+
+        #[cfg(feature = "chpot-oracle")]
+        {
+            topocore.query(Query { from, to });
+        }
 
         report!("from", from);
         report!("to", to);
