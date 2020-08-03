@@ -8,7 +8,7 @@ extern crate rust_road_router;
 use rust_road_router::algo::customizable_contraction_hierarchy::*;
 use rust_road_router::{
     algo::{
-        ch_potentials::{td_query::Server, *},
+        ch_potentials::{query::Server, *},
         dijkstra::query::td_dijkstra::{LiveTDDijkstraOps, Server as DijkServer},
         *,
     },
@@ -186,10 +186,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         report!("from", from);
         report!("to", to);
         report!("at", now);
-        let (ea, time) = measure(|| server.query(TDQuery { from, to, departure: now }).map(|res| res.distance()));
+        let (mut res, time) = measure(|| TDQueryServer::query(&mut server, TDQuery { from, to, departure: now }));
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-        report!("result", ea);
-        report!("lower_bound", server.lower_bound(from));
+        report!("result", res.as_ref().map(|res| res.distance()));
+        report!("lower_bound", res.as_mut().map(|res| res.data().lower_bound(from)).flatten());
         astar_time = astar_time + time;
     }
     eprintln!("A* {}", astar_time / (num_queries as i32));

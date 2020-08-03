@@ -3,7 +3,7 @@ use crate::algo::customizable_contraction_hierarchy::*;
 use crate::{
     algo::{
         ch_potentials::{query::Server as TopoServer, *},
-        dijkstra::query::dijkstra::Server as DijkServer,
+        dijkstra::{generic_dijkstra::DefaultOps, query::dijkstra::Server as DijkServer},
         *,
     },
     datastr::{graph::*, node_order::NodeOrder},
@@ -109,14 +109,14 @@ pub fn run(
     };
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
-    let mut topocore: TopoServer<_, OwnedGraph> = {
+    let mut topocore: TopoServer<_, _, OwnedGraph> = {
         #[cfg(feature = "chpot-visualize")]
         {
-            TopoServer::new(modified_graph.clone(), potential, &lat, &lng)
+            TopoServer::new(modified_graph.clone(), potential, DefaultOps::default(), &lat, &lng)
         }
         #[cfg(not(feature = "chpot-visualize"))]
         {
-            TopoServer::new(modified_graph.clone(), potential)
+            TopoServer::new(modified_graph.clone(), potential, DefaultOps::default())
         }
     };
     drop(virtual_topocore_ctxt);
@@ -139,7 +139,7 @@ pub fn run(
 
         query_count += 1;
 
-        let (mut res, time) = measure(|| topocore.query(Query { from, to }));
+        let (mut res, time) = measure(|| QueryServer::query(&mut topocore, Query { from, to }));
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         let dist = res.as_ref().map(|res| res.distance());
         report!("result", dist);

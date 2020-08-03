@@ -5,7 +5,7 @@ use rust_road_router::algo::customizable_contraction_hierarchy::*;
 use rust_road_router::{
     algo::{
         ch_potentials::{query::Server as TopoServer, *},
-        dijkstra::query::dijkstra::Server as DijkServer,
+        dijkstra::{generic_dijkstra::DefaultOps, query::dijkstra::Server as DijkServer},
         *,
     },
     cli::CliErr,
@@ -89,14 +89,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
-    let mut topocore: TopoServer<_, OwnedGraph> = {
+    let mut topocore: TopoServer<_, _, OwnedGraph> = {
         #[cfg(feature = "chpot_visualize")]
         {
-            TopoServer::new(modified_graph, potential, &lat, &lng)
+            TopoServer::new(modified_graph, potential, DefaultOps::default(), &lat, &lng)
         }
         #[cfg(not(feature = "chpot_visualize"))]
         {
-            TopoServer::new(modified_graph, potential)
+            TopoServer::new(modified_graph, potential, DefaultOps::default())
         }
     };
     drop(virtual_topocore_ctxt);
@@ -110,7 +110,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         server.ranks(from, |to, _dist, rank| {
             let _query_ctxt = algo_runs_ctxt.push_collection_item();
-            let (mut res, time) = measure(|| topocore.query(Query { from, to }));
+            let (mut res, time) = measure(|| QueryServer::query(&mut topocore, Query { from, to }));
 
             report!("from", from);
             report!("to", to);

@@ -10,7 +10,6 @@ use crate::{
 };
 
 pub mod query;
-pub mod td_query;
 
 pub trait Potential {
     fn init(&mut self, target: NodeId);

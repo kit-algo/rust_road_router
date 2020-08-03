@@ -5,7 +5,7 @@ use rust_road_router::algo::customizable_contraction_hierarchy::*;
 use rust_road_router::{
     algo::{
         ch_potentials::{query::Server as TopoServer, *},
-        dijkstra::query::dijkstra::Server as DijkServer,
+        dijkstra::{generic_dijkstra::DefaultOps, query::dijkstra::Server as DijkServer},
         *,
     },
     cli::CliErr,
@@ -122,14 +122,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     });
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
-    let mut topocore: TopoServer<_, OwnedGraph> = {
+    let mut topocore: TopoServer<_, _, OwnedGraph> = {
         #[cfg(feature = "chpot_visualize")]
         {
-            TopoServer::new(exp_graph.clone(), potential, &lat, &lng)
+            TopoServer::new(exp_graph.clone(), potential, DefaultOps::default(), &lat, &lng)
         }
         #[cfg(not(feature = "chpot_visualize"))]
         {
-            TopoServer::new(exp_graph.clone(), potential)
+            TopoServer::new(exp_graph.clone(), potential, DefaultOps::default())
         }
     };
     drop(virtual_topocore_ctxt);
@@ -143,7 +143,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let from: NodeId = rng.gen_range(0, n as NodeId);
         let to: NodeId = rng.gen_range(0, n as NodeId);
 
-        let (mut res, time) = measure(|| topocore.query(Query { from, to }));
+        let (mut res, time) = measure(|| QueryServer::query(&mut topocore, Query { from, to }));
 
         query_count += 1;
 
