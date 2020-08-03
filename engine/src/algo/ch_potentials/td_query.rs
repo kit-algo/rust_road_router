@@ -33,7 +33,7 @@ where
         }
     }
 
-    fn distance(&mut self, query: impl GenQuery<Ops::Label>) -> Option<Weight> {
+    fn distance(&mut self, query: TDQuery<Timestamp>) -> Option<Weight> {
         report!("algo", "CH Potentials TD Query");
 
         let to = query.to();
