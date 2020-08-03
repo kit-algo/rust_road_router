@@ -8,7 +8,7 @@ use rust_road_router::algo::customizable_contraction_hierarchy::*;
 use rust_road_router::{
     algo::{
         ch_potentials::{query::Server, *},
-        dijkstra::query::td_dijkstra::{Server as DijkServer, TDDijkstraOps},
+        dijkstra::query::{dijkstra::Server as DijkServer, td_dijkstra::TDDijkstraOps},
         *,
     },
     cli::CliErr,
@@ -130,7 +130,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let num_queries = rust_road_router::experiments::NUM_DIJKSTRA_QUERIES;
 
-    let mut server = DijkServer::new(graph);
+    let mut server = DijkServer::<TDDijkstraOps, _>::new(graph);
 
     let mut dijkstra_time = Duration::zero();
 
@@ -143,7 +143,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         report!("from", from);
         report!("to", to);
         report!("at", at);
-        let (ea, time) = measure(|| server.query(TDQuery { from, to, departure: at }).map(|res| res.distance()));
+        let (ea, time) = measure(|| TDQueryServer::query(&mut server, TDQuery { from, to, departure: at }).map(|res| res.distance()));
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         report!("result", ea);
         dijkstra_time = dijkstra_time + time;

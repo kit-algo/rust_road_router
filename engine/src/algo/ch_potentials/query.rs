@@ -117,7 +117,7 @@ where
     }
 }
 
-pub struct PathServerWrapper<'s, P, O: DijkstraOps<G, Label = Timestamp>, G, Q>(&'s mut Server<P, O, G>, Q);
+pub struct PathServerWrapper<'s, P, O: DijkstraOps<G>, G, Q>(&'s mut Server<P, O, G>, Q);
 
 impl<'s, P, O, G, Q> PathServer for PathServerWrapper<'s, P, O, G, Q>
 where

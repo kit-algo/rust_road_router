@@ -153,7 +153,7 @@ pub fn run(
         eprintln!("Avg. query time {}", total_query_time / (query_count as i32))
     };
 
-    let mut server = DijkServer::new(modified_graph);
+    let mut server = DijkServer::<DefaultOps, _>::new(modified_graph);
 
     for _i in 0..super::NUM_DIJKSTRA_QUERIES {
         let _query_ctxt = algo_runs_ctxt.push_collection_item();
@@ -165,7 +165,7 @@ pub fn run(
 
         query_count += 1;
 
-        let (res, time) = measure(|| server.query(Query { from, to }));
+        let (res, time) = measure(|| QueryServer::query(&mut server, Query { from, to }));
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         let dist = res.as_ref().map(|res| res.distance());
         report!("result", dist);

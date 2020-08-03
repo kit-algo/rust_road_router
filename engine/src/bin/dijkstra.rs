@@ -1,6 +1,12 @@
 #[macro_use]
 extern crate rust_road_router;
-use rust_road_router::{algo::*, cli::CliErr, datastr::graph::*, io::*, report::*};
+use rust_road_router::{
+    algo::{dijkstra::*, *},
+    cli::CliErr,
+    datastr::graph::*,
+    io::*,
+    report::*,
+};
 use std::{env, error::Error, path::Path};
 
 use rand::prelude::*;
@@ -31,7 +37,7 @@ pub fn main() -> Result<(), Box<dyn Error>> {
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
 
-    let mut server = rust_road_router::algo::dijkstra::query::dijkstra::Server::new(graph.clone());
+    let mut server = rust_road_router::algo::dijkstra::query::dijkstra::Server::<DefaultOps, _>::new(graph.clone());
 
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[0]);
@@ -50,7 +56,7 @@ pub fn main() -> Result<(), Box<dyn Error>> {
 
         query_count += 1;
 
-        let (dist, time) = measure(|| server.query(Query { from, to }).map(|res| res.distance()));
+        let (dist, time) = measure(|| QueryServer::query(&mut server, Query { from, to }).map(|res| res.distance()));
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         report!("result", dist.unwrap_or(INFINITY));
         total_query_time = total_query_time + time;

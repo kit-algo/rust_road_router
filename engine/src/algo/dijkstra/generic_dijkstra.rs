@@ -52,10 +52,13 @@ pub struct GenericDijkstra<Ops: DijkstraOps<Graph>, Graph> {
 
 impl<Ops, Graph> GenericDijkstra<Ops, Graph>
 where
-    Ops: DijkstraOps<Graph> + Default,
+    Ops: DijkstraOps<Graph>,
     Graph: for<'a> LinkIterable<'a, Ops::Arc>,
 {
-    pub fn new(graph: Graph) -> Self {
+    pub fn new(graph: Graph) -> Self
+    where
+        Ops: Default,
+    {
         let n = graph.num_nodes();
 
         GenericDijkstra {
@@ -72,7 +75,10 @@ where
     /// For CH preprocessing we reuse the distance array and the queue to reduce allocations.
     /// This method creates an algo struct from recycled data.
     /// The counterpart is the `recycle` method.
-    pub fn from_recycled(graph: Graph, recycled: Trash<Ops::Label>) -> Self {
+    pub fn from_recycled(graph: Graph, recycled: Trash<Ops::Label>) -> Self
+    where
+        Ops: Default,
+    {
         let n = graph.num_nodes();
         assert!(recycled.distances.len() >= n);
         assert!(recycled.predecessors.len() >= n);
@@ -159,7 +165,7 @@ where
 
 impl<Ops, Graph> Iterator for GenericDijkstra<Ops, Graph>
 where
-    Ops: DijkstraOps<Graph> + Default,
+    Ops: DijkstraOps<Graph>,
     Graph: for<'a> LinkIterable<'a, Ops::Arc>,
 {
     type Item = NodeId;

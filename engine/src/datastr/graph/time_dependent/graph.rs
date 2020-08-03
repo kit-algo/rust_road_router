@@ -189,6 +189,7 @@ impl BuildPermutated<Graph> for Graph {
     }
 }
 
+#[derive(Clone)]
 pub struct LiveTDGraph {
     graph: Graph,
     soon: Timestamp,

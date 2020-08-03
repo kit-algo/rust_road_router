@@ -3,7 +3,10 @@ use std::{env, error::Error, path::Path, sync::Arc};
 use rust_road_router::{
     algo::{
         contraction_hierarchy::{self, query::Server as CHServer, ContractionHierarchy},
-        dijkstra::query::{bidirectional_dijkstra::Server as BiDijkServer, dijkstra::Server as DijkServer},
+        dijkstra::{
+            generic_dijkstra::DefaultOps,
+            query::{bidirectional_dijkstra::Server as BiDijkServer, dijkstra::Server as DijkServer},
+        },
         *,
     },
     cli::CliErr,
@@ -28,7 +31,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let ground_truth = Vec::load_from(path.join("test/travel_time_length"))?;
 
     let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
-    let mut simple_server = DijkServer::new(graph.clone());
+    let mut simple_server = DijkServer::<DefaultOps, _>::new(graph.clone());
     let mut bi_dir_server = BiDijkServer::new(graph.clone());
 
     let ch_first_out = Vec::load_from(path.join("travel_time_ch/first_out"))?;
@@ -48,7 +51,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         };
 
         report_time("simple dijkstra", || {
-            assert_eq!(simple_server.query(Query { from, to }).map(|res| res.distance()), ground_truth);
+            assert_eq!(
+                QueryServer::query(&mut simple_server, Query { from, to }).map(|res| res.distance()),
+                ground_truth
+            );
         });
         report_time("bidir dijkstra", || {
             assert_eq!(bi_dir_server.query(Query { from, to }).map(|res| res.distance()), ground_truth);

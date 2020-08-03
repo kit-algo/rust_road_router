@@ -7,6 +7,8 @@ pub mod gen_topo_dijkstra;
 pub mod generic_dijkstra;
 pub mod query;
 
+pub use generic_dijkstra::{DefaultOps, DijkstraOps};
+
 /// Result of a single iteration
 #[derive(Debug, Clone)]
 pub enum QueryProgress<W> {

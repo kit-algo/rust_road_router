@@ -2,7 +2,10 @@ extern crate rust_road_router;
 
 use rust_road_router::{
     algo::{
-        dijkstra::query::{bidirectional_dijkstra::Server as BiDijkServer, dijkstra::Server as DijkServer},
+        dijkstra::{
+            query::{bidirectional_dijkstra::Server as BiDijkServer, dijkstra::Server as DijkServer},
+            *,
+        },
         *,
     },
     datastr::graph::*,
@@ -32,13 +35,13 @@ fn graph() -> OwnedGraph {
 
 #[test]
 fn simple_dijkstra_correct_distances() {
-    let mut server = DijkServer::new(graph());
+    let mut server = DijkServer::<DefaultOps, _>::new(graph());
 
-    assert_eq!(server.query(Query { from: 0, to: 1 }).map(|res| res.distance()), Some(1));
-    assert_eq!(server.query(Query { from: 0, to: 3 }).map(|res| res.distance()), Some(3));
-    assert_eq!(server.query(Query { from: 3, to: 0 }).map(|res| res.distance()), Some(7));
-    assert_eq!(server.query(Query { from: 0, to: 4 }).map(|res| res.distance()), Some(5));
-    assert_eq!(server.query(Query { from: 4, to: 0 }).map(|res| res.distance()), None);
+    assert_eq!(QueryServer::query(&mut server, Query { from: 0, to: 1 }).map(|res| res.distance()), Some(1));
+    assert_eq!(QueryServer::query(&mut server, Query { from: 0, to: 3 }).map(|res| res.distance()), Some(3));
+    assert_eq!(QueryServer::query(&mut server, Query { from: 3, to: 0 }).map(|res| res.distance()), Some(7));
+    assert_eq!(QueryServer::query(&mut server, Query { from: 0, to: 4 }).map(|res| res.distance()), Some(5));
+    assert_eq!(QueryServer::query(&mut server, Query { from: 4, to: 0 }).map(|res| res.distance()), None);
 }
 
 #[test]

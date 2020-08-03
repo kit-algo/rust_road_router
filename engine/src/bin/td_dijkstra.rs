@@ -4,7 +4,10 @@ use std::{env, error::Error, path::Path};
 #[macro_use]
 extern crate rust_road_router;
 use rust_road_router::{
-    algo::{dijkstra::query::td_dijkstra::Server, *},
+    algo::{
+        dijkstra::query::{dijkstra::Server, td_dijkstra::TDDijkstraOps},
+        *,
+    },
     cli::CliErr,
     datastr::graph::time_dependent::*,
     datastr::graph::*,
@@ -41,7 +44,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
 
-    let mut server = Server::new(graph);
+    let mut server = Server::<TDDijkstraOps, _>::new(graph);
 
     let mut query_dir = None;
     let mut base_dir = Some(path);
@@ -71,7 +74,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let _query_ctxt = algo_runs_ctxt.push_collection_item();
             report!("from", from);
             report!("to", to);
-            let (ea, time) = measure(|| server.query(TDQuery { from, to, departure: at }).map(|res| res.distance() + at));
+            let (ea, time) = measure(|| TDQueryServer::query(&mut server, TDQuery { from, to, departure: at }).map(|res| res.distance() + at));
             report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
             report!("result", ea.unwrap_or(INFINITY));
             total_time = total_time + time;

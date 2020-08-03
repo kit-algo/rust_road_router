@@ -1,4 +1,9 @@
-use rust_road_router::{algo::dijkstra::query::dijkstra::Server as DijkServer, cli::CliErr, datastr::graph::*, io::*};
+use rust_road_router::{
+    algo::dijkstra::{query::dijkstra::Server as DijkServer, *},
+    cli::CliErr,
+    datastr::graph::*,
+    io::*,
+};
 
 use std::{env, error::Error, path::Path};
 
@@ -20,8 +25,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let n = graph.num_nodes();
 
-    let mut forward_dijkstra = DijkServer::new(graph);
-    let mut backward_dijkstra = DijkServer::new(reversed);
+    let mut forward_dijkstra = DijkServer::<DefaultOps, _>::new(graph);
+    let mut backward_dijkstra = DijkServer::<DefaultOps, _>::new(reversed);
     let forward_dists = forward_dijkstra.one_to_all(from);
     let backward_dists = backward_dijkstra.one_to_all(to);
 
