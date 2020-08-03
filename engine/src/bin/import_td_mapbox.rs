@@ -65,8 +65,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                     // TODO by day
                     let speeds: Vec<u32> = records
-                        .skip(60 / 5 * 24 * 2)
-                        .take(60 / 5 * 24)
+                        // .skip(60 / 5 * 24 * 2)
+                        // .take(60 / 5 * 24)
                         .map(|s| s.parse::<u32>())
                         .collect::<Result<Vec<_>, _>>()?;
 
