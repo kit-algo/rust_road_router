@@ -100,6 +100,45 @@ impl Graph {
             .filter(|&deg| deg == 1)
             .count()
     }
+
+    pub fn line_graph(&self, mut turn_costs: impl FnMut(EdgeId, EdgeId) -> Option<Weight>) -> Self {
+        let mut first_out = Vec::with_capacity(self.num_arcs() + 1);
+        first_out.push(0);
+        let mut head = Vec::new();
+        let mut first_ipp_of_arc = Vec::new();
+        first_ipp_of_arc.push(0);
+        let mut ipp_departure_time = Vec::new();
+        let mut ipp_travel_time = Vec::new();
+        let mut num_turns = 0;
+        let mut num_ipps = 0;
+
+        for edge_id in 0..self.num_arcs() {
+            let link = self.link(edge_id as EdgeId);
+            for next_link_id in self.neighbor_edge_indices(link.node) {
+                if let Some(turn_cost) = turn_costs(edge_id as EdgeId, next_link_id) {
+                    head.push(next_link_id);
+
+                    let ipp_range = self.first_ipp_of_arc[edge_id] as usize..self.first_ipp_of_arc[edge_id + 1] as usize;
+                    for (&dt, &tt) in self.ipp_departure_time[ipp_range.clone()].iter().zip(self.ipp_travel_time[ipp_range].iter()) {
+                        ipp_departure_time.push(dt);
+                        ipp_travel_time.push(tt + turn_cost);
+                        num_ipps += 1;
+                    }
+                    first_ipp_of_arc.push(num_ipps);
+                    num_turns += 1;
+                }
+            }
+            first_out.push(num_turns as EdgeId);
+        }
+
+        Self {
+            first_out,
+            head,
+            first_ipp_of_arc,
+            ipp_departure_time,
+            ipp_travel_time,
+        }
+    }
 }
 
 impl GraphTrait for Graph {
@@ -220,6 +259,18 @@ impl LiveTDGraph {
         } else {
             predicted
         }
+    }
+
+    pub fn line_graph(&self, mut turn_costs: impl FnMut(EdgeId, EdgeId) -> Option<Weight>) -> Self {
+        let mut live = Vec::new();
+        let graph = self.graph.line_graph(|from_edge, to_edge| {
+            let turn = turn_costs(from_edge, to_edge);
+            if let Some(cost) = turn {
+                live.push(InRangeOption::new(self.live[from_edge as usize].value().map(|tt| tt + cost)))
+            }
+            turn
+        });
+        Self { graph, live, soon: self.soon }
     }
 }
 
