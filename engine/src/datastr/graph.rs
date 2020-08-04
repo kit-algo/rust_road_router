@@ -180,3 +180,33 @@ pub trait BuildPermutated<G>: Sized {
     /// Predicate takes edges as NodeId pairs with NodeIds according to the permutated graph.
     fn permutated_filtered(graph: &G, order: &NodeOrder, predicate: Box<dyn FnMut(NodeId, NodeId) -> bool>) -> Self;
 }
+
+pub struct InfinityFilteringGraph<G>(pub G);
+
+impl<G: Graph> Graph for InfinityFilteringGraph<G> {
+    fn degree(&self, node: NodeId) -> usize {
+        self.0.degree(node)
+    }
+    fn num_nodes(&self) -> usize {
+        self.0.num_nodes()
+    }
+    fn num_arcs(&self) -> usize {
+        self.0.num_arcs()
+    }
+}
+
+impl<'a, G: for<'b> LinkIterable<'b, Link>> LinkIterable<'a, Link> for InfinityFilteringGraph<G> {
+    type Iter = std::iter::Filter<<G as LinkIterable<'a, Link>>::Iter, fn(&Link) -> bool>;
+
+    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+        self.0.link_iter(node).filter(|l| l.weight < INFINITY)
+    }
+}
+
+impl<'a, G: for<'b> LinkIterable<'b, Link>> LinkIterable<'a, NodeId> for InfinityFilteringGraph<G> {
+    type Iter = std::iter::Map<<Self as LinkIterable<'a, Link>>::Iter, fn(Link) -> NodeId>;
+
+    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+        LinkIterable::<'a, Link>::link_iter(self, node).map(|l| l.node)
+    }
+}

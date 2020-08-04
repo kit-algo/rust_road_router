@@ -63,7 +63,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                     found += 1;
                     let edge_idx = edge_idx as usize;
 
-                    // TODO by day
                     let speeds: Vec<u32> = records
                         // .skip(60 / 5 * 24 * 2)
                         // .take(60 / 5 * 24)

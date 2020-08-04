@@ -484,7 +484,6 @@ pub fn virtual_topocore<'c, Graph: for<'a> LinkIterable<'a, NodeId>>(graph: &Gra
             graph
                 .link_iter(node as NodeId)
                 .chain(reversed.link_iter(node as NodeId))
-                // .filter(|l| l.weight < INFINITY) TODO
                 .collect::<Vec<NodeId>>()
                 .tap(|neighbors| neighbors.sort_unstable())
                 .tap(|neighbors| neighbors.dedup())

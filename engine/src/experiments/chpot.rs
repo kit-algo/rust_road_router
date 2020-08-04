@@ -116,16 +116,18 @@ pub fn run(
     };
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
+    let infinity_filtered_graph = InfinityFilteringGraph(modified_graph);
     let mut topocore: TopoServer<_, _, OwnedGraph> = {
         #[cfg(feature = "chpot-visualize")]
         {
-            TopoServer::new(&modified_graph, potential, DefaultOps::default(), &lat, &lng)
+            TopoServer::new(&infinity_filtered_graph, potential, DefaultOps::default(), &lat, &lng)
         }
         #[cfg(not(feature = "chpot-visualize"))]
         {
-            TopoServer::new(&modified_graph, potential, DefaultOps::default())
+            TopoServer::new(&infinity_filtered_graph, potential, DefaultOps::default())
         }
     };
+    let InfinityFilteringGraph(modified_graph) = infinity_filtered_graph;
     drop(virtual_topocore_ctxt);
 
     let mut query_count = 0;
