@@ -1,4 +1,5 @@
 use super::*;
+use crate::algo::dijkstra::gen_topo_dijkstra::{SymmetricDeg, SymmetricDegreeGraph};
 use crate::datastr::node_order::NodeOrder;
 use crate::datastr::rank_select_map::*;
 use crate::report::*;
@@ -427,13 +428,13 @@ pub fn preprocess<'c, Graph: for<'a> LinkIterGraph<'a> + for<'a> LinkIterable<'a
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct VirtualTopocore {
     pub order: NodeOrder,
     biggest_bcc: usize,
     deg2: usize,
     deg3: usize,
-    symmetric_degrees: Vec<u8>,
+    symmetric_degrees: std::rc::Rc<[u8]>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -538,7 +539,95 @@ pub fn virtual_topocore<'c, Graph: for<'a> LinkIterable<'a, NodeId>>(graph: &Gra
         biggest_bcc: biggest_bcc_size,
         deg3,
         deg2,
-        symmetric_degrees: other_bccs_symmetric_degrees,
+        symmetric_degrees: other_bccs_symmetric_degrees.into(),
+    }
+}
+
+pub struct VirtualTopocoreGraph<G> {
+    pub graph: G,
+    virtual_topocore: VirtualTopocore,
+}
+
+impl<Graph> VirtualTopocoreGraph<Graph> {
+    pub fn new<G>(graph: &G) -> (Self, VirtualTopocore)
+    where
+        G: for<'a> LinkIterable<'a, NodeId>,
+        Graph: BuildPermutated<G>,
+    {
+        let topocore = virtual_topocore(graph);
+        (
+            VirtualTopocoreGraph {
+                graph: <Graph as BuildPermutated<G>>::permutated(&graph, &topocore.order),
+                virtual_topocore: topocore.clone(),
+            },
+            topocore,
+        )
+    }
+
+    pub fn new_topo_dijkstra_graphs<G>(graph: &G) -> (Self, Self, VirtualTopocore)
+    where
+        G: for<'a> LinkIterable<'a, NodeId>,
+        Graph: BuildPermutated<G>,
+    {
+        let topocore = virtual_topocore(graph);
+        (
+            VirtualTopocoreGraph {
+                graph: <Graph as BuildPermutated<G>>::permutated_filtered(&graph, &topocore.order, {
+                    let topocore = topocore.clone();
+                    Box::new(move |t, h| !topocore.node_type(t).in_core() || topocore.node_type(h).in_core())
+                }),
+                virtual_topocore: topocore.clone(),
+            },
+            VirtualTopocoreGraph {
+                graph: <Graph as BuildPermutated<G>>::permutated_filtered(&graph, &topocore.order, {
+                    let topocore = topocore.clone();
+                    Box::new(move |t, h| !(topocore.node_type(t).in_core() && topocore.node_type(h).in_core()))
+                }),
+                virtual_topocore: topocore.clone(),
+            },
+            topocore,
+        )
+    }
+}
+
+impl<G: Graph> Graph for VirtualTopocoreGraph<G> {
+    fn degree(&self, node: NodeId) -> usize {
+        self.graph.degree(node)
+    }
+    fn num_nodes(&self) -> usize {
+        self.graph.num_nodes()
+    }
+    fn num_arcs(&self) -> usize {
+        self.graph.num_arcs()
+    }
+}
+
+impl<'a, G: for<'b> LinkIterable<'b, L>, L> LinkIterable<'a, L> for VirtualTopocoreGraph<G> {
+    type Iter = <G as LinkIterable<'a, L>>::Iter;
+
+    #[inline(always)]
+    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+        self.graph.link_iter(node)
+    }
+}
+
+impl<G> SymmetricDegreeGraph for VirtualTopocoreGraph<G> {
+    #[inline(always)]
+    fn symmetric_degree(&self, node: NodeId) -> SymmetricDeg {
+        let node = node as usize;
+        if node < self.virtual_topocore.deg3 {
+            SymmetricDeg::GreaterEqFour
+        } else if node < self.virtual_topocore.deg2 {
+            SymmetricDeg::Three
+        } else if node < self.virtual_topocore.biggest_bcc {
+            SymmetricDeg::LessEqTwo
+        } else {
+            match self.virtual_topocore.symmetric_degrees[node - self.virtual_topocore.biggest_bcc].cmp(&3) {
+                std::cmp::Ordering::Equal => SymmetricDeg::Three,
+                std::cmp::Ordering::Greater => SymmetricDeg::GreaterEqFour,
+                std::cmp::Ordering::Less => SymmetricDeg::LessEqTwo,
+            }
+        }
     }
 }
 

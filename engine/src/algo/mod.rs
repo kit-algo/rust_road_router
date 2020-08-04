@@ -1,6 +1,6 @@
 //! Building blocks for fast routing algorithms.
 
-use crate::datastr::graph::*;
+use crate::datastr::{graph::*, node_order::NodeOrder};
 
 use self::dijkstra::{QueryProgress, State};
 
@@ -16,6 +16,7 @@ pub trait GenQuery<Label> {
     fn from(&self) -> NodeId;
     fn to(&self) -> NodeId;
     fn initial_state(&self) -> Label;
+    fn permutate(&mut self, order: &NodeOrder);
 }
 
 /// Simply a source-target pair
@@ -34,6 +35,10 @@ impl GenQuery<Weight> for Query {
     }
     fn initial_state(&self) -> Weight {
         0
+    }
+    fn permutate(&mut self, order: &NodeOrder) {
+        self.from = order.rank(self.from);
+        self.to = order.rank(self.to);
     }
 }
 
@@ -55,6 +60,10 @@ impl<T: Copy> GenQuery<T> for TDQuery<T> {
     }
     fn initial_state(&self) -> T {
         self.departure
+    }
+    fn permutate(&mut self, order: &NodeOrder) {
+        self.from = order.rank(self.from);
+        self.to = order.rank(self.to);
     }
 }
 

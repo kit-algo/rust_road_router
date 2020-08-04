@@ -156,7 +156,7 @@ impl<'a> LinkIterable<'a, (NodeId, EdgeId)> for Graph {
 }
 
 impl BuildPermutated<Graph> for Graph {
-    fn permutated(graph: &Graph, order: &NodeOrder) -> Self {
+    fn permutated_filtered(graph: &Graph, order: &NodeOrder, mut predicate: Box<dyn FnMut(NodeId, NodeId) -> bool>) -> Self {
         let mut first_out: Vec<EdgeId> = Vec::with_capacity(graph.num_nodes() + 1);
         first_out.push(0);
         let mut head = Vec::with_capacity(graph.num_arcs());
@@ -165,9 +165,12 @@ impl BuildPermutated<Graph> for Graph {
         let mut ipp_departure_time = Vec::<Timestamp>::with_capacity(graph.ipp_departure_time.len());
         let mut ipp_travel_time = Vec::<Weight>::with_capacity(graph.ipp_travel_time.len());
 
-        for &node in order.order() {
-            first_out.push(first_out.last().unwrap() + graph.degree(node) as NodeId);
-            let mut links = graph.neighbor_and_edge_id_iter(node).collect::<Vec<_>>();
+        for (rank, &node) in order.order().iter().enumerate() {
+            let mut links = graph
+                .neighbor_and_edge_id_iter(node)
+                .filter(|&(h, _)| predicate(rank as NodeId, order.rank(h)))
+                .collect::<Vec<_>>();
+            first_out.push(first_out.last().unwrap() + links.len() as EdgeId);
             links.sort_unstable_by_key(|&(head, _)| order.rank(head));
 
             for (h, e) in links {
@@ -248,7 +251,7 @@ impl<'a> LinkIterable<'a, (NodeId, EdgeId)> for LiveTDGraph {
 }
 
 impl BuildPermutated<LiveTDGraph> for LiveTDGraph {
-    fn permutated(graph: &LiveTDGraph, order: &NodeOrder) -> Self {
+    fn permutated_filtered(graph: &LiveTDGraph, order: &NodeOrder, mut predicate: Box<dyn FnMut(NodeId, NodeId) -> bool>) -> Self {
         let mut first_out: Vec<EdgeId> = Vec::with_capacity(graph.num_nodes() + 1);
         first_out.push(0);
         let mut head = Vec::with_capacity(graph.num_arcs());
@@ -258,9 +261,13 @@ impl BuildPermutated<LiveTDGraph> for LiveTDGraph {
         let mut ipp_departure_time = Vec::<Timestamp>::with_capacity(graph.graph.ipp_departure_time.len());
         let mut ipp_travel_time = Vec::<Weight>::with_capacity(graph.graph.ipp_travel_time.len());
 
-        for &node in order.order() {
-            first_out.push(first_out.last().unwrap() + graph.degree(node) as NodeId);
-            let mut links = graph.graph.neighbor_and_edge_id_iter(node).collect::<Vec<_>>();
+        for (rank, &node) in order.order().iter().enumerate() {
+            let mut links = graph
+                .graph
+                .neighbor_and_edge_id_iter(node)
+                .filter(|&(h, _)| predicate(rank as NodeId, order.rank(h)))
+                .collect::<Vec<_>>();
+            first_out.push(first_out.last().unwrap() + links.len() as EdgeId);
             links.sort_unstable_by_key(|&(head, _)| order.rank(head));
 
             for (h, e) in links {

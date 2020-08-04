@@ -120,15 +120,18 @@ impl<G: for<'a> LinkIterable<'a, Link>> BuildReversed<G> for OwnedGraph {
 }
 
 impl<G: for<'a> LinkIterable<'a, Link>> BuildPermutated<G> for OwnedGraph {
-    fn permutated(graph: &G, order: &NodeOrder) -> Self {
+    fn permutated_filtered(graph: &G, order: &NodeOrder, mut predicate: Box<dyn FnMut(NodeId, NodeId) -> bool>) -> Self {
         let mut first_out: Vec<EdgeId> = Vec::with_capacity(graph.num_nodes() + 1);
         first_out.push(0);
         let mut head = Vec::with_capacity(graph.num_arcs());
         let mut weight = Vec::with_capacity(graph.num_arcs());
 
-        for &node in order.order() {
-            first_out.push(first_out.last().unwrap() + graph.degree(node) as NodeId);
-            let mut links = graph.link_iter(node).collect::<Vec<_>>();
+        for (rank, &node) in order.order().iter().enumerate() {
+            let mut links = graph
+                .link_iter(node)
+                .filter(|l| predicate(rank as NodeId, order.rank(l.node)))
+                .collect::<Vec<_>>();
+            first_out.push(first_out.last().unwrap() + links.len() as EdgeId);
             links.sort_unstable_by_key(|l| order.rank(l.node));
 
             for link in links {

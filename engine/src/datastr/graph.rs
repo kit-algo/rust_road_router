@@ -170,7 +170,13 @@ pub trait BuildReversed<G> {
 
 /// Generic Trait for building permutated graphs.
 /// Type setup similar to `FromIter` for `std::iter::collect`.
-pub trait BuildPermutated<G> {
+pub trait BuildPermutated<G>: Sized {
     /// Build an isomorph graph with node ids permutated according to the given order.
-    fn permutated(graph: &G, order: &NodeOrder) -> Self;
+    fn permutated(graph: &G, order: &NodeOrder) -> Self {
+        Self::permutated_filtered(graph, order, Box::new(|_, _| true))
+    }
+
+    /// Build an isomorph graph with node ids permutated according to the given order while filtering out edges.
+    /// Predicate takes edges as NodeId pairs with NodeIds according to the permutated graph.
+    fn permutated_filtered(graph: &G, order: &NodeOrder, predicate: Box<dyn FnMut(NodeId, NodeId) -> bool>) -> Self;
 }

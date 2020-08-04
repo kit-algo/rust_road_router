@@ -170,7 +170,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
-    let mut server = Server::new(graph.clone(), potential, LiveTDDijkstraOps::default());
+    let mut server = Server::new(&graph, potential, LiveTDDijkstraOps::default());
     drop(virtual_topocore_ctxt);
 
     let num_queries = rust_road_router::experiments::chpot::NUM_QUERIES;

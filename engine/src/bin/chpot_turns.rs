@@ -125,11 +125,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut topocore: TopoServer<_, _, OwnedGraph> = {
         #[cfg(feature = "chpot_visualize")]
         {
-            TopoServer::new(exp_graph.clone(), potential, DefaultOps::default(), &lat, &lng)
+            TopoServer::new(&exp_graph, potential, DefaultOps::default(), &lat, &lng)
         }
         #[cfg(not(feature = "chpot_visualize"))]
         {
-            TopoServer::new(exp_graph.clone(), potential, DefaultOps::default())
+            TopoServer::new(&exp_graph, potential, DefaultOps::default())
         }
     };
     drop(virtual_topocore_ctxt);

@@ -112,11 +112,11 @@ pub fn run(
     let mut topocore: TopoServer<_, _, OwnedGraph> = {
         #[cfg(feature = "chpot-visualize")]
         {
-            TopoServer::new(modified_graph.clone(), potential, DefaultOps::default(), &lat, &lng)
+            TopoServer::new(&modified_graph, potential, DefaultOps::default(), &lat, &lng)
         }
         #[cfg(not(feature = "chpot-visualize"))]
         {
-            TopoServer::new(modified_graph.clone(), potential, DefaultOps::default())
+            TopoServer::new(&modified_graph, potential, DefaultOps::default())
         }
     };
     drop(virtual_topocore_ctxt);

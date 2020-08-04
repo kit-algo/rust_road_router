@@ -2,20 +2,14 @@
 
 use super::generic_dijkstra::*;
 use super::*;
-use crate::algo::topocore::*;
-use crate::datastr::{index_heap::*, rank_select_map::FastClearBitVec, timestamped_vector::*};
+use crate::datastr::{index_heap::*, timestamped_vector::*};
 
 pub struct GenTopoDijkstra<Ops: DijkstraOps<Graph>, Graph> {
     graph: Graph,
-    reversed: UnweightedOwnedGraph,
-    virtual_topocore: VirtualTopocore,
-    visited: FastClearBitVec,
 
     distances: TimestampedVector<Ops::Label>,
     predecessors: Vec<NodeId>,
     queue: IndexdMinHeap<State<<Ops::Label as super::Label>::Key>>,
-
-    border_node: NodeId,
 
     num_relaxed_arcs: usize,
     num_queue_pushs: usize,
@@ -34,33 +28,20 @@ impl<Ops, Graph> GenTopoDijkstra<Ops, Graph>
 where
     Ops: DijkstraOps<Graph>,
     <Ops::Label as super::Label>::Key: std::ops::Add<Output = <Ops::Label as super::Label>::Key>,
-    Graph: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, Ops::Arc>,
+    Graph: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, Ops::Arc> + SymmetricDegreeGraph,
 {
-    pub fn new<G>(graph: G) -> Self
+    pub fn new(graph: Graph) -> Self
     where
-        G: for<'a> LinkIterable<'a, NodeId>,
-        Graph: BuildPermutated<G>,
         Ops: Default,
     {
         Self::new_with_ops(graph, Default::default())
     }
 
-    pub fn new_with_ops<G>(graph: G, ops: Ops) -> Self
-    where
-        G: for<'a> LinkIterable<'a, NodeId>,
-        Graph: BuildPermutated<G>,
-    {
+    pub fn new_with_ops(graph: Graph, ops: Ops) -> Self {
         let n = graph.num_nodes();
-        let virtual_topocore = virtual_topocore(&graph);
-
-        let graph = <Graph as BuildPermutated<G>>::permutated(&graph, &virtual_topocore.order);
-        let reversed = UnweightedOwnedGraph::reversed(&graph);
 
         Self {
             graph,
-            reversed,
-            virtual_topocore,
-            visited: FastClearBitVec::new(n),
 
             distances: TimestampedVector::new(n, Label::neutral()),
             predecessors: vec![n as NodeId; n],
@@ -68,15 +49,13 @@ where
 
             num_relaxed_arcs: 0,
             num_queue_pushs: 0,
-            border_node: 0,
 
             ops,
         }
     }
 
     pub fn initialize_query(&mut self, query: impl GenQuery<Ops::Label>) {
-        let from = self.virtual_topocore.order.rank(query.from());
-        let to = self.virtual_topocore.order.rank(query.to());
+        let from = query.from();
         // initialize
         self.num_relaxed_arcs = 0;
         self.num_queue_pushs = 0;
@@ -87,68 +66,6 @@ where
 
         self.distances.reset();
         self.distances[from as usize] = init;
-
-        let border = self.border(to);
-        if let Some(border_node) = border {
-            self.border_node = border_node;
-        } else {
-            self.queue.clear();
-            return;
-        }
-
-        if self.in_core(to) {
-            let mut counter = 0;
-            self.visited.clear();
-            Self::dfs(&self.reversed, to, &mut self.visited, &mut |_| {}, &mut |_| {
-                if counter < 100 {
-                    counter += 1;
-                    false
-                } else {
-                    true
-                }
-            });
-
-            if counter < 100 {
-                self.queue.clear();
-            }
-        }
-    }
-
-    fn dfs(
-        graph: &UnweightedOwnedGraph,
-        node: NodeId,
-        visited: &mut FastClearBitVec,
-        border_callback: &mut impl FnMut(NodeId),
-        in_core: &mut impl FnMut(NodeId) -> bool,
-    ) {
-        if visited.get(node as usize) {
-            return;
-        }
-        visited.set(node as usize);
-        if in_core(node) {
-            border_callback(node);
-            return;
-        }
-        for head in graph.link_iter(node) {
-            Self::dfs(graph, head, visited, border_callback, in_core);
-        }
-    }
-
-    fn border(&mut self, node: NodeId) -> Option<NodeId> {
-        let mut border = None;
-        self.visited.clear();
-        let virtual_topocore = &self.virtual_topocore;
-        Self::dfs(
-            &self.reversed,
-            node,
-            &mut self.visited,
-            &mut |node| {
-                let prev = border.replace(node);
-                debug_assert_eq!(prev, None);
-            },
-            &mut |node| virtual_topocore.node_type(node).in_core(),
-        );
-        border
     }
 
     #[inline(always)]
@@ -171,18 +88,7 @@ where
         P: FnMut(NodeId) -> Option<O>,
         O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
     {
-        let mut next_node = None;
-
-        while let Some(State { node, key: dist_with_pot }) = self.queue.pop() {
-            if !(dist_with_pot > potential(self.virtual_topocore.order.node(self.border_node)).unwrap() + self.distances[self.border_node as usize].key()
-                && self.in_core(node))
-            {
-                next_node = Some(State { node, key: dist_with_pot });
-                break;
-            }
-        }
-
-        next_node.map(|State { node, key: _dist_with_pot }| {
+        self.queue.pop().map(|State { node, .. }| {
             for edge in LinkIterable::<Ops::Arc>::link_iter(&self.graph, node) {
                 let mut chain = Some(ChainStep {
                     prev_node: node,
@@ -200,16 +106,14 @@ where
                 {
                     self.num_relaxed_arcs += 1;
 
-                    if (cfg!(feature = "chpot-no-bcc") || self.in_core(next_node) || !self.in_core(prev_node) || self.border_node == prev_node)
-                        && self.ops.merge(&mut self.distances[next_node as usize], next_distance)
-                    {
+                    if self.ops.merge(&mut self.distances[next_node as usize], next_distance) {
                         let next_distance = &self.distances[next_node as usize];
                         let mut next_edge = None;
                         let mut endpoint = false;
                         // debug_assert!(next_distance >= distance);
 
-                        match self.virtual_topocore.node_type(next_node) {
-                            NodeType::Deg2OrLess | NodeType::OtherBCC(2) => {
+                        match self.graph.symmetric_degree(next_node) {
+                            SymmetricDeg::LessEqTwo => {
                                 if cfg!(feature = "chpot-no-deg2") {
                                     endpoint = true;
                                 } else {
@@ -220,7 +124,7 @@ where
                                     }
                                 }
                             }
-                            NodeType::Deg3 | NodeType::OtherBCC(3) => {
+                            SymmetricDeg::Three => {
                                 if cfg!(feature = "chpot-no-deg3")
                                     || had_deg_three
                                     || self.queue.contains_index(
@@ -245,13 +149,9 @@ where
                                     }
                                 }
                             }
-                            NodeType::Deg4OrMore => {
+                            SymmetricDeg::GreaterEqFour => {
                                 endpoint = true;
                             }
-                            NodeType::OtherBCC(d) if d > 3 => {
-                                endpoint = true;
-                            }
-                            _ => {}
                         }
 
                         self.predecessors[next_node as usize] = prev_node;
@@ -263,7 +163,7 @@ where
                                 next_distance: self.ops.link(&self.graph, next_distance, &next_edge),
                             });
                         } else if endpoint {
-                            if let Some(key) = potential(self.virtual_topocore.order.node(next_node)).map(|p| p + next_distance.key()) {
+                            if let Some(key) = potential(next_node).map(|p| p + next_distance.key()) {
                                 let next = State { key, node: next_node };
                                 if let Some(other) = self.queue.get(next.as_index()) {
                                     debug_assert!(other.key >= next.key);
@@ -288,22 +188,29 @@ where
                 }
             }
 
-            self.virtual_topocore.order.node(node)
+            node
         })
     }
 
-    fn in_core(&self, node: NodeId) -> bool {
-        self.virtual_topocore.node_type(node).in_core()
+    pub fn reinit_queue(&mut self, node: NodeId) {
+        self.queue.clear();
+        self.queue.push(State {
+            key: self.distances[node as usize].key(),
+            node,
+        });
+    }
+
+    pub fn swap_graph(&mut self, other: &mut Graph) {
+        debug_assert_eq!(self.graph.num_nodes(), other.num_nodes());
+        std::mem::swap(&mut self.graph, other);
     }
 
     pub fn tentative_distance(&self, node: NodeId) -> &Ops::Label {
-        &self.distances[self.virtual_topocore.order.rank(node) as usize]
+        &self.distances[node as usize]
     }
 
     pub fn predecessor(&self, node: NodeId) -> NodeId {
-        self.virtual_topocore
-            .order
-            .node(self.predecessors[self.virtual_topocore.order.rank(node) as usize])
+        self.predecessors[node as usize]
     }
 
     pub fn queue(&self) -> &IndexdMinHeap<State<<Ops::Label as super::Label>::Key>> {
@@ -329,4 +236,14 @@ impl<T> std::ops::Add<T> for Neutral {
     fn add(self, rhs: T) -> Self::Output {
         rhs
     }
+}
+
+pub enum SymmetricDeg {
+    LessEqTwo,
+    Three,
+    GreaterEqFour,
+}
+
+pub trait SymmetricDegreeGraph {
+    fn symmetric_degree(&self, node: NodeId) -> SymmetricDeg;
 }
