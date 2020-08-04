@@ -146,23 +146,13 @@ where
         #[cfg(not(feature = "chpot-no-bcc"))]
         {
             let border_node = if let Some(border_node) = border { border_node } else { return None };
-            let border_node_pot = if let Some(pot) = if cfg!(feature = "chpot-only-topo") {
-                Some(0)
-            } else {
-                potential.potential(self.virtual_topocore.order.node(border_node))
-            } {
+            let border_node_pot = if let Some(pot) = potential.potential(self.virtual_topocore.order.node(border_node)) {
                 pot
             } else {
                 return None;
             };
 
-            while let Some(node) = forward_dijkstra.next_step_with_potential(|node| {
-                if cfg!(feature = "chpot-only-topo") {
-                    Some(0)
-                } else {
-                    potential.potential(virtual_topocore.order.node(node))
-                }
-            }) {
+            while let Some(node) = forward_dijkstra.next_step_with_potential(|node| potential.potential(virtual_topocore.order.node(node))) {
                 num_queue_pops += 1;
                 #[cfg(feature = "chpot-visualize")]
                 {
@@ -194,13 +184,7 @@ where
             forward_dijkstra.reinit_queue(border_node);
         }
 
-        while let Some(node) = forward_dijkstra.next_step_with_potential(|node| {
-            if cfg!(feature = "chpot-only-topo") {
-                Some(0)
-            } else {
-                potential.potential(virtual_topocore.order.node(node))
-            }
-        }) {
+        while let Some(node) = forward_dijkstra.next_step_with_potential(|node| potential.potential(virtual_topocore.order.node(node))) {
             num_queue_pops += 1;
             #[cfg(feature = "chpot-visualize")]
             {

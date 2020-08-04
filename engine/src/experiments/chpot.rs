@@ -76,25 +76,32 @@ pub fn run(
     };
 
     let potential = {
-        #[cfg(feature = "chpot-cch")]
+        #[cfg(feature = "chpot-only-topo")]
         {
-            let _potential_ctxt = algo_runs_ctxt.push_collection_item();
-            CCHPotential::new(&cch, &graph)
+            ZeroPotential()
         }
-        #[cfg(not(feature = "chpot-cch"))]
+        #[cfg(not(feature = "chpot-only-topo"))]
         {
-            let forward_first_out = Vec::<EdgeId>::load_from(path.join("lower_bound_ch/forward_first_out"))?;
-            let forward_head = Vec::<NodeId>::load_from(path.join("lower_bound_ch/forward_head"))?;
-            let forward_weight = Vec::<Weight>::load_from(path.join("lower_bound_ch/forward_weight"))?;
-            let backward_first_out = Vec::<EdgeId>::load_from(path.join("lower_bound_ch/backward_first_out"))?;
-            let backward_head = Vec::<NodeId>::load_from(path.join("lower_bound_ch/backward_head"))?;
-            let backward_weight = Vec::<Weight>::load_from(path.join("lower_bound_ch/backward_weight"))?;
-            let order = NodeOrder::from_node_order(Vec::<NodeId>::load_from(path.join("lower_bound_ch/order"))?);
-            CHPotential::new(
-                OwnedGraph::new(forward_first_out, forward_head, forward_weight),
-                OwnedGraph::new(backward_first_out, backward_head, backward_weight),
-                order,
-            )
+            #[cfg(feature = "chpot-cch")]
+            {
+                let _potential_ctxt = algo_runs_ctxt.push_collection_item();
+                CCHPotential::new(&cch, &graph)
+            }
+            #[cfg(not(feature = "chpot-cch"))]
+            {
+                let forward_first_out = Vec::<EdgeId>::load_from(path.join("lower_bound_ch/forward_first_out"))?;
+                let forward_head = Vec::<NodeId>::load_from(path.join("lower_bound_ch/forward_head"))?;
+                let forward_weight = Vec::<Weight>::load_from(path.join("lower_bound_ch/forward_weight"))?;
+                let backward_first_out = Vec::<EdgeId>::load_from(path.join("lower_bound_ch/backward_first_out"))?;
+                let backward_head = Vec::<NodeId>::load_from(path.join("lower_bound_ch/backward_head"))?;
+                let backward_weight = Vec::<Weight>::load_from(path.join("lower_bound_ch/backward_weight"))?;
+                let order = NodeOrder::from_node_order(Vec::<NodeId>::load_from(path.join("lower_bound_ch/order"))?);
+                CHPotential::new(
+                    OwnedGraph::new(forward_first_out, forward_head, forward_weight),
+                    OwnedGraph::new(backward_first_out, backward_head, backward_weight),
+                    order,
+                )
+            }
         }
     };
     let potential = {

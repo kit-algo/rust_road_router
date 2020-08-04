@@ -73,29 +73,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         .collect::<Vec<Weight>>();
     unify_parallel_edges(&mut FirstOutGraph::new(graph.first_out(), graph.head(), &mut lower_bound[..]));
 
-    let potential = {
-        #[cfg(feature = "chpot-cch")]
-        {
-            let _potential_ctxt = algo_runs_ctxt.push_collection_item();
-            CCHPotential::new(&cch, &FirstOutGraph::new(graph.first_out(), graph.head(), lower_bound))
-        }
-        #[cfg(not(feature = "chpot-cch"))]
-        {
-            let forward_first_out = Vec::<EdgeId>::load_from(path.join("lower_bound_ch/forward_first_out"))?;
-            let forward_head = Vec::<NodeId>::load_from(path.join("lower_bound_ch/forward_head"))?;
-            let forward_weight = Vec::<Weight>::load_from(path.join("lower_bound_ch/forward_weight"))?;
-            let backward_first_out = Vec::<EdgeId>::load_from(path.join("lower_bound_ch/backward_first_out"))?;
-            let backward_head = Vec::<NodeId>::load_from(path.join("lower_bound_ch/backward_head"))?;
-            let backward_weight = Vec::<Weight>::load_from(path.join("lower_bound_ch/backward_weight"))?;
-            let order = NodeOrder::from_node_order(Vec::<NodeId>::load_from(path.join("lower_bound_ch/order"))?);
-            CHPotential::new(
-                OwnedGraph::new(forward_first_out, forward_head, forward_weight),
-                OwnedGraph::new(backward_first_out, backward_head, backward_weight),
-                order,
-            )
-        }
-    };
-
     let arg = &args.next().ok_or(CliErr("No live data directory arg given"))?;
     let live_dir = Path::new(arg);
 
@@ -139,17 +116,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    // let now = 15 * 3600 * 1000 + 41 * 60 * 1000;
-    let now = 12 * 3600 * 1000;
-    let soon = now + 3600 * 1000;
-    let graph = LiveTDGraph::new(graph, soon, live);
-
     report!("live_traffic", { "num_modifications": total, "num_matched": found, "num_too_fast": too_fast });
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
 
-    let core_ids = core_affinity::get_core_ids().unwrap();
-    core_affinity::set_for_current(core_ids[0]);
+    // let now = 15 * 3600 * 1000 + 41 * 60 * 1000;
+    let now = 12 * 3600 * 1000;
+    let soon = now + 3600 * 1000;
 
     #[cfg(feature = "chpot-cch")]
     let cch = {
@@ -168,6 +141,41 @@ fn main() -> Result<(), Box<dyn Error>> {
         let _cch_build_ctxt = algo_runs_ctxt.push_collection_item();
         contract(&graph, cch_order)
     };
+
+    let potential = {
+        #[cfg(feature = "chpot-only-topo")]
+        {
+            ZeroPotential()
+        }
+        #[cfg(not(feature = "chpot-only-topo"))]
+        {
+            #[cfg(feature = "chpot-cch")]
+            {
+                let _potential_ctxt = algo_runs_ctxt.push_collection_item();
+                CCHPotential::new(&cch, &FirstOutGraph::new(graph.first_out(), graph.head(), lower_bound))
+            }
+            #[cfg(not(feature = "chpot-cch"))]
+            {
+                let forward_first_out = Vec::<EdgeId>::load_from(path.join("lower_bound_ch/forward_first_out"))?;
+                let forward_head = Vec::<NodeId>::load_from(path.join("lower_bound_ch/forward_head"))?;
+                let forward_weight = Vec::<Weight>::load_from(path.join("lower_bound_ch/forward_weight"))?;
+                let backward_first_out = Vec::<EdgeId>::load_from(path.join("lower_bound_ch/backward_first_out"))?;
+                let backward_head = Vec::<NodeId>::load_from(path.join("lower_bound_ch/backward_head"))?;
+                let backward_weight = Vec::<Weight>::load_from(path.join("lower_bound_ch/backward_weight"))?;
+                let order = NodeOrder::from_node_order(Vec::<NodeId>::load_from(path.join("lower_bound_ch/order"))?);
+                CHPotential::new(
+                    OwnedGraph::new(forward_first_out, forward_head, forward_weight),
+                    OwnedGraph::new(backward_first_out, backward_head, backward_weight),
+                    order,
+                )
+            }
+        }
+    };
+
+    let graph = LiveTDGraph::new(graph, soon, live);
+
+    let core_ids = core_affinity::get_core_ids().unwrap();
+    core_affinity::set_for_current(core_ids[0]);
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
     let mut server = Server::new(&graph, potential, LiveTDDijkstraOps::default());

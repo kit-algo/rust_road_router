@@ -263,3 +263,16 @@ impl<P: Potential> Potential for RecyclingPotential<P> {
         self.potential.num_pot_evals()
     }
 }
+
+#[derive(Debug)]
+pub struct ZeroPotential();
+
+impl Potential for ZeroPotential {
+    fn init(&mut self, _target: NodeId) {}
+    fn potential(&mut self, _node: NodeId) -> Option<Weight> {
+        Some(0)
+    }
+    fn num_pot_evals(&self) -> usize {
+        0
+    }
+}
