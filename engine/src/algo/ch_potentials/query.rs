@@ -143,6 +143,23 @@ where
         let virtual_topocore = &self.virtual_topocore;
         let potential = &mut self.potential;
 
+        if cfg!(feature = "chpot-no-bcc") || self.virtual_topocore.node_type(query.to()).in_core() {
+            let mut counter = 0;
+            self.visited.clear();
+            Self::dfs(&self.reversed, query.to(), &mut self.visited, &mut |_| {}, &mut |_| {
+                if counter < 100 {
+                    counter += 1;
+                    false
+                } else {
+                    true
+                }
+            });
+
+            if counter < 100 {
+                return None;
+            }
+        }
+
         #[cfg(not(feature = "chpot-no-bcc"))]
         {
             let border_node = if let Some(border_node) = border { border_node } else { return None };
