@@ -1,6 +1,6 @@
 use super::*;
 use crate::datastr::graph::Graph as GraphTrait;
-use crate::util::in_range_option::*;
+use crate::util::{in_range_option::*, *};
 
 type IPPIndex = u32;
 
@@ -264,11 +264,11 @@ impl LiveTDGraph {
     pub fn line_graph(&self, mut turn_costs: impl FnMut(EdgeId, EdgeId) -> Option<Weight>) -> Self {
         let mut live = Vec::new();
         let graph = self.graph.line_graph(|from_edge, to_edge| {
-            let turn = turn_costs(from_edge, to_edge);
-            if let Some(cost) = turn {
-                live.push(InRangeOption::new(self.live[from_edge as usize].value().map(|tt| tt + cost)))
-            }
-            turn
+            turn_costs(from_edge, to_edge).tap(|turn| {
+                if let &mut Some(cost) = turn {
+                    live.push(InRangeOption::new(self.live[from_edge as usize].value().map(|tt| tt + cost)))
+                }
+            })
         });
         Self { graph, live, soon: self.soon }
     }
