@@ -1,6 +1,6 @@
 #[macro_use]
 extern crate rust_road_router;
-use rust_road_router::{cli::CliErr, report::*};
+use rust_road_router::{cli::CliErr, datastr::graph::*, report::*};
 use std::{env, error::Error, path::Path};
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -22,7 +22,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     rust_road_router::experiments::chpot::run(path, |_graph, _rng, travel_time| {
         for weight in travel_time.iter_mut() {
-            *weight = *weight * 11 / 10;
+            *weight = (*weight as f64 * 1.05) as Weight;
         }
 
         Ok(())
