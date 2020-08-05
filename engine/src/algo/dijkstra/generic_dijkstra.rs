@@ -48,6 +48,9 @@ pub struct GenericDijkstra<Ops: DijkstraOps<Graph>, Graph> {
     queue: IndexdMinHeap<State<<Ops::Label as super::Label>::Key>>,
 
     ops: Ops,
+
+    num_relaxed_arcs: usize,
+    num_queue_pushs: usize,
 }
 
 impl<Ops, Graph> GenericDijkstra<Ops, Graph>
@@ -69,6 +72,9 @@ where
             queue: IndexdMinHeap::new(n),
 
             ops: Default::default(),
+
+            num_relaxed_arcs: 0,
+            num_queue_pushs: 0,
         }
     }
 
@@ -89,6 +95,9 @@ where
             predecessors: recycled.predecessors,
             queue: recycled.queue,
             ops: Default::default(),
+
+            num_relaxed_arcs: 0,
+            num_queue_pushs: 0,
         }
     }
 
@@ -113,6 +122,7 @@ where
         self.queue.pop().map(|State { node, .. }| {
             for link in self.graph.link_iter(node) {
                 if edge_predicate(&link) {
+                    self.num_relaxed_arcs += 1;
                     let linked = self.ops.link(&self.graph, &self.distances[node as usize], &link);
 
                     if self.ops.merge(&mut self.distances[link.head() as usize], linked) {
@@ -125,6 +135,7 @@ where
                         if self.queue.contains_index(next.as_index()) {
                             self.queue.decrease_key(next);
                         } else {
+                            self.num_queue_pushs += 1;
                             self.queue.push(next);
                         }
                     }
@@ -160,6 +171,14 @@ where
             predecessors: self.predecessors,
             queue: self.queue,
         }
+    }
+
+    pub fn num_relaxed_arcs(&self) -> usize {
+        self.num_relaxed_arcs
+    }
+
+    pub fn num_queue_pushs(&self) -> usize {
+        self.num_queue_pushs
     }
 }
 

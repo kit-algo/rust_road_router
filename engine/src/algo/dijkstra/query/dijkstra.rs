@@ -22,11 +22,17 @@ impl<Ops: DijkstraOps<Graph, Label = Weight>, Graph: for<'a> LinkIterable<'a, Op
         let to = query.to();
         self.dijkstra.initialize_query(query);
 
+        let mut num_queue_pops = 0;
         while let Some(node) = self.dijkstra.next() {
+            num_queue_pops += 1;
             if node == to {
                 return Some(*self.dijkstra.tentative_distance(node));
             }
         }
+
+        report!("num_queue_pops", num_queue_pops);
+        report!("num_queue_pushs", self.dijkstra.num_queue_pushs());
+        report!("num_relaxed_arcs", self.dijkstra.num_relaxed_arcs());
 
         None
     }
