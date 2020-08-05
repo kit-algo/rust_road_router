@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     report!("seed", seed);
     let mut rng = StdRng::from_seed(seed);
 
-    report!("program", "chpot_td");
+    report!("program", "chpot_td_live");
     report!("start_time", format!("{}", time::now_utc().rfc822()));
     report!("args", env::args().collect::<Vec<String>>());
 
