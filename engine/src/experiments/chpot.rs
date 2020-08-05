@@ -140,7 +140,7 @@ pub fn run(
 
         #[cfg(feature = "chpot-oracle")]
         {
-            topocore.query(Query { from, to });
+            QueryServer::query(&mut topocore, Query { from, to })
         }
 
         report!("from", from);
