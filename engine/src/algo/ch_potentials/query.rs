@@ -1,6 +1,5 @@
 use super::*;
 
-#[cfg(not(feature = "chpot-no-bcc"))]
 use crate::datastr::rank_select_map::FastClearBitVec;
 use crate::{
     algo::{dijkstra::gen_topo_dijkstra::*, topocore::*},
@@ -14,10 +13,8 @@ pub struct Server<P, Ops: DijkstraOps<Graph>, Graph> {
 
     potential: P,
 
-    #[cfg(not(feature = "chpot-no-bcc"))]
     reversed: UnweightedOwnedGraph,
     virtual_topocore: VirtualTopocore,
-    #[cfg(not(feature = "chpot-no-bcc"))]
     visited: FastClearBitVec,
 
     #[cfg(feature = "chpot-visualize")]
@@ -36,14 +33,18 @@ where
         Graph: BuildPermutated<G>,
     {
         report_time_with_key("TopoDijkstra preprocessing", "topo_dijk_prepro", move || {
+            let n = graph.num_nodes();
             #[cfg(feature = "chpot-no-bcc")]
             {
                 let (graph, virtual_topocore) = VirtualTopocoreGraph::new(graph);
+                let reversed = UnweightedOwnedGraph::reversed(&graph);
                 Self {
                     forward_dijkstra: GenTopoDijkstra::new_with_ops(graph, VirtualTopocoreOps(ops)),
                     potential,
 
+                    reversed,
                     virtual_topocore,
+                    visited: FastClearBitVec::new(n),
 
                     #[cfg(feature = "chpot-visualize")]
                     lat,
@@ -53,7 +54,6 @@ where
             }
             #[cfg(not(feature = "chpot-no-bcc"))]
             {
-                let n = graph.num_nodes();
                 let (main_graph, into_comp_graph, virtual_topocore) = VirtualTopocoreGraph::new_topo_dijkstra_graphs(graph);
                 let reversed = UnweightedOwnedGraph::reversed(&into_comp_graph);
 
@@ -75,7 +75,6 @@ where
         })
     }
 
-    #[cfg(not(feature = "chpot-no-bcc"))]
     fn dfs(
         graph: &UnweightedOwnedGraph,
         node: NodeId,
