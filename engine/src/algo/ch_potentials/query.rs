@@ -10,6 +10,8 @@ pub struct Server<P, Ops: DijkstraOps<Graph>, Graph> {
     forward_dijkstra: GenTopoDijkstra<VirtualTopocoreOps<Ops>, VirtualTopocoreGraph<Graph>>,
     #[cfg(not(feature = "chpot-no-bcc"))]
     into_comp_graph: VirtualTopocoreGraph<Graph>,
+    #[cfg(not(feature = "chpot-no-bcc"))]
+    reversed_into_comp_graph: UnweightedOwnedGraph,
 
     potential: P,
 
@@ -55,11 +57,13 @@ where
             #[cfg(not(feature = "chpot-no-bcc"))]
             {
                 let (main_graph, into_comp_graph, virtual_topocore) = VirtualTopocoreGraph::new_topo_dijkstra_graphs(graph);
-                let reversed = UnweightedOwnedGraph::reversed(&into_comp_graph);
+                let reversed = UnweightedOwnedGraph::reversed(&main_graph);
+                let reversed_into_comp_graph = UnweightedOwnedGraph::reversed(&into_comp_graph);
 
                 Self {
                     forward_dijkstra: GenTopoDijkstra::new_with_ops(main_graph, VirtualTopocoreOps(ops)),
                     into_comp_graph,
+                    reversed_into_comp_graph,
                     potential,
 
                     reversed,
@@ -101,7 +105,7 @@ where
         self.visited.clear();
         let virtual_topocore = &self.virtual_topocore;
         Self::dfs(
-            &self.reversed,
+            &self.reversed_into_comp_graph,
             node,
             &mut self.visited,
             &mut |node| {
