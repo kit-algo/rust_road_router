@@ -22,11 +22,13 @@ impl<Ops: DijkstraOps<Graph, Label = Weight>, Graph: for<'a> LinkIterable<'a, Op
         let to = query.to();
         self.dijkstra.initialize_query(query);
 
+        let mut result = None;
         let mut num_queue_pops = 0;
         while let Some(node) = self.dijkstra.next() {
             num_queue_pops += 1;
             if node == to {
-                return Some(*self.dijkstra.tentative_distance(node));
+                result = Some(*self.dijkstra.tentative_distance(node));
+                break;
             }
         }
 
@@ -34,7 +36,7 @@ impl<Ops: DijkstraOps<Graph, Label = Weight>, Graph: for<'a> LinkIterable<'a, Op
         report!("num_queue_pushs", self.dijkstra.num_queue_pushs());
         report!("num_relaxed_arcs", self.dijkstra.num_relaxed_arcs());
 
-        None
+        result
     }
 
     fn path(&self, query: impl GenQuery<Weight>) -> Vec<NodeId> {
