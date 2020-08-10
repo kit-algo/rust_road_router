@@ -31,7 +31,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let ground_truth = Vec::load_from(path.join("test/travel_time_length"))?;
 
     let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
-    let mut simple_server = DijkServer::<DefaultOps, _>::new(graph.clone());
+    let mut simple_server = DijkServer::<DefaultOps, _, _>::new(graph.clone());
     let mut bi_dir_server = BiDijkServer::new(graph.clone());
 
     let ch_first_out = Vec::load_from(path.join("travel_time_ch/first_out"))?;

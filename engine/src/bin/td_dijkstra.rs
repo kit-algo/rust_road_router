@@ -44,7 +44,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
 
-    let mut server = Server::<TDDijkstraOps, _>::new(graph);
+    let mut server = Server::<TDDijkstraOps, _, _>::new(graph);
 
     let mut query_dir = None;
     let mut base_dir = Some(path);

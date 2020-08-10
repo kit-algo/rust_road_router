@@ -137,7 +137,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let num_queries = rust_road_router::experiments::NUM_DIJKSTRA_QUERIES;
 
-    let mut server = DijkServer::<TDDijkstraOps, _>::new(graph);
+    let mut server = DijkServer::<TDDijkstraOps, _, _>::new(graph);
 
     let mut dijkstra_time = Duration::zero();
 

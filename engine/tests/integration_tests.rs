@@ -35,7 +35,7 @@ fn graph() -> OwnedGraph {
 
 #[test]
 fn simple_dijkstra_correct_distances() {
-    let mut server = DijkServer::<DefaultOps, _>::new(graph());
+    let mut server = DijkServer::<DefaultOps, _, _>::new(graph());
 
     assert_eq!(QueryServer::query(&mut server, Query { from: 0, to: 1 }).map(|res| res.distance()), Some(1));
     assert_eq!(QueryServer::query(&mut server, Query { from: 0, to: 3 }).map(|res| res.distance()), Some(3));

@@ -1,79 +1,56 @@
-#[macro_use]
-extern crate rust_road_router;
 #[cfg(feature = "chpot-cch")]
-use rust_road_router::algo::customizable_contraction_hierarchy::*;
-use rust_road_router::{
+use crate::algo::customizable_contraction_hierarchy::*;
+use crate::{
     algo::{
-        ch_potentials::{query::Server as TopoServer, *},
+        ch_potentials::*,
         dijkstra::{generic_dijkstra::DefaultOps, query::dijkstra::Server as DijkServer},
         *,
     },
-    cli::CliErr,
     datastr::{graph::*, node_order::NodeOrder},
     io::*,
     report::*,
 };
+use std::{error::Error, path::Path};
 
 use rand::prelude::*;
-use std::{env, error::Error, path::Path};
 use time::Duration;
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let _reporter = enable_reporting();
+/// Number of queries performed for each experiment.
+/// Can be overriden through the CHPOT_NUM_QUERIES env var.
+#[cfg(not(override_chpot_num_queries))]
+pub const NUM_QUERIES: usize = 10000;
+#[cfg(override_chpot_num_queries)]
+pub const NUM_QUERIES: usize = include!(concat!(env!("OUT_DIR"), "/CHPOT_NUM_QUERIES"));
 
+pub fn run(
+    path: &Path,
+    modify_travel_time: impl FnOnce(&FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>, &mut StdRng, &mut [Weight]) -> Result<(), Box<dyn Error>>,
+) -> Result<(), Box<dyn Error>> {
     let seed = Default::default();
     report!("seed", seed);
     let mut rng = StdRng::from_seed(seed);
 
-    report!("program", "chpot_turns");
-    report!("start_time", format!("{}", time::now_utc().rfc822()));
-    report!("args", env::args().collect::<Vec<String>>());
-
-    let mut args = env::args();
-    args.next();
-    let arg = &args.next().ok_or(CliErr("No graph directory arg given"))?;
-    let path = Path::new(arg);
-
-    let first_out = Vec::load_from(path.join("first_out"))?;
-    let head = Vec::load_from(path.join("head"))?;
-    let travel_time = Vec::load_from(path.join("travel_time"))?;
-
-    #[cfg(feature = "chpot_visualize")]
+    let first_out = Vec::<NodeId>::load_from(path.join("first_out"))?;
+    let head = Vec::<EdgeId>::load_from(path.join("head"))?;
+    let mut travel_time = Vec::<EdgeId>::load_from(path.join("travel_time"))?;
+    #[cfg(feature = "chpot-visualize")]
     let lat = Vec::<f32>::load_from(path.join("latitude"))?;
-    #[cfg(feature = "chpot_visualize")]
+    #[cfg(feature = "chpot-visualize")]
     let lng = Vec::<f32>::load_from(path.join("longitude"))?;
+    let mut modified_travel_time = travel_time.clone();
 
-    let forbidden_turn_from_arc = Vec::<EdgeId>::load_from(path.join("forbidden_turn_from_arc"))?;
-    let forbidden_turn_to_arc = Vec::<EdgeId>::load_from(path.join("forbidden_turn_to_arc"))?;
-
+    let mut graph = FirstOutGraph::new(&first_out[..], &head[..], &mut travel_time[..]);
+    unify_parallel_edges(&mut graph);
+    drop(graph);
     let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
 
-    let mut tail = Vec::with_capacity(graph.num_arcs());
-    for node in 0..graph.num_nodes() {
-        for _ in 0..graph.degree(node as NodeId) {
-            tail.push(node as NodeId);
-        }
-    }
+    report!("graph", { "num_nodes": graph.num_nodes(), "num_arcs": graph.num_arcs() });
 
-    let mut iter = forbidden_turn_from_arc.iter().zip(forbidden_turn_to_arc.iter()).peekable();
-
-    let exp_graph = graph.line_graph(|edge1_idx, edge2_idx| {
-        while let Some((&from_arc, &to_arc)) = iter.peek() {
-            if from_arc < edge1_idx || (from_arc == edge1_idx && to_arc < edge2_idx) {
-                iter.next();
-            } else {
-                break;
-            }
-        }
-
-        if iter.peek() == Some(&(&edge1_idx, &edge2_idx)) {
-            return None;
-        }
-        if tail[edge1_idx as usize] == head[edge2_idx as usize] {
-            return None;
-        }
-        Some(0)
-    });
+    modify_travel_time(&graph, &mut rng, &mut modified_travel_time)?;
+    let mut modified_graph = FirstOutGraph::new(&first_out[..], &head[..], &mut modified_travel_time[..]);
+    unify_parallel_edges(&mut modified_graph);
+    drop(modified_graph);
+    let modified_graph = FirstOutGraph::new(&first_out[..], &head[..], &modified_travel_time[..]);
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
 
@@ -98,7 +75,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         contract(&graph, cch_order)
     };
 
-    let potential = TurnExpandedPotential::new(&graph, {
+    let potential = {
         #[cfg(feature = "chpot-only-topo")]
         {
             ZeroPotential()
@@ -126,41 +103,45 @@ fn main() -> Result<(), Box<dyn Error>> {
                 )
             }
         }
-    });
-
-    let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
-    let mut topocore: TopoServer<_, _, OwnedGraph> = {
-        #[cfg(feature = "chpot_visualize")]
+    };
+    let potential = {
+        #[cfg(feature = "chpot-oracle")]
         {
-            TopoServer::new(&exp_graph, potential, DefaultOps::default(), &lat, &lng)
+            RecyclingPotential::new(potential)
         }
-        #[cfg(not(feature = "chpot_visualize"))]
+        #[cfg(not(feature = "chpot-oracle"))]
         {
-            TopoServer::new(&exp_graph, potential, DefaultOps::default())
+            potential
         }
     };
+
+    let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
+    let mut topocore: DijkServer<DefaultOps, _, _> = DijkServer::with_potential(modified_graph, potential);
     drop(virtual_topocore_ctxt);
 
     let mut query_count = 0;
     let mut total_query_time = Duration::zero();
 
-    let n = exp_graph.num_nodes();
-    for _i in 0..rust_road_router::experiments::chpot::NUM_QUERIES {
+    for _i in 0..NUM_QUERIES {
         let _query_ctxt = algo_runs_ctxt.push_collection_item();
-        let from: NodeId = rng.gen_range(0, n as NodeId);
-        let to: NodeId = rng.gen_range(0, n as NodeId);
+        let from: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
+        let to: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
 
-        let (mut res, time) = measure(|| QueryServer::query(&mut topocore, Query { from, to }));
-
-        query_count += 1;
+        #[cfg(feature = "chpot-oracle")]
+        {
+            QueryServer::query(&mut topocore, Query { from, to });
+        }
 
         report!("from", from);
         report!("to", to);
+
+        query_count += 1;
+
+        let (mut res, time) = measure(|| QueryServer::query(&mut topocore, Query { from, to }));
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         let dist = res.as_ref().map(|res| res.distance());
         report!("result", dist);
         res.as_mut().map(|res| res.path());
-        report!("lower_bound", res.as_mut().map(|res| res.data().lower_bound(from)).flatten());
 
         total_query_time = total_query_time + time;
     }
@@ -168,24 +149,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     if query_count > 0 {
         eprintln!("Avg. query time {}", total_query_time / (query_count as i32))
     };
-
-    let mut server = DijkServer::<DefaultOps, _, _>::new(exp_graph);
-
-    for _i in 0..rust_road_router::experiments::NUM_DIJKSTRA_QUERIES {
-        let _query_ctxt = algo_runs_ctxt.push_collection_item();
-        let from: NodeId = rng.gen_range(0, n as NodeId);
-        let to: NodeId = rng.gen_range(0, n as NodeId);
-
-        report!("from", from);
-        report!("to", to);
-
-        query_count += 1;
-
-        let (res, time) = measure(|| QueryServer::query(&mut server, Query { from, to }));
-        report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-        let dist = res.as_ref().map(|res| res.distance());
-        report!("result", dist);
-    }
 
     Ok(())
 }

@@ -25,8 +25,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let n = graph.num_nodes();
 
-    let mut forward_dijkstra = DijkServer::<DefaultOps, _>::new(graph);
-    let mut backward_dijkstra = DijkServer::<DefaultOps, _>::new(reversed);
+    let mut forward_dijkstra = DijkServer::<DefaultOps, _, _>::new(graph);
+    let mut backward_dijkstra = DijkServer::<DefaultOps, _, _>::new(reversed);
     let forward_dists = forward_dijkstra.one_to_all(from);
     let backward_dists = backward_dijkstra.one_to_all(to);
 

@@ -1,6 +1,7 @@
 //! Basic variant of dijkstras algorithm
 
 use super::*;
+use crate::algo::dijkstra::gen_topo_dijkstra::Neutral;
 use crate::datastr::{index_heap::*, timestamped_vector::*};
 
 pub trait DijkstraOps<Graph> {
@@ -110,15 +111,31 @@ where
 
         self.distances.reset();
         self.distances[from as usize] = init;
+
+        self.num_relaxed_arcs = 0;
+        self.num_queue_pushs = 0;
     }
 
     #[inline]
     pub fn next_filtered_edges(&mut self, edge_predicate: impl FnMut(&Ops::Arc) -> bool) -> Option<NodeId> {
-        self.settle_next_node(edge_predicate)
+        self.settle_next_node(edge_predicate, |_| Some(Neutral()))
+    }
+
+    #[inline(always)]
+    pub fn next_step_with_potential<P, O>(&mut self, potential: P) -> Option<NodeId>
+    where
+        P: FnMut(NodeId) -> Option<O>,
+        O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
+    {
+        self.settle_next_node(|_| true, potential)
     }
 
     #[inline]
-    fn settle_next_node(&mut self, mut edge_predicate: impl FnMut(&Ops::Arc) -> bool) -> Option<NodeId> {
+    fn settle_next_node<P, O>(&mut self, mut edge_predicate: impl FnMut(&Ops::Arc) -> bool, mut potential: P) -> Option<NodeId>
+    where
+        P: FnMut(NodeId) -> Option<O>,
+        O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
+    {
         self.queue.pop().map(|State { node, .. }| {
             for link in self.graph.link_iter(node) {
                 if edge_predicate(&link) {
@@ -127,16 +144,16 @@ where
 
                     if self.ops.merge(&mut self.distances[link.head() as usize], linked) {
                         self.predecessors[link.head() as usize] = node;
+                        let next_distance = &self.distances[link.head() as usize];
 
-                        let next = State {
-                            key: self.distances[link.head() as usize].key(),
-                            node: link.head(),
-                        };
-                        if self.queue.contains_index(next.as_index()) {
-                            self.queue.decrease_key(next);
-                        } else {
-                            self.num_queue_pushs += 1;
-                            self.queue.push(next);
+                        if let Some(key) = potential(link.head()).map(|p| p + next_distance.key()) {
+                            let next = State { key, node: link.head() };
+                            if self.queue.contains_index(next.as_index()) {
+                                self.queue.decrease_key(next);
+                            } else {
+                                self.num_queue_pushs += 1;
+                                self.queue.push(next);
+                            }
                         }
                     }
                 }
@@ -191,7 +208,7 @@ where
 
     #[inline]
     fn next(&mut self) -> Option<NodeId> {
-        self.settle_next_node(|_| true)
+        self.settle_next_node(|_| true, |_| Some(Neutral()))
     }
 }
 
