@@ -189,7 +189,7 @@ where
                     );
                 };
 
-                if node == to
+                if node == query.to()
                     || forward_dijkstra
                         .queue()
                         .peek()
@@ -221,7 +221,7 @@ where
                 );
             };
 
-            if node == to
+            if node == query.to()
                 || forward_dijkstra
                     .queue()
                     .peek()
