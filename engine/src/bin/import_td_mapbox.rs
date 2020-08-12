@@ -87,6 +87,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         .iter()
                         .enumerate()
                         .map(|(i, speed)| (i as Timestamp * 1000 * 60 * 5, 100 * 36 * geo_distance[edge_idx] / speed))
+                        .map(|(i, tt)| (i, std::cmp::max(tt, travel_time[edge_idx])))
                         .collect();
                     tts.dedup_by_key(|&mut (_, tt)| tt);
                     tts.push((num_buckets * 1000 * 60 * 5, tts.first().unwrap().1));
