@@ -18,6 +18,38 @@
 
 <script src="js/leaflet-color-markers.js"></script>
 <script type="text/javascript">
+L.DataDivIcon = L.DivIcon.extend({
+  createIcon: function(oldIcon) {
+    var div = L.DivIcon.prototype.createIcon.call(this, oldIcon);
+    if(this.options.data) {
+      for(var key in this.options.data) {
+        div.dataset[key] = this.options.data[key];
+      }
+    }
+    return div;
+  }
+});
+
+L.dataDivIcon = function(options) {
+  return new L.DataDivIcon(options);
+}
+
+L.DataIcon = L.DivIcon.extend({
+  createIcon: function(oldIcon) {
+    var newIcon = L.Icon.prototype.createIcon.call(this, oldIcon);
+    if(this.options.data) {
+      for(var key in this.options.data) {
+        newIcon.dataset[key] = this.options.data[key];
+      }
+    }
+    return newIcon;
+  }
+});
+
+L.dataIcon = function(options) {
+  return new L.DataIcon(options);
+}
+
 var map = null;
 var current_event_idx = 0;
 var events = [];
@@ -25,7 +57,7 @@ var events = [];
 <script type="text/javascript">
 state = _.map(events, () => Object.create({}));
 
-map = L.map('map').setView([49.697, 6.169], 10);
+map = L.map('map').setView([49.0058035, 8.4013703], 14);
 
 L.tileLayer('http://{s}.tile.osm.org/{z}/{x}/{y}.png', {
   attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
@@ -44,7 +76,14 @@ map.on('keypress', (event) => {
     }
   }
 });
+
 </script>
 <script src="events.js"></script>
+<script type="text/javascript">
+for (icon of document.getElementsByClassName("leaflet-marker-icon")) {
+  icon.classList.remove("leaflet-div-icon");
+  icon.style.filter = `hue-rotate(${parseInt(icon.dataset.popped) / 228 * -0.7 + 0.1}turn)`;
+}
+</script>
 </body>
 </html>

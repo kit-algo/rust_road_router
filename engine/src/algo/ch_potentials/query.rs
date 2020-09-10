@@ -5,6 +5,8 @@ use crate::{
     algo::{dijkstra::gen_topo_dijkstra::*, topocore::*},
     datastr::graph::time_dependent::*,
 };
+#[cfg(feature = "chpot-visualize")]
+use std::rc::Rc;
 
 pub struct Server<P, Ops: DijkstraOps<Graph>, Graph> {
     forward_dijkstra: GenTopoDijkstra<VirtualTopocoreOps<Ops>, VirtualTopocoreGraph<Graph>>,
@@ -20,16 +22,22 @@ pub struct Server<P, Ops: DijkstraOps<Graph>, Graph> {
     visited: FastClearBitVec,
 
     #[cfg(feature = "chpot-visualize")]
-    lat: &[f32],
+    lat: Rc<[f32]>,
     #[cfg(feature = "chpot-visualize")]
-    lng: &[f32],
+    lng: Rc<[f32]>,
 }
 
 impl<P: Potential, Ops: DijkstraOps<Graph, Label = Timestamp>, Graph> Server<P, Ops, Graph>
 where
     Graph: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, Ops::Arc>,
 {
-    pub fn new<G>(graph: &G, potential: P, ops: Ops, #[cfg(feature = "chpot-visualize")] lat: &[f32], #[cfg(feature = "chpot-visualize")] lng: &[f32]) -> Self
+    pub fn new<G>(
+        graph: &G,
+        potential: P,
+        ops: Ops,
+        #[cfg(feature = "chpot-visualize")] lat: Rc<[f32]>,
+        #[cfg(feature = "chpot-visualize")] lng: Rc<[f32]>,
+    ) -> Self
     where
         G: for<'a> LinkIterable<'a, NodeId>,
         Graph: BuildPermutated<G>,
@@ -119,6 +127,7 @@ where
 
     fn distance(&mut self, mut query: impl GenQuery<Timestamp> + Copy) -> Option<Weight> {
         let to = query.to();
+        let _from = query.from();
         query.permutate(&self.virtual_topocore.order);
 
         report!("algo", "CH Potentials Query");
@@ -129,7 +138,7 @@ where
         {
             println!(
                 "L.marker([{}, {}], {{ title: \"from\", icon: blackIcon }}).addTo(map);",
-                self.lat[from as usize], self.lng[from as usize]
+                self.lat[_from as usize], self.lng[_from as usize]
             );
             println!(
                 "L.marker([{}, {}], {{ title: \"from\", icon: blackIcon }}).addTo(map);",
@@ -176,16 +185,16 @@ where
                 num_queue_pops += 1;
                 #[cfg(feature = "chpot-visualize")]
                 {
-                    let node_id = self.order.node(_node) as usize;
+                    let node_id = virtual_topocore.order.node(node) as usize;
                     println!(
-                        "var marker = L.marker([{}, {}], {{ icon: blueIcon }}).addTo(map);",
-                        self.lat[node_id], self.lng[node_id]
+                        "var marker = L.marker([{}, {}], {{ icon: L.dataIcon({{ data: {{ popped: {} }}, ...blueIconOptions }}) }}).addTo(map);",
+                        self.lat[node_id], self.lng[node_id], num_queue_pops
                     );
                     println!(
                         "marker.bindPopup(\"id: {}<br>distance: {}<br>potential: {}\");",
                         node_id,
-                        distance,
-                        potential.potential(_node)
+                        forward_dijkstra.tentative_distance(node),
+                        potential.potential(node_id as NodeId).unwrap()
                     );
                 };
 
@@ -208,16 +217,16 @@ where
             num_queue_pops += 1;
             #[cfg(feature = "chpot-visualize")]
             {
-                let node_id = self.order.node(_node) as usize;
+                let node_id = virtual_topocore.order.node(node) as usize;
                 println!(
-                    "var marker = L.marker([{}, {}], {{ icon: blueIcon }}).addTo(map);",
-                    self.lat[node_id], self.lng[node_id]
+                    "var marker = L.marker([{}, {}], {{ icon: L.dataIcon({{ data: {{ popped: {} }}, ...blueIconOptions }}) }}).addTo(map);",
+                    self.lat[node_id], self.lng[node_id], num_queue_pops
                 );
                 println!(
                     "marker.bindPopup(\"id: {}<br>distance: {}<br>potential: {}\");",
                     node_id,
-                    distance,
-                    potential.potential(_node)
+                    forward_dijkstra.tentative_distance(node),
+                    potential.potential(node_id as NodeId).unwrap()
                 );
             };
 

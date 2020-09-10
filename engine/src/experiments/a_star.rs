@@ -33,10 +33,6 @@ pub fn run(
     let first_out = Vec::<NodeId>::load_from(path.join("first_out"))?;
     let head = Vec::<EdgeId>::load_from(path.join("head"))?;
     let mut travel_time = Vec::<EdgeId>::load_from(path.join("travel_time"))?;
-    #[cfg(feature = "chpot-visualize")]
-    let lat = Vec::<f32>::load_from(path.join("latitude"))?;
-    #[cfg(feature = "chpot-visualize")]
-    let lng = Vec::<f32>::load_from(path.join("longitude"))?;
     let mut modified_travel_time = travel_time.clone();
 
     let mut graph = FirstOutGraph::new(&first_out[..], &head[..], &mut travel_time[..]);
