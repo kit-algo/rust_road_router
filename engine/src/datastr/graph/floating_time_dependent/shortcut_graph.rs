@@ -230,6 +230,42 @@ impl<'a> CustomizedGraph<'a> {
             bounds: &self.incoming.bounds[..],
         }
     }
+
+    pub fn unique_path_edges(&self) -> (BitVec, BitVec) {
+        let mut incoming_unique = BitVec::new(self.incoming.head.len());
+        let mut outgoing_unique = BitVec::new(self.outgoing.head.len());
+
+        for n in 0..self.original_graph.num_nodes() {
+            for ((_, edge), _) in self.downward_bounds_graph().neighbor_iter(n as NodeId) {
+                if let &[(_, source)] = self.incoming.edge_sources(edge as usize) {
+                    match source.into() {
+                        ShortcutSource::Shortcut(down, up) => {
+                            if incoming_unique.get(down as usize) && outgoing_unique.get(up as usize) {
+                                incoming_unique.set(edge as usize)
+                            }
+                        }
+                        ShortcutSource::OriginalEdge(_) => incoming_unique.set(edge as usize),
+                        ShortcutSource::None => incoming_unique.set(edge as usize),
+                    }
+                }
+            }
+            for ((_, edge), _) in self.upward_bounds_graph().neighbor_iter(n as NodeId) {
+                if let &[(_, source)] = self.outgoing.edge_sources(edge as usize) {
+                    match source.into() {
+                        ShortcutSource::Shortcut(down, up) => {
+                            if incoming_unique.get(down as usize) && outgoing_unique.get(up as usize) {
+                                outgoing_unique.set(edge as usize)
+                            }
+                        }
+                        ShortcutSource::OriginalEdge(_) => outgoing_unique.set(edge as usize),
+                        ShortcutSource::None => outgoing_unique.set(edge as usize),
+                    }
+                }
+            }
+        }
+
+        (incoming_unique, outgoing_unique)
+    }
 }
 
 impl<'a> Deconstruct for CustomizedGraph<'a> {
@@ -418,6 +454,45 @@ impl CustomizedSingleDirGraph {
             ),
             ShortcutSource::None => (FlWeight::INFINITY, if Dir::VALUE { self.head[edge_idx] } else { self.tail[edge_idx] }, edge_id),
         })
+    }
+
+    pub fn add_first_original_arcs_to_searchspace<F>(
+        &self,
+        edge_id: EdgeId,
+        lower_bound_target: FlWeight,
+        customized_graph: &CustomizedGraph,
+        lower_bounds_to_target: &mut ClearlistVector<FlWeight>,
+        searchspace: &mut FastClearBitVec,
+        mark_upward: &mut F,
+    ) where
+        F: FnMut(EdgeId),
+    {
+        let edge_idx = edge_id as usize;
+
+        // TODO constant?? pruning with bounds?? avoid duplicate unpacking ops??
+
+        for &(_, source) in self.edge_sources(edge_idx) {
+            match source.into() {
+                ShortcutSource::Shortcut(down, up) => {
+                    mark_upward(up);
+                    let lower_bound_to_middle = customized_graph.outgoing.bounds()[up as usize].0 + lower_bound_target;
+                    lower_bounds_to_target[customized_graph.incoming.tail[down as usize] as usize] = min(
+                        lower_bounds_to_target[customized_graph.incoming.tail[down as usize] as usize],
+                        lower_bound_to_middle,
+                    );
+                    customized_graph.incoming.add_first_original_arcs_to_searchspace(
+                        down,
+                        lower_bound_to_middle,
+                        customized_graph,
+                        lower_bounds_to_target,
+                        searchspace,
+                        mark_upward,
+                    )
+                }
+                ShortcutSource::OriginalEdge(edge) => searchspace.set(edge as usize),
+                _ => (),
+            }
+        }
     }
 
     /// Recursively unpack the edge with the given id at the given timestamp and add the path to `result`

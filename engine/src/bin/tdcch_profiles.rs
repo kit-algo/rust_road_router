@@ -6,7 +6,7 @@ use std::{env, error::Error, path::Path};
 #[macro_use]
 extern crate rust_road_router;
 use rust_road_router::{
-    algo::{catchup::Server, customizable_contraction_hierarchy::*, *},
+    algo::{catchup::profiles::Server, customizable_contraction_hierarchy::*, *},
     cli::CliErr,
     datastr::{
         graph::{
@@ -19,6 +19,7 @@ use rust_road_router::{
     report::*,
 };
 
+use rand::prelude::*;
 use time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -28,6 +29,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     report!("start_time", format!("{}", time::now_utc().rfc822()));
     report!("args", env::args().collect::<Vec<String>>());
     report!("num_threads", rayon::current_num_threads());
+
+    let seed = Default::default();
+    report!("seed", seed);
+    let mut rng = StdRng::from_seed(seed);
 
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[0]);
@@ -47,6 +52,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     report!("unprocessed_graph", { "num_nodes": first_out.len() - 1, "num_arcs": head.len(), "num_ipps": ipp_departure_time.len() });
 
     let graph = TDGraph::new(first_out, head, first_ipp_of_arc, ipp_departure_time, ipp_travel_time);
+
+    let n = graph.num_nodes();
 
     report!("graph", { "num_nodes": graph.num_nodes(), "num_arcs": graph.num_arcs(), "num_ipps": graph.num_ipps(), "num_constant_ttfs": graph.num_constant() });
 
@@ -71,55 +78,26 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut server = Server::new(&cch, &td_cch_graph);
 
-    let mut query_dir = None;
-    let mut base_dir = Some(path);
+    let mut tdcch_time = Duration::zero();
 
-    while let Some(base) = base_dir {
-        if base.join("uniform_queries").exists() {
-            query_dir = Some(base.join("uniform_queries"));
-            break;
-        } else {
-            base_dir = base.parent();
+    for _ in 0..10 {
+        eprintln!();
+        let from: NodeId = rng.gen_range(0, n as NodeId);
+        let to: NodeId = rng.gen_range(0, n as NodeId);
+
+        let _tdcch_query_ctxt = algo_runs_ctxt.push_collection_item();
+        let (result, time) = measure(|| server.distance(from, to));
+
+        report!("from", from);
+        report!("to", to);
+        report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        tdcch_time = tdcch_time + time;
+        if let Some(mut result) = result {
+            report!("profile_complexity", result.len());
         }
     }
 
-    if let Some(path) = query_dir {
-        let mut tdcch_time = Duration::zero();
-
-        let from = Vec::load_from(path.join("source_node"))?;
-        let at = Vec::<u32>::load_from(path.join("source_time"))?;
-        let to = Vec::load_from(path.join("target_node"))?;
-
-        let mut num_queries = 0;
-
-        for ((from, to), at) in from.into_iter().zip(to.into_iter()).zip(at.into_iter()) {
-            let at = Timestamp::new(f64::from(at) / 1000.0);
-
-            let _tdcch_query_ctxt = algo_runs_ctxt.push_collection_item();
-            let (result, time) = measure(|| server.query(TDQuery { from, to, departure: at }));
-
-            report!("from", from);
-            report!("to", to);
-            report!("departure_time", f64::from(at));
-            report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-            tdcch_time = tdcch_time + time;
-            if let Some(mut result) = result {
-                report!("earliest_arrival", f64::from(result.distance() + at));
-                let (path, unpacking_duration) = measure(|| result.path());
-                report!("num_nodes_on_shortest_path", path.len());
-                report!(
-                    "unpacking_running_time_ms",
-                    unpacking_duration.to_std().unwrap().as_nanos() as f64 / 1_000_000.0
-                );
-            }
-
-            num_queries += 1;
-        }
-
-        if num_queries > 0 {
-            eprintln!("TDCCH {}", tdcch_time / num_queries);
-        }
-    }
+    eprintln!("TDCCH {}", tdcch_time / (10i32));
 
     Ok(())
 }

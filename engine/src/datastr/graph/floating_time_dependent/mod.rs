@@ -16,7 +16,7 @@
 use super::*;
 
 mod piecewise_linear_function;
-use self::piecewise_linear_function::*;
+pub use piecewise_linear_function::PiecewiseLinearFunction;
 
 mod geometry;
 pub use self::geometry::TTFPoint;
