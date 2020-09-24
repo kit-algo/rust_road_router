@@ -178,12 +178,30 @@ impl<'a> PiecewiseLinearFunction<'a> {
     /// and then insert points to cover everything up to (including) end.
     #[allow(clippy::cognitive_complexity)]
     pub(super) fn append_partials(first: &mut impl PLFTarget, second: &[TTFPoint], switchover: Timestamp) {
+        if second.is_empty() {
+            return;
+        }
         debug_assert!(second.len() > 1);
         if let Some(&TTFPoint { at, .. }) = first.split_last().map(|(_, rest)| rest.last()).unwrap_or(None) {
             debug_assert!(at.fuzzy_lt(switchover));
         }
         if let Some(&TTFPoint { at, .. }) = first.last() {
-            debug_assert!(!at.fuzzy_lt(switchover));
+            if at.fuzzy_lt(switchover) {
+                let switchover_val = if second[0].at.fuzzy_eq(switchover) {
+                    second[0].val
+                } else {
+                    interpolate_linear(&second[0], &second[1], switchover)
+                };
+                let delta = switchover - at - FlWeight::new(EPSILON);
+                first.push(TTFPoint {
+                    at: at + FlWeight::new(EPSILON),
+                    val: switchover_val + delta,
+                });
+                first.push(TTFPoint {
+                    at: switchover,
+                    val: switchover_val,
+                });
+            }
         }
         if let Some(&TTFPoint { at, .. }) = second.first() {
             debug_assert!(!switchover.fuzzy_lt(at));

@@ -14,7 +14,7 @@ pub const APPROX_THRESHOLD: usize = include!(concat!(env!("OUT_DIR"), "/TDCCH_AP
 // During customization we need to store PLFs.
 // For each shortcut we either have the exact function (`Exact`) or an approximation through less complex upper and lower bounds (`Approx`).
 #[derive(Debug)]
-enum TTFCache<D> {
+pub enum TTFCache<D> {
     Exact(D),
     Approx(D, D),
 }
@@ -60,7 +60,7 @@ enum BoundMergingState {
 
 // Similar to `TTFCache`, though this one is for actually working with the functions, `TTFCache` is for storing them.
 #[derive(Debug)]
-enum TTF<'a> {
+pub enum TTF<'a> {
     Exact(PiecewiseLinearFunction<'a>),
     Approx(PiecewiseLinearFunction<'a>, PiecewiseLinearFunction<'a>),
 }
@@ -623,9 +623,25 @@ impl Shortcut {
         }
     }
 
+    pub fn new_finished(sources: &[(Timestamp, ShortcutSourceData)], bounds: (FlWeight, FlWeight), constant: bool) -> Self {
+        let sources = match sources {
+            &[] => Sources::None,
+            &[(_, data)] => Sources::One(data),
+            data => Sources::Multi(data.into()),
+        };
+        Self {
+            cache: None,
+            lower_bound: bounds.0,
+            upper_bound: bounds.1,
+            constant,
+            required: true,
+            sources,
+        }
+    }
+
     /// Merge this Shortcut with the lower triangle made up of the two EdgeIds (first down, then up).
     /// The `shortcut_graph` has to contain all the edges we may need to unpack.
-    pub fn merge(&mut self, linked_ids: (EdgeId, EdgeId), shortcut_graph: &PartialShortcutGraph, buffers: &mut MergeBuffers) {
+    pub fn merge(&mut self, linked_ids: (EdgeId, EdgeId), shortcut_graph: &impl ShortcutGraphTrt, buffers: &mut MergeBuffers) {
         // We already know, we won't need this edge, so do nothing
         if !self.required {
             return;
@@ -644,14 +660,12 @@ impl Shortcut {
             let other_data = ShortcutSource::Shortcut(linked_ids.0, linked_ids.1).into();
 
             // if one of the edges of the triangle is an infinity edge we don't need to do anything
-            if !(shortcut_graph.get_incoming(linked_ids.0).is_valid_path() && shortcut_graph.get_outgoing(linked_ids.1).is_valid_path()) {
+            if !(shortcut_graph.is_valid_path(ShortcutId::Incoming(linked_ids.0)) && shortcut_graph.is_valid_path(ShortcutId::Outgoing(linked_ids.1))) {
                 return;
             }
 
-            let first = shortcut_graph.get_incoming(linked_ids.0);
-            let second = shortcut_graph.get_outgoing(linked_ids.1);
-
-            let other_lower_bound = first.lower_bound + second.lower_bound;
+            let other_lower_bound =
+                shortcut_graph.lower_bound(ShortcutId::Incoming(linked_ids.0)) + shortcut_graph.lower_bound(ShortcutId::Outgoing(linked_ids.1));
 
             // current upper bound always better than linked lower bound - do nothing
             if self.upper_bound.fuzzy_lt(other_lower_bound) {
@@ -659,8 +673,8 @@ impl Shortcut {
             }
 
             // get cached (possibly approximated) TTFs
-            let first_plf = first.plf(shortcut_graph);
-            let second_plf = second.plf(shortcut_graph);
+            let first_plf = shortcut_graph.ttf(ShortcutId::Incoming(linked_ids.0));
+            let second_plf = shortcut_graph.ttf(ShortcutId::Outgoing(linked_ids.1));
 
             // when the current shortcut is always infinity, the linked paths will always be better.
             if !self.is_valid_path() {
@@ -787,21 +801,21 @@ impl Shortcut {
         }
     }
 
-    fn plf<'s>(&'s self, shortcut_graph: &'s PartialShortcutGraph) -> TTF<'s> {
+    pub fn plf<'s>(&'s self, shortcut_graph: &'s impl ShortcutGraphTrt) -> TTF<'s> {
         if let Some(cache) = &self.cache {
             return cache.into();
         }
 
         match self.sources {
             Sources::One(source) => match source.into() {
-                ShortcutSource::OriginalEdge(id) => TTF::Exact(shortcut_graph.original_graph.travel_time_function(id)),
+                ShortcutSource::OriginalEdge(id) => TTF::Exact(shortcut_graph.original_graph().travel_time_function(id)),
                 _ => panic!("invalid state of shortcut: ipps must be cached when shortcut not trivial {:?}", self),
             },
             _ => panic!("invalid state of shortcut: ipps must be cached when shortcut not trivial {:?}", self),
         }
     }
 
-    fn is_valid_path(&self) -> bool {
+    pub fn is_valid_path(&self) -> bool {
         match self.sources {
             Sources::None => false,
             _ => true,
@@ -856,14 +870,21 @@ impl Shortcut {
                 if !ShortcutSource::from(*source).required(shortcut_graph) {
                     *source = ShortcutSource::None.into();
                     self.upper_bound = FlWeight::INFINITY;
+                    self.required = false;
                 }
             }
             Sources::Multi(sources) => {
+                let mut any_required = false;
                 for (_, source) in &mut sources[..] {
                     if !ShortcutSource::from(*source).required(shortcut_graph) {
                         *source = ShortcutSource::None.into();
                         self.upper_bound = FlWeight::INFINITY;
+                    } else {
+                        any_required = true;
                     }
+                }
+                if !any_required {
+                    self.required = false;
                 }
             }
         }
@@ -884,6 +905,10 @@ impl Shortcut {
             }
         }
         self.cache = None;
+    }
+
+    pub fn set_cache(&mut self, ttf: Option<TTFCache<Box<[TTFPoint]>>>) {
+        self.cache = ttf;
     }
 
     // Combine current `Sources` and the result of a merge into new `Sources`
@@ -985,11 +1010,11 @@ impl Shortcut {
     // Use two `ReusablePLFStorage`s to reduce allocations.
     // One storage will contain the functions for each source - the other the complete resulting function.
     // That means when fetching the functions for each source, we need to use the two storages with flipped roles.
-    pub(super) fn exact_ttf_for(
+    pub fn exact_ttf_for(
         &self,
         start: Timestamp,
         end: Timestamp,
-        shortcut_graph: &PartialShortcutGraph,
+        shortcut_graph: &impl ShortcutGraphTrt,
         target: &mut MutTopPLF,
         tmp: &mut ReusablePLFStorage,
     ) {
@@ -1010,28 +1035,38 @@ impl Shortcut {
         match &self.sources {
             Sources::None => unreachable!("There are no TTFs for empty shortcuts"),
             Sources::One(source) => ShortcutSource::from(*source).exact_ttf_for(start, end, shortcut_graph, target, tmp),
-            Sources::Multi(sources) => {
-                // when we have multiple source, we need to do unpacking (and append the results) for all sources which are relevant for the given time range.
-                let mut c = SourceCursor::valid_at(sources, start);
+            Sources::Multi(sources) => Self::exact_ttf_sources(sources, start, end, shortcut_graph, target, tmp),
+        }
+    }
 
-                while c.cur().0.fuzzy_lt(end) {
-                    let mut inner_target = tmp.push_plf();
-                    ShortcutSource::from(c.cur().1).exact_ttf_for(
-                        max(start, c.cur().0),
-                        min(end, c.next().0),
-                        shortcut_graph,
-                        &mut inner_target,
-                        target.storage_mut(),
-                    );
-                    PiecewiseLinearFunction::append_partials(target, &inner_target, max(start, c.cur().0));
+    pub fn exact_ttf_sources(
+        sources: &[(Timestamp, ShortcutSourceData)],
+        start: Timestamp,
+        end: Timestamp,
+        shortcut_graph: &impl ShortcutGraphTrt,
+        target: &mut MutTopPLF,
+        tmp: &mut ReusablePLFStorage,
+    ) {
+        // when we have multiple source, we need to do unpacking (and append the results) for all sources which are relevant for the given time range.
+        let mut c = SourceCursor::valid_at(sources, start);
 
-                    c.advance();
-                }
+        while c.cur().0.fuzzy_lt(end) {
+            let mut inner_target = tmp.push_plf();
+            ShortcutSource::from(c.cur().1).exact_ttf_for(
+                max(start, c.cur().0),
+                min(end, c.next().0),
+                shortcut_graph,
+                &mut inner_target,
+                target.storage_mut(),
+            );
+            PiecewiseLinearFunction::append_partials(target, &inner_target, max(start, c.cur().0));
 
-                for points in target.windows(2) {
-                    debug_assert!(points[0].at.fuzzy_lt(points[1].at));
-                }
-            }
+            // TODO what about wrapping holes??
+            c.advance();
+        }
+
+        for points in target.windows(2) {
+            debug_assert!(points[0].at.fuzzy_lt(points[1].at));
         }
     }
 
@@ -1158,8 +1193,8 @@ impl<'a> SourceCursor<'a> {
 
 /// Container struct which bundles all the reusable buffers we need during the customization for merging.
 pub struct MergeBuffers {
-    unpacking_target: ReusablePLFStorage,
-    unpacking_tmp: ReusablePLFStorage,
+    pub unpacking_target: ReusablePLFStorage,
+    pub unpacking_tmp: ReusablePLFStorage,
     buffer: Vec<TTFPoint>,
     exact_self_buffer: Vec<TTFPoint>,
     exact_other_buffer: Vec<TTFPoint>,

@@ -32,7 +32,7 @@ mod shortcut_source;
 use self::shortcut_source::*;
 
 pub mod shortcut_graph;
-pub use self::shortcut_graph::{CustomizedGraph, PartialShortcutGraph, SingleDirBoundsGraph};
+pub use self::shortcut_graph::*;
 
 #[allow(clippy::float_cmp)]
 mod time {
@@ -354,7 +354,7 @@ impl ReusablePLFStorage {
     }
 
     /// Create a new PLF and push it on top of the existing ones in this object
-    fn push_plf(&mut self) -> MutTopPLF {
+    pub fn push_plf(&mut self) -> MutTopPLF {
         self.first_points.push(self.data.len() as u32);
         MutTopPLF { storage: self }
     }
@@ -377,7 +377,7 @@ impl ReusablePLFStorage {
 /// A wrapper with mutable access to a PLF in a `ReusablePLFStorage`.
 /// Borrows the `ReusablePLFStorage` and allows other to reborrow it.
 #[derive(Debug)]
-struct MutTopPLF<'a> {
+pub struct MutTopPLF<'a> {
     storage: &'a mut ReusablePLFStorage,
 }
 

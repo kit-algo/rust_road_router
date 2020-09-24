@@ -8,6 +8,21 @@ use crate::io::*;
 use crate::util::*;
 use std::cmp::min;
 
+#[derive(Debug, Clone, Copy)]
+pub enum ShortcutId {
+    Outgoing(EdgeId),
+    Incoming(EdgeId),
+}
+
+pub trait ShortcutGraphTrt {
+    fn ttf(&self, shortcut_id: ShortcutId) -> TTF;
+    fn is_valid_path(&self, shortcut_id: ShortcutId) -> bool;
+    fn lower_bound(&self, shortcut_id: ShortcutId) -> FlWeight;
+    fn upper_bound(&self, shortcut_id: ShortcutId) -> FlWeight;
+    fn original_graph(&self) -> &TDGraph;
+    fn exact_ttf_for(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage);
+}
+
 /// Container for partial CCH graphs during CATCHUp customization.
 /// Think split borrows.
 #[derive(Debug)]
@@ -29,6 +44,13 @@ impl<'a> PartialShortcutGraph<'a> {
         }
     }
 
+    fn get(&self, shortcut_id: ShortcutId) -> &Shortcut {
+        match shortcut_id {
+            ShortcutId::Incoming(id) => self.get_incoming(id),
+            ShortcutId::Outgoing(id) => self.get_outgoing(id),
+        }
+    }
+
     /// Borrow upward `Shortcut` with given CCH EdgeId
     pub fn get_outgoing(&self, edge_id: EdgeId) -> &Shortcut {
         &self.outgoing[edge_id as usize - self.offset]
@@ -37,6 +59,27 @@ impl<'a> PartialShortcutGraph<'a> {
     /// Borrow downward `Shortcut` with given CCH EdgeId
     pub fn get_incoming(&self, edge_id: EdgeId) -> &Shortcut {
         &self.incoming[edge_id as usize - self.offset]
+    }
+}
+
+impl<'a> ShortcutGraphTrt for PartialShortcutGraph<'a> {
+    fn ttf(&self, shortcut_id: ShortcutId) -> TTF {
+        self.get(shortcut_id).plf(self)
+    }
+    fn is_valid_path(&self, shortcut_id: ShortcutId) -> bool {
+        self.get(shortcut_id).is_valid_path()
+    }
+    fn lower_bound(&self, shortcut_id: ShortcutId) -> FlWeight {
+        self.get(shortcut_id).lower_bound
+    }
+    fn upper_bound(&self, shortcut_id: ShortcutId) -> FlWeight {
+        self.get(shortcut_id).upper_bound
+    }
+    fn original_graph(&self) -> &TDGraph {
+        &self.original_graph
+    }
+    fn exact_ttf_for(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
+        self.get(shortcut_id).exact_ttf_for(start, end, self, target, tmp)
     }
 }
 
@@ -531,6 +574,16 @@ impl CustomizedSingleDirGraph {
     pub fn edge_sources(&self, edge_idx: usize) -> &[(Timestamp, ShortcutSourceData)] {
         &self.sources[(self.first_source[edge_idx] as usize)..(self.first_source[edge_idx + 1] as usize)]
     }
+
+    pub fn to_shortcut_vec(&self) -> Vec<Shortcut> {
+        (0..self.head.len())
+            .map(|edge_idx| Shortcut::new_finished(self.edge_sources(edge_idx), self.bounds[edge_idx], self.constant.get(edge_idx)))
+            .collect()
+    }
+
+    pub fn to_shortcut(&self, edge_idx: usize) -> Shortcut {
+        Shortcut::new_finished(self.edge_sources(edge_idx), self.bounds[edge_idx], self.constant.get(edge_idx))
+    }
 }
 
 /// Struct with borrowed slice of the relevant parts (topology, upper and lower bounds) for elimination tree corridor query.
@@ -560,4 +613,159 @@ impl<'a> SingleDirBoundsGraph<'a> {
 // Util function to skip early returns
 fn always(_up: bool, _shortcut_id: EdgeId, _t: Timestamp) -> bool {
     true
+}
+
+#[derive(Debug)]
+pub struct ProfileGraph<'a> {
+    pub customized_graph: &'a CustomizedGraph<'a>,
+    pub outgoing_cache: &'a mut [Option<TTFCache<Box<[TTFPoint]>>>],
+    pub incoming_cache: &'a mut [Option<TTFCache<Box<[TTFPoint]>>>],
+}
+
+impl<'a> ProfileGraph<'a> {
+    pub fn cache(&mut self, shortcut_id: ShortcutId, buffers: &mut MergeBuffers) {
+        let mut target = buffers.unpacking_target.push_plf();
+        self.exact_ttf_for(shortcut_id, Timestamp::zero(), period(), &mut target, &mut buffers.unpacking_tmp);
+        match shortcut_id {
+            ShortcutId::Incoming(id) => self.incoming_cache[id as usize] = Some(TTFCache::Exact(target.to_vec().into())),
+            ShortcutId::Outgoing(id) => self.outgoing_cache[id as usize] = Some(TTFCache::Exact(target.to_vec().into())),
+        };
+    }
+
+    pub fn clear(&mut self, shortcut_id: ShortcutId) {
+        match shortcut_id {
+            ShortcutId::Incoming(id) => self.incoming_cache[id as usize] = None,
+            ShortcutId::Outgoing(id) => self.outgoing_cache[id as usize] = None,
+        };
+    }
+
+    pub fn take_cache(&mut self, shortcut_id: ShortcutId) -> Option<TTFCache<Box<[TTFPoint]>>> {
+        match shortcut_id {
+            ShortcutId::Incoming(id) => self.incoming_cache[id as usize].take(),
+            ShortcutId::Outgoing(id) => self.outgoing_cache[id as usize].take(),
+        }
+    }
+}
+
+impl<'a> ShortcutGraphTrt for ProfileGraph<'a> {
+    fn ttf(&self, shortcut_id: ShortcutId) -> TTF {
+        let cache = match shortcut_id {
+            ShortcutId::Incoming(id) => &self.incoming_cache[id as usize],
+            ShortcutId::Outgoing(id) => &self.outgoing_cache[id as usize],
+        };
+
+        if let Some(cache) = cache {
+            return cache.into();
+        }
+
+        let (dir_graph, edge_id) = match shortcut_id {
+            ShortcutId::Incoming(id) => (&self.customized_graph.incoming, id),
+            ShortcutId::Outgoing(id) => (&self.customized_graph.outgoing, id),
+        };
+
+        match dir_graph.edge_sources(edge_id as usize) {
+            &[(_, source)] => match source.into() {
+                ShortcutSource::OriginalEdge(id) => TTF::Exact(self.original_graph().travel_time_function(id)),
+                _ => panic!("invalid state of shortcut: ipps must be cached when shortcut not trivial {:?}", self),
+            },
+            _ => panic!("invalid state of shortcut: ipps must be cached when shortcut not trivial {:?}", self),
+        }
+    }
+    fn is_valid_path(&self, _shortcut_id: ShortcutId) -> bool {
+        true
+    }
+    fn lower_bound(&self, shortcut_id: ShortcutId) -> FlWeight {
+        match shortcut_id {
+            ShortcutId::Incoming(id) => self.customized_graph.incoming.bounds[id as usize],
+            ShortcutId::Outgoing(id) => self.customized_graph.outgoing.bounds[id as usize],
+        }
+        .0
+    }
+    fn upper_bound(&self, shortcut_id: ShortcutId) -> FlWeight {
+        match shortcut_id {
+            ShortcutId::Incoming(id) => self.customized_graph.incoming.bounds[id as usize],
+            ShortcutId::Outgoing(id) => self.customized_graph.outgoing.bounds[id as usize],
+        }
+        .1
+    }
+    fn original_graph(&self) -> &TDGraph {
+        &self.customized_graph.original_graph
+    }
+    fn exact_ttf_for(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
+        let (dir_graph, edge_id) = match shortcut_id {
+            ShortcutId::Incoming(id) => (&self.customized_graph.incoming, id),
+            ShortcutId::Outgoing(id) => (&self.customized_graph.outgoing, id),
+        };
+        if dir_graph.constant.get(edge_id as usize) {
+            target.push(TTFPoint {
+                at: start,
+                val: dir_graph.bounds[edge_id as usize].0,
+            });
+            target.push(TTFPoint {
+                at: end,
+                val: dir_graph.bounds[edge_id as usize].0,
+            });
+            return;
+        }
+        match dir_graph.edge_sources(edge_id as usize) {
+            &[] => unreachable!("There are no TTFs for empty shortcuts"),
+            &[(_, source)] => ShortcutSource::from(source).exact_ttf_for(start, end, self, target, tmp),
+            sources => Shortcut::exact_ttf_sources(sources, start, end, self, target, tmp),
+        }
+    }
+}
+
+pub struct ProfileGraphWrapper<'a> {
+    pub profile_graph: ProfileGraph<'a>,
+    pub down_shortcuts: &'a mut [Shortcut],
+    pub up_shortcuts: &'a mut [Shortcut],
+}
+
+impl<'a> ProfileGraphWrapper<'a> {
+    fn delegate(&self, shortcut_id: ShortcutId) -> bool {
+        match shortcut_id {
+            ShortcutId::Incoming(id) => (id as usize) < self.profile_graph.customized_graph.incoming.bounds.len(),
+            ShortcutId::Outgoing(id) => (id as usize) < self.profile_graph.customized_graph.outgoing.bounds.len(),
+        }
+    }
+
+    fn get(&self, shortcut_id: ShortcutId) -> &Shortcut {
+        match shortcut_id {
+            ShortcutId::Incoming(id) => &self.down_shortcuts[(id as usize) - self.profile_graph.customized_graph.incoming.bounds.len()],
+            ShortcutId::Outgoing(id) => &self.up_shortcuts[(id as usize) - self.profile_graph.customized_graph.outgoing.bounds.len()],
+        }
+    }
+}
+
+impl<'a> ShortcutGraphTrt for ProfileGraphWrapper<'a> {
+    fn ttf(&self, shortcut_id: ShortcutId) -> TTF {
+        if self.delegate(shortcut_id) {
+            return self.profile_graph.ttf(shortcut_id);
+        }
+        self.get(shortcut_id).plf(self)
+    }
+    fn is_valid_path(&self, _shortcut_id: ShortcutId) -> bool {
+        true
+    }
+    fn lower_bound(&self, shortcut_id: ShortcutId) -> FlWeight {
+        if self.delegate(shortcut_id) {
+            return self.profile_graph.lower_bound(shortcut_id);
+        }
+        self.get(shortcut_id).lower_bound
+    }
+    fn upper_bound(&self, shortcut_id: ShortcutId) -> FlWeight {
+        if self.delegate(shortcut_id) {
+            return self.profile_graph.upper_bound(shortcut_id);
+        }
+        self.get(shortcut_id).upper_bound
+    }
+    fn original_graph(&self) -> &TDGraph {
+        &self.profile_graph.customized_graph.original_graph
+    }
+    fn exact_ttf_for(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
+        if self.delegate(shortcut_id) {
+            return self.profile_graph.exact_ttf_for(shortcut_id, start, end, target, tmp);
+        }
+        self.get(shortcut_id).exact_ttf_for(start, end, self, target, tmp)
+    }
 }

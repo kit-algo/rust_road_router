@@ -69,7 +69,7 @@ impl ShortcutSource {
         &self,
         start: Timestamp,
         end: Timestamp,
-        shortcut_graph: &PartialShortcutGraph,
+        shortcut_graph: &impl ShortcutGraphTrt,
         target: &mut MutTopPLF,
         tmp: &mut ReusablePLFStorage,
     ) {
@@ -78,27 +78,26 @@ impl ShortcutSource {
         match *self {
             ShortcutSource::Shortcut(down, up) => {
                 let mut first_target = tmp.push_plf();
-                shortcut_graph
-                    .get_incoming(down)
-                    .exact_ttf_for(start, end, shortcut_graph, &mut first_target, target.storage_mut());
+                shortcut_graph.exact_ttf_for(ShortcutId::Incoming(down), start, end, &mut first_target, target.storage_mut());
+                if first_target.is_empty() {
+                    return;
+                }
                 // for `up` PLF we need to shift the time range
                 let second_start = start + interpolate_linear(&first_target[0], &first_target[1], start);
                 let second_end = end + interpolate_linear(&first_target[first_target.len() - 2], &first_target[first_target.len() - 1], end);
 
                 let mut second_target = first_target.storage_mut().push_plf();
-                shortcut_graph
-                    .get_outgoing(up)
-                    .exact_ttf_for(second_start, second_end, shortcut_graph, &mut second_target, target.storage_mut());
+                shortcut_graph.exact_ttf_for(ShortcutId::Outgoing(up), second_start, second_end, &mut second_target, target.storage_mut());
 
                 let (first, second) = second_target.storage().top_plfs();
                 PiecewiseLinearFunction::link_partials(first, second, start, end, target);
             }
             ShortcutSource::OriginalEdge(edge) => {
-                let ttf = shortcut_graph.original_graph.travel_time_function(edge);
+                let ttf = shortcut_graph.original_graph().travel_time_function(edge);
                 ttf.copy_range(start, end, target);
             }
             ShortcutSource::None => {
-                panic!("can't fetch ttf for None source");
+                // panic!("can't fetch ttf for None source");
             }
         }
     }

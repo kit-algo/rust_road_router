@@ -6,7 +6,7 @@ use std::{env, error::Error, path::Path};
 #[macro_use]
 extern crate rust_road_router;
 use rust_road_router::{
-    algo::{catchup::profiles::Server, customizable_contraction_hierarchy::*, *},
+    algo::{catchup::profiles::Server, customizable_contraction_hierarchy::*},
     cli::CliErr,
     datastr::{
         graph::{
@@ -92,9 +92,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         report!("to", to);
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         tdcch_time = tdcch_time + time;
-        if let Some(mut result) = result {
-            report!("profile_complexity", result.len());
-        }
+        report!("num_sources", result.num_sources());
     }
 
     eprintln!("TDCCH {}", tdcch_time / (10i32));
