@@ -916,6 +916,14 @@ impl Shortcut {
         self.cache = ttf;
     }
 
+    pub fn set_sources(&mut self, sources: &[(Timestamp, ShortcutSourceData)]) {
+        self.sources = match sources {
+            &[] => Sources::None,
+            &[(_, data)] => Sources::One(data),
+            data => Sources::Multi(data.into()),
+        };
+    }
+
     // Combine current `Sources` and the result of a merge into new `Sources`
     fn combine(sources: Sources, intersection_data: Vec<(Timestamp, bool)>, other_data: ShortcutSourceData) -> Sources {
         // when just one is better all the time

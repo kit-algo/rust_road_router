@@ -280,7 +280,8 @@ impl<'a> Server<'a> {
 
         // TODO compute profiles of unpacked edges more efficiently
 
-        let original_graph = &self.customized_graph.original_graph;
+        let forward = &self.forward;
+        let backward = &self.backward;
         let forward_tree_mask = &self.forward_tree_mask;
         let backward_tree_mask = &self.backward_tree_mask;
         let to = self.to;
@@ -295,20 +296,34 @@ impl<'a> Server<'a> {
             self.upward_shortcut_offsets[node as usize] = offset;
         }
 
-        let mut down_shortcuts: Vec<_> = self.forward_tree_path[1..].iter().map(|_| Shortcut::new(None, original_graph)).collect();
-        let mut up_shortcuts: Vec<_> = self.backward_tree_path[1..].iter().map(|_| Shortcut::new(None, original_graph)).collect();
+        let mut down_shortcuts: Vec<_> = self.forward_tree_path[1..]
+            .iter()
+            .map(|&node| {
+                let label = &forward.node_data(node);
+                Shortcut::new_finished(&[], (label.lower_bound, label.upper_bound), label.lower_bound.fuzzy_eq(label.upper_bound))
+            })
+            .collect();
+        let mut up_shortcuts: Vec<_> = self.backward_tree_path[1..]
+            .iter()
+            .map(|&node| {
+                let label = &backward.node_data(node);
+                Shortcut::new_finished(&[], (label.lower_bound, label.upper_bound), label.lower_bound.fuzzy_eq(label.upper_bound))
+            })
+            .collect();
 
         for ((head, edge_id), _) in self.customized_graph.upward_bounds_graph().neighbor_iter(self.from) {
             if self.forward_tree_mask.get(head as usize) {
-                down_shortcuts[self.downward_shortcut_offsets[head as usize]] = self.customized_graph.outgoing.to_shortcut(edge_id as usize);
-                down_shortcuts[self.downward_shortcut_offsets[head as usize]].set_cache(profile_graph.take_cache(ShortcutId::Outgoing(edge_id)));
+                let shortcut = &mut down_shortcuts[self.downward_shortcut_offsets[head as usize]];
+                shortcut.set_sources(self.customized_graph.outgoing.edge_sources(edge_id as usize));
+                shortcut.set_cache(profile_graph.take_cache(ShortcutId::Outgoing(edge_id)));
             }
         }
 
         for ((head, edge_id), _) in self.customized_graph.downward_bounds_graph().neighbor_iter(self.to) {
             if self.backward_tree_mask.get(head as usize) {
-                up_shortcuts[self.upward_shortcut_offsets[head as usize]] = self.customized_graph.incoming.to_shortcut(edge_id as usize);
-                up_shortcuts[self.upward_shortcut_offsets[head as usize]].set_cache(profile_graph.take_cache(ShortcutId::Incoming(edge_id)));
+                let shortcut = &mut up_shortcuts[self.upward_shortcut_offsets[head as usize]];
+                shortcut.set_sources(self.customized_graph.incoming.edge_sources(edge_id as usize));
+                shortcut.set_cache(profile_graph.take_cache(ShortcutId::Incoming(edge_id)));
             }
         }
 
