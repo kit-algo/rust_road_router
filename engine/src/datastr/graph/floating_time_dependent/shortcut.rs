@@ -686,7 +686,7 @@ impl Shortcut {
 
                 self.upper_bound = min(self.upper_bound, TTF::from(&linked).static_upper_bound());
                 debug_assert!(
-                    !self.upper_bound.fuzzy_lt(self.lower_bound),
+                    !cfg!(feature = "tdcch-precustomization") || !self.upper_bound.fuzzy_lt(self.lower_bound),
                     "lower {:?} upper {:?}",
                     self.lower_bound,
                     self.upper_bound
@@ -717,7 +717,7 @@ impl Shortcut {
                 // new linked function is always better than the current one
                 self.upper_bound = min(self.upper_bound, other_upper_bound);
                 debug_assert!(
-                    !self.upper_bound.fuzzy_lt(self.lower_bound),
+                    !cfg!(feature = "tdcch-precustomization") || !self.upper_bound.fuzzy_lt(self.lower_bound),
                     "lower {:?} upper {:?}",
                     self.lower_bound,
                     self.upper_bound
@@ -780,7 +780,7 @@ impl Shortcut {
             // We can only set the lower bound as tight as possible, once we have the final travel time function.
             self.upper_bound = min(self.upper_bound, TTF::from(&merged).static_upper_bound());
             debug_assert!(
-                !self.upper_bound.fuzzy_lt(self.lower_bound),
+                !cfg!(feature = "tdcch-precustomization") || !self.upper_bound.fuzzy_lt(self.lower_bound),
                 "lower {:?} upper {:?}",
                 self.lower_bound,
                 self.upper_bound
@@ -824,7 +824,7 @@ impl Shortcut {
 
     /// Once the TTF of this Shortcut is final, we can tighten the lower bound.
     /// When we know or detect, that we don't need this shortcut, we set all bounds to infinity.
-    pub fn finalize_bounds(&mut self, shortcut_graph: &PartialShortcutGraph) {
+    pub fn finalize_bounds(&mut self, shortcut_graph: &impl ShortcutGraphTrt) {
         if !self.required {
             return;
         }
@@ -852,7 +852,12 @@ impl Shortcut {
             return;
         }
 
-        debug_assert!(!new_lower_bound.fuzzy_lt(self.lower_bound), "{:?}, {:?}", new_lower_bound, self);
+        debug_assert!(
+            !cfg!(feature = "tdcch-precustomization") || !new_lower_bound.fuzzy_lt(self.lower_bound),
+            "{:?}, {:?}",
+            new_lower_bound,
+            self
+        );
         debug_assert!(!self.upper_bound.fuzzy_lt(new_lower_bound), "{:?}, {:?}", new_lower_bound, self);
         self.lower_bound = new_lower_bound;
 

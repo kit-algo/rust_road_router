@@ -305,7 +305,7 @@ impl<'a> Server<'a> {
             }
         }
 
-        for ((head, edge_id), _) in self.customized_graph.downward_bounds_graph().neighbor_iter(self.from) {
+        for ((head, edge_id), _) in self.customized_graph.downward_bounds_graph().neighbor_iter(self.to) {
             if self.backward_tree_mask.get(head as usize) {
                 up_shortcuts[self.upward_shortcut_offsets[head as usize]] = self.customized_graph.incoming.to_shortcut(edge_id as usize);
                 up_shortcuts[self.upward_shortcut_offsets[head as usize]].set_cache(profile_graph.take_cache(ShortcutId::Incoming(edge_id)));
@@ -343,6 +343,9 @@ impl<'a> Server<'a> {
                     );
                 }
             }
+            if offset < profile_graph.down_shortcuts.len() {
+                shortcut.finalize_bounds(&profile_graph);
+            }
             std::mem::swap(&mut shortcut, profile_graph.down_shortcuts.get_mut(offset).unwrap_or(&mut st_shortcut));
         }
 
@@ -369,6 +372,11 @@ impl<'a> Server<'a> {
                     );
                 }
             }
+
+            if offset < profile_graph.up_shortcuts.len() {
+                shortcut.finalize_bounds(&profile_graph);
+            }
+            std::mem::swap(&mut shortcut, profile_graph.up_shortcuts.get_mut(offset).unwrap_or(&mut st_shortcut));
         }
 
         for &(node, _) in &self.meeting_nodes {
