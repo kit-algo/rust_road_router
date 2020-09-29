@@ -188,13 +188,7 @@ pub struct PartialPlfLinkCursor<'a> {
 impl<'a> PartialPlfLinkCursor<'a> {
     pub fn new(ipps: &'a [TTFPoint]) -> Self {
         let mut iter = ipps.iter();
-        let cur = iter
-            .next()
-            .unwrap_or(&TTFPoint {
-                at: Timestamp::new(1.0),
-                val: FlWeight::INFINITY,
-            })
-            .clone();
+        let cur = iter.next().unwrap().clone();
         let prev = TTFPoint {
             at: cur.at - FlWeight::new(1.0),
             val: cur.val,

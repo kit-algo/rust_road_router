@@ -872,25 +872,24 @@ impl Shortcut {
         match &mut self.sources {
             Sources::None => {}
             Sources::One(source) => {
-                if !ShortcutSource::from(*source).required(shortcut_graph) {
-                    *source = ShortcutSource::None.into();
-                    self.upper_bound = FlWeight::INFINITY;
-                    self.required = false;
-                }
+                debug_assert!(ShortcutSource::from(*source).required(shortcut_graph));
+                // if !ShortcutSource::from(*source).required(shortcut_graph) {
+                //     self.lower_bound = FlWeight::INFINITY;
+                //     self.upper_bound = FlWeight::INFINITY;
+                // }
             }
             Sources::Multi(sources) => {
-                let mut any_required = false;
+                // let mut any_required = false;
                 for (_, source) in &mut sources[..] {
-                    if !ShortcutSource::from(*source).required(shortcut_graph) {
-                        *source = ShortcutSource::None.into();
-                        self.upper_bound = FlWeight::INFINITY;
-                    } else {
-                        any_required = true;
-                    }
+                    debug_assert!(ShortcutSource::from(*source).required(shortcut_graph));
+                    //     if ShortcutSource::from(*source).required(shortcut_graph) {
+                    //         any_required = true;
+                    //     }
                 }
-                if !any_required {
-                    self.required = false;
-                }
+                // if !any_required {
+                //     self.lower_bound = FlWeight::INFINITY;
+                //     self.upper_bound = FlWeight::INFINITY;
+                // }
             }
         }
     }
@@ -1048,7 +1047,7 @@ impl Shortcut {
         match &self.sources {
             Sources::None => unreachable!("There are no TTFs for empty shortcuts"),
             Sources::One(source) => ShortcutSource::from(*source).exact_ttf_for(start, end, shortcut_graph, target, tmp),
-            Sources::Multi(sources) => Self::exact_ttf_sources(sources, start, end, shortcut_graph, self.upper_bound, target, tmp),
+            Sources::Multi(sources) => Self::exact_ttf_sources(sources, start, end, shortcut_graph, target, tmp),
         }
     }
 
@@ -1057,20 +1056,11 @@ impl Shortcut {
         start: Timestamp,
         end: Timestamp,
         shortcut_graph: &impl ShortcutGraphTrt,
-        upper_bound: FlWeight,
         target: &mut MutTopPLF,
         tmp: &mut ReusablePLFStorage,
     ) {
         // when we have multiple source, we need to do unpacking (and append the results) for all sources which are relevant for the given time range.
         let mut c = SourceCursor::valid_at(sources, start);
-
-        if let ShortcutSource::None = c.cur().1.into() {
-            target.push(TTFPoint {
-                at: start,
-                val: dbg!(upper_bound) + FlWeight::new(EPSILON),
-            });
-        }
-
         while c.cur().0.fuzzy_lt(end) {
             let mut inner_target = tmp.push_plf();
             ShortcutSource::from(c.cur().1).exact_ttf_for(
@@ -1083,26 +1073,6 @@ impl Shortcut {
             PiecewiseLinearFunction::append_partials(target, &inner_target, max(start, c.cur().0));
 
             c.advance();
-        }
-
-        if let ShortcutSource::None = c.prev_source().into() {
-            let &TTFPoint { at: prev_at, val: prev_val } = target.last().unwrap();
-            if prev_at.fuzzy_lt(end) {
-                if prev_val.fuzzy_lt(upper_bound) {
-                    if (prev_at + FlWeight::new(EPSILON)).fuzzy_lt(end) {
-                        target.push(TTFPoint {
-                            at: prev_at + FlWeight::new(EPSILON),
-                            val: upper_bound + FlWeight::new(EPSILON),
-                        });
-                    }
-                    target.push(TTFPoint {
-                        at: end,
-                        val: upper_bound + FlWeight::new(EPSILON),
-                    });
-                } else {
-                    target.push(TTFPoint { at: end, val: prev_val });
-                }
-            }
         }
 
         for points in target.windows(2) {
@@ -1221,14 +1191,6 @@ impl<'a> SourceCursor<'a> {
             (self.sources[0].0 + self.offset + FlWeight::from(period()), self.sources[0].1)
         } else {
             (self.sources[self.current_index + 1].0 + self.offset, self.sources[self.current_index + 1].1)
-        }
-    }
-
-    fn prev_source(&self) -> ShortcutSourceData {
-        if self.current_index > 0 {
-            self.sources[self.current_index - 1].1
-        } else {
-            self.sources.last().unwrap().1
         }
     }
 

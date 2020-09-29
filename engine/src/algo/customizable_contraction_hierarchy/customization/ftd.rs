@@ -356,6 +356,19 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> CustomizedGra
                 PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::new(None); n as usize]), || cb());
             });
 
+            // routine to disable shortcuts for which the perfect precustomization determined them to be irrelevant
+            let disable_dominated = |(shortcut, &lower_bound): (&mut Shortcut, &FlWeight)| {
+                // shortcut contains shortest path length, lower bound the length of the specific path represented by the shortcut (not necessarily the shortest)
+                if shortcut.upper_bound.fuzzy_lt(lower_bound) {
+                    // shortcut.required = false;
+                    shortcut.lower_bound = FlWeight::INFINITY;
+                    shortcut.upper_bound = FlWeight::INFINITY;
+                } else {
+                    // reset shortcut lower bound from path to actual shortcut bound
+                    shortcut.lower_bound = lower_bound;
+                }
+            };
+
             upward.par_iter_mut().zip(upward_preliminary_bounds.par_iter()).for_each(disable_dominated);
             downward.par_iter_mut().zip(downward_preliminary_bounds.par_iter()).for_each(disable_dominated);
 

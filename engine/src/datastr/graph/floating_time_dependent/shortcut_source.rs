@@ -79,9 +79,7 @@ impl ShortcutSource {
             ShortcutSource::Shortcut(down, up) => {
                 let mut first_target = tmp.push_plf();
                 shortcut_graph.exact_ttf_for(ShortcutId::Incoming(down), start, end, &mut first_target, target.storage_mut());
-                if first_target.is_empty() {
-                    return;
-                }
+                debug_assert!(!first_target.last().unwrap().at.fuzzy_lt(end));
                 // for `up` PLF we need to shift the time range
                 let second_start = start + interpolate_linear(&first_target[0], &first_target[1], start);
                 let second_end = end + interpolate_linear(&first_target[first_target.len() - 2], &first_target[first_target.len() - 1], end);
@@ -97,7 +95,7 @@ impl ShortcutSource {
                 ttf.copy_range(start, end, target);
             }
             ShortcutSource::None => {
-                // panic!("can't fetch ttf for None source");
+                panic!("can't fetch ttf for None source");
             }
         }
     }
