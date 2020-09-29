@@ -2,7 +2,7 @@ use super::*;
 use crate::util::in_range_option::InRangeOption;
 
 /// An enum for what might make up a TD-CCH edge at a given point in time.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ShortcutSource {
     Shortcut(EdgeId, EdgeId), // shortcut over lower triangle
     OriginalEdge(EdgeId),     // original edge with corresponding id in the original graph

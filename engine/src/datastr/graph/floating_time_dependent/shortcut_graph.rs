@@ -710,7 +710,7 @@ impl<'a> ShortcutGraphTrt for ProfileGraph<'a> {
         match dir_graph.edge_sources(edge_id as usize) {
             &[] => unreachable!("There are no TTFs for empty shortcuts"),
             &[(_, source)] => ShortcutSource::from(source).exact_ttf_for(start, end, self, target, tmp),
-            sources => Shortcut::exact_ttf_sources(sources, start, end, self, target, tmp),
+            sources => Shortcut::exact_ttf_sources(sources, start, end, self, dir_graph.bounds[edge_id as usize].1, target, tmp),
         }
     }
 }
