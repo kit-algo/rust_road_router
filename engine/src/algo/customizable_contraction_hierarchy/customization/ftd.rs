@@ -356,19 +356,6 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> CustomizedGra
                 PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::new(None); n as usize]), || cb());
             });
 
-            // routine to disable shortcuts for which the perfect precustomization determined them to be irrelevant
-            let disable_dominated = |(shortcut, &lower_bound): (&mut Shortcut, &FlWeight)| {
-                // shortcut contains shortest path length, lower bound the length of the specific path represented by the shortcut (not necessarily the shortest)
-                if shortcut.upper_bound.fuzzy_lt(lower_bound) {
-                    // shortcut.required = false;
-                    shortcut.lower_bound = FlWeight::INFINITY;
-                    shortcut.upper_bound = FlWeight::INFINITY;
-                } else {
-                    // reset shortcut lower bound from path to actual shortcut bound
-                    shortcut.lower_bound = lower_bound;
-                }
-            };
-
             upward.par_iter_mut().zip(upward_preliminary_bounds.par_iter()).for_each(disable_dominated);
             downward.par_iter_mut().zip(downward_preliminary_bounds.par_iter()).for_each(disable_dominated);
 
@@ -380,11 +367,26 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> CustomizedGra
                 let shortcut_graph = PartialShortcutGraph::new(metric, upward_below, downward_below, 0);
 
                 for shortcut in &mut upward_active[..] {
-                    shortcut.invalidate_unneccesary_sources(&shortcut_graph);
+                    shortcut.disable_if_unneccesary(&shortcut_graph);
                 }
 
                 for shortcut in &mut downward_active[..] {
-                    shortcut.invalidate_unneccesary_sources(&shortcut_graph);
+                    shortcut.disable_if_unneccesary(&shortcut_graph);
+                }
+            }
+
+            for current_node in (0..n).rev() {
+                let (upward_below, upward_above) = upward.split_at_mut(cch.first_out[current_node as usize] as usize);
+                let upward_active = &mut upward_above[0..cch.neighbor_edge_indices(current_node as NodeId).len()];
+                let (downward_below, downward_above) = downward.split_at_mut(cch.first_out[current_node as usize] as usize);
+                let downward_active = &mut downward_above[0..cch.neighbor_edge_indices(current_node as NodeId).len()];
+
+                for shortcut in &mut upward_active[..] {
+                    shortcut.reenable_required(downward_below, upward_below);
+                }
+
+                for shortcut in &mut downward_active[..] {
+                    shortcut.reenable_required(downward_below, upward_below);
                 }
             }
         });

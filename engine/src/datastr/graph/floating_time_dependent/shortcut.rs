@@ -868,28 +868,39 @@ impl Shortcut {
     }
 
     /// If Shortcuts in skipped triangles are not required, the corresponding `Source` in this shortcut is also not required, so remove it
-    pub fn invalidate_unneccesary_sources(&mut self, shortcut_graph: &PartialShortcutGraph) {
+    pub fn disable_if_unneccesary(&mut self, shortcut_graph: &PartialShortcutGraph) {
         match &mut self.sources {
             Sources::None => {}
             Sources::One(source) => {
-                debug_assert!(ShortcutSource::from(*source).required(shortcut_graph));
-                // if !ShortcutSource::from(*source).required(shortcut_graph) {
-                //     self.lower_bound = FlWeight::INFINITY;
-                //     self.upper_bound = FlWeight::INFINITY;
-                // }
+                if !ShortcutSource::from(*source).required(shortcut_graph) {
+                    self.required = false;
+                    self.lower_bound = FlWeight::INFINITY;
+                    self.upper_bound = FlWeight::INFINITY;
+                }
             }
             Sources::Multi(sources) => {
-                // let mut any_required = false;
+                let mut any_required = false;
                 for (_, source) in &mut sources[..] {
-                    debug_assert!(ShortcutSource::from(*source).required(shortcut_graph));
-                    //     if ShortcutSource::from(*source).required(shortcut_graph) {
-                    //         any_required = true;
-                    //     }
+                    if ShortcutSource::from(*source).required(shortcut_graph) {
+                        any_required = true;
+                    }
                 }
-                // if !any_required {
-                //     self.lower_bound = FlWeight::INFINITY;
-                //     self.upper_bound = FlWeight::INFINITY;
-                // }
+                if !any_required {
+                    self.required = false;
+                    self.lower_bound = FlWeight::INFINITY;
+                    self.upper_bound = FlWeight::INFINITY;
+                }
+            }
+        }
+    }
+
+    pub fn reenable_required(&self, downward: &mut [Shortcut], upward: &mut [Shortcut]) {
+        if self.required {
+            for (_, &source) in self.sources_iter() {
+                if let ShortcutSource::Shortcut(down, up) = source.into() {
+                    downward[down as usize].required = true;
+                    upward[up as usize].required = true;
+                }
             }
         }
     }
