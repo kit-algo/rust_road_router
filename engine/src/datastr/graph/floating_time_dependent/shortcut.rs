@@ -1049,6 +1049,8 @@ impl Shortcut {
             Sources::One(source) => ShortcutSource::from(*source).exact_ttf_for(start, end, shortcut_graph, target, tmp),
             Sources::Multi(sources) => Self::exact_ttf_sources(sources, start, end, shortcut_graph, target, tmp),
         }
+
+        debug_assert!(!target.last().unwrap().at.fuzzy_lt(end), "{:?}", dbg_each!(self, start, end));
     }
 
     pub fn exact_ttf_sources(

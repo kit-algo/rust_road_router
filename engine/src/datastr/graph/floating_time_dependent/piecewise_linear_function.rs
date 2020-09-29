@@ -363,11 +363,14 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 target.pop();
             }
 
-            let point = TTFPoint { at: x, val: y };
+            let mut point = TTFPoint { at: x, val: y };
             debug_assert!(point.val >= FlWeight::new(0.0), "{:?}", point);
             if let Some(p) = target.last() {
                 if p.at.fuzzy_eq(point.at) && p.val.fuzzy_eq(point.val) {
-                    return;
+                    continue;
+                }
+                if !p.at.fuzzy_lt(point.at) {
+                    point.at = point.at + FlWeight::new(EPSILON);
                 }
             }
             debug_assert!(
@@ -393,7 +396,21 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
 
         debug_assert!(target.len() > 1);
-        debug_assert!(target.len() <= first.len() + second.len() + 1);
+        debug_assert!(
+            target.len() <= first.len() + second.len() + 1,
+            "{:?}",
+            dbg_each!(
+                first.len(),
+                second.len(),
+                target.len(),
+                start,
+                end,
+                first.first(),
+                first.last(),
+                second.first(),
+                second.last()
+            )
+        );
         for points in target.windows(2) {
             debug_assert!(points[0].at.fuzzy_lt(points[1].at));
         }

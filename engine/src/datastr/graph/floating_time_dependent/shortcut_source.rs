@@ -89,6 +89,23 @@ impl ShortcutSource {
 
                 let (first, second) = second_target.storage().top_plfs();
                 PiecewiseLinearFunction::link_partials(first, second, start, end, target);
+
+                debug_assert!(
+                    !target.last().unwrap().at.fuzzy_lt(end),
+                    "{:?}",
+                    dbg_each!(
+                        self,
+                        target.last(),
+                        start,
+                        end,
+                        first.first(),
+                        first.last(),
+                        first.len(),
+                        second.first(),
+                        second.last(),
+                        second.len()
+                    )
+                );
             }
             ShortcutSource::OriginalEdge(edge) => {
                 let ttf = shortcut_graph.original_graph().travel_time_function(edge);
