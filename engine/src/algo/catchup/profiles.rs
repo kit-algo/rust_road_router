@@ -85,8 +85,7 @@ impl<'a> Server<'a> {
     pub fn distance(&mut self, from_node: NodeId, to_node: NodeId) -> Shortcut {
         report!("algo", "Floating TDCCH Profile Query");
 
-        #[cfg(feature = "tdcch-query-detailed-timing")]
-        let timer = Timer::new();
+        let mut timer = Timer::new();
 
         self.from = self.cch_graph.node_order().rank(from_node);
         self.to = self.cch_graph.node_order().rank(to_node);
@@ -103,9 +102,6 @@ impl<'a> Server<'a> {
 
         self.forward_tree_path.clear();
         self.backward_tree_path.clear();
-
-        #[cfg(feature = "tdcch-query-detailed-timing")]
-        let init_time = timer.get_passed();
 
         // stats
         let mut nodes_in_elimination_tree_search_space = 0;
@@ -204,8 +200,8 @@ impl<'a> Server<'a> {
             report!("num_meeting_nodes", self.meeting_nodes.len());
         }
 
-        #[cfg(feature = "tdcch-query-detailed-timing")]
-        let elimination_tree_time = timer.get_passed();
+        report!("elimination_tree_time", timer.get_passed().num_milliseconds());
+        timer.restart();
 
         // elimination tree query done, now we want to retrieve the corridor
 
@@ -277,6 +273,9 @@ impl<'a> Server<'a> {
                 }
             }
         }
+
+        report!("reconstruct_time", timer.get_passed().num_milliseconds());
+        timer.restart();
 
         // TODO compute profiles of unpacked edges more efficiently
 
@@ -407,6 +406,8 @@ impl<'a> Server<'a> {
                 &mut self.buffers,
             )
         }
+
+        report!("contract_time", timer.get_passed().num_milliseconds());
 
         // TODO path switch points
 
