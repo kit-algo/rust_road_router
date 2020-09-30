@@ -626,9 +626,16 @@ impl<'a> ProfileGraph<'a> {
     pub fn cache(&mut self, shortcut_id: ShortcutId, buffers: &mut MergeBuffers) {
         let mut target = buffers.unpacking_target.push_plf();
         self.exact_ttf_for(shortcut_id, Timestamp::zero(), period(), &mut target, &mut buffers.unpacking_tmp);
+        let cache = TTFCache::Exact(target.to_vec());
+        drop(target);
+        let cache = if cache.num_points() > APPROX_THRESHOLD {
+            TTF::from(&cache).approximate(buffers)
+        } else {
+            cache.into()
+        };
         match shortcut_id {
-            ShortcutId::Incoming(id) => self.incoming_cache[id as usize] = Some(TTFCache::Exact(target.to_vec().into())),
-            ShortcutId::Outgoing(id) => self.outgoing_cache[id as usize] = Some(TTFCache::Exact(target.to_vec().into())),
+            ShortcutId::Incoming(id) => self.incoming_cache[id as usize] = Some(cache),
+            ShortcutId::Outgoing(id) => self.outgoing_cache[id as usize] = Some(cache),
         };
     }
 

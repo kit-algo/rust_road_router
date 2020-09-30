@@ -20,7 +20,7 @@ pub enum TTFCache<D> {
 }
 
 impl TTFCache<Vec<TTFPoint>> {
-    fn num_points(&self) -> usize {
+    pub fn num_points(&self) -> usize {
         use TTFCache::*;
 
         match &self {
@@ -553,7 +553,7 @@ impl<'a> TTF<'a> {
         // (TTFCache::Approx(result_lower, result_upper), result)
     }
 
-    fn approximate(&self, buffers: &mut MergeBuffers) -> TTFCache<Box<[TTFPoint]>> {
+    pub fn approximate(&self, buffers: &mut MergeBuffers) -> TTFCache<Box<[TTFPoint]>> {
         use TTF::*;
 
         match self {
