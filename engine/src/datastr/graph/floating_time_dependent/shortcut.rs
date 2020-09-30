@@ -31,7 +31,7 @@ impl TTFCache<Vec<TTFPoint>> {
 }
 
 impl TTFCache<Box<[TTFPoint]>> {
-    fn num_points(&self) -> usize {
+    pub fn num_points(&self) -> usize {
         use TTFCache::*;
 
         match &self {

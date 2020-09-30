@@ -238,7 +238,7 @@ impl<'a> Server<'a> {
                     // mark parent as in corridor
                     self.backward_tree_mask.set(label.parent as usize);
 
-                    profile_graph.cache(ShortcutId::Incoming(label.shortcut_id), &mut self.buffers);
+                    profile_graph.cache_recursive(ShortcutId::Incoming(label.shortcut_id), &mut self.buffers);
                 }
             }
         }
@@ -269,7 +269,7 @@ impl<'a> Server<'a> {
                     self.forward_tree_mask.set(label.parent as usize);
                     // mark edge as in search space
                     self.relevant_upward.set(label.shortcut_id as usize);
-                    profile_graph.cache(ShortcutId::Outgoing(label.shortcut_id), &mut self.buffers);
+                    profile_graph.cache_recursive(ShortcutId::Outgoing(label.shortcut_id), &mut self.buffers);
                 }
             }
         }
@@ -277,7 +277,40 @@ impl<'a> Server<'a> {
         report!("reconstruct_time", timer.get_passed().num_milliseconds());
         timer.restart();
 
-        // TODO compute profiles of unpacked edges more efficiently
+        for &node in self.backward_tree_path.iter().rev() {
+            if self.backward_tree_mask.get(node as usize) {
+                let upper_bound = self.backward.node_data(node).upper_bound;
+
+                for label in self
+                    .backward
+                    .node_data(node)
+                    .labels
+                    .iter()
+                    .filter(|label| !upper_bound.fuzzy_lt(label.lower_bound))
+                {
+                    profile_graph.approximate(ShortcutId::Incoming(label.shortcut_id), &mut self.buffers);
+                }
+            }
+        }
+
+        for &node in self.forward_tree_path.iter().rev() {
+            if self.forward_tree_mask.get(node as usize) {
+                let upper_bound = self.forward.node_data(node).upper_bound;
+
+                for label in self
+                    .forward
+                    .node_data(node)
+                    .labels
+                    .iter()
+                    .filter(|label| !upper_bound.fuzzy_lt(label.lower_bound))
+                {
+                    profile_graph.approximate(ShortcutId::Outgoing(label.shortcut_id), &mut self.buffers);
+                }
+            }
+        }
+
+        report!("approx_time", timer.get_passed().num_milliseconds());
+        timer.restart();
 
         let forward = &self.forward;
         let backward = &self.backward;
@@ -414,7 +447,7 @@ impl<'a> Server<'a> {
         while let Some(node) = self.backward_tree_path.pop() {
             if self.backward_tree_mask.get(node as usize) {
                 for label in self.backward.node_data(node).labels.iter() {
-                    profile_graph.profile_graph.clear(ShortcutId::Incoming(label.shortcut_id));
+                    profile_graph.profile_graph.clear_recursive(ShortcutId::Incoming(label.shortcut_id));
                 }
             }
         }
@@ -422,7 +455,7 @@ impl<'a> Server<'a> {
         while let Some(node) = self.forward_tree_path.pop() {
             if self.forward_tree_mask.get(node as usize) {
                 for label in self.forward.node_data(node).labels.iter() {
-                    profile_graph.profile_graph.clear(ShortcutId::Outgoing(label.shortcut_id));
+                    profile_graph.profile_graph.clear_recursive(ShortcutId::Outgoing(label.shortcut_id));
                 }
             }
         }

@@ -626,17 +626,44 @@ impl<'a> ProfileGraph<'a> {
     pub fn cache(&mut self, shortcut_id: ShortcutId, buffers: &mut MergeBuffers) {
         let mut target = buffers.unpacking_target.push_plf();
         self.exact_ttf_for(shortcut_id, Timestamp::zero(), period(), &mut target, &mut buffers.unpacking_tmp);
-        let cache = TTFCache::Exact(target.to_vec());
-        drop(target);
-        let cache = if cache.num_points() > APPROX_THRESHOLD {
-            TTF::from(&cache).approximate(buffers)
-        } else {
-            cache.into()
-        };
+        let cache = TTFCache::Exact(target.to_vec().into());
         match shortcut_id {
             ShortcutId::Incoming(id) => self.incoming_cache[id as usize] = Some(cache),
             ShortcutId::Outgoing(id) => self.outgoing_cache[id as usize] = Some(cache),
         };
+    }
+
+    pub fn cache_recursive(&mut self, shortcut_id: ShortcutId, buffers: &mut MergeBuffers) {
+        if self.get_ttf(shortcut_id).is_some() {
+            return;
+        }
+
+        let (dir_graph, edge_id) = match shortcut_id {
+            ShortcutId::Incoming(id) => (&self.customized_graph.incoming, id),
+            ShortcutId::Outgoing(id) => (&self.customized_graph.outgoing, id),
+        };
+        for (_, source) in dir_graph.edge_sources(edge_id as usize) {
+            match ShortcutSource::from(*source) {
+                ShortcutSource::Shortcut(down, up) => {
+                    self.cache_recursive(ShortcutId::Incoming(down), buffers);
+                    self.cache_recursive(ShortcutId::Outgoing(up), buffers);
+                }
+                _ => (),
+            }
+        }
+        self.cache(shortcut_id, buffers);
+    }
+
+    pub fn approximate(&mut self, shortcut_id: ShortcutId, buffers: &mut MergeBuffers) {
+        let cache = match shortcut_id {
+            ShortcutId::Incoming(id) => self.incoming_cache[id as usize].as_mut(),
+            ShortcutId::Outgoing(id) => self.outgoing_cache[id as usize].as_mut(),
+        };
+        if let Some(cache) = cache {
+            if cache.num_points() > APPROX_THRESHOLD {
+                *cache = TTF::from(&*cache).approximate(buffers);
+            }
+        }
     }
 
     pub fn clear(&mut self, shortcut_id: ShortcutId) {
@@ -646,23 +673,41 @@ impl<'a> ProfileGraph<'a> {
         };
     }
 
+    pub fn clear_recursive(&mut self, shortcut_id: ShortcutId) {
+        if self.get_ttf(shortcut_id).is_none() {
+            return;
+        }
+        let (dir_graph, edge_id) = match shortcut_id {
+            ShortcutId::Incoming(id) => (&self.customized_graph.incoming, id),
+            ShortcutId::Outgoing(id) => (&self.customized_graph.outgoing, id),
+        };
+        for (_, source) in dir_graph.edge_sources(edge_id as usize) {
+            match ShortcutSource::from(*source) {
+                ShortcutSource::Shortcut(down, up) => {
+                    self.clear_recursive(ShortcutId::Incoming(down));
+                    self.clear_recursive(ShortcutId::Outgoing(up));
+                }
+                _ => (),
+            }
+        }
+        self.clear(shortcut_id);
+    }
+
     pub fn take_cache(&mut self, shortcut_id: ShortcutId) -> Option<TTFCache<Box<[TTFPoint]>>> {
         match shortcut_id {
             ShortcutId::Incoming(id) => self.incoming_cache[id as usize].take(),
             ShortcutId::Outgoing(id) => self.outgoing_cache[id as usize].take(),
         }
     }
-}
 
-impl<'a> ShortcutGraphTrt for ProfileGraph<'a> {
-    fn ttf(&self, shortcut_id: ShortcutId) -> TTF {
+    fn get_ttf(&self, shortcut_id: ShortcutId) -> Option<TTF> {
         let cache = match shortcut_id {
             ShortcutId::Incoming(id) => &self.incoming_cache[id as usize],
             ShortcutId::Outgoing(id) => &self.outgoing_cache[id as usize],
         };
 
         if let Some(cache) = cache {
-            return cache.into();
+            return Some(cache.into());
         }
 
         let (dir_graph, edge_id) = match shortcut_id {
@@ -672,11 +717,18 @@ impl<'a> ShortcutGraphTrt for ProfileGraph<'a> {
 
         match dir_graph.edge_sources(edge_id as usize) {
             &[(_, source)] => match source.into() {
-                ShortcutSource::OriginalEdge(id) => TTF::Exact(self.original_graph().travel_time_function(id)),
-                _ => panic!("invalid state of shortcut: ipps must be cached when shortcut not trivial {:?}", self),
+                ShortcutSource::OriginalEdge(id) => Some(TTF::Exact(self.original_graph().travel_time_function(id))),
+                _ => None,
             },
-            _ => panic!("invalid state of shortcut: ipps must be cached when shortcut not trivial {:?}", self),
+            _ => None,
         }
+    }
+}
+
+impl<'a> ShortcutGraphTrt for ProfileGraph<'a> {
+    fn ttf(&self, shortcut_id: ShortcutId) -> TTF {
+        self.get_ttf(shortcut_id)
+            .expect("invalid state of shortcut: ipps must be cached when shortcut not trivial")
     }
     fn is_valid_path(&self, _shortcut_id: ShortcutId) -> bool {
         true
@@ -714,10 +766,14 @@ impl<'a> ShortcutGraphTrt for ProfileGraph<'a> {
             });
             return;
         }
-        match dir_graph.edge_sources(edge_id as usize) {
-            &[] => unreachable!("There are no TTFs for empty shortcuts"),
-            &[(_, source)] => ShortcutSource::from(source).exact_ttf_for(start, end, self, target, tmp),
-            sources => Shortcut::exact_ttf_sources(sources, start, end, self, target, tmp),
+        if let Some(TTF::Exact(ttf)) = self.get_ttf(shortcut_id) {
+            ttf.copy_range(start, end, target);
+        } else {
+            match dir_graph.edge_sources(edge_id as usize) {
+                &[] => unreachable!("There are no TTFs for empty shortcuts"),
+                &[(_, source)] => ShortcutSource::from(source).exact_ttf_for(start, end, self, target, tmp),
+                sources => Shortcut::exact_ttf_sources(sources, start, end, self, target, tmp),
+            }
         }
     }
 }
