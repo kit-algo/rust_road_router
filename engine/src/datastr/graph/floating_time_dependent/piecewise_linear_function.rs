@@ -262,10 +262,19 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 val: min(first_switchover_val, second_switchover_val),
             });
         }
+        let debug_start = first.len() - 2;
         first.extend(second[1..].iter().cloned());
 
-        for points in first.windows(2) {
+        for points in first[debug_start..debug_start + 3].windows(2) {
             debug_assert!(points[0].at.fuzzy_lt(points[1].at));
+            // debug_assert!(
+            //     !(points[1].at - points[0].at).fuzzy_lt(points[0].val - points[1].val),
+            //     "FiFo broken {:?}",
+            //     points
+            // );
+            // if (points[1].at - points[0].at).fuzzy_lt(points[0].val - points[1].val) {
+            //     eprintln!("FiFo broken {:?}", points);
+            // }
         }
     }
 
@@ -306,10 +315,19 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 val: max(first_switchover_val, second_switchover_val),
             });
         }
+        let debug_start = first.len() - 2;
         first.extend(second[1..].iter().cloned());
 
-        for points in first.windows(2) {
+        for points in first[debug_start..debug_start + 3].windows(2) {
             debug_assert!(points[0].at.fuzzy_lt(points[1].at));
+            // debug_assert!(
+            //     !(points[1].at - points[0].at).fuzzy_lt(points[0].val - points[1].val),
+            //     "FiFo broken {:?}",
+            //     points
+            // );
+            // if (points[1].at - points[0].at).fuzzy_lt(points[0].val - points[1].val) {
+            //     eprintln!("FiFo broken {:?}", points);
+            // }
         }
     }
 

@@ -1175,8 +1175,6 @@ pub struct SourceCursor<'a> {
 
 impl<'a> SourceCursor<'a> {
     pub fn valid_at(sources: &'a [(Timestamp, ShortcutSourceData)], t: Timestamp) -> Self {
-        debug_assert!(sources.len() > 1);
-
         let (times_period, t) = t.split_of_period();
         let offset = times_period * FlWeight::from(period());
 
