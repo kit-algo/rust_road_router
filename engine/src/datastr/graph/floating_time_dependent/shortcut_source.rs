@@ -117,6 +117,96 @@ impl ShortcutSource {
         }
     }
 
+    pub(super) fn partial_lower_bound(
+        &self,
+        start: Timestamp,
+        end: Timestamp,
+        shortcut_graph: &impl ShortcutGraphTrt,
+        target: &mut MutTopPLF,
+        tmp: &mut ReusablePLFStorage,
+    ) {
+        debug_assert!(start.fuzzy_lt(end), "{:?} - {:?}", start, end);
+
+        match *self {
+            ShortcutSource::Shortcut(down, up) => {
+                let mut first_target = tmp.push_plf();
+                shortcut_graph
+                    .ttf(ShortcutId::Incoming(down))
+                    .bound_plfs()
+                    .0
+                    .copy_range(start, end, &mut first_target);
+
+                debug_assert!(!first_target.last().unwrap().at.fuzzy_lt(end));
+                // for `up` PLF we need to shift the time range
+                // TODO is this correct????????
+                let second_start = start + interpolate_linear(&first_target[0], &first_target[1], start);
+                let second_end = end + interpolate_linear(&first_target[first_target.len() - 2], &first_target[first_target.len() - 1], end);
+
+                let mut second_target = first_target.storage_mut().push_plf();
+                shortcut_graph
+                    .ttf(ShortcutId::Outgoing(up))
+                    .bound_plfs()
+                    .0
+                    .copy_range(second_start, second_end, &mut second_target);
+
+                let (first, second) = second_target.storage().top_plfs();
+                PiecewiseLinearFunction::link_partials(first, second, start, end, target);
+            }
+            ShortcutSource::OriginalEdge(edge) => {
+                let ttf = shortcut_graph.original_graph().travel_time_function(edge);
+                ttf.copy_range(start, end, target);
+            }
+            ShortcutSource::None => {
+                panic!("can't fetch ttf for None source");
+            }
+        }
+    }
+
+    pub(super) fn partial_upper_bound(
+        &self,
+        start: Timestamp,
+        end: Timestamp,
+        shortcut_graph: &impl ShortcutGraphTrt,
+        target: &mut MutTopPLF,
+        tmp: &mut ReusablePLFStorage,
+    ) {
+        debug_assert!(start.fuzzy_lt(end), "{:?} - {:?}", start, end);
+
+        match *self {
+            ShortcutSource::Shortcut(down, up) => {
+                let mut first_target = tmp.push_plf();
+                shortcut_graph
+                    .ttf(ShortcutId::Incoming(down))
+                    .bound_plfs()
+                    .1
+                    .copy_range(start, end, &mut first_target);
+
+                debug_assert!(!first_target.last().unwrap().at.fuzzy_lt(end));
+                // for `up` PLF we need to shift the time range
+                // TODO is this correct????????
+                let second_start = start + interpolate_linear(&first_target[0], &first_target[1], start);
+                let second_end = end + interpolate_linear(&first_target[first_target.len() - 2], &first_target[first_target.len() - 1], end);
+
+                let mut second_target = first_target.storage_mut().push_plf();
+                shortcut_graph
+                    .ttf(ShortcutId::Outgoing(up))
+                    .bound_plfs()
+                    .1
+                    .copy_range(second_start, second_end, &mut second_target);
+
+                let (first, second) = second_target.storage().top_plfs();
+                PiecewiseLinearFunction::link_partials(first, second, start, end, target);
+            }
+            ShortcutSource::OriginalEdge(edge) => {
+                let ttf = shortcut_graph.original_graph().travel_time_function(edge);
+                ttf.copy_range(start, end, target);
+            }
+            ShortcutSource::None => {
+                panic!("can't fetch ttf for None source");
+            }
+        }
+    }
+
     /// Check if this edge is actually necessary for correctness of the CH or if it could possibly be removed (or set to infinity)
     pub(super) fn required(&self, shortcut_graph: &PartialShortcutGraph) -> bool {
         match *self {

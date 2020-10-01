@@ -84,6 +84,15 @@ impl<'a> From<&'a TTFCache<Vec<TTFPoint>>> for TTF<'a> {
 }
 
 impl<'a> TTF<'a> {
+    pub fn exact(&self) -> bool {
+        use TTF::*;
+
+        match &self {
+            Exact(_) => true,
+            Approx(_, _) => false,
+        }
+    }
+
     fn static_lower_bound(&self) -> FlWeight {
         use TTF::*;
 
@@ -565,7 +574,7 @@ impl<'a> TTF<'a> {
         }
     }
 
-    fn bound_plfs(&self) -> (PiecewiseLinearFunction<'a>, PiecewiseLinearFunction<'a>) {
+    pub fn bound_plfs(&self) -> (PiecewiseLinearFunction<'a>, PiecewiseLinearFunction<'a>) {
         use TTF::*;
 
         match self {
@@ -1158,14 +1167,14 @@ impl<'a> Iterator for SourcesIter<'a> {
 // Allows to get sources valid for times > period().
 // Handles all the ugly wraparound logic.
 #[derive(Debug)]
-struct SourceCursor<'a> {
+pub struct SourceCursor<'a> {
     sources: &'a [(Timestamp, ShortcutSourceData)],
     current_index: usize,
     offset: FlWeight,
 }
 
 impl<'a> SourceCursor<'a> {
-    fn valid_at(sources: &'a [(Timestamp, ShortcutSourceData)], t: Timestamp) -> Self {
+    pub fn valid_at(sources: &'a [(Timestamp, ShortcutSourceData)], t: Timestamp) -> Self {
         debug_assert!(sources.len() > 1);
 
         let (times_period, t) = t.split_of_period();
@@ -1195,11 +1204,11 @@ impl<'a> SourceCursor<'a> {
         }
     }
 
-    fn cur(&self) -> (Timestamp, ShortcutSourceData) {
+    pub fn cur(&self) -> (Timestamp, ShortcutSourceData) {
         (self.sources[self.current_index].0 + self.offset, self.sources[self.current_index].1)
     }
 
-    fn next(&self) -> (Timestamp, ShortcutSourceData) {
+    pub fn next(&self) -> (Timestamp, ShortcutSourceData) {
         if self.current_index + 1 == self.sources.len() {
             (self.sources[0].0 + self.offset + FlWeight::from(period()), self.sources[0].1)
         } else {
@@ -1207,7 +1216,7 @@ impl<'a> SourceCursor<'a> {
         }
     }
 
-    fn advance(&mut self) {
+    pub fn advance(&mut self) {
         self.current_index += 1;
         if self.current_index == self.sources.len() {
             self.offset = self.offset + FlWeight::from(period());

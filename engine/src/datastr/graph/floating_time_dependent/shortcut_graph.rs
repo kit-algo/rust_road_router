@@ -6,7 +6,7 @@ use crate::datastr::graph::first_out_graph::degrees_to_first_out;
 use crate::datastr::rank_select_map::*;
 use crate::io::*;
 use crate::util::*;
-use std::cmp::min;
+use std::cmp::{max, min};
 
 #[derive(Debug, Clone, Copy)]
 pub enum ShortcutId {
@@ -624,13 +624,66 @@ pub struct ProfileGraph<'a> {
 
 impl<'a> ProfileGraph<'a> {
     pub fn cache(&mut self, shortcut_id: ShortcutId, buffers: &mut MergeBuffers) {
-        let mut target = buffers.unpacking_target.push_plf();
-        self.exact_ttf_for(shortcut_id, Timestamp::zero(), period(), &mut target, &mut buffers.unpacking_tmp);
-        let cache = TTFCache::Exact(target.to_vec().into());
+        let cache = if self.all_sources_exact(shortcut_id) {
+            let mut target = buffers.unpacking_target.push_plf();
+            self.exact_ttf_for(shortcut_id, Timestamp::zero(), period(), &mut target, &mut buffers.unpacking_tmp);
+            TTFCache::Exact(target.to_vec().into())
+        } else {
+            let mut target = buffers.unpacking_target.push_plf();
+
+            let (dir_graph, edge_id) = match shortcut_id {
+                ShortcutId::Incoming(id) => (&self.customized_graph.incoming, id),
+                ShortcutId::Outgoing(id) => (&self.customized_graph.outgoing, id),
+            };
+
+            let mut c = SourceCursor::valid_at(dir_graph.edge_sources(edge_id as usize), Timestamp::zero());
+
+            while c.cur().0.fuzzy_lt(period()) {
+                let mut inner_target = buffers.unpacking_tmp.push_plf();
+                ShortcutSource::from(c.cur().1).partial_lower_bound(
+                    max(Timestamp::zero(), c.cur().0),
+                    min(period(), c.next().0),
+                    self,
+                    &mut inner_target,
+                    target.storage_mut(),
+                );
+                PiecewiseLinearFunction::append_lower_bound_partials(&mut target, &inner_target, max(Timestamp::zero(), c.cur().0));
+
+                c.advance();
+            }
+
+            let lower = target.to_vec();
+            drop(target);
+
+            let mut target = buffers.unpacking_target.push_plf();
+
+            let mut c = SourceCursor::valid_at(dir_graph.edge_sources(edge_id as usize), Timestamp::zero());
+
+            while c.cur().0.fuzzy_lt(period()) {
+                let mut inner_target = buffers.unpacking_tmp.push_plf();
+                ShortcutSource::from(c.cur().1).partial_upper_bound(
+                    max(Timestamp::zero(), c.cur().0),
+                    min(period(), c.next().0),
+                    self,
+                    &mut inner_target,
+                    target.storage_mut(),
+                );
+                PiecewiseLinearFunction::append_upper_bound_partials(&mut target, &inner_target, max(Timestamp::zero(), c.cur().0));
+
+                c.advance();
+            }
+
+            let upper = target.to_vec();
+
+            TTFCache::Approx(lower.into(), upper.into())
+        };
+
         match shortcut_id {
             ShortcutId::Incoming(id) => self.incoming_cache[id as usize] = Some(cache),
             ShortcutId::Outgoing(id) => self.outgoing_cache[id as usize] = Some(cache),
         };
+
+        self.approximate(shortcut_id, buffers);
     }
 
     pub fn cache_recursive(&mut self, shortcut_id: ShortcutId, buffers: &mut MergeBuffers) {
@@ -722,6 +775,21 @@ impl<'a> ProfileGraph<'a> {
             },
             _ => None,
         }
+    }
+
+    fn all_sources_exact(&self, shortcut_id: ShortcutId) -> bool {
+        let (dir_graph, edge_id) = match shortcut_id {
+            ShortcutId::Incoming(id) => (&self.customized_graph.incoming, id),
+            ShortcutId::Outgoing(id) => (&self.customized_graph.outgoing, id),
+        };
+
+        dir_graph
+            .edge_sources(edge_id as usize)
+            .iter()
+            .all(|(_, source)| match ShortcutSource::from(*source) {
+                ShortcutSource::Shortcut(down, up) => self.ttf(ShortcutId::Incoming(down)).exact() && self.ttf(ShortcutId::Outgoing(up)).exact(),
+                _ => true,
+            })
     }
 }
 

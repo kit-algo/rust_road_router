@@ -277,41 +277,6 @@ impl<'a> Server<'a> {
         report!("reconstruct_time", timer.get_passed().num_milliseconds());
         timer.restart();
 
-        for &node in self.backward_tree_path.iter().rev() {
-            if self.backward_tree_mask.get(node as usize) {
-                let upper_bound = self.backward.node_data(node).upper_bound;
-
-                for label in self
-                    .backward
-                    .node_data(node)
-                    .labels
-                    .iter()
-                    .filter(|label| !upper_bound.fuzzy_lt(label.lower_bound))
-                {
-                    profile_graph.approximate(ShortcutId::Incoming(label.shortcut_id), &mut self.buffers);
-                }
-            }
-        }
-
-        for &node in self.forward_tree_path.iter().rev() {
-            if self.forward_tree_mask.get(node as usize) {
-                let upper_bound = self.forward.node_data(node).upper_bound;
-
-                for label in self
-                    .forward
-                    .node_data(node)
-                    .labels
-                    .iter()
-                    .filter(|label| !upper_bound.fuzzy_lt(label.lower_bound))
-                {
-                    profile_graph.approximate(ShortcutId::Outgoing(label.shortcut_id), &mut self.buffers);
-                }
-            }
-        }
-
-        report!("approx_time", timer.get_passed().num_milliseconds());
-        timer.restart();
-
         let forward = &self.forward;
         let backward = &self.backward;
         let forward_tree_mask = &self.forward_tree_mask;

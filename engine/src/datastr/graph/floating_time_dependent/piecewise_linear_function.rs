@@ -176,7 +176,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
     /// The difference here to the other copy/append methods is that we don't need the Cursor logig but can copy the entire slice.
     /// When target already covers switchover, restrict those points to the range up to start, insert a point by linear interpolation
     /// and then insert points to cover everything up to (including) end.
-    #[allow(clippy::cognitive_complexity)]
     pub(super) fn append_partials(first: &mut impl PLFTarget, second: &[TTFPoint], switchover: Timestamp) {
         debug_assert!(second.len() > 1);
         if let Some(&TTFPoint { at, .. }) = first.split_last().map(|(_, rest)| rest.last()).unwrap_or(None) {
@@ -185,12 +184,8 @@ impl<'a> PiecewiseLinearFunction<'a> {
         if let Some(&TTFPoint { at, .. }) = first.last() {
             debug_assert!(!at.fuzzy_lt(switchover));
         }
-        if let Some(&TTFPoint { at, .. }) = second.first() {
-            debug_assert!(!switchover.fuzzy_lt(at));
-        }
-        if let Some(&TTFPoint { at, .. }) = second.split_first().map(|(_, rest)| rest.first()).unwrap_or(None) {
-            debug_assert!(switchover.fuzzy_lt(at));
-        }
+        debug_assert!(!switchover.fuzzy_lt(second[0].at));
+        debug_assert!(switchover.fuzzy_lt(second[1].at));
 
         if first.is_empty() {
             first.extend(second.iter().cloned());
@@ -216,10 +211,99 @@ impl<'a> PiecewiseLinearFunction<'a> {
             );
         }
 
+        // ignore point when segments colinear
         if first.last() != Some(&second[0]) {
             first.push(TTFPoint {
                 at: switchover,
                 val: switchover_val,
+            });
+        }
+        first.extend(second[1..].iter().cloned());
+
+        for points in first.windows(2) {
+            debug_assert!(points[0].at.fuzzy_lt(points[1].at));
+        }
+    }
+
+    pub(super) fn append_lower_bound_partials(first: &mut impl PLFTarget, second: &[TTFPoint], switchover: Timestamp) {
+        debug_assert!(second.len() > 1);
+        if let Some(&TTFPoint { at, .. }) = first.split_last().map(|(_, rest)| rest.last()).unwrap_or(None) {
+            debug_assert!(at.fuzzy_lt(switchover));
+        }
+        if let Some(&TTFPoint { at, .. }) = first.last() {
+            debug_assert!(!at.fuzzy_lt(switchover));
+        }
+        debug_assert!(!switchover.fuzzy_lt(second[0].at));
+        debug_assert!(switchover.fuzzy_lt(second[1].at));
+
+        if first.is_empty() {
+            first.extend(second.iter().cloned());
+            return;
+        }
+
+        let first_last = first.pop().unwrap();
+
+        let first_switchover_val = if first_last.at.fuzzy_eq(switchover) {
+            first_last.val
+        } else {
+            interpolate_linear(first.last().unwrap(), &first_last, switchover)
+        };
+
+        let second_switchover_val = if second[0].at.fuzzy_eq(switchover) {
+            second[0].val
+        } else {
+            interpolate_linear(&second[0], &second[1], switchover)
+        };
+
+        // ignore point when segments colinear
+        if first.last() != Some(&second[0]) {
+            first.push(TTFPoint {
+                at: switchover,
+                val: min(first_switchover_val, second_switchover_val),
+            });
+        }
+        first.extend(second[1..].iter().cloned());
+
+        for points in first.windows(2) {
+            debug_assert!(points[0].at.fuzzy_lt(points[1].at));
+        }
+    }
+
+    pub(super) fn append_upper_bound_partials(first: &mut impl PLFTarget, second: &[TTFPoint], switchover: Timestamp) {
+        debug_assert!(second.len() > 1);
+        if let Some(&TTFPoint { at, .. }) = first.split_last().map(|(_, rest)| rest.last()).unwrap_or(None) {
+            debug_assert!(at.fuzzy_lt(switchover));
+        }
+        if let Some(&TTFPoint { at, .. }) = first.last() {
+            debug_assert!(!at.fuzzy_lt(switchover));
+        }
+        debug_assert!(!switchover.fuzzy_lt(second[0].at));
+        debug_assert!(switchover.fuzzy_lt(second[1].at));
+
+        if first.is_empty() {
+            first.extend(second.iter().cloned());
+            return;
+        }
+
+        let first_last = first.pop().unwrap();
+
+        let first_switchover_val = if first_last.at.fuzzy_eq(switchover) {
+            first_last.val
+        } else {
+            interpolate_linear(first.last().unwrap(), &first_last, switchover)
+        };
+
+        let second_switchover_val = if second[0].at.fuzzy_eq(switchover) {
+            second[0].val
+        } else {
+            interpolate_linear(&second[0], &second[1], switchover)
+        };
+
+        // ignore point when segments colinear
+        if first.last() != Some(&second[0]) {
+            first.push(TTFPoint {
+                at: switchover,
+                val: max(first_switchover_val, second_switchover_val),
             });
         }
         first.extend(second[1..].iter().cloned());
