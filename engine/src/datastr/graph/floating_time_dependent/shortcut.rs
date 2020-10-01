@@ -543,10 +543,7 @@ impl<'a> TTF<'a> {
         }
 
         let ret = (
-            TTFCache::Approx(
-                buffers.exact_result_lower[..].to_vec().into_boxed_slice(),
-                buffers.exact_result_upper[..].to_vec().into_boxed_slice(),
-            ),
+            TTFCache::Approx(Box::from(&buffers.exact_result_lower[..]), Box::from(&buffers.exact_result_upper[..])),
             result,
         );
 

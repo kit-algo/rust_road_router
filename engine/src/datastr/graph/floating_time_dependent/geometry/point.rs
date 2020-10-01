@@ -2,7 +2,7 @@ use super::*;
 use std::ops::{Mul, Sub};
 
 /// Struct for interpolation points of travel time functions
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub struct TTFPoint {
     /// Time
     pub at: Timestamp,

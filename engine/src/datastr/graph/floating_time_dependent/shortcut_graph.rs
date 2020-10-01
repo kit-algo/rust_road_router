@@ -627,7 +627,7 @@ impl<'a> ProfileGraph<'a> {
         let cache = if self.all_sources_exact(shortcut_id) {
             let mut target = buffers.unpacking_target.push_plf();
             self.exact_ttf_for(shortcut_id, Timestamp::zero(), period(), &mut target, &mut buffers.unpacking_tmp);
-            TTFCache::Exact(target.to_vec().into())
+            TTFCache::Exact(Box::<[TTFPoint]>::from(&target[..]))
         } else {
             let mut target = buffers.unpacking_target.push_plf();
 
@@ -652,7 +652,7 @@ impl<'a> ProfileGraph<'a> {
                 c.advance();
             }
 
-            let lower = target.to_vec();
+            let lower = Box::<[TTFPoint]>::from(&target[..]);
             drop(target);
 
             let mut target = buffers.unpacking_target.push_plf();
@@ -673,9 +673,9 @@ impl<'a> ProfileGraph<'a> {
                 c.advance();
             }
 
-            let upper = target.to_vec();
+            let upper = Box::<[TTFPoint]>::from(&target[..]);
 
-            TTFCache::Approx(lower.into(), upper.into())
+            TTFCache::Approx(lower, upper)
         };
 
         match shortcut_id {

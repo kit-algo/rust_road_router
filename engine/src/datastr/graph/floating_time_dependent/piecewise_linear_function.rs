@@ -554,9 +554,9 @@ impl<'a> PiecewiseLinearFunction<'a> {
     ) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
         // easy cases
         if self.upper_bound() < other.lower_bound() {
-            return (self.ipps.to_vec().into_boxed_slice(), vec![(start, true)]);
+            return (Box::from(self.ipps), vec![(start, true)]);
         } else if other.upper_bound() < self.lower_bound() {
-            return (other.ipps.to_vec().into_boxed_slice(), vec![(start, false)]);
+            return (Box::from(other.ipps), vec![(start, false)]);
         }
 
         // setup
@@ -627,10 +627,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
 
         if !needs_merging {
-            return (
-                (if better.last().unwrap().1 { self.ipps } else { other.ipps }).to_vec().into_boxed_slice(),
-                better,
-            );
+            return ((Box::from(if better.last().unwrap().1 { self.ipps } else { other.ipps })), better);
         }
 
         let mut f = C::new(&self.ipps);
@@ -811,7 +808,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         debug_assert!(!result[result.len() - 1].at.fuzzy_lt(end));
         debug_assert!(result[result.len() - 2].at.fuzzy_lt(end));
 
-        let ret = (result[..].to_vec().into_boxed_slice(), better);
+        let ret = (Box::from(&result[..]), better);
         result.clear();
         ret
     }
@@ -841,7 +838,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
     pub fn approximate(&self, buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
         buffer.reserve(self.ipps.len());
         self.douglas_peuker(buffer);
-        let result = buffer[..].to_vec().into_boxed_slice();
+        let result = Box::<[TTFPoint]>::from(&buffer[..]);
         buffer.clear();
         result
     }
@@ -857,7 +854,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         buffer.first_mut().unwrap().val = wrap_min;
         buffer.last_mut().unwrap().val = wrap_min;
 
-        let result = buffer[..].to_vec().into_boxed_slice();
+        let result = Box::<[TTFPoint]>::from(&buffer[..]);
         buffer.clear();
         result
     }
@@ -873,7 +870,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         buffer.first_mut().unwrap().val = wrap_max;
         buffer.last_mut().unwrap().val = wrap_max;
 
-        let result = buffer[..].to_vec().into_boxed_slice();
+        let result = Box::<[TTFPoint]>::from(&buffer[..]);
         buffer.clear();
         result
     }
@@ -893,7 +890,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         result_upper.first_mut().unwrap().val = wrap_max;
         result_upper.last_mut().unwrap().val = wrap_max;
 
-        (result_lower.into_boxed_slice(), result_upper.into_boxed_slice())
+        (result_lower.into(), result_upper.into())
     }
 
     // calculate approximated function
