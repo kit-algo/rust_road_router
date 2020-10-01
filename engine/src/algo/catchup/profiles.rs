@@ -406,6 +406,14 @@ impl<'a> Server<'a> {
         }
 
         report!("contract_time", timer.get_passed().num_milliseconds());
+        timer.restart();
+
+        let mut target = self.buffers.unpacking_target.push_plf();
+        st_shortcut.exact_ttf_for(Timestamp::zero(), period(), &profile_graph, &mut target, &mut self.buffers.unpacking_tmp);
+        report!("profile_complexity", target.len());
+
+        report!("exact_profile_time", timer.get_passed().num_milliseconds());
+        timer.restart();
 
         // TODO path switch points
 
