@@ -215,6 +215,62 @@ impl ShortcutSource {
             ShortcutSource::None => false,
         }
     }
+
+    pub fn get_switchpoints(
+        &self,
+        start: Timestamp,
+        end: Timestamp,
+        shortcut_graph: &impl ShortcutGraphTrt,
+        switchpoints: &mut Vec<Timestamp>,
+    ) -> (FlWeight, FlWeight) {
+        match *self {
+            ShortcutSource::Shortcut(down, up) => {
+                let mut first_switchpoints = Vec::new();
+                let mut second_switchpoints = Vec::new();
+                let (first_start, first_end) = shortcut_graph.get_switchpoints(ShortcutId::Incoming(down), start, end, &mut first_switchpoints);
+                let (second_start, second_end) =
+                    shortcut_graph.get_switchpoints(ShortcutId::Outgoing(up), start + first_start, end + first_end, &mut second_switchpoints);
+
+                let mut first_iter = first_switchpoints.into_iter().peekable();
+                let mut second_iter = second_switchpoints.into_iter().peekable();
+                loop {
+                    match (first_iter.peek(), second_iter.peek()) {
+                        (Some(&first_at), Some(&second_at)) => {
+                            if first_at.fuzzy_lt(second_at) {
+                                switchpoints.push(first_at);
+                                first_iter.next();
+                            } else if second_at.fuzzy_lt(first_at) {
+                                switchpoints.push(second_at);
+                                second_iter.next();
+                            } else {
+                                switchpoints.push(first_at);
+                                first_iter.next();
+                                second_iter.next();
+                            }
+                        }
+                        (Some(&first_at), None) => {
+                            switchpoints.push(first_at);
+                            first_iter.next();
+                        }
+                        (None, Some(&second_at)) => {
+                            switchpoints.push(second_at);
+                            second_iter.next();
+                        }
+                        (None, None) => break,
+                    }
+                }
+
+                (first_start + second_start, first_end + second_end)
+            }
+            ShortcutSource::OriginalEdge(edge) => {
+                let ttf = shortcut_graph.original_graph().travel_time_function(edge);
+                (ttf.evaluate(start), ttf.evaluate(end))
+            }
+            ShortcutSource::None => {
+                panic!("can't compute switchpoints for None source");
+            }
+        }
+    }
 }
 
 /// More compact struct to actually store `ShortcutSource`s in memory.

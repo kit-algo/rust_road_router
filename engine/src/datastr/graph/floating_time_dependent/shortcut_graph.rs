@@ -21,6 +21,7 @@ pub trait ShortcutGraphTrt {
     fn upper_bound(&self, shortcut_id: ShortcutId) -> FlWeight;
     fn original_graph(&self) -> &TDGraph;
     fn exact_ttf_for(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage);
+    fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, switchpoints: &mut Vec<Timestamp>) -> (FlWeight, FlWeight);
 }
 
 /// Container for partial CCH graphs during CATCHUp customization.
@@ -80,6 +81,9 @@ impl<'a> ShortcutGraphTrt for PartialShortcutGraph<'a> {
     }
     fn exact_ttf_for(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
         self.get(shortcut_id).exact_ttf_for(start, end, self, target, tmp)
+    }
+    fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, switchpoints: &mut Vec<Timestamp>) -> (FlWeight, FlWeight) {
+        self.get(shortcut_id).get_switchpoints(start, end, self, switchpoints)
     }
 }
 
@@ -844,6 +848,17 @@ impl<'a> ShortcutGraphTrt for ProfileGraph<'a> {
             }
         }
     }
+    fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, switchpoints: &mut Vec<Timestamp>) -> (FlWeight, FlWeight) {
+        let (dir_graph, edge_id) = match shortcut_id {
+            ShortcutId::Incoming(id) => (&self.customized_graph.incoming, id),
+            ShortcutId::Outgoing(id) => (&self.customized_graph.outgoing, id),
+        };
+        match dir_graph.edge_sources(edge_id as usize) {
+            &[] => unreachable!("There are no switchpoints for empty shortcuts"),
+            &[(_, source)] => ShortcutSource::from(source).get_switchpoints(start, end, self, switchpoints),
+            sources => Shortcut::get_switchpoints_sources(sources, start, end, self, switchpoints),
+        }
+    }
 }
 
 pub struct ProfileGraphWrapper<'a> {
@@ -898,5 +913,11 @@ impl<'a> ShortcutGraphTrt for ProfileGraphWrapper<'a> {
             return self.profile_graph.exact_ttf_for(shortcut_id, start, end, target, tmp);
         }
         self.get(shortcut_id).exact_ttf_for(start, end, self, target, tmp)
+    }
+    fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, switchpoints: &mut Vec<Timestamp>) -> (FlWeight, FlWeight) {
+        if self.delegate(shortcut_id) {
+            return self.profile_graph.get_switchpoints(shortcut_id, start, end, switchpoints);
+        }
+        self.get(shortcut_id).get_switchpoints(start, end, self, switchpoints)
     }
 }

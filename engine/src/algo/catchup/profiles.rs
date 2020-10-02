@@ -415,6 +415,12 @@ impl<'a> Server<'a> {
         report!("exact_profile_time", timer.get_passed().num_milliseconds());
         timer.restart();
 
+        let mut switchpoints = Vec::new();
+        st_shortcut.get_switchpoints(Timestamp::zero(), period(), &profile_graph, &mut switchpoints);
+        report!("path_switches", switchpoints.len());
+        report!("switchpoints_time", timer.get_passed().num_milliseconds());
+        timer.restart();
+
         // TODO path switch points
 
         while let Some(node) = self.backward_tree_path.pop() {

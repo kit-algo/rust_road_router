@@ -1113,6 +1113,47 @@ impl Shortcut {
     pub fn is_constant(&self) -> bool {
         self.constant
     }
+
+    pub fn get_switchpoints(
+        &self,
+        start: Timestamp,
+        end: Timestamp,
+        shortcut_graph: &impl ShortcutGraphTrt,
+        switchpoints: &mut Vec<Timestamp>,
+    ) -> (FlWeight, FlWeight) {
+        match &self.sources {
+            Sources::None => unreachable!("There are no TTFs for empty shortcuts"),
+            Sources::One(source) => ShortcutSource::from(*source).get_switchpoints(start, end, shortcut_graph, switchpoints),
+            Sources::Multi(sources) => Self::get_switchpoints_sources(sources, start, end, shortcut_graph, switchpoints),
+        }
+    }
+
+    pub fn get_switchpoints_sources(
+        sources: &[(Timestamp, ShortcutSourceData)],
+        start: Timestamp,
+        end: Timestamp,
+        shortcut_graph: &impl ShortcutGraphTrt,
+        switchpoints: &mut Vec<Timestamp>,
+    ) -> (FlWeight, FlWeight) {
+        let mut c = SourceCursor::valid_at(sources, start);
+
+        let (first_weight, mut last_weight) =
+            ShortcutSource::from(c.cur().1).get_switchpoints(max(start, c.cur().0), min(end, c.next().0), shortcut_graph, switchpoints);
+
+        c.advance();
+
+        while c.cur().0.fuzzy_lt(end) {
+            switchpoints.push(c.cur().0);
+
+            last_weight = ShortcutSource::from(c.cur().1)
+                .get_switchpoints(max(start, c.cur().0), min(end, c.next().0), shortcut_graph, switchpoints)
+                .1;
+
+            c.advance();
+        }
+
+        (first_weight, last_weight)
+    }
 }
 
 // Enum to catch the common no source or just one source cases without allocations.
