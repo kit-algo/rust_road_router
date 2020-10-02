@@ -22,6 +22,7 @@ pub trait ShortcutGraphTrt {
     fn original_graph(&self) -> &TDGraph;
     fn exact_ttf_for(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage);
     fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, switchpoints: &mut Vec<Timestamp>) -> (FlWeight, FlWeight);
+    fn unpack_at(&self, shortcut_id: ShortcutId, t: Timestamp, result: &mut Vec<(EdgeId, Timestamp)>);
 }
 
 /// Container for partial CCH graphs during CATCHUp customization.
@@ -84,6 +85,9 @@ impl<'a> ShortcutGraphTrt for PartialShortcutGraph<'a> {
     }
     fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, switchpoints: &mut Vec<Timestamp>) -> (FlWeight, FlWeight) {
         self.get(shortcut_id).get_switchpoints(start, end, self, switchpoints)
+    }
+    fn unpack_at(&self, shortcut_id: ShortcutId, t: Timestamp, result: &mut Vec<(EdgeId, Timestamp)>) {
+        self.get(shortcut_id).unpack_at(t, self, result);
     }
 }
 
@@ -550,8 +554,10 @@ impl CustomizedSingleDirGraph {
     }
 
     fn edge_source_at(&self, edge_idx: usize, t: Timestamp) -> Option<&ShortcutSourceData> {
-        let data = self.edge_sources(edge_idx);
+        Self::edge_source_at_for(self.edge_sources(edge_idx), t)
+    }
 
+    pub fn edge_source_at_for(data: &[(Timestamp, ShortcutSourceData)], t: Timestamp) -> Option<&ShortcutSourceData> {
         if data.is_empty() {
             return None;
         }
@@ -859,6 +865,13 @@ impl<'a> ShortcutGraphTrt for ProfileGraph<'a> {
             sources => Shortcut::get_switchpoints_sources(sources, start, end, self, switchpoints),
         }
     }
+    fn unpack_at(&self, shortcut_id: ShortcutId, t: Timestamp, result: &mut Vec<(EdgeId, Timestamp)>) {
+        let (dir_graph, edge_id) = match shortcut_id {
+            ShortcutId::Incoming(id) => (&self.customized_graph.incoming, id),
+            ShortcutId::Outgoing(id) => (&self.customized_graph.outgoing, id),
+        };
+        ShortcutSource::from(*dir_graph.edge_source_at(edge_id as usize, t).unwrap()).unpack_at2(t, self, result)
+    }
 }
 
 pub struct ProfileGraphWrapper<'a> {
@@ -919,5 +932,11 @@ impl<'a> ShortcutGraphTrt for ProfileGraphWrapper<'a> {
             return self.profile_graph.get_switchpoints(shortcut_id, start, end, switchpoints);
         }
         self.get(shortcut_id).get_switchpoints(start, end, self, switchpoints)
+    }
+    fn unpack_at(&self, shortcut_id: ShortcutId, t: Timestamp, result: &mut Vec<(EdgeId, Timestamp)>) {
+        if self.delegate(shortcut_id) {
+            return self.profile_graph.unpack_at(shortcut_id, t, result);
+        }
+        self.get(shortcut_id).unpack_at(t, self, result);
     }
 }

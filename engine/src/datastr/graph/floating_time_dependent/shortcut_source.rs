@@ -60,6 +60,22 @@ impl ShortcutSource {
             }
         }
     }
+    pub(super) fn unpack_at2(&self, t: Timestamp, shortcut_graph: &impl ShortcutGraphTrt, result: &mut Vec<(EdgeId, Timestamp)>) {
+        match *self {
+            ShortcutSource::Shortcut(down, up) => {
+                shortcut_graph.unpack_at(ShortcutId::Incoming(down), t, result);
+                let t_mid = result.last().unwrap().1;
+                shortcut_graph.unpack_at(ShortcutId::Outgoing(up), t_mid, result);
+            }
+            ShortcutSource::OriginalEdge(edge) => {
+                let arr = t + shortcut_graph.original_graph().travel_time_function(edge).evaluate(t);
+                result.push((edge, arr))
+            }
+            ShortcutSource::None => {
+                panic!("can't unpack None source");
+            }
+        }
+    }
 
     /// (Recursively) calculate the exact PLF for this source in a given time range.
     // Use two `ReusablePLFStorage`s to reduce allocations.

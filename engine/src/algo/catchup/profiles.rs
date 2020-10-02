@@ -418,6 +418,17 @@ impl<'a> Server<'a> {
         let mut switchpoints = Vec::new();
         st_shortcut.get_switchpoints(Timestamp::zero(), period(), &profile_graph, &mut switchpoints);
         report!("path_switches", switchpoints.len());
+        let mut paths: Vec<_> = std::iter::once(&Timestamp::zero())
+            .chain(switchpoints.iter())
+            .map(|t| {
+                let mut path = Vec::new();
+                st_shortcut.unpack_at(*t + FlWeight::new(EPSILON), &profile_graph, &mut path);
+                path
+            })
+            .collect();
+        paths.sort_by(|p1, p2| p1.iter().map(|(e, _)| e).partial_cmp(p2.iter().map(|(e, _)| e)).unwrap());
+        paths.dedup_by(|p1, p2| p1.iter().map(|(e, _)| e).eq(p2.iter().map(|(e, _)| e)));
+        report!("num_distinct_paths", paths.len());
         report!("switchpoints_time", timer.get_passed().num_milliseconds());
         timer.restart();
 

@@ -1154,6 +1154,15 @@ impl Shortcut {
 
         (first_weight, last_weight)
     }
+
+    pub fn unpack_at(&self, t: Timestamp, shortcut_graph: &impl ShortcutGraphTrt, result: &mut Vec<(EdgeId, Timestamp)>) {
+        ShortcutSource::from(*match &self.sources {
+            Sources::None => unreachable!("There are no paths for empty shortcuts"),
+            Sources::One(source) => source,
+            Sources::Multi(sources) => CustomizedSingleDirGraph::edge_source_at_for(sources, t).unwrap(),
+        })
+        .unpack_at2(t, shortcut_graph, result)
+    }
 }
 
 // Enum to catch the common no source or just one source cases without allocations.
