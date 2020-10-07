@@ -283,6 +283,8 @@ impl<'a> Server<'a> {
         let backward_tree_mask = &self.backward_tree_mask;
         let to = self.to;
         let from = self.from;
+        let customized_graph = &self.customized_graph;
+
         self.forward_tree_path.retain(|&node| forward_tree_mask.get(node as usize) && node != to);
         self.backward_tree_path.retain(|&node| backward_tree_mask.get(node as usize) && node != from);
 
@@ -292,6 +294,9 @@ impl<'a> Server<'a> {
         for (offset, &node) in self.backward_tree_path[1..].iter().enumerate() {
             self.upward_shortcut_offsets[node as usize] = offset;
         }
+
+        let downward_shortcut_offsets = &self.downward_shortcut_offsets;
+        let upward_shortcut_offsets = &self.upward_shortcut_offsets;
 
         let mut down_shortcuts: Vec<_> = self.forward_tree_path[1..]
             .iter()
@@ -330,30 +335,41 @@ impl<'a> Server<'a> {
             up_shortcuts: &mut up_shortcuts[..],
         };
 
+        report!("transfer_time", timer.get_passed().num_milliseconds());
+        timer.restart();
+
         let mut st_shortcut = Shortcut::new_finished(&[], tentative_distance, false);
 
         for (offset, &node) in self.forward_tree_path[1..].iter().chain(std::iter::once(&self.to)).enumerate() {
             let mut shortcut = Shortcut::new(None, &self.customized_graph.original_graph);
             std::mem::swap(&mut shortcut, profile_graph.down_shortcuts.get_mut(offset).unwrap_or(&mut st_shortcut));
             let upper_bound = self.forward.node_data(node).upper_bound;
-            for label in self
-                .forward
+            let mut label_idx: Vec<_> = forward
                 .node_data(node)
                 .labels
                 .iter()
-                // lazy label filtering
-                .filter(|label| !upper_bound.fuzzy_lt(label.lower_bound))
-            {
-                if label.parent != self.from {
-                    shortcut.merge(
-                        (
-                            (self.downward_shortcut_offsets[label.parent as usize] + self.customized_graph.incoming.head().len()) as EdgeId,
-                            label.shortcut_id,
-                        ),
-                        &profile_graph,
-                        &mut self.buffers,
-                    );
-                }
+                .enumerate()
+                .filter(|(_, label)| label.parent != from && !upper_bound.fuzzy_lt(label.lower_bound))
+                .map(|(i, _)| i)
+                .collect();
+
+            label_idx.sort_by_key(|&idx| {
+                let label = &forward.node_data(node).labels[idx];
+                profile_graph.lower_bound(ShortcutId::Incoming(
+                    (downward_shortcut_offsets[label.parent as usize] + customized_graph.incoming.head().len()) as EdgeId,
+                )) + profile_graph.lower_bound(ShortcutId::Outgoing(label.shortcut_id))
+            });
+
+            for idx in label_idx {
+                let label = &forward.node_data(node).labels[idx];
+                shortcut.merge(
+                    (
+                        (self.downward_shortcut_offsets[label.parent as usize] + self.customized_graph.incoming.head().len()) as EdgeId,
+                        label.shortcut_id,
+                    ),
+                    &profile_graph,
+                    &mut self.buffers,
+                );
             }
             if offset < profile_graph.down_shortcuts.len() {
                 shortcut.finalize_bounds(&profile_graph);
@@ -361,28 +377,40 @@ impl<'a> Server<'a> {
             std::mem::swap(&mut shortcut, profile_graph.down_shortcuts.get_mut(offset).unwrap_or(&mut st_shortcut));
         }
 
+        report!("down_contract_time", timer.get_passed().num_milliseconds());
+        timer.restart();
+
         for (offset, &node) in self.backward_tree_path[1..].iter().chain(std::iter::once(&self.from)).enumerate() {
             let mut shortcut = Shortcut::new(None, &self.customized_graph.original_graph);
             std::mem::swap(&mut shortcut, profile_graph.up_shortcuts.get_mut(offset).unwrap_or(&mut st_shortcut));
             let upper_bound = self.backward.node_data(node).upper_bound;
-            for label in self
-                .backward
+            let mut label_idx: Vec<_> = backward
                 .node_data(node)
                 .labels
                 .iter()
-                // lazy label filtering
-                .filter(|label| !upper_bound.fuzzy_lt(label.lower_bound))
-            {
-                if label.parent != self.to {
-                    shortcut.merge(
-                        (
-                            label.shortcut_id,
-                            (self.upward_shortcut_offsets[label.parent as usize] + self.customized_graph.outgoing.head().len()) as EdgeId,
-                        ),
-                        &profile_graph,
-                        &mut self.buffers,
-                    );
-                }
+                .enumerate()
+                .filter(|(_, label)| label.parent != to && !upper_bound.fuzzy_lt(label.lower_bound))
+                .map(|(i, _)| i)
+                .collect();
+
+            label_idx.sort_by_key(|&idx| {
+                let label = &backward.node_data(node).labels[idx];
+                profile_graph.lower_bound(ShortcutId::Incoming(label.shortcut_id))
+                    + profile_graph.lower_bound(ShortcutId::Outgoing(
+                        (upward_shortcut_offsets[label.parent as usize] + customized_graph.outgoing.head().len()) as EdgeId,
+                    ))
+            });
+
+            for idx in label_idx {
+                let label = &backward.node_data(node).labels[idx];
+                shortcut.merge(
+                    (
+                        label.shortcut_id,
+                        (self.upward_shortcut_offsets[label.parent as usize] + self.customized_graph.outgoing.head().len()) as EdgeId,
+                    ),
+                    &profile_graph,
+                    &mut self.buffers,
+                );
             }
 
             if offset < profile_graph.up_shortcuts.len() {
@@ -390,6 +418,17 @@ impl<'a> Server<'a> {
             }
             std::mem::swap(&mut shortcut, profile_graph.up_shortcuts.get_mut(offset).unwrap_or(&mut st_shortcut));
         }
+
+        report!("up_contract_time", timer.get_passed().num_milliseconds());
+        timer.restart();
+
+        self.meeting_nodes.sort_by_key(|&(node, _)| {
+            profile_graph.lower_bound(ShortcutId::Incoming(
+                (downward_shortcut_offsets[node as usize] + customized_graph.incoming.head().len()) as EdgeId,
+            )) + profile_graph.lower_bound(ShortcutId::Outgoing(
+                (upward_shortcut_offsets[node as usize] + customized_graph.outgoing.head().len()) as EdgeId,
+            ))
+        });
 
         for &(node, _) in &self.meeting_nodes {
             if node == self.from || node == self.to {
@@ -405,7 +444,7 @@ impl<'a> Server<'a> {
             )
         }
 
-        report!("contract_time", timer.get_passed().num_milliseconds());
+        report!("st_contract_time", timer.get_passed().num_milliseconds());
         timer.restart();
 
         let mut target = self.buffers.unpacking_target.push_plf();
@@ -431,8 +470,6 @@ impl<'a> Server<'a> {
         report!("num_distinct_paths", paths.len());
         report!("switchpoints_time", timer.get_passed().num_milliseconds());
         timer.restart();
-
-        // TODO path switch points
 
         while let Some(node) = self.backward_tree_path.pop() {
             if self.backward_tree_mask.get(node as usize) {
