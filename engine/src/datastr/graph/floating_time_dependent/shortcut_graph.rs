@@ -626,17 +626,18 @@ fn always(_up: bool, _shortcut_id: EdgeId, _t: Timestamp) -> bool {
 }
 
 #[derive(Debug)]
-pub struct ProfileGraph<'a> {
+pub struct ReconstructionGraph<'a> {
     pub customized_graph: &'a CustomizedGraph<'a>,
     pub outgoing_cache: &'a mut [Option<TTFCache<Box<[TTFPoint]>>>],
     pub incoming_cache: &'a mut [Option<TTFCache<Box<[TTFPoint]>>>],
 }
 
-impl<'a> ProfileGraph<'a> {
+impl<'a> ReconstructionGraph<'a> {
     pub fn cache(&mut self, shortcut_id: ShortcutId, buffers: &mut MergeBuffers) {
-        let cache = if self.all_sources_exact(shortcut_id) {
+        let cache = if self.as_reconstructed().all_sources_exact(shortcut_id) {
             let mut target = buffers.unpacking_target.push_plf();
-            self.exact_ttf_for(shortcut_id, Timestamp::zero(), period(), &mut target, &mut buffers.unpacking_tmp);
+            self.as_reconstructed()
+                .exact_ttf_for(shortcut_id, Timestamp::zero(), period(), &mut target, &mut buffers.unpacking_tmp);
             TTFCache::Exact(Box::<[TTFPoint]>::from(&target[..]))
         } else {
             let mut target = buffers.unpacking_target.push_plf();
@@ -653,7 +654,7 @@ impl<'a> ProfileGraph<'a> {
                 ShortcutSource::from(c.cur().1).partial_lower_bound(
                     max(Timestamp::zero(), c.cur().0),
                     min(period(), c.next().0),
-                    self,
+                    &self.as_reconstructed(),
                     &mut inner_target,
                     target.storage_mut(),
                 );
@@ -674,7 +675,7 @@ impl<'a> ProfileGraph<'a> {
                 ShortcutSource::from(c.cur().1).partial_upper_bound(
                     max(Timestamp::zero(), c.cur().0),
                     min(period(), c.next().0),
-                    self,
+                    &self.as_reconstructed(),
                     &mut inner_target,
                     target.storage_mut(),
                 );
@@ -697,7 +698,7 @@ impl<'a> ProfileGraph<'a> {
     }
 
     pub fn cache_recursive(&mut self, shortcut_id: ShortcutId, buffers: &mut MergeBuffers) {
-        if self.get_ttf(shortcut_id).is_some() {
+        if self.as_reconstructed().get_ttf(shortcut_id).is_some() {
             return;
         }
 
@@ -737,7 +738,7 @@ impl<'a> ProfileGraph<'a> {
     }
 
     pub fn clear_recursive(&mut self, shortcut_id: ShortcutId) {
-        if self.get_ttf(shortcut_id).is_none() {
+        if self.as_reconstructed().get_ttf(shortcut_id).is_none() {
             return;
         }
         let (dir_graph, edge_id) = match shortcut_id {
@@ -763,6 +764,23 @@ impl<'a> ProfileGraph<'a> {
         }
     }
 
+    pub fn as_reconstructed(&self) -> ReconstructedGraph {
+        ReconstructedGraph {
+            customized_graph: self.customized_graph,
+            outgoing_cache: self.outgoing_cache,
+            incoming_cache: self.incoming_cache,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ReconstructedGraph<'a> {
+    pub customized_graph: &'a CustomizedGraph<'a>,
+    pub outgoing_cache: &'a [Option<TTFCache<Box<[TTFPoint]>>>],
+    pub incoming_cache: &'a [Option<TTFCache<Box<[TTFPoint]>>>],
+}
+
+impl<'a> ReconstructedGraph<'a> {
     fn get_ttf(&self, shortcut_id: ShortcutId) -> Option<TTF> {
         let cache = match shortcut_id {
             ShortcutId::Incoming(id) => &self.incoming_cache[id as usize],
@@ -780,7 +798,7 @@ impl<'a> ProfileGraph<'a> {
 
         match dir_graph.edge_sources(edge_id as usize) {
             &[(_, source)] => match source.into() {
-                ShortcutSource::OriginalEdge(id) => Some(TTF::Exact(self.original_graph().travel_time_function(id))),
+                ShortcutSource::OriginalEdge(id) => Some(TTF::Exact(self.customized_graph.original_graph.travel_time_function(id))),
                 _ => None,
             },
             _ => None,
@@ -803,7 +821,7 @@ impl<'a> ProfileGraph<'a> {
     }
 }
 
-impl<'a> ShortcutGraphTrt for ProfileGraph<'a> {
+impl<'a> ShortcutGraphTrt for ReconstructedGraph<'a> {
     fn ttf(&self, shortcut_id: ShortcutId) -> TTF {
         self.get_ttf(shortcut_id)
             .expect("invalid state of shortcut: ipps must be cached when shortcut not trivial")
@@ -875,7 +893,7 @@ impl<'a> ShortcutGraphTrt for ProfileGraph<'a> {
 }
 
 pub struct ProfileGraphWrapper<'a> {
-    pub profile_graph: ProfileGraph<'a>,
+    pub profile_graph: ReconstructedGraph<'a>,
     pub down_shortcuts: &'a mut [Shortcut],
     pub up_shortcuts: &'a mut [Shortcut],
 }
