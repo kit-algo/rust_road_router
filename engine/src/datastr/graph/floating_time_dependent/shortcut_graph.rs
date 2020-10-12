@@ -554,30 +554,7 @@ impl CustomizedSingleDirGraph {
     }
 
     fn edge_source_at(&self, edge_idx: usize, t: Timestamp) -> Option<&ShortcutSourceData> {
-        Self::edge_source_at_for(self.edge_sources(edge_idx), t)
-    }
-
-    pub fn edge_source_at_for(data: &[(Timestamp, ShortcutSourceData)], t: Timestamp) -> Option<&ShortcutSourceData> {
-        if data.is_empty() {
-            return None;
-        }
-        if data.len() == 1 {
-            return Some(&data[0].1);
-        }
-
-        let (_, t_period) = t.split_of_period();
-        debug_assert!(data.first().map(|&(t, _)| t == Timestamp::zero()).unwrap_or(true), "{:?}", data);
-        match data.binary_search_by_key(&t_period, |(t, _)| *t) {
-            Ok(i) => data.get(i),
-            Err(i) => {
-                debug_assert!(data.get(i - 1).map(|&(t, _)| t < t_period).unwrap_or(true));
-                if i < data.len() {
-                    debug_assert!(t_period < data[i].0);
-                }
-                data.get(i - 1)
-            }
-        }
-        .map(|(_, s)| s)
+        self.edge_sources(edge_idx).edge_source_at(t)
     }
 
     /// Borrow slice of all the source of the edge with given id.
@@ -868,7 +845,7 @@ impl<'a> ShortcutGraphTrt for ReconstructedGraph<'a> {
             match dir_graph.edge_sources(edge_id as usize) {
                 &[] => unreachable!("There are no TTFs for empty shortcuts"),
                 &[(_, source)] => ShortcutSource::from(source).exact_ttf_for(start, end, self, target, tmp),
-                sources => Shortcut::exact_ttf_sources(sources, start, end, self, target, tmp),
+                sources => sources.exact_ttf_for(start, end, self, target, tmp),
             }
         }
     }
@@ -880,7 +857,7 @@ impl<'a> ShortcutGraphTrt for ReconstructedGraph<'a> {
         match dir_graph.edge_sources(edge_id as usize) {
             &[] => unreachable!("There are no switchpoints for empty shortcuts"),
             &[(_, source)] => ShortcutSource::from(source).get_switchpoints(start, end, self, switchpoints),
-            sources => Shortcut::get_switchpoints_sources(sources, start, end, self, switchpoints),
+            sources => sources.get_switchpoints(start, end, self, switchpoints),
         }
     }
     fn unpack_at(&self, shortcut_id: ShortcutId, t: Timestamp, result: &mut Vec<(EdgeId, Timestamp)>) {

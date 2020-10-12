@@ -335,3 +335,155 @@ impl Default for ShortcutSourceData {
         }
     }
 }
+
+pub trait Sources {
+    fn exact_ttf_for(&self, start: Timestamp, end: Timestamp, shortcut_graph: &impl ShortcutGraphTrt, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage);
+
+    fn get_switchpoints(
+        &self,
+        start: Timestamp,
+        end: Timestamp,
+        shortcut_graph: &impl ShortcutGraphTrt,
+        switchpoints: &mut Vec<Timestamp>,
+    ) -> (FlWeight, FlWeight);
+
+    fn edge_source_at(&self, t: Timestamp) -> Option<&ShortcutSourceData>;
+}
+
+use std::cmp::{max, min};
+impl Sources for [(Timestamp, ShortcutSourceData)] {
+    fn exact_ttf_for(&self, start: Timestamp, end: Timestamp, shortcut_graph: &impl ShortcutGraphTrt, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
+        // when we have multiple source, we need to do unpacking (and append the results) for all sources which are relevant for the given time range.
+        let mut c = SourceCursor::valid_at(self, start);
+        while c.cur().0.fuzzy_lt(end) {
+            let mut inner_target = tmp.push_plf();
+            ShortcutSource::from(c.cur().1).exact_ttf_for(
+                max(start, c.cur().0),
+                min(end, c.next().0),
+                shortcut_graph,
+                &mut inner_target,
+                target.storage_mut(),
+            );
+            PiecewiseLinearFunction::append_partials(target, &inner_target, max(start, c.cur().0));
+
+            c.advance();
+        }
+
+        for points in target.windows(2) {
+            debug_assert!(points[0].at.fuzzy_lt(points[1].at));
+        }
+
+        debug_assert!(!target.last().unwrap().at.fuzzy_lt(end), "{:?}", dbg_each!(self, start, end));
+    }
+
+    fn get_switchpoints(
+        &self,
+        start: Timestamp,
+        end: Timestamp,
+        shortcut_graph: &impl ShortcutGraphTrt,
+        switchpoints: &mut Vec<Timestamp>,
+    ) -> (FlWeight, FlWeight) {
+        let mut c = SourceCursor::valid_at(self, start);
+
+        let (first_weight, mut last_weight) =
+            ShortcutSource::from(c.cur().1).get_switchpoints(max(start, c.cur().0), min(end, c.next().0), shortcut_graph, switchpoints);
+
+        c.advance();
+
+        while c.cur().0.fuzzy_lt(end) {
+            switchpoints.push(c.cur().0);
+
+            last_weight = ShortcutSource::from(c.cur().1)
+                .get_switchpoints(max(start, c.cur().0), min(end, c.next().0), shortcut_graph, switchpoints)
+                .1;
+
+            c.advance();
+        }
+
+        (first_weight, last_weight)
+    }
+
+    fn edge_source_at(&self, t: Timestamp) -> Option<&ShortcutSourceData> {
+        if self.is_empty() {
+            return None;
+        }
+        if self.len() == 1 {
+            return Some(&self[0].1);
+        }
+
+        let (_, t_period) = t.split_of_period();
+        debug_assert!(self.first().map(|&(t, _)| t == Timestamp::zero()).unwrap_or(true), "{:?}", self);
+        match self.binary_search_by_key(&t_period, |(t, _)| *t) {
+            Ok(i) => self.get(i),
+            Err(i) => {
+                debug_assert!(self.get(i - 1).map(|&(t, _)| t < t_period).unwrap_or(true));
+                if i < self.len() {
+                    debug_assert!(t_period < self[i].0);
+                }
+                self.get(i - 1)
+            }
+        }
+        .map(|(_, s)| s)
+    }
+}
+
+// Helper struct to iterate over sources.
+// Allows to get sources valid for times > period().
+// Handles all the ugly wraparound logic.
+#[derive(Debug)]
+pub struct SourceCursor<'a> {
+    sources: &'a [(Timestamp, ShortcutSourceData)],
+    current_index: usize,
+    offset: FlWeight,
+}
+
+impl<'a> SourceCursor<'a> {
+    pub fn valid_at(sources: &'a [(Timestamp, ShortcutSourceData)], t: Timestamp) -> Self {
+        let (times_period, t) = t.split_of_period();
+        let offset = times_period * FlWeight::from(period());
+
+        let pos = sources.binary_search_by(|p| {
+            use std::cmp::Ordering;
+            if p.0.fuzzy_eq(t) {
+                Ordering::Equal
+            } else if p.0 < t {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            }
+        });
+
+        match pos {
+            Ok(i) => Self {
+                sources,
+                current_index: i,
+                offset,
+            },
+            Err(i) => Self {
+                sources,
+                current_index: i - 1,
+                offset,
+            },
+        }
+    }
+
+    pub fn cur(&self) -> (Timestamp, ShortcutSourceData) {
+        (self.sources[self.current_index].0 + self.offset, self.sources[self.current_index].1)
+    }
+
+    pub fn next(&self) -> (Timestamp, ShortcutSourceData) {
+        if self.current_index + 1 == self.sources.len() {
+            (self.sources[0].0 + self.offset + FlWeight::from(period()), self.sources[0].1)
+        } else {
+            (self.sources[self.current_index + 1].0 + self.offset, self.sources[self.current_index + 1].1)
+        }
+    }
+
+    pub fn advance(&mut self) {
+        self.current_index += 1;
+        if self.current_index == self.sources.len() {
+            self.offset = self.offset + FlWeight::from(period());
+            self.current_index = 0;
+        }
+    }
+}

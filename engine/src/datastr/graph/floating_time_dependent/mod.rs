@@ -34,6 +34,9 @@ use self::shortcut_source::*;
 pub mod shortcut_graph;
 pub use self::shortcut_graph::*;
 
+pub mod travel_time_function;
+pub use travel_time_function::*;
+
 #[allow(clippy::float_cmp)]
 mod time {
     use std::{
@@ -443,5 +446,36 @@ impl PLFTarget for Vec<TTFPoint> {
 
     fn pop(&mut self) -> Option<TTFPoint> {
         self.pop()
+    }
+}
+
+/// Container struct which bundles all the reusable buffers we need during the customization for merging.
+pub struct MergeBuffers {
+    pub unpacking_target: ReusablePLFStorage,
+    pub unpacking_tmp: ReusablePLFStorage,
+    buffer: Vec<TTFPoint>,
+    exact_self_buffer: Vec<TTFPoint>,
+    exact_other_buffer: Vec<TTFPoint>,
+    exact_result_lower: Vec<TTFPoint>,
+    exact_result_upper: Vec<TTFPoint>,
+}
+
+impl Default for MergeBuffers {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MergeBuffers {
+    pub fn new() -> Self {
+        MergeBuffers {
+            unpacking_target: ReusablePLFStorage::new(),
+            unpacking_tmp: ReusablePLFStorage::new(),
+            buffer: Vec::new(),
+            exact_self_buffer: Vec::new(),
+            exact_other_buffer: Vec::new(),
+            exact_result_lower: Vec::new(),
+            exact_result_upper: Vec::new(),
+        }
     }
 }
