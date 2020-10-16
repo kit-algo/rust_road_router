@@ -1,6 +1,8 @@
+use super::piecewise_linear_function::cursor::*;
 use super::*;
 use crate::datastr::graph::time_dependent::period as int_period;
 use crate::datastr::graph::Graph as GraphTrait;
+use crate::util::in_range_option::*;
 
 type IPPIndex = u32;
 
@@ -172,5 +174,84 @@ impl<'a> LinkIterable<'a, (NodeId, EdgeId)> for Graph {
     fn link_iter(&'a self, node: NodeId) -> Self::Iter {
         let range = self.neighbor_edge_indices_usize(node);
         self.head[range].iter().cloned().zip(self.neighbor_edge_indices(node))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct LiveGraph {
+    pub graph: Graph,
+    first_live_ipp_of_arc: Vec<IPPIndex>,
+    live_ipps: Vec<TTFPoint>,
+}
+
+impl LiveGraph {
+    pub fn new(graph: Graph, t_live: Timestamp, t_soon: Timestamp, live: &[InRangeOption<u32>]) -> Self {
+        let mut first_live_ipp_of_arc = Vec::with_capacity(graph.num_arcs() + 1);
+        first_live_ipp_of_arc.push(0);
+        let mut live_ipps = Vec::new();
+
+        for (edge_id, live) in live.iter().enumerate() {
+            if let Some(live) = live.value() {
+                let live = FlWeight::new(f64::from(live) / 1000.0);
+                live_ipps.push(TTFPoint { at: t_live, val: live });
+                let switchpoint = Self::switchpoint(graph.travel_time_function(edge_id as EdgeId), live, t_soon);
+                if t_soon.fuzzy_lt(switchpoint.at) {
+                    live_ipps.push(TTFPoint { at: t_soon, val: live });
+                }
+                live_ipps.push(switchpoint);
+            }
+            first_live_ipp_of_arc.push(live_ipps.len() as u32);
+        }
+
+        Self {
+            graph,
+            first_live_ipp_of_arc,
+            live_ipps,
+        }
+    }
+
+    fn switchpoint(plf: PiecewiseLinearFunction, live: FlWeight, t_soon: Timestamp) -> TTFPoint {
+        let evaled = plf.evaluate(t_soon);
+        if evaled.fuzzy_eq(live) {
+            return TTFPoint { at: t_soon, val: live };
+        }
+        let mut cursor = Cursor::starting_at_or_after(plf.ipps(), t_soon);
+        let pred_below = evaled.fuzzy_lt(live);
+        loop {
+            let live_at_cur = if pred_below {
+                t_soon + live - cursor.cur().at
+            } else {
+                live + cursor.cur().at - t_soon
+            };
+
+            if live_at_cur.fuzzy_eq(cursor.cur().val) {
+                return cursor.cur();
+            } else if (pred_below && live_at_cur.fuzzy_lt(cursor.cur().val)) || cursor.cur().val.fuzzy_lt(live_at_cur) {
+                return intersection_point(
+                    &cursor.prev(),
+                    &cursor.cur(),
+                    &TTFPoint { at: t_soon, val: live },
+                    &TTFPoint {
+                        at: cursor.cur().at,
+                        val: live_at_cur,
+                    },
+                );
+            } else {
+                cursor.advance();
+            }
+        }
+    }
+
+    /// Borrow PLF
+    pub fn travel_time_function(&self, edge_id: EdgeId) -> UpdatedPiecewiseLinearFunction {
+        let edge_idx = edge_id as usize;
+        UpdatedPiecewiseLinearFunction::new(
+            self.graph.travel_time_function(edge_id),
+            &self.live_ipps[self.first_live_ipp_of_arc[edge_idx] as usize..self.first_live_ipp_of_arc[edge_idx + 1] as usize],
+        )
+    }
+
+    pub fn t_live(&self) -> Timestamp {
+        self.live_ipps[0].at
     }
 }

@@ -208,7 +208,7 @@ impl<'a> From<ShortcutGraph<'a>> for CustomizedGraph<'a> {
                 first_source: degrees_to_first_out(outgoing_iter().map(|shortcut| shortcut.num_sources() as u32)).collect(),
                 sources: outgoing_iter()
                     .flat_map(|shortcut| {
-                        shortcut.sources_iter().map(|(t, &s)| {
+                        shortcut.sources_iter().map(|(t, s)| {
                             let s = if let ShortcutSource::Shortcut(down, up) = ShortcutSource::from(s) {
                                 ShortcutSource::Shortcut(
                                     mapping_incoming.get(down as usize).unwrap() as EdgeId,
@@ -233,7 +233,7 @@ impl<'a> From<ShortcutGraph<'a>> for CustomizedGraph<'a> {
                 first_source: degrees_to_first_out(incoming_iter().map(|shortcut| shortcut.num_sources() as u32)).collect(),
                 sources: incoming_iter()
                     .flat_map(|shortcut| {
-                        shortcut.sources_iter().map(|(t, &s)| {
+                        shortcut.sources_iter().map(|(t, s)| {
                             let s = if let ShortcutSource::Shortcut(down, up) = ShortcutSource::from(s) {
                                 ShortcutSource::Shortcut(
                                     mapping_incoming.get(down as usize).unwrap() as EdgeId,

@@ -12,7 +12,7 @@ use super::*;
 use crate::util::*;
 use std::cmp::{max, min, Ordering};
 
-mod cursor;
+pub mod cursor;
 use cursor::*;
 
 /// A struct borrowing a slice of points which implements all sorts of operations and algorithms for PLFs.
@@ -1443,5 +1443,59 @@ def plot_coords(coords, *args, **kwargs):
         writeln!(output, "plt.legend()")?;
         writeln!(output, "plt.show()")?;
         Ok(())
+    }
+}
+
+pub struct UpdatedPiecewiseLinearFunction<'a> {
+    plf: PiecewiseLinearFunction<'a>,
+    update: &'a [TTFPoint],
+}
+
+impl<'a> UpdatedPiecewiseLinearFunction<'a> {
+    pub fn new(plf: PiecewiseLinearFunction<'a>, update: &'a [TTFPoint]) -> Self {
+        Self { plf, update }
+    }
+
+    pub fn lower_bound(&self) -> FlWeight {
+        min(self.plf.lower_bound(), self.update.iter().map(|p| p.val).min().unwrap_or(FlWeight::INFINITY))
+    }
+
+    pub fn upper_bound(&self) -> FlWeight {
+        max(self.plf.upper_bound(), self.update.iter().map(|p| p.val).max().unwrap_or(FlWeight::zero()))
+    }
+
+    pub fn evaluate(&self, t: Timestamp) -> FlWeight {
+        debug_assert!(!t.fuzzy_lt(self.update[0].at));
+        if self.update.last().map(|p| t <= p.at).unwrap_or(false) {
+            self.eval(t)
+        } else {
+            self.plf.evaluate(t)
+        }
+    }
+
+    fn eval(&self, t: Timestamp) -> FlWeight {
+        let pos = self.update.binary_search_by(|p| {
+            if p.at.fuzzy_eq(t) {
+                Ordering::Equal
+            } else if p.at < t {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            }
+        });
+
+        match pos {
+            Ok(i) => unsafe { self.update.get_unchecked(i).val },
+            Err(i) => {
+                let prev = unsafe { self.update.get_unchecked(i - 1) };
+                let next = unsafe { self.update.get_unchecked(i) };
+
+                interpolate_linear(prev, next, t)
+            }
+        }
+    }
+
+    pub fn t_switch(&self) -> Option<Timestamp> {
+        self.update.last().map(|p| p.at)
     }
 }

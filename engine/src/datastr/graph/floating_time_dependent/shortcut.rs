@@ -333,7 +333,7 @@ impl Shortcut {
 
     pub fn reenable_required(&self, downward: &mut [Shortcut], upward: &mut [Shortcut]) {
         if self.required {
-            for (_, &source) in self.sources_iter() {
+            for (_, source) in self.sources_iter() {
                 if let ShortcutSource::Shortcut(down, up) = source.into() {
                     downward[down as usize].required = true;
                     upward[up as usize].required = true;
@@ -390,8 +390,8 @@ impl Shortcut {
         let debug_intersections = intersection_data.clone();
         let mut intersection_iter = intersection_data.into_iter().peekable();
 
-        let dummy = ShortcutSource::None.into();
-        let mut prev_source = &dummy;
+        let dummy: ShortcutSourceData = ShortcutSource::None.into();
+        let mut prev_source = dummy;
         let mut new_sources = Vec::new();
 
         // iterate over all old sources.
@@ -401,7 +401,7 @@ impl Shortcut {
         for (at, source) in sources.iter() {
             if intersection_iter.peek().is_none() || at < intersection_iter.peek().unwrap().0 {
                 if self_currently_better {
-                    new_sources.push((at, *source));
+                    new_sources.push((at, source));
                 }
             } else {
                 while let Some(&(next_change, better)) = intersection_iter.peek() {
@@ -413,7 +413,7 @@ impl Shortcut {
 
                     if self_currently_better {
                         if next_change < at {
-                            new_sources.push((next_change, *prev_source));
+                            new_sources.push((next_change, prev_source));
                         }
                     } else {
                         new_sources.push((next_change, other_data));
@@ -423,7 +423,7 @@ impl Shortcut {
                 }
 
                 if self_currently_better {
-                    new_sources.push((at, *source));
+                    new_sources.push((at, source));
                 }
             }
 
@@ -433,7 +433,7 @@ impl Shortcut {
         // intersections after the last old source
         for (at, is_self_better) in intersection_iter {
             if is_self_better {
-                new_sources.push((at, *prev_source));
+                new_sources.push((at, prev_source));
             } else {
                 new_sources.push((at, other_data));
             }
@@ -506,8 +506,12 @@ impl Shortcut {
     }
 
     /// Returns an iterator over all the sources combined with a Timestamp for the time from which the corresponding source becomes valid.
-    pub fn sources_iter(&self) -> impl Iterator<Item = (Timestamp, &ShortcutSourceData)> {
+    pub fn sources_iter<'s>(&'s self) -> impl Iterator<Item = (Timestamp, ShortcutSourceData)> + 's {
         self.sources.iter()
+    }
+
+    pub fn sources_for<'s>(&'s self, start: Timestamp, end: Timestamp) -> impl Iterator<Item = (Timestamp, ShortcutSourceData)> + 's {
+        self.sources.wrapping_iter_for(start, end)
     }
 
     pub fn is_constant(&self) -> bool {
@@ -547,12 +551,16 @@ enum Sources {
 }
 
 impl Sources {
-    fn iter(&self) -> SourcesIter {
+    fn wrapping_iter_for(&self, start: Timestamp, end: Timestamp) -> SourcesIter {
         match self {
             Sources::None => SourcesIter::None,
-            Sources::One(source) => SourcesIter::One(std::iter::once(&source)),
-            Sources::Multi(sources) => SourcesIter::Multi(sources.iter()),
+            Sources::One(source) => SourcesIter::One(std::iter::once(*source)),
+            Sources::Multi(sources) => SourcesIter::Multi(sources.wrapping_iter(start, end)),
         }
+    }
+
+    fn iter(&self) -> SourcesIter {
+        self.wrapping_iter_for(Timestamp::zero(), period())
     }
 
     fn len(&self) -> usize {
@@ -567,18 +575,18 @@ impl Sources {
 #[derive(Debug)]
 enum SourcesIter<'a> {
     None,
-    One(std::iter::Once<&'a ShortcutSourceData>),
-    Multi(std::slice::Iter<'a, (Timestamp, ShortcutSourceData)>),
+    One(std::iter::Once<ShortcutSourceData>),
+    Multi(WrappingSourceIter<'a>),
 }
 
 impl<'a> Iterator for SourcesIter<'a> {
-    type Item = (Timestamp, &'a ShortcutSourceData);
+    type Item = (Timestamp, ShortcutSourceData);
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             SourcesIter::None => None,
             SourcesIter::One(iter) => iter.next().map(|source| (Timestamp::zero(), source)),
-            SourcesIter::Multi(iter) => iter.next().map(|(t, source)| (*t, source)),
+            SourcesIter::Multi(iter) => iter.next(),
         }
     }
 }

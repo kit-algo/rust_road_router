@@ -16,19 +16,19 @@
 use super::*;
 
 mod piecewise_linear_function;
-pub use piecewise_linear_function::PiecewiseLinearFunction;
+pub use piecewise_linear_function::{PiecewiseLinearFunction, UpdatedPiecewiseLinearFunction};
 
 mod geometry;
 pub use self::geometry::TTFPoint;
 use self::geometry::*;
 
 mod graph;
-pub use self::graph::Graph as TDGraph;
+pub use self::graph::{Graph as TDGraph, LiveGraph};
 
 mod shortcut;
 pub use self::shortcut::*;
 
-mod shortcut_source;
+pub mod shortcut_source;
 use self::shortcut_source::*;
 
 pub mod shortcut_graph;

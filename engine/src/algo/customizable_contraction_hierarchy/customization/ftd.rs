@@ -4,7 +4,7 @@ use super::*;
 use crate::report::*;
 use floating_time_dependent::*;
 use std::{
-    cmp::{min, Ordering as Ord},
+    cmp::{max, min, Ordering as Ord},
     sync::atomic::Ordering,
 };
 
@@ -19,6 +19,11 @@ scoped_thread_local!(static PERFECT_WORKSPACE: RefCell<Vec<InRangeOption<EdgeId>
 
 /// Run CATCHUp customization
 pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> CustomizedGraph<'a> {
+    let (upward, downward) = customize_internal(cch, metric);
+    CustomizedGraph::new(metric, &cch.first_out, &cch.head, upward, downward)
+}
+
+pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec<Shortcut>, Vec<Shortcut>) {
     report!("algo", "Floating TDCCH Customization");
 
     let n = (cch.first_out.len() - 1) as NodeId;
@@ -392,7 +397,7 @@ pub fn customize<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> CustomizedGra
         });
     }
 
-    CustomizedGraph::new(metric, &cch.first_out, &cch.head, upward, downward)
+    (upward, downward)
 }
 
 // Encapsulates the creation of the CATCHUp main customization lambdas
@@ -535,5 +540,329 @@ impl<'s, 'c> ForEachIter<'s, 'c> for ParIter<'c> {
             .zip_eq(upward_active.par_iter_mut())
             .zip_eq(downward_active.par_iter_mut())
             .for_each(f);
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct LiveShortcut {
+    lower_bound: FlWeight,
+    upper_bound: FlWeight,
+    live_until: Option<Timestamp>,
+    unpack: Option<Timestamp>,
+}
+
+scoped_thread_local!(static UPWARD_WORKSPACE_LIVE: RefCell<Vec<LiveShortcut>>);
+scoped_thread_local!(static DOWNWARD_WORKSPACE_LIVE: RefCell<Vec<LiveShortcut>>);
+
+pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) -> CustomizedGraph<'a> {
+    report!("algo", "CATCHUp Live Customization");
+
+    let n = (cch.first_out.len() - 1) as NodeId;
+    let m = cch.head.len();
+    let t_live = metric.t_live();
+
+    let (upward_pred, downward_pred) = customize_internal(cch, &metric.graph);
+    let mut upward: Vec<_> = std::iter::repeat_with(|| LiveShortcut {
+        lower_bound: FlWeight::INFINITY,
+        upper_bound: FlWeight::INFINITY,
+        live_until: None,
+        unpack: None,
+    })
+    .take(m)
+    .collect();
+    let mut downward = upward.clone();
+
+    // start with respecting - set shortcuts to respective original edge.
+    let subctxt = push_context("weight_applying".to_string());
+    report_time("CATCHUp Live respecting", || {
+        upward
+            .par_iter_mut()
+            .zip(downward.par_iter_mut())
+            .zip(cch.cch_edge_to_orig_arc.par_iter())
+            .for_each(|((up_weight, down_weight), &(up_arc, down_arc))| {
+                if let Some(up_arc) = up_arc.value() {
+                    up_weight.lower_bound = metric.travel_time_function(up_arc).lower_bound();
+                    up_weight.upper_bound = metric.travel_time_function(up_arc).upper_bound();
+                    up_weight.live_until = metric.travel_time_function(up_arc).t_switch();
+                }
+                if let Some(down_arc) = down_arc.value() {
+                    down_weight.lower_bound = metric.travel_time_function(down_arc).lower_bound();
+                    down_weight.upper_bound = metric.travel_time_function(down_arc).upper_bound();
+                    down_weight.live_until = metric.travel_time_function(down_arc).t_switch();
+                }
+            });
+    });
+    drop(subctxt);
+
+    let customize = |nodes: Range<usize>, offset: usize, upward_weights: &mut [LiveShortcut], downward_weights: &mut [LiveShortcut]| {
+        UPWARD_WORKSPACE_LIVE.with(|node_outgoing_weights| {
+            let mut node_outgoing_weights = node_outgoing_weights.borrow_mut();
+
+            DOWNWARD_WORKSPACE_LIVE.with(|node_incoming_weights| {
+                let mut node_incoming_weights = node_incoming_weights.borrow_mut();
+
+                for current_node in nodes {
+                    let current_node = current_node as NodeId;
+                    let mut edges = cch.neighbor_edge_indices_usize(current_node);
+                    edges.start -= offset;
+                    edges.end -= offset;
+                    for ((node, down), up) in cch
+                        .neighbor_iter(current_node)
+                        .zip(&downward_weights[edges.clone()])
+                        .zip(&upward_weights[edges.clone()])
+                    {
+                        node_incoming_weights[node as usize] = *down;
+                        node_outgoing_weights[node as usize] = *up;
+                    }
+
+                    for Link {
+                        node: low_node,
+                        weight: first_edge_id,
+                    } in LinkIterable::<Link>::link_iter(&cch.inverted, current_node)
+                    {
+                        let first_down_weight: &LiveShortcut = &downward_weights[first_edge_id as usize - offset];
+                        let first_up_weight: &LiveShortcut = &upward_weights[first_edge_id as usize - offset];
+                        let mut low_up_edges = cch.neighbor_edge_indices_usize(low_node);
+                        low_up_edges.start -= offset;
+                        low_up_edges.end -= offset;
+                        for ((node, upward_weight), downward_weight) in cch
+                            .neighbor_iter(low_node)
+                            .rev()
+                            .zip(upward_weights[low_up_edges.clone()].iter().rev())
+                            .zip(downward_weights[low_up_edges].iter().rev())
+                        {
+                            if node <= current_node {
+                                break;
+                            }
+
+                            let relax = unsafe { node_outgoing_weights.get_unchecked_mut(node as usize) };
+                            relax.lower_bound = std::cmp::min(relax.lower_bound, upward_weight.lower_bound + first_down_weight.lower_bound);
+                            relax.upper_bound = std::cmp::min(relax.upper_bound, upward_weight.upper_bound + first_down_weight.upper_bound);
+                            let relax = unsafe { node_incoming_weights.get_unchecked_mut(node as usize) };
+                            relax.lower_bound = std::cmp::min(relax.lower_bound, downward_weight.lower_bound + first_up_weight.lower_bound);
+                            relax.upper_bound = std::cmp::min(relax.upper_bound, downward_weight.upper_bound + first_up_weight.upper_bound);
+                        }
+                    }
+
+                    for Link {
+                        node: low_node,
+                        weight: first_edge_id,
+                    } in LinkIterable::<Link>::link_iter(&cch.inverted, current_node)
+                    {
+                        let first_down_weight: &LiveShortcut = &downward_weights[first_edge_id as usize - offset];
+                        let first_up_weight: &LiveShortcut = &upward_weights[first_edge_id as usize - offset];
+                        let mut low_up_edges = cch.neighbor_edge_indices_usize(low_node);
+                        low_up_edges.start -= offset;
+                        low_up_edges.end -= offset;
+                        for ((node, upward_weight), downward_weight) in cch
+                            .neighbor_iter(low_node)
+                            .rev()
+                            .zip(upward_weights[low_up_edges.clone()].iter().rev())
+                            .zip(downward_weights[low_up_edges].iter().rev())
+                        {
+                            if node <= current_node {
+                                break;
+                            }
+
+                            let relax = unsafe { node_outgoing_weights.get_unchecked_mut(node as usize) };
+                            if upward_weight.lower_bound + first_down_weight.lower_bound <= relax.upper_bound {
+                                relax.live_until = std::cmp::max(
+                                    relax.live_until,
+                                    std::cmp::max(
+                                        first_down_weight.live_until,
+                                        upward_weight
+                                            .live_until
+                                            .map(|live_until| live_until - first_down_weight.lower_bound)
+                                            .filter(|&live_until| live_until >= t_live),
+                                    ),
+                                )
+                            }
+                            let relax = unsafe { node_incoming_weights.get_unchecked_mut(node as usize) };
+                            if downward_weight.lower_bound + first_up_weight.lower_bound <= relax.upper_bound {
+                                relax.live_until = std::cmp::max(
+                                    relax.live_until,
+                                    std::cmp::max(
+                                        downward_weight.live_until,
+                                        first_up_weight
+                                            .live_until
+                                            .map(|live_until| live_until - downward_weight.lower_bound)
+                                            .filter(|&live_until| live_until >= t_live),
+                                    ),
+                                )
+                            }
+                        }
+                    }
+
+                    for (((node, down), up), _edge_id) in cch
+                        .neighbor_iter(current_node)
+                        .zip(&mut downward_weights[edges.clone()])
+                        .zip(&mut upward_weights[edges.clone()])
+                        .zip(edges)
+                    {
+                        *down = node_incoming_weights[node as usize];
+                        *up = node_outgoing_weights[node as usize];
+                    }
+                }
+            });
+        });
+    };
+
+    let static_customization = SeperatorBasedParallelCustomization::new(cch, customize, customize);
+
+    let customize_perfect = |nodes: Range<usize>, upward: *mut LiveShortcut, downward: *mut LiveShortcut| {
+        PERFECT_WORKSPACE.with(|node_edge_ids| {
+            let mut node_edge_ids = node_edge_ids.borrow_mut();
+
+            // processing nodes in reverse order
+            for current_node in nodes.rev() {
+                let current_node = current_node as NodeId;
+                // store mapping of head node to corresponding outgoing edge id
+                for (node, edge_id) in cch.neighbor_iter(current_node).zip(cch.neighbor_edge_indices(current_node)) {
+                    node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
+                }
+
+                for (node, edge_id) in cch.neighbor_iter(current_node).zip(cch.neighbor_edge_indices(current_node)) {
+                    let shortcut_edge_ids = cch.neighbor_edge_indices(node);
+                    for (target, shortcut_edge_id) in cch.neighbor_iter(node).zip(shortcut_edge_ids) {
+                        if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
+                            // Here we have both an intermediate and an upper triangle
+                            // depending on which edge we take as the base
+                            // Relax all them.
+                            unsafe {
+                                (*upward.add(other_edge_id as usize)).upper_bound = min(
+                                    (*upward.add(other_edge_id as usize)).upper_bound,
+                                    (*upward.add(edge_id as usize)).upper_bound + (*upward.add(shortcut_edge_id as usize)).upper_bound,
+                                );
+                                (*upward.add(other_edge_id as usize)).lower_bound = min(
+                                    (*upward.add(other_edge_id as usize)).lower_bound,
+                                    (*upward.add(edge_id as usize)).lower_bound + (*upward.add(shortcut_edge_id as usize)).lower_bound,
+                                );
+
+                                (*upward.add(edge_id as usize)).upper_bound = min(
+                                    (*upward.add(edge_id as usize)).upper_bound,
+                                    (*upward.add(other_edge_id as usize)).upper_bound + (*downward.add(shortcut_edge_id as usize)).upper_bound,
+                                );
+                                (*upward.add(edge_id as usize)).lower_bound = min(
+                                    (*upward.add(edge_id as usize)).lower_bound,
+                                    (*upward.add(other_edge_id as usize)).lower_bound + (*downward.add(shortcut_edge_id as usize)).lower_bound,
+                                );
+
+                                (*downward.add(other_edge_id as usize)).upper_bound = min(
+                                    (*downward.add(other_edge_id as usize)).upper_bound,
+                                    (*downward.add(edge_id as usize)).upper_bound + (*downward.add(shortcut_edge_id as usize)).upper_bound,
+                                );
+                                (*downward.add(other_edge_id as usize)).lower_bound = min(
+                                    (*downward.add(other_edge_id as usize)).lower_bound,
+                                    (*downward.add(edge_id as usize)).lower_bound + (*downward.add(shortcut_edge_id as usize)).lower_bound,
+                                );
+
+                                (*downward.add(edge_id as usize)).upper_bound = min(
+                                    (*downward.add(edge_id as usize)).upper_bound,
+                                    (*downward.add(other_edge_id as usize)).upper_bound + (*upward.add(shortcut_edge_id as usize)).upper_bound,
+                                );
+                                (*downward.add(edge_id as usize)).lower_bound = min(
+                                    (*downward.add(edge_id as usize)).lower_bound,
+                                    (*downward.add(other_edge_id as usize)).lower_bound + (*upward.add(shortcut_edge_id as usize)).lower_bound,
+                                );
+                            }
+                        }
+                    }
+                }
+
+                for (node, edge_id) in cch.neighbor_iter(current_node).zip(cch.neighbor_edge_indices(current_node)) {
+                    let shortcut_edge_ids = cch.neighbor_edge_indices(node);
+                    for (target, shortcut_edge_id) in cch.neighbor_iter(node).zip(shortcut_edge_ids) {
+                        if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
+                            // Here we have both an intermediate and an upper triangle
+                            // depending on which edge we take as the base
+                            // Relax all them.
+                            unsafe {
+                                // TODO only if necessary by bounds
+                                //   maybe that happens by invalidating? - i dont think so
+
+                                (*downward.add(edge_id as usize)).unpack =
+                                    max((*downward.add(edge_id as usize)).unpack, (*upward.add(shortcut_edge_id as usize)).live_until);
+                                (*upward.add(other_edge_id as usize)).unpack = max(
+                                    (*upward.add(other_edge_id as usize)).unpack,
+                                    (*upward.add(shortcut_edge_id as usize))
+                                        .live_until
+                                        .map(|live_until| live_until + (*downward.add(edge_id as usize)).upper_bound),
+                                );
+
+                                (*downward.add(other_edge_id as usize)).unpack = max(
+                                    (*downward.add(other_edge_id as usize)).unpack,
+                                    (*downward.add(shortcut_edge_id as usize)).live_until,
+                                );
+                                (*upward.add(edge_id as usize)).unpack = max(
+                                    (*upward.add(edge_id as usize)).unpack,
+                                    (*downward.add(shortcut_edge_id as usize))
+                                        .live_until
+                                        .map(|live_until| live_until + (*downward.add(other_edge_id as usize)).upper_bound),
+                                );
+                            }
+                        }
+                    }
+                }
+
+                // reset the mapping
+                for node in cch.neighbor_iter(current_node) {
+                    node_edge_ids[node as usize] = InRangeOption::new(None);
+                }
+            }
+        });
+    };
+
+    let static_perfect_customization = SeperatorBasedPerfectParallelCustomization::new(cch, customize_perfect, customize_perfect);
+
+    unimplemented!()
+}
+
+#[derive(Debug)]
+struct LiveBumms<'a> {
+    live_up: &'a mut [LiveShortcut],
+    live_down: &'a mut [LiveShortcut],
+    up: &'a [Shortcut],
+    down: &'a [Shortcut],
+}
+
+impl<'a> LiveBumms<'a> {
+    fn mark_below(&mut self, t_live: Timestamp) {
+        use floating_time_dependent::shortcut_source::ShortcutSource;
+        let m = self.live_up.len();
+        for edge_idx in (0..m).rev() {
+            if let Some(unpack) = self.live_up[edge_idx].unpack {
+                let start = self.live_up[edge_idx].live_until.unwrap_or(t_live);
+                if start.fuzzy_lt(unpack) {
+                    for (_, source) in self.up[edge_idx].sources_for(start, unpack) {
+                        if let ShortcutSource::Shortcut(down, up) = source.into() {
+                            let down = down as usize;
+                            let up = up as usize;
+                            self.live_down[down].unpack = max(self.live_down[down].unpack, self.live_up[edge_idx].unpack);
+                            self.live_up[up].unpack = max(
+                                self.live_up[up].unpack,
+                                self.live_up[edge_idx].unpack.map(|unpack| unpack + self.live_down[down].upper_bound),
+                            );
+                        }
+                    }
+                }
+            }
+
+            if let Some(unpack) = self.live_down[edge_idx].unpack {
+                let start = self.live_down[edge_idx].live_until.unwrap_or(t_live);
+                if start.fuzzy_lt(unpack) {
+                    for (_, source) in self.down[edge_idx].sources_for(start, unpack) {
+                        if let ShortcutSource::Shortcut(down, up) = source.into() {
+                            let down = down as usize;
+                            let up = up as usize;
+                            self.live_down[down].unpack = max(self.live_down[down].unpack, self.live_down[edge_idx].unpack);
+                            self.live_up[up].unpack = max(
+                                self.live_up[up].unpack,
+                                self.live_down[edge_idx].unpack.map(|unpack| unpack + self.live_down[down].upper_bound),
+                            );
+                        }
+                    }
+                }
+            }
+        }
     }
 }

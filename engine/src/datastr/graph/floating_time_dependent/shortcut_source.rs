@@ -348,6 +348,8 @@ pub trait Sources {
     ) -> (FlWeight, FlWeight);
 
     fn edge_source_at(&self, t: Timestamp) -> Option<&ShortcutSourceData>;
+
+    fn wrapping_iter(&self, start: Timestamp, end: Timestamp) -> WrappingSourceIter;
 }
 
 use std::cmp::{max, min};
@@ -425,6 +427,13 @@ impl Sources for [(Timestamp, ShortcutSourceData)] {
         }
         .map(|(_, s)| s)
     }
+
+    fn wrapping_iter(&self, start: Timestamp, end: Timestamp) -> WrappingSourceIter {
+        WrappingSourceIter {
+            cursor: SourceCursor::valid_at(&self, start),
+            end,
+        }
+    }
 }
 
 // Helper struct to iterate over sources.
@@ -484,6 +493,26 @@ impl<'a> SourceCursor<'a> {
         if self.current_index == self.sources.len() {
             self.offset = self.offset + FlWeight::from(period());
             self.current_index = 0;
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct WrappingSourceIter<'a> {
+    pub cursor: SourceCursor<'a>,
+    pub end: Timestamp,
+}
+
+impl<'a> Iterator for WrappingSourceIter<'a> {
+    type Item = (Timestamp, ShortcutSourceData);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.cursor.cur().0.fuzzy_lt(self.end) {
+            let res = Some(self.cursor.cur());
+            self.cursor.advance();
+            res
+        } else {
+            None
         }
     }
 }
