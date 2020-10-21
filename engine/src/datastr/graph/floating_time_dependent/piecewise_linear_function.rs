@@ -30,7 +30,8 @@ impl<'a> PiecewiseLinearFunction<'a> {
         debug_assert!(ipps.len() == 1 || ipps.last().unwrap().at == period(), "{:?}", ipps);
 
         for points in ipps.windows(2) {
-            debug_assert!(points[0].at < points[1].at, "{:?}", ipps);
+            debug_assert!(points[0].at.fuzzy_lt(points[1].at), "{:?}", ipps);
+            debug_assert!(points[1].val - points[0].val >= points[0].at - points[1].at);
         }
 
         PiecewiseLinearFunction { ipps }
@@ -207,7 +208,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
             debug_assert!(
                 switchover_val.fuzzy_eq(second_switchover_val),
                 "{:?}",
-                dbg_each!(first.last(), first_last, second_switchover_val, &second[..=1], switchover)
+                dbg_each!(first.last(), first_last, switchover_val, second_switchover_val, &second[..=1], switchover)
             );
         }
 
@@ -854,7 +855,8 @@ impl<'a> PiecewiseLinearFunction<'a> {
         buffer.first_mut().unwrap().val = wrap_min;
         buffer.last_mut().unwrap().val = wrap_min;
 
-        let result = Box::<[TTFPoint]>::from(&buffer[..]);
+        let mut result = Box::<[TTFPoint]>::from(&buffer[..]);
+        Self::fifoize_down(&mut result);
         buffer.clear();
         result
     }
@@ -870,7 +872,8 @@ impl<'a> PiecewiseLinearFunction<'a> {
         buffer.first_mut().unwrap().val = wrap_max;
         buffer.last_mut().unwrap().val = wrap_max;
 
-        let result = Box::<[TTFPoint]>::from(&buffer[..]);
+        let mut result = Box::<[TTFPoint]>::from(&buffer[..]);
+        Self::fifoize_up(&mut result);
         buffer.clear();
         result
     }
@@ -889,6 +892,9 @@ impl<'a> PiecewiseLinearFunction<'a> {
         result_lower.last_mut().unwrap().val = wrap_min;
         result_upper.first_mut().unwrap().val = wrap_max;
         result_upper.last_mut().unwrap().val = wrap_max;
+
+        Self::fifoize_down(&mut result_lower);
+        Self::fifoize_up(&mut result_upper);
 
         (result_lower.into(), result_upper.into())
     }
@@ -1082,16 +1088,11 @@ impl<'a> PiecewiseLinearFunction<'a> {
     pub fn lower_bound_ttf(&self) -> Box<[TTFPoint]> {
         let mut lower = Imai::new(self.ipps, 0.0, APPROX.into(), true, true).compute();
 
-        for i in (1..lower.len()).rev() {
-            if lower[i - 1].val - lower[i].val > lower[i].at - lower[i - 1].at {
-                lower[i - 1].val = lower[i].val + (lower[i].at - lower[i - 1].at)
-            }
-        }
-
-        // TODO this may break FIFO again
         let wrap = min(lower.first().unwrap().val, lower.last().unwrap().val);
         lower.first_mut().unwrap().val = wrap;
         lower.last_mut().unwrap().val = wrap;
+
+        Self::fifoize_down(&mut lower);
 
         lower.into_boxed_slice()
     }
@@ -1100,18 +1101,31 @@ impl<'a> PiecewiseLinearFunction<'a> {
     pub fn upper_bound_ttf(&self) -> Box<[TTFPoint]> {
         let mut upper = Imai::new(self.ipps, APPROX.into(), 0.0, true, true).compute();
 
-        for i in 1..upper.len() {
-            if upper[i - 1].val - upper[i].val > upper[i].at - upper[i - 1].at {
-                upper[i].val = upper[i - 1].val - (upper[i].at - upper[i - 1].at)
-            }
-        }
-
-        // TODO this may break FIFO again
         let wrap = max(upper.first().unwrap().val, upper.last().unwrap().val);
         upper.first_mut().unwrap().val = wrap;
         upper.last_mut().unwrap().val = wrap;
 
+        Self::fifoize_up(&mut upper);
+
         upper.into_boxed_slice()
+    }
+
+    fn fifoize_down(plf: &mut [TTFPoint]) {
+        for _ in 0..2 {
+            for i in (0..plf.len() - 1).rev() {
+                plf[i].val = min(plf[i].val, plf[i + 1].val + plf[i + 1].at - plf[i].at);
+            }
+            plf.last_mut().unwrap().val = plf[0].val;
+        }
+    }
+
+    fn fifoize_up(plf: &mut [TTFPoint]) {
+        for _ in 0..2 {
+            for i in 1..plf.len() {
+                plf[i].val = max(plf[i].val, plf[i - 1].val + plf[i - 1].at - plf[i].at);
+            }
+            plf[0].val = plf.last().unwrap().val;
+        }
     }
 }
 
