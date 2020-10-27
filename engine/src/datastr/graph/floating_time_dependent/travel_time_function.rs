@@ -492,6 +492,7 @@ impl<'a> TTF<'a> {
         end_of_segment_iter.next();
 
         // go over all segments, either copy the better one, or merge bounds (this time lower with lower and upper with upper) and append these
+        // debug::debug(self, other, &bound_merge_state);
         for (&(start_of_segment, state), end_of_segment) in bound_merge_state.iter().zip(end_of_segment_iter) {
             match state {
                 BoundMergingState::First => {
@@ -568,5 +569,101 @@ impl<'a> TTF<'a> {
             Exact(plf) => (*plf, *plf),
             Approx(lower_plf, upper_plf) => (*lower_plf, *upper_plf),
         }
+    }
+}
+
+mod debug {
+    use super::*;
+
+    use std::env;
+    use std::fs::File;
+    use std::io::{Error, Write};
+    use std::process::{Command, Stdio};
+
+    pub(super) fn debug(f: &TTF, g: &TTF, state: &[(Timestamp, BoundMergingState)]) {
+        if let Ok(mut file) = File::create("debug.py") {
+            write_python(&mut file, f, g, state).unwrap_or_else(|_| eprintln!("failed to write debug script to file"));
+        }
+
+        if env::var("TDCCH_INTERACTIVE_DEBUG").is_ok() {
+            if let Ok(mut child) = Command::new("python3").stdin(Stdio::piped()).spawn() {
+                if let Some(mut stdin) = child.stdin.as_mut() {
+                    write_python(&mut stdin, f, g, state).unwrap_or_else(|_| eprintln!("failed to execute debug script"));
+                }
+            }
+        }
+    }
+
+    fn write_python(output: &mut dyn Write, f: &TTF, g: &TTF, state: &[(Timestamp, BoundMergingState)]) -> Result<(), Error> {
+        writeln!(
+            output,
+            "
+import numpy as np
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import seaborn
+
+def plot_coords(coords, *args, **kwargs):
+    x, y = zip(*coords)
+    plt.plot(list(x), list(y), *args, **kwargs)
+
+"
+        )?;
+        write!(output, "plot_coords([")?;
+        for p in f.bound_plfs().0.ipps() {
+            write!(output, "({}, {}), ", f64::from(p.at), f64::from(p.val))?;
+        }
+        writeln!(output, "], 'r+-', label='f', linewidth=1, markersize=5)")?;
+
+        write!(output, "plot_coords([")?;
+        for p in f.bound_plfs().1.ipps() {
+            write!(output, "({}, {}), ", f64::from(p.at), f64::from(p.val))?;
+        }
+        writeln!(output, "], 'r+-', label='f', linewidth=1, markersize=5)")?;
+
+        write!(output, "plot_coords([")?;
+        for p in g.bound_plfs().0.ipps() {
+            write!(output, "({}, {}), ", f64::from(p.at), f64::from(p.val))?;
+        }
+        writeln!(output, "], 'gx-', label='g', linewidth=1, markersize=5)")?;
+
+        write!(output, "plot_coords([")?;
+        for p in g.bound_plfs().1.ipps() {
+            write!(output, "({}, {}), ", f64::from(p.at), f64::from(p.val))?;
+        }
+        writeln!(output, "], 'gx-', label='g', linewidth=1, markersize=5)")?;
+
+        // if !merged.is_empty() {
+        //     write!(output, "plot_coords([")?;
+        //     for p in merged {
+        //         write!(output, "({}, {}), ", f64::from(p.at), f64::from(p.val))?;
+        //     }
+        //     writeln!(output, "], 'bo-', label='merged', linewidth=1, markersize=1)")?;
+        // }
+
+        let max_val = f.bound_plfs().1.ipps().iter().map(|p| p.val).max().unwrap();
+        let max_val = max(g.bound_plfs().1.ipps().iter().map(|p| p.val).max().unwrap(), max_val);
+
+        let min_val = f.bound_plfs().0.ipps().iter().map(|p| p.val).min().unwrap();
+        let min_val = std::cmp::min(g.bound_plfs().0.ipps().iter().map(|p| p.val).min().unwrap(), min_val);
+
+        for &(t, state) in state {
+            writeln!(
+                output,
+                "plt.vlines({}, {}, {}, '{}', linewidth=1)",
+                f64::from(t),
+                f64::from(min_val),
+                f64::from(max_val),
+                match state {
+                    BoundMergingState::First => 'r',
+                    BoundMergingState::Second => 'g',
+                    BoundMergingState::Merge => 'b',
+                }
+            )?;
+        }
+
+        writeln!(output, "plt.legend()")?;
+        writeln!(output, "plt.show()")?;
+        Ok(())
     }
 }

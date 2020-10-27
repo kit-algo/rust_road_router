@@ -31,7 +31,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
         for points in ipps.windows(2) {
             debug_assert!(points[0].at.fuzzy_lt(points[1].at), "{:?}", ipps);
-            debug_assert!(points[1].val - points[0].val >= points[0].at - points[1].at);
+            debug_assert!(!(points[1].val - points[0].val).fuzzy_lt(points[0].at - points[1].at), "{:#?}", points);
         }
 
         PiecewiseLinearFunction { ipps }
@@ -263,10 +263,10 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 val: min(first_switchover_val, second_switchover_val),
             });
         }
-        let debug_start = first.len() - 2;
+        let debug_start = first.len().saturating_sub(2);
         first.extend(second[1..].iter().cloned());
 
-        for points in first[debug_start..debug_start + 3].windows(2) {
+        for points in first[debug_start..].windows(2).take(2) {
             debug_assert!(points[0].at.fuzzy_lt(points[1].at));
             // debug_assert!(
             //     !(points[1].at - points[0].at).fuzzy_lt(points[0].val - points[1].val),
@@ -316,10 +316,10 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 val: max(first_switchover_val, second_switchover_val),
             });
         }
-        let debug_start = first.len() - 2;
+        let debug_start = first.len().saturating_sub(2);
         first.extend(second[1..].iter().cloned());
 
-        for points in first[debug_start..debug_start + 3].windows(2) {
+        for points in first[debug_start..].windows(2).take(2) {
             debug_assert!(points[0].at.fuzzy_lt(points[1].at));
             // debug_assert!(
             //     !(points[1].at - points[0].at).fuzzy_lt(points[0].val - points[1].val),
@@ -564,6 +564,8 @@ impl<'a> PiecewiseLinearFunction<'a> {
         result.reserve(2 * self.ipps.len() + 2 * other.ipps.len() + 2);
         let mut better = Vec::new();
 
+        debug_assert!(!self.ipps.is_empty());
+        debug_assert!(!other.ipps.is_empty());
         let mut f = C::new(&self.ipps);
         let mut g = C::new(&other.ipps);
 
@@ -647,7 +649,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                         better.last().unwrap().1,
                         counter_clockwise(&g.prev(), &f.cur(), &g.cur()),
                         "{:?} {:?}",
-                        debug_merge(&f, &g, &result, &better),
+                        debug_merge(&self.ipps, f.cur(), &other.ipps, g.cur(), &result, &better),
                         dbg_each!(start, end, intersection)
                     );
                     better.push((intersection.at, counter_clockwise(&g.prev(), &f.cur(), &g.cur())));
@@ -667,19 +669,31 @@ impl<'a> PiecewiseLinearFunction<'a> {
                         debug_assert!(
                             !counter_clockwise(&g.prev(), &f.prev(), &f.cur()),
                             "{:?}",
-                            debug_merge(&f, &g, &result, &better)
+                            debug_merge(&self.ipps, f.cur(), &other.ipps, g.cur(), &result, &better)
                         );
                         better.push((f.cur().at, true));
                     }
 
                     if better.last().unwrap().1 && clockwise(&f.cur(), &f.next(), &g.next()) {
-                        debug_assert!(!clockwise(&g.prev(), &f.prev(), &f.cur()), "{:?}", debug_merge(&f, &g, &result, &better));
+                        debug_assert!(
+                            !clockwise(&g.prev(), &f.prev(), &f.cur()),
+                            "{:?}",
+                            debug_merge(&self.ipps, f.cur(), &other.ipps, g.cur(), &result, &better)
+                        );
                         better.push((f.cur().at, false));
                     }
                 } else if f.cur().val < g.cur().val {
                     Self::append_point(result, f.cur());
-                    debug_assert!(f.cur().val.fuzzy_lt(g.cur().val), "{:?}", debug_merge(&f, &g, &result, &better));
-                    debug_assert!(better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
+                    debug_assert!(
+                        f.cur().val.fuzzy_lt(g.cur().val),
+                        "{:?}",
+                        debug_merge(&self.ipps, f.cur(), &other.ipps, g.cur(), &result, &better)
+                    );
+                    debug_assert!(
+                        better.last().unwrap().1,
+                        "{:?}",
+                        debug_merge(&self.ipps, f.cur(), &other.ipps, g.cur(), &result, &better)
+                    );
 
                     if !better.last().unwrap().1 {
                         eprintln!("Missed Intersection!");
@@ -688,8 +702,16 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     }
                 } else {
                     Self::append_point(result, g.cur());
-                    debug_assert!(g.cur().val < f.cur().val, "{:?}", debug_merge(&f, &g, &result, &better));
-                    debug_assert!(!better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
+                    debug_assert!(
+                        g.cur().val < f.cur().val,
+                        "{:?}",
+                        debug_merge(&self.ipps, f.cur(), &other.ipps, g.cur(), &result, &better)
+                    );
+                    debug_assert!(
+                        !better.last().unwrap().1,
+                        "{:?}",
+                        debug_merge(&self.ipps, f.cur(), &other.ipps, g.cur(), &result, &better)
+                    );
 
                     if better.last().unwrap().1 {
                         eprintln!("Missed Intersection!");
@@ -705,7 +727,11 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
                 if counter_clockwise(&g.prev(), &f.cur(), &g.cur()) {
                     Self::append_point(result, f.cur());
-                    debug_assert!(better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
+                    debug_assert!(
+                        better.last().unwrap().1,
+                        "{:?}",
+                        debug_merge(&self.ipps, f.cur(), &other.ipps, g.cur(), &result, &better)
+                    );
 
                     if !better.last().unwrap().1 {
                         eprintln!("Missed Intersection!");
@@ -719,7 +745,11 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
                     if counter_clockwise(&g.prev(), &f.prev(), &f.cur()) || counter_clockwise(&f.cur(), &f.next(), &g.cur()) {
                         Self::append_point(result, f.cur());
-                        debug_assert!(better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
+                        debug_assert!(
+                            better.last().unwrap().1,
+                            "{:?}",
+                            debug_merge(&self.ipps, f.cur(), &other.ipps, g.cur(), &result, &better)
+                        );
                     }
 
                     if better.last().unwrap().1 && clockwise(&f.cur(), &f.next(), &g.cur()) {
@@ -733,7 +763,11 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
                 if counter_clockwise(&f.prev(), &g.cur(), &f.cur()) {
                     Self::append_point(result, g.cur());
-                    debug_assert!(!better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
+                    debug_assert!(
+                        !better.last().unwrap().1,
+                        "{:?}",
+                        debug_merge(&self.ipps, f.cur(), &other.ipps, g.cur(), &result, &better)
+                    );
 
                     if better.last().unwrap().1 {
                         eprintln!("Missed Intersection!");
@@ -747,7 +781,11 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
                     if counter_clockwise(&g.prev(), &g.cur(), &f.prev()) || counter_clockwise(&g.cur(), &g.next(), &f.cur()) {
                         Self::append_point(result, g.cur());
-                        debug_assert!(!better.last().unwrap().1, "{:?}", debug_merge(&f, &g, &result, &better));
+                        debug_assert!(
+                            !better.last().unwrap().1,
+                            "{:?}",
+                            debug_merge(&self.ipps, f.cur(), &other.ipps, g.cur(), &result, &better)
+                        );
                     }
 
                     if !better.last().unwrap().1 && clockwise(&g.cur(), &g.next(), &f.cur()) {
@@ -759,8 +797,16 @@ impl<'a> PiecewiseLinearFunction<'a> {
             }
         }
 
-        debug_assert!(!f.cur().at.fuzzy_lt(end), "{:?}", debug_merge(&f, &g, &result, &better));
-        debug_assert!(!g.cur().at.fuzzy_lt(end), "{:?}", debug_merge(&f, &g, &result, &better));
+        debug_assert!(
+            !f.cur().at.fuzzy_lt(end),
+            "{:?}",
+            debug_merge(&self.ipps, f.cur(), &other.ipps, g.cur(), &result, &better)
+        );
+        debug_assert!(
+            !g.cur().at.fuzzy_lt(end),
+            "{:?}",
+            debug_merge(&self.ipps, f.cur(), &other.ipps, g.cur(), &result, &better)
+        );
 
         // intersection of final segments?
         if intersect(&f.prev(), &f.cur(), &g.prev(), &g.cur()) {
@@ -770,7 +816,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     better.last().unwrap().1,
                     counter_clockwise(&g.prev(), &f.cur(), &g.cur()),
                     "{:?}",
-                    debug_merge(&f, &g, &result, &better)
+                    debug_merge(&self.ipps, f.cur(), &other.ipps, g.cur(), &result, &better)
                 );
                 better.push((intersection.at, counter_clockwise(&g.prev(), &f.cur(), &g.cur())));
                 Self::append_point(result, intersection);
@@ -789,8 +835,17 @@ impl<'a> PiecewiseLinearFunction<'a> {
 
         debug_assert!(result.len() <= 2 * self.ipps.len() + 2 * other.ipps.len() + 2);
         for better_fns in better.windows(2) {
-            debug_assert!(better_fns[0].0 < better_fns[1].0, "{:?}", debug_merge(&f, &g, &result, &better));
-            debug_assert_ne!(better_fns[0].1, better_fns[1].1, "{:?}", debug_merge(&f, &g, &result, &better));
+            debug_assert!(
+                better_fns[0].0 < better_fns[1].0,
+                "{:?}",
+                debug_merge(&self.ipps, f.cur(), &other.ipps, g.cur(), &result, &better)
+            );
+            debug_assert_ne!(
+                better_fns[0].1,
+                better_fns[1].1,
+                "{:?}",
+                debug_merge(&self.ipps, f.cur(), &other.ipps, g.cur(), &result, &better)
+            );
         }
         for &(at, _) in &better {
             debug_assert!(!at.fuzzy_lt(start));
@@ -801,7 +856,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 better.first().map(|(_, better_fn)| better_fn),
                 better.last().map(|(_, better_fn)| better_fn),
                 "{:?}",
-                debug_merge(&f, &g, &result, &better)
+                debug_merge(&self.ipps, f.cur(), &other.ipps, g.cur(), &result, &better)
             );
         }
         debug_assert!(!start.fuzzy_lt(result[0].at));
@@ -1110,6 +1165,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         upper.into_boxed_slice()
     }
 
+    // TODO safe second round if possible
     fn fifoize_down(plf: &mut [TTFPoint]) {
         for _ in 0..2 {
             for i in (0..plf.len() - 1).rev() {
@@ -1119,6 +1175,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
+    // TODO safe second round if possible
     fn fifoize_up(plf: &mut [TTFPoint]) {
         for _ in 0..2 {
             for i in 1..plf.len() {
@@ -1375,21 +1432,29 @@ mod debug {
     use std::io::{Error, Write};
     use std::process::{Command, Stdio};
 
-    pub(super) fn debug_merge<'a, C: MergeCursor<'a>>(f: &C, g: &C, merged: &[TTFPoint], better: &[(Timestamp, bool)]) {
-        if let Ok(mut file) = File::create(format!("debug-{}-{}.py", f64::from(f.cur().at), f64::from(g.cur().at))) {
-            write_python(&mut file, f, g, merged, better).unwrap_or_else(|_| eprintln!("failed to write debug script to file"));
+    pub(super) fn debug_merge(f: &[TTFPoint], f_cur: TTFPoint, g: &[TTFPoint], g_cur: TTFPoint, merged: &[TTFPoint], better: &[(Timestamp, bool)]) {
+        if let Ok(mut file) = File::create(format!("debug-{}-{}.py", f64::from(f_cur.at), f64::from(g_cur.at))) {
+            write_python(&mut file, f, f_cur, g, g_cur, merged, better).unwrap_or_else(|_| eprintln!("failed to write debug script to file"));
         }
 
         if env::var("TDCCH_INTERACTIVE_DEBUG").is_ok() {
             if let Ok(mut child) = Command::new("python3").stdin(Stdio::piped()).spawn() {
                 if let Some(mut stdin) = child.stdin.as_mut() {
-                    write_python(&mut stdin, f, g, merged, better).unwrap_or_else(|_| eprintln!("failed to execute debug script"));
+                    write_python(&mut stdin, f, f_cur, g, g_cur, merged, better).unwrap_or_else(|_| eprintln!("failed to execute debug script"));
                 }
             }
         }
     }
 
-    fn write_python<'a, C: MergeCursor<'a>, O: Write>(output: &mut O, f: &C, g: &C, merged: &[TTFPoint], better: &[(Timestamp, bool)]) -> Result<(), Error> {
+    fn write_python(
+        output: &mut dyn Write,
+        f: &[TTFPoint],
+        f_cur: TTFPoint,
+        g: &[TTFPoint],
+        g_cur: TTFPoint,
+        merged: &[TTFPoint],
+        better: &[(Timestamp, bool)],
+    ) -> Result<(), Error> {
         writeln!(
             output,
             "
@@ -1405,13 +1470,13 @@ def plot_coords(coords, *args, **kwargs):
 "
         )?;
         write!(output, "plot_coords([")?;
-        for p in f.ipps() {
+        for p in f {
             write!(output, "({}, {}), ", f64::from(p.at), f64::from(p.val))?;
         }
         writeln!(output, "], 'r+-', label='f', linewidth=1, markersize=5)")?;
 
         write!(output, "plot_coords([")?;
-        for p in g.ipps() {
+        for p in g {
             write!(output, "({}, {}), ", f64::from(p.at), f64::from(p.val))?;
         }
         writeln!(output, "], 'gx-', label='g', linewidth=1, markersize=5)")?;
@@ -1419,14 +1484,14 @@ def plot_coords(coords, *args, **kwargs):
         writeln!(
             output,
             "plot_coords([({}, {})], 'rs', markersize=10)",
-            f64::from(f.cur().at),
-            f64::from(f.cur().val)
+            f64::from(f_cur.at),
+            f64::from(f_cur.val)
         )?;
         writeln!(
             output,
             "plot_coords([({}, {})], 'gs', markersize=10)",
-            f64::from(g.cur().at),
-            f64::from(g.cur().val)
+            f64::from(g_cur.at),
+            f64::from(g_cur.val)
         )?;
 
         if !merged.is_empty() {
@@ -1437,11 +1502,11 @@ def plot_coords(coords, *args, **kwargs):
             writeln!(output, "], 'bo-', label='merged', linewidth=1, markersize=1)")?;
         }
 
-        let max_val = f.ipps().iter().map(|p| p.val).max().unwrap();
-        let max_val = max(g.ipps().iter().map(|p| p.val).max().unwrap(), max_val);
+        let max_val = f.iter().map(|p| p.val).max().unwrap();
+        let max_val = max(g.iter().map(|p| p.val).max().unwrap(), max_val);
 
-        let min_val = f.ipps().iter().map(|p| p.val).min().unwrap();
-        let min_val = min(g.ipps().iter().map(|p| p.val).min().unwrap(), min_val);
+        let min_val = f.iter().map(|p| p.val).min().unwrap();
+        let min_val = min(g.iter().map(|p| p.val).min().unwrap(), min_val);
 
         for &(t, f_better) in better {
             writeln!(
