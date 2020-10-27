@@ -91,6 +91,24 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 valid: (dts[0]..dts[1]).intersection(&range),
             })
     }
+
+    pub fn min_slope(&self) -> f64 {
+        self.departure_time
+            .windows(2)
+            .zip(self.travel_time.windows(2))
+            .map(|(dts, tts)| (tts[1] as i32 - tts[0] as i32) as f64 / (dts[1] - dts[0]) as f64)
+            .min_by(|x, y| x.partial_cmp(y).unwrap())
+            .unwrap_or(0.0)
+    }
+
+    pub fn max_slope(&self) -> f64 {
+        self.departure_time
+            .windows(2)
+            .zip(self.travel_time.windows(2))
+            .map(|(dts, tts)| (tts[1] as i32 - tts[0] as i32) as f64 / (dts[1] - dts[0]) as f64)
+            .max_by(|x, y| x.partial_cmp(y).unwrap())
+            .unwrap_or(0.0)
+    }
 }
 
 #[cfg(test)]
