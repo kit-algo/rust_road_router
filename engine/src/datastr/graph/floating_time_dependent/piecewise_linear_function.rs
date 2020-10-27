@@ -584,7 +584,9 @@ impl<'a> PiecewiseLinearFunction<'a> {
         };
 
         let mut needs_merging = false;
-        if self_start_val.fuzzy_eq(other_start_val) {
+        let intersect_fuzzy_on_start =
+            intersect(&f.cur(), &f.next(), &g.cur(), &g.next()) && intersection_point(&f.cur(), &f.next(), &g.cur(), &g.next()).at.fuzzy_eq(start);
+        if self_start_val.fuzzy_eq(other_start_val) || intersect_fuzzy_on_start {
             better.push((start, !clockwise(&f.cur(), &f.next(), &g.next())));
 
             if intersect(&f.cur(), &f.next(), &g.cur(), &g.next()) {
@@ -629,14 +631,30 @@ impl<'a> PiecewiseLinearFunction<'a> {
             }
         }
 
-        if !needs_merging {
+        if !needs_merging && !intersect_fuzzy_on_start {
             return ((Box::from(if better.last().unwrap().1 { self.ipps } else { other.ipps })), better);
         }
 
         let mut f = C::new(&self.ipps);
         let mut g = C::new(&other.ipps);
 
-        Self::append_point(result, if better.last().unwrap().1 { f.cur() } else { g.cur() });
+        if intersect_fuzzy_on_start {
+            Self::append_point(
+                result,
+                TTFPoint {
+                    at: start,
+                    val: min(self_start_val, other_start_val),
+                },
+            );
+            let p_after_start = |f: &C| TTFPoint {
+                at: start + FlWeight::new(EPSILON * 1.1),
+                val: interpolate_linear(&f.cur(), &f.next(), start + FlWeight::new(EPSILON * 1.1)),
+            };
+            Self::append_point(result, p_after_start(if better.last().unwrap().1 { &f } else { &g }));
+        } else {
+            Self::append_point(result, if better.last().unwrap().1 { f.cur() } else { g.cur() });
+        }
+
         f.advance();
         g.advance();
 
@@ -1418,6 +1436,39 @@ mod tests {
                     }
                 ]
             );
+        });
+    }
+
+    #[test]
+    fn test_partial_merging_with_intersection_fuzzy_on_start() {
+        run_test_with_periodicity(Timestamp::new(86400.0), || {
+            let first = [
+                TTFPoint {
+                    at: Timestamp::new(52074.519796162815),
+                    val: FlWeight::new(135.4043214842386),
+                },
+                TTFPoint {
+                    at: Timestamp::new(52079.684629900694),
+                    val: FlWeight::new(168.51889019081864),
+                },
+                TTFPoint {
+                    at: Timestamp::new(52120.84202396357),
+                    val: FlWeight::new(165.15049612794246),
+                },
+            ];
+            let second = [
+                TTFPoint {
+                    at: Timestamp::new(52078.159999999996),
+                    val: FlWeight::new(169.1520000000022),
+                },
+                TTFPoint {
+                    at: Timestamp::new(52082.479999999996),
+                    val: FlWeight::new(166.49300000000252),
+                },
+            ];
+            let (result, _) =
+                PiecewiseLinearFunction::merge_partials(&first, &second, Timestamp::new(52079.64118104493), Timestamp::new(52082.0), &mut Vec::new());
+            assert_eq!(*result.last().unwrap(), second[1]);
         });
     }
 }
