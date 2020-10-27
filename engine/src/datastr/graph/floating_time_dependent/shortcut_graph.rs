@@ -23,6 +23,7 @@ pub trait ShortcutGraphTrt {
     fn exact_ttf_for(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage);
     fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, switchpoints: &mut Vec<Timestamp>) -> (FlWeight, FlWeight);
     fn unpack_at(&self, shortcut_id: ShortcutId, t: Timestamp, result: &mut Vec<(EdgeId, Timestamp)>);
+    fn evaluate(&self, shortcut_id: ShortcutId, t: Timestamp) -> FlWeight;
 }
 
 /// Container for partial CCH graphs during CATCHUp customization.
@@ -88,6 +89,9 @@ impl<'a> ShortcutGraphTrt for PartialShortcutGraph<'a> {
     }
     fn unpack_at(&self, shortcut_id: ShortcutId, t: Timestamp, result: &mut Vec<(EdgeId, Timestamp)>) {
         self.get(shortcut_id).unpack_at(t, self, result);
+    }
+    fn evaluate(&self, shortcut_id: ShortcutId, t: Timestamp) -> FlWeight {
+        self.get(shortcut_id).evaluate(t, self)
     }
 }
 
@@ -441,7 +445,7 @@ impl CustomizedSingleDirGraph {
             debug_assert_eq!(
                 self.bounds[edge_idx].0,
                 self.edge_source_at(edge_idx, t)
-                    .map(|&source| ShortcutSource::from(source).evaluate(t, customized_graph, &mut always))
+                    .map(|&source| ShortcutSource::from(source).evaluate(t, customized_graph))
                     .unwrap_or(FlWeight::INFINITY),
                 "{:?}, {:?}, {}",
                 self.bounds[edge_idx],
@@ -452,7 +456,7 @@ impl CustomizedSingleDirGraph {
         }
 
         self.edge_source_at(edge_idx, t)
-            .map(|&source| ShortcutSource::from(source).evaluate(t, customized_graph, f))
+            .map(|&source| ShortcutSource::from(source).evaluate_opt(t, customized_graph, f))
             .unwrap_or(FlWeight::INFINITY)
     }
 
@@ -573,6 +577,54 @@ impl CustomizedSingleDirGraph {
     }
 }
 
+impl<'a> ShortcutGraphTrt for CustomizedGraph<'a> {
+    fn ttf(&self, _: ShortcutId) -> TTF {
+        unimplemented!()
+    }
+    fn is_valid_path(&self, _: ShortcutId) -> bool {
+        true
+    }
+    fn lower_bound(&self, shortcut_id: ShortcutId) -> FlWeight {
+        match shortcut_id {
+            ShortcutId::Incoming(id) => self.incoming.bounds[id as usize].0,
+            ShortcutId::Outgoing(id) => self.incoming.bounds[id as usize].0,
+        }
+    }
+    fn upper_bound(&self, shortcut_id: ShortcutId) -> FlWeight {
+        match shortcut_id {
+            ShortcutId::Incoming(id) => self.incoming.bounds[id as usize].1,
+            ShortcutId::Outgoing(id) => self.incoming.bounds[id as usize].1,
+        }
+    }
+    fn original_graph(&self) -> &TDGraph {
+        &self.original_graph
+    }
+    fn exact_ttf_for(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
+        match shortcut_id {
+            ShortcutId::Incoming(id) => self.incoming.edge_sources(id as usize).exact_ttf_for(start, end, self, target, tmp),
+            ShortcutId::Outgoing(id) => self.incoming.edge_sources(id as usize).exact_ttf_for(start, end, self, target, tmp),
+        }
+    }
+    fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, switchpoints: &mut Vec<Timestamp>) -> (FlWeight, FlWeight) {
+        match shortcut_id {
+            ShortcutId::Incoming(id) => self.incoming.edge_sources(id as usize).get_switchpoints(start, end, self, switchpoints),
+            ShortcutId::Outgoing(id) => self.incoming.edge_sources(id as usize).get_switchpoints(start, end, self, switchpoints),
+        }
+    }
+    fn unpack_at(&self, shortcut_id: ShortcutId, t: Timestamp, result: &mut Vec<(EdgeId, Timestamp)>) {
+        match shortcut_id {
+            ShortcutId::Incoming(id) => ShortcutSource::from(*self.incoming.edge_source_at(id as usize, t).unwrap()).unpack_at(t, self, result),
+            ShortcutId::Outgoing(id) => ShortcutSource::from(*self.incoming.edge_source_at(id as usize, t).unwrap()).unpack_at(t, self, result),
+        }
+    }
+    fn evaluate(&self, shortcut_id: ShortcutId, t: Timestamp) -> FlWeight {
+        match shortcut_id {
+            ShortcutId::Incoming(id) => ShortcutSource::from(*self.incoming.edge_source_at(id as usize, t).unwrap()).evaluate(t, self),
+            ShortcutId::Outgoing(id) => ShortcutSource::from(*self.incoming.edge_source_at(id as usize, t).unwrap()).evaluate(t, self),
+        }
+    }
+}
+
 /// Struct with borrowed slice of the relevant parts (topology, upper and lower bounds) for elimination tree corridor query.
 #[derive(Debug)]
 pub struct SingleDirBoundsGraph<'a> {
@@ -595,11 +647,6 @@ impl<'a> SingleDirBoundsGraph<'a> {
         let edge_ids = range.start as EdgeId..range.end as EdgeId;
         self.head[range.clone()].iter().cloned().zip(edge_ids).zip(self.bounds[range].iter())
     }
-}
-
-// Util function to skip early returns
-fn always(_up: bool, _shortcut_id: EdgeId, _t: Timestamp) -> bool {
-    true
 }
 
 #[derive(Debug)]
@@ -865,7 +912,14 @@ impl<'a> ShortcutGraphTrt for ReconstructedGraph<'a> {
             ShortcutId::Incoming(id) => (&self.customized_graph.incoming, id),
             ShortcutId::Outgoing(id) => (&self.customized_graph.outgoing, id),
         };
-        ShortcutSource::from(*dir_graph.edge_source_at(edge_id as usize, t).unwrap()).unpack_at2(t, self, result)
+        ShortcutSource::from(*dir_graph.edge_source_at(edge_id as usize, t).unwrap()).unpack_at(t, self, result)
+    }
+    fn evaluate(&self, shortcut_id: ShortcutId, t: Timestamp) -> FlWeight {
+        let (dir_graph, edge_id) = match shortcut_id {
+            ShortcutId::Incoming(id) => (&self.customized_graph.incoming, id),
+            ShortcutId::Outgoing(id) => (&self.customized_graph.outgoing, id),
+        };
+        ShortcutSource::from(*dir_graph.edge_source_at(edge_id as usize, t).unwrap()).evaluate(t, self)
     }
 }
 
@@ -933,5 +987,11 @@ impl<'a> ShortcutGraphTrt for ProfileGraphWrapper<'a> {
             return self.profile_graph.unpack_at(shortcut_id, t, result);
         }
         self.get(shortcut_id).unpack_at(t, self, result);
+    }
+    fn evaluate(&self, shortcut_id: ShortcutId, t: Timestamp) -> FlWeight {
+        if self.delegate(shortcut_id) {
+            return self.profile_graph.evaluate(shortcut_id, t);
+        }
+        self.get(shortcut_id).evaluate(t, self)
     }
 }

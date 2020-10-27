@@ -773,9 +773,6 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) -> Custom
                     let shortcut_edge_ids = cch.neighbor_edge_indices(node);
                     for (target, shortcut_edge_id) in cch.neighbor_iter(node).zip(shortcut_edge_ids) {
                         if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
-                            // Here we have both an intermediate and an upper triangle
-                            // depending on which edge we take as the base
-                            // Relax all them.
                             unsafe {
                                 // TODO only if necessary by bounds
                                 //   maybe that happens by invalidating? - i dont think so

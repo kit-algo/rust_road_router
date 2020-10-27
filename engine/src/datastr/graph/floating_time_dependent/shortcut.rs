@@ -538,7 +538,20 @@ impl Shortcut {
             Sources::One(source) => source,
             Sources::Multi(sources) => sources.edge_source_at(t).unwrap(),
         })
-        .unpack_at2(t, shortcut_graph, result)
+        .unpack_at(t, shortcut_graph, result)
+    }
+
+    pub fn evaluate(&self, t: Timestamp, shortcut_graph: &impl ShortcutGraphTrt) -> FlWeight {
+        if self.constant {
+            return self.lower_bound;
+        }
+
+        ShortcutSource::from(*match &self.sources {
+            Sources::None => return FlWeight::INFINITY,
+            Sources::One(source) => source,
+            Sources::Multi(sources) => sources.edge_source_at(t).unwrap(),
+        })
+        .evaluate(t, shortcut_graph)
     }
 }
 

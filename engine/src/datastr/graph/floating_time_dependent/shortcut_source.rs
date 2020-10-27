@@ -13,7 +13,7 @@ impl ShortcutSource {
     /// Evaluate travel time of this shortcut for a given point in time and a completely customized graph.
     /// Will unpack and recurse if this is a real shortcut.
     /// The callback `f` can be used to do early returns if we reach a node that already has a better tentative distance.
-    pub(super) fn evaluate<F>(&self, t: Timestamp, customized_graph: &CustomizedGraph, f: &mut F) -> FlWeight
+    pub(super) fn evaluate_opt<F>(&self, t: Timestamp, customized_graph: &CustomizedGraph, f: &mut F) -> FlWeight
     where
         F: (FnMut(bool, EdgeId, Timestamp) -> bool),
     {
@@ -42,25 +42,29 @@ impl ShortcutSource {
         }
     }
 
-    /// Recursively unpack this source and append the path to `result`.
-    /// The timestamp is just needed for the recursion.
-    pub(super) fn unpack_at(&self, t: Timestamp, customized_graph: &CustomizedGraph, result: &mut Vec<(EdgeId, Timestamp)>) {
+    pub(super) fn evaluate(&self, t: Timestamp, shortcut_graph: &impl ShortcutGraphTrt) -> FlWeight {
         match *self {
+            // recursively eval down edge, then up edge
             ShortcutSource::Shortcut(down, up) => {
-                customized_graph.incoming.unpack_at(down, t, customized_graph, result);
-                let t_mid = result.last().unwrap().1;
-                customized_graph.outgoing.unpack_at(up, t_mid, customized_graph, result);
+                let first_val = shortcut_graph.evaluate(ShortcutId::Incoming(down), t);
+                debug_assert!(first_val >= FlWeight::zero());
+                let t_mid = t + first_val;
+                let second_val = shortcut_graph.evaluate(ShortcutId::Outgoing(up), t_mid);
+                debug_assert!(second_val >= FlWeight::zero());
+                first_val + second_val
             }
             ShortcutSource::OriginalEdge(edge) => {
-                let arr = t + customized_graph.original_graph.travel_time_function(edge).evaluate(t);
-                result.push((edge, arr))
+                let res = shortcut_graph.original_graph().travel_time_function(edge).evaluate(t);
+                debug_assert!(res >= FlWeight::zero());
+                res
             }
-            ShortcutSource::None => {
-                panic!("can't unpack None source");
-            }
+            ShortcutSource::None => FlWeight::INFINITY,
         }
     }
-    pub(super) fn unpack_at2(&self, t: Timestamp, shortcut_graph: &impl ShortcutGraphTrt, result: &mut Vec<(EdgeId, Timestamp)>) {
+
+    /// Recursively unpack this source and append the path to `result`.
+    /// The timestamp is just needed for the recursion.
+    pub(super) fn unpack_at(&self, t: Timestamp, shortcut_graph: &impl ShortcutGraphTrt, result: &mut Vec<(EdgeId, Timestamp)>) {
         match *self {
             ShortcutSource::Shortcut(down, up) => {
                 shortcut_graph.unpack_at(ShortcutId::Incoming(down), t, result);
@@ -100,28 +104,39 @@ impl ShortcutSource {
                 let second_start = start + interpolate_linear(&first_target[0], &first_target[1], start);
                 let second_end = end + interpolate_linear(&first_target[first_target.len() - 2], &first_target[first_target.len() - 1], end);
 
-                let mut second_target = first_target.storage_mut().push_plf();
-                shortcut_graph.exact_ttf_for(ShortcutId::Outgoing(up), second_start, second_end, &mut second_target, target.storage_mut());
+                if second_start.fuzzy_eq(second_end) {
+                    debug_assert_eq!(first_target.len(), 2);
+                    let second_val = shortcut_graph.evaluate(ShortcutId::Outgoing(up), second_start);
+                    for p in &first_target[..] {
+                        target.push(TTFPoint {
+                            at: p.at,
+                            val: p.val + second_val,
+                        });
+                    }
+                } else {
+                    let mut second_target = first_target.storage_mut().push_plf();
+                    shortcut_graph.exact_ttf_for(ShortcutId::Outgoing(up), second_start, second_end, &mut second_target, target.storage_mut());
 
-                let (first, second) = second_target.storage().top_plfs();
-                PiecewiseLinearFunction::link_partials(first, second, start, end, target);
+                    let (first, second) = second_target.storage().top_plfs();
+                    PiecewiseLinearFunction::link_partials(first, second, start, end, target);
 
-                debug_assert!(
-                    !target.last().unwrap().at.fuzzy_lt(end),
-                    "{:?}",
-                    dbg_each!(
-                        self,
-                        target.last(),
-                        start,
-                        end,
-                        first.first(),
-                        first.last(),
-                        first.len(),
-                        second.first(),
-                        second.last(),
-                        second.len()
-                    )
-                );
+                    debug_assert!(
+                        !target.last().unwrap().at.fuzzy_lt(end),
+                        "{:?}",
+                        dbg_each!(
+                            self,
+                            target.last(),
+                            start,
+                            end,
+                            first.first(),
+                            first.last(),
+                            first.len(),
+                            second.first(),
+                            second.last(),
+                            second.len()
+                        )
+                    );
+                }
             }
             ShortcutSource::OriginalEdge(edge) => {
                 let ttf = shortcut_graph.original_graph().travel_time_function(edge);
