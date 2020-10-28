@@ -28,7 +28,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     let modified_graph = FirstOutGraph::new(&first_out[..], &head[..], &modified_travel_time[..]);
 
     let potential = BaselinePotential::new(&graph);
-    let mut topocore: TopoServer<_, _, OwnedGraph> = TopoServer::new(&modified_graph, potential, DefaultOps::default(), lat.clone(), lng.clone());
+    let mut topocore: TopoServer<_, _, OwnedGraph> = {
+        #[cfg(feature = "chpot-visualize")]
+        {
+            TopoServer::new(&modified_graph, potential, DefaultOps::default(), lat.clone(), lng.clone())
+        }
+        #[cfg(not(feature = "chpot-visualize"))]
+        {
+            TopoServer::new(&modified_graph, potential, DefaultOps::default())
+        }
+    };
 
     let n = graph.num_nodes();
     let from_lat = 49.0138685;
