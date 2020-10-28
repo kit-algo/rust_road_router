@@ -78,7 +78,7 @@ impl Shortcut {
 
     /// Merge this Shortcut with the lower triangle made up of the two EdgeIds (first down, then up).
     /// The `shortcut_graph` has to contain all the edges we may need to unpack.
-    pub fn merge(&mut self, linked_ids: (EdgeId, EdgeId), shortcut_graph: &impl ShortcutGraphTrt, buffers: &mut MergeBuffers) {
+    pub fn merge(&mut self, linked_ids: (EdgeId, EdgeId), shortcut_graph: &impl ShortcutGraphTrt<OriginalGraph = TDGraph>, buffers: &mut MergeBuffers) {
         // We already know, we won't need this edge, so do nothing
         if !self.required {
             return;
@@ -238,7 +238,7 @@ impl Shortcut {
         }
     }
 
-    pub fn plf<'s>(&'s self, shortcut_graph: &'s impl ShortcutGraphTrt) -> TTF<'s> {
+    pub fn plf<'s>(&'s self, shortcut_graph: &'s impl ShortcutGraphTrt<OriginalGraph = TDGraph>) -> TTF<'s> {
         if let Some(cache) = &self.cache {
             return cache.into();
         }
@@ -261,7 +261,7 @@ impl Shortcut {
 
     /// Once the TTF of this Shortcut is final, we can tighten the lower bound.
     /// When we know or detect, that we don't need this shortcut, we set all bounds to infinity.
-    pub fn finalize_bounds(&mut self, shortcut_graph: &impl ShortcutGraphTrt) {
+    pub fn finalize_bounds(&mut self, shortcut_graph: &impl ShortcutGraphTrt<OriginalGraph = TDGraph>) {
         if !self.required {
             return;
         }

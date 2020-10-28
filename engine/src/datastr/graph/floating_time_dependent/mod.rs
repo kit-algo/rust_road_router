@@ -16,14 +16,14 @@
 use super::*;
 
 mod piecewise_linear_function;
-pub use piecewise_linear_function::{PiecewiseLinearFunction, UpdatedPiecewiseLinearFunction};
+pub use piecewise_linear_function::{PiecewiseLinearFunction, UpdatedPiecewiseLinearFunction, PLF};
 
 mod geometry;
 pub use self::geometry::TTFPoint;
 use self::geometry::*;
 
 mod graph;
-pub use self::graph::{Graph as TDGraph, LiveGraph};
+pub use self::graph::{Graph as TDGraph, LiveGraph, TDGraphTrait};
 
 mod shortcut;
 pub use self::shortcut::*;
@@ -432,7 +432,7 @@ impl<'a> Drop for MutTopPLF<'a> {
 }
 
 /// Trait to abstract over different kinds of PLF storage
-trait PLFTarget: Extend<TTFPoint> + std::ops::Deref<Target = [TTFPoint]> {
+pub trait PLFTarget: Extend<TTFPoint> + std::ops::Deref<Target = [TTFPoint]> {
     /// Push single interpolation point to the PLF
     fn push(&mut self, val: TTFPoint);
     /// Pop single interpolation point from the PLF

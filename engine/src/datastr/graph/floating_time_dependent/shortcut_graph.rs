@@ -15,11 +15,13 @@ pub enum ShortcutId {
 }
 
 pub trait ShortcutGraphTrt {
+    type OriginalGraph: for<'a> TDGraphTrait<'a>;
+
     fn ttf(&self, shortcut_id: ShortcutId) -> TTF;
     fn is_valid_path(&self, shortcut_id: ShortcutId) -> bool;
     fn lower_bound(&self, shortcut_id: ShortcutId) -> FlWeight;
     fn upper_bound(&self, shortcut_id: ShortcutId) -> FlWeight;
-    fn original_graph(&self) -> &TDGraph;
+    fn original_graph(&self) -> &Self::OriginalGraph;
     fn exact_ttf_for(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage);
     fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, switchpoints: &mut Vec<Timestamp>) -> (FlWeight, FlWeight);
     fn unpack_at(&self, shortcut_id: ShortcutId, t: Timestamp, result: &mut Vec<(EdgeId, Timestamp)>);
@@ -66,6 +68,8 @@ impl<'a> PartialShortcutGraph<'a> {
 }
 
 impl<'a> ShortcutGraphTrt for PartialShortcutGraph<'a> {
+    type OriginalGraph = TDGraph;
+
     fn ttf(&self, shortcut_id: ShortcutId) -> TTF {
         self.get(shortcut_id).plf(self)
     }
@@ -578,6 +582,8 @@ impl CustomizedSingleDirGraph {
 }
 
 impl<'a> ShortcutGraphTrt for CustomizedGraph<'a> {
+    type OriginalGraph = TDGraph;
+
     fn ttf(&self, _: ShortcutId) -> TTF {
         unimplemented!()
     }
@@ -846,6 +852,8 @@ impl<'a> ReconstructedGraph<'a> {
 }
 
 impl<'a> ShortcutGraphTrt for ReconstructedGraph<'a> {
+    type OriginalGraph = TDGraph;
+
     fn ttf(&self, shortcut_id: ShortcutId) -> TTF {
         self.get_ttf(shortcut_id)
             .expect("invalid state of shortcut: ipps must be cached when shortcut not trivial")
@@ -946,6 +954,8 @@ impl<'a> ProfileGraphWrapper<'a> {
 }
 
 impl<'a> ShortcutGraphTrt for ProfileGraphWrapper<'a> {
+    type OriginalGraph = TDGraph;
+
     fn ttf(&self, shortcut_id: ShortcutId) -> TTF {
         if self.delegate(shortcut_id) {
             return self.profile_graph.ttf(shortcut_id);

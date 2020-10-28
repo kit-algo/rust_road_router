@@ -580,6 +580,7 @@ mod debug {
     use std::io::{Error, Write};
     use std::process::{Command, Stdio};
 
+    #[allow(dead_code)]
     pub(super) fn debug(f: &TTF, g: &TTF, state: &[(Timestamp, BoundMergingState)]) {
         if let Ok(mut file) = File::create("debug.py") {
             write_python(&mut file, f, g, state).unwrap_or_else(|_| eprintln!("failed to write debug script to file"));

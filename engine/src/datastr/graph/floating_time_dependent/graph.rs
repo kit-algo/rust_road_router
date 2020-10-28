@@ -255,3 +255,22 @@ impl LiveGraph {
         self.live_ipps[0].at
     }
 }
+
+pub trait TDGraphTrait<'a> {
+    type TTF: PLF;
+    fn travel_time_function(&'a self, edge_id: EdgeId) -> Self::TTF;
+}
+
+impl<'a> TDGraphTrait<'a> for Graph {
+    type TTF = PiecewiseLinearFunction<'a>;
+    fn travel_time_function(&'a self, edge_id: EdgeId) -> Self::TTF {
+        Graph::travel_time_function(self, edge_id)
+    }
+}
+
+impl<'a> TDGraphTrait<'a> for LiveGraph {
+    type TTF = UpdatedPiecewiseLinearFunction<'a>;
+    fn travel_time_function(&'a self, edge_id: EdgeId) -> Self::TTF {
+        LiveGraph::travel_time_function(self, edge_id)
+    }
+}

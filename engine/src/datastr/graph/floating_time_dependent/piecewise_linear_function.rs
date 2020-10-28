@@ -1629,3 +1629,38 @@ impl<'a> UpdatedPiecewiseLinearFunction<'a> {
         self.update.last().map(|p| p.at)
     }
 }
+
+pub trait PLF {
+    fn evaluate(&self, t: Timestamp) -> FlWeight;
+    fn copy_range(&self, start: Timestamp, end: Timestamp, target: &mut impl PLFTarget);
+}
+
+impl<'a> PLF for PiecewiseLinearFunction<'a> {
+    fn evaluate(&self, t: Timestamp) -> FlWeight {
+        PiecewiseLinearFunction::evaluate(self, t)
+    }
+    fn copy_range(&self, start: Timestamp, end: Timestamp, target: &mut impl PLFTarget) {
+        PiecewiseLinearFunction::copy_range(self, start, end, target)
+    }
+}
+
+impl<'a> PLF for UpdatedPiecewiseLinearFunction<'a> {
+    fn evaluate(&self, t: Timestamp) -> FlWeight {
+        UpdatedPiecewiseLinearFunction::evaluate(self, t)
+    }
+    fn copy_range(&self, start: Timestamp, end: Timestamp, target: &mut impl PLFTarget) {
+        if self.t_switch().map(|l| l.fuzzy_lt(start)).unwrap_or(true) {
+            self.plf.copy_range(start, end, target)
+        } else {
+            let live_until = self.t_switch().unwrap();
+            if !live_until.fuzzy_lt(end) {
+                // TODO limit self to range
+                PiecewiseLinearFunction::append_partials(target, self.update, start)
+            } else {
+                // TODO limit self to range
+                PiecewiseLinearFunction::append_partials(target, self.update, start);
+                self.plf.copy_range(live_until, end, target);
+            }
+        }
+    }
+}
