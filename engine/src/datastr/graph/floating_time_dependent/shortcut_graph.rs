@@ -587,13 +587,13 @@ impl<'a> ShortcutGraphTrt for CustomizedGraph<'a> {
     fn lower_bound(&self, shortcut_id: ShortcutId) -> FlWeight {
         match shortcut_id {
             ShortcutId::Incoming(id) => self.incoming.bounds[id as usize].0,
-            ShortcutId::Outgoing(id) => self.incoming.bounds[id as usize].0,
+            ShortcutId::Outgoing(id) => self.outgoing.bounds[id as usize].0,
         }
     }
     fn upper_bound(&self, shortcut_id: ShortcutId) -> FlWeight {
         match shortcut_id {
             ShortcutId::Incoming(id) => self.incoming.bounds[id as usize].1,
-            ShortcutId::Outgoing(id) => self.incoming.bounds[id as usize].1,
+            ShortcutId::Outgoing(id) => self.outgoing.bounds[id as usize].1,
         }
     }
     fn original_graph(&self) -> &TDGraph {
@@ -602,25 +602,25 @@ impl<'a> ShortcutGraphTrt for CustomizedGraph<'a> {
     fn exact_ttf_for(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
         match shortcut_id {
             ShortcutId::Incoming(id) => self.incoming.edge_sources(id as usize).exact_ttf_for(start, end, self, target, tmp),
-            ShortcutId::Outgoing(id) => self.incoming.edge_sources(id as usize).exact_ttf_for(start, end, self, target, tmp),
+            ShortcutId::Outgoing(id) => self.outgoing.edge_sources(id as usize).exact_ttf_for(start, end, self, target, tmp),
         }
     }
     fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, switchpoints: &mut Vec<Timestamp>) -> (FlWeight, FlWeight) {
         match shortcut_id {
             ShortcutId::Incoming(id) => self.incoming.edge_sources(id as usize).get_switchpoints(start, end, self, switchpoints),
-            ShortcutId::Outgoing(id) => self.incoming.edge_sources(id as usize).get_switchpoints(start, end, self, switchpoints),
+            ShortcutId::Outgoing(id) => self.outgoing.edge_sources(id as usize).get_switchpoints(start, end, self, switchpoints),
         }
     }
     fn unpack_at(&self, shortcut_id: ShortcutId, t: Timestamp, result: &mut Vec<(EdgeId, Timestamp)>) {
         match shortcut_id {
             ShortcutId::Incoming(id) => ShortcutSource::from(*self.incoming.edge_source_at(id as usize, t).unwrap()).unpack_at(t, self, result),
-            ShortcutId::Outgoing(id) => ShortcutSource::from(*self.incoming.edge_source_at(id as usize, t).unwrap()).unpack_at(t, self, result),
+            ShortcutId::Outgoing(id) => ShortcutSource::from(*self.outgoing.edge_source_at(id as usize, t).unwrap()).unpack_at(t, self, result),
         }
     }
     fn evaluate(&self, shortcut_id: ShortcutId, t: Timestamp) -> FlWeight {
         match shortcut_id {
             ShortcutId::Incoming(id) => ShortcutSource::from(*self.incoming.edge_source_at(id as usize, t).unwrap()).evaluate(t, self),
-            ShortcutId::Outgoing(id) => ShortcutSource::from(*self.incoming.edge_source_at(id as usize, t).unwrap()).evaluate(t, self),
+            ShortcutId::Outgoing(id) => ShortcutSource::from(*self.outgoing.edge_source_at(id as usize, t).unwrap()).evaluate(t, self),
         }
     }
 }
