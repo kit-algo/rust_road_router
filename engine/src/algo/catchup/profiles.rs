@@ -43,8 +43,8 @@ pub struct Server<'a> {
     from: NodeId,
     to: NodeId,
 
-    outgoing_profiles: Vec<Option<TTFCache<Box<[TTFPoint]>>>>,
-    incoming_profiles: Vec<Option<TTFCache<Box<[TTFPoint]>>>>,
+    outgoing_profiles: Vec<Option<ApproxTTFContainer<Box<[TTFPoint]>>>>,
+    incoming_profiles: Vec<Option<ApproxTTFContainer<Box<[TTFPoint]>>>>,
     buffers: MergeBuffers,
     buffers2: MergeBuffers,
 

@@ -17,7 +17,7 @@ pub enum ShortcutId {
 pub trait ShortcutGraphTrt {
     type OriginalGraph: for<'a> TDGraphTrait<'a>;
 
-    fn ttf(&self, shortcut_id: ShortcutId) -> TTF;
+    fn ttf(&self, shortcut_id: ShortcutId) -> ApproxTTF;
     fn is_valid_path(&self, shortcut_id: ShortcutId) -> bool;
     fn lower_bound(&self, shortcut_id: ShortcutId) -> FlWeight;
     fn upper_bound(&self, shortcut_id: ShortcutId) -> FlWeight;
@@ -70,8 +70,8 @@ impl<'a> PartialShortcutGraph<'a> {
 impl<'a> ShortcutGraphTrt for PartialShortcutGraph<'a> {
     type OriginalGraph = TDGraph;
 
-    fn ttf(&self, shortcut_id: ShortcutId) -> TTF {
-        self.get(shortcut_id).plf(self)
+    fn ttf(&self, shortcut_id: ShortcutId) -> ApproxTTF {
+        self.get(shortcut_id).travel_time_function(self)
     }
     fn is_valid_path(&self, shortcut_id: ShortcutId) -> bool {
         self.get(shortcut_id).is_valid_path()
@@ -584,7 +584,7 @@ impl CustomizedSingleDirGraph {
 impl<'a> ShortcutGraphTrt for CustomizedGraph<'a> {
     type OriginalGraph = TDGraph;
 
-    fn ttf(&self, _: ShortcutId) -> TTF {
+    fn ttf(&self, _: ShortcutId) -> ApproxTTF {
         unimplemented!()
     }
     fn is_valid_path(&self, _: ShortcutId) -> bool {
@@ -658,8 +658,8 @@ impl<'a> SingleDirBoundsGraph<'a> {
 #[derive(Debug)]
 pub struct ReconstructionGraph<'a> {
     pub customized_graph: &'a CustomizedGraph<'a>,
-    pub outgoing_cache: &'a mut [Option<TTFCache<Box<[TTFPoint]>>>],
-    pub incoming_cache: &'a mut [Option<TTFCache<Box<[TTFPoint]>>>],
+    pub outgoing_cache: &'a mut [Option<ApproxTTFContainer<Box<[TTFPoint]>>>],
+    pub incoming_cache: &'a mut [Option<ApproxTTFContainer<Box<[TTFPoint]>>>],
 }
 
 impl<'a> ReconstructionGraph<'a> {
@@ -668,7 +668,7 @@ impl<'a> ReconstructionGraph<'a> {
             let mut target = buffers.unpacking_target.push_plf();
             self.as_reconstructed()
                 .exact_ttf_for(shortcut_id, Timestamp::zero(), period(), &mut target, &mut buffers.unpacking_tmp);
-            TTFCache::Exact(Box::<[TTFPoint]>::from(&target[..]))
+            ApproxTTFContainer::Exact(Box::<[TTFPoint]>::from(&target[..]))
         } else {
             let mut target = buffers.unpacking_target.push_plf();
 
@@ -716,7 +716,7 @@ impl<'a> ReconstructionGraph<'a> {
 
             let upper = Box::<[TTFPoint]>::from(&target[..]);
 
-            TTFCache::Approx(lower, upper)
+            ApproxTTFContainer::Approx(lower, upper)
         };
 
         match shortcut_id {
@@ -755,7 +755,7 @@ impl<'a> ReconstructionGraph<'a> {
         };
         if let Some(cache) = cache {
             if cache.num_points() > APPROX_THRESHOLD {
-                *cache = TTF::from(&*cache).approximate(buffers);
+                *cache = ApproxTTF::from(&*cache).approximate(buffers);
             }
         }
     }
@@ -787,7 +787,7 @@ impl<'a> ReconstructionGraph<'a> {
         self.clear(shortcut_id);
     }
 
-    pub fn take_cache(&mut self, shortcut_id: ShortcutId) -> Option<TTFCache<Box<[TTFPoint]>>> {
+    pub fn take_cache(&mut self, shortcut_id: ShortcutId) -> Option<ApproxTTFContainer<Box<[TTFPoint]>>> {
         match shortcut_id {
             ShortcutId::Incoming(id) => self.incoming_cache[id as usize].take(),
             ShortcutId::Outgoing(id) => self.outgoing_cache[id as usize].take(),
@@ -806,12 +806,12 @@ impl<'a> ReconstructionGraph<'a> {
 #[derive(Debug)]
 pub struct ReconstructedGraph<'a> {
     pub customized_graph: &'a CustomizedGraph<'a>,
-    pub outgoing_cache: &'a [Option<TTFCache<Box<[TTFPoint]>>>],
-    pub incoming_cache: &'a [Option<TTFCache<Box<[TTFPoint]>>>],
+    pub outgoing_cache: &'a [Option<ApproxTTFContainer<Box<[TTFPoint]>>>],
+    pub incoming_cache: &'a [Option<ApproxTTFContainer<Box<[TTFPoint]>>>],
 }
 
 impl<'a> ReconstructedGraph<'a> {
-    fn get_ttf(&self, shortcut_id: ShortcutId) -> Option<TTF> {
+    fn get_ttf(&self, shortcut_id: ShortcutId) -> Option<ApproxTTF> {
         let cache = match shortcut_id {
             ShortcutId::Incoming(id) => &self.incoming_cache[id as usize],
             ShortcutId::Outgoing(id) => &self.outgoing_cache[id as usize],
@@ -828,7 +828,7 @@ impl<'a> ReconstructedGraph<'a> {
 
         match dir_graph.edge_sources(edge_id as usize) {
             &[(_, source)] => match source.into() {
-                ShortcutSource::OriginalEdge(id) => Some(TTF::Exact(self.customized_graph.original_graph.travel_time_function(id))),
+                ShortcutSource::OriginalEdge(id) => Some(ApproxTTF::Exact(self.customized_graph.original_graph.travel_time_function(id))),
                 _ => None,
             },
             _ => None,
@@ -854,7 +854,7 @@ impl<'a> ReconstructedGraph<'a> {
 impl<'a> ShortcutGraphTrt for ReconstructedGraph<'a> {
     type OriginalGraph = TDGraph;
 
-    fn ttf(&self, shortcut_id: ShortcutId) -> TTF {
+    fn ttf(&self, shortcut_id: ShortcutId) -> ApproxTTF {
         self.get_ttf(shortcut_id)
             .expect("invalid state of shortcut: ipps must be cached when shortcut not trivial")
     }
@@ -894,7 +894,7 @@ impl<'a> ShortcutGraphTrt for ReconstructedGraph<'a> {
             });
             return;
         }
-        if let Some(TTF::Exact(ttf)) = self.get_ttf(shortcut_id) {
+        if let Some(ApproxTTF::Exact(ttf)) = self.get_ttf(shortcut_id) {
             ttf.copy_range(start, end, target);
         } else {
             match dir_graph.edge_sources(edge_id as usize) {
@@ -956,11 +956,11 @@ impl<'a> ProfileGraphWrapper<'a> {
 impl<'a> ShortcutGraphTrt for ProfileGraphWrapper<'a> {
     type OriginalGraph = TDGraph;
 
-    fn ttf(&self, shortcut_id: ShortcutId) -> TTF {
+    fn ttf(&self, shortcut_id: ShortcutId) -> ApproxTTF {
         if self.delegate(shortcut_id) {
             return self.profile_graph.ttf(shortcut_id);
         }
-        self.get(shortcut_id).plf(self)
+        self.get(shortcut_id).travel_time_function(self)
     }
     fn is_valid_path(&self, _shortcut_id: ShortcutId) -> bool {
         true

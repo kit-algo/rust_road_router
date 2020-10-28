@@ -4,14 +4,14 @@ use std::cmp::max;
 // During customization we need to store PLFs.
 // For each shortcut we either have the exact function (`Exact`) or an approximation through less complex upper and lower bounds (`Approx`).
 #[derive(Debug)]
-pub enum TTFCache<D> {
+pub enum ApproxTTFContainer<D> {
     Exact(D),
     Approx(D, D),
 }
 
-impl TTFCache<Vec<TTFPoint>> {
+impl ApproxTTFContainer<Vec<TTFPoint>> {
     pub fn num_points(&self) -> usize {
-        use TTFCache::*;
+        use ApproxTTFContainer::*;
 
         match &self {
             Exact(points) => points.len(),
@@ -20,9 +20,9 @@ impl TTFCache<Vec<TTFPoint>> {
     }
 }
 
-impl TTFCache<Box<[TTFPoint]>> {
+impl ApproxTTFContainer<Box<[TTFPoint]>> {
     pub fn num_points(&self) -> usize {
-        use TTFCache::*;
+        use ApproxTTFContainer::*;
 
         match &self {
             Exact(points) => points.len(),
@@ -31,11 +31,11 @@ impl TTFCache<Box<[TTFPoint]>> {
     }
 }
 
-impl From<TTFCache<Vec<TTFPoint>>> for TTFCache<Box<[TTFPoint]>> {
-    fn from(cache: TTFCache<Vec<TTFPoint>>) -> Self {
+impl From<ApproxTTFContainer<Vec<TTFPoint>>> for ApproxTTFContainer<Box<[TTFPoint]>> {
+    fn from(cache: ApproxTTFContainer<Vec<TTFPoint>>) -> Self {
         match cache {
-            TTFCache::Exact(ipps) => TTFCache::Exact(ipps.into_boxed_slice()),
-            TTFCache::Approx(lower_ipps, upper_ipps) => TTFCache::Approx(lower_ipps.into_boxed_slice(), upper_ipps.into_boxed_slice()),
+            ApproxTTFContainer::Exact(ipps) => ApproxTTFContainer::Exact(ipps.into_boxed_slice()),
+            ApproxTTFContainer::Approx(lower_ipps, upper_ipps) => ApproxTTFContainer::Approx(lower_ipps.into_boxed_slice(), upper_ipps.into_boxed_slice()),
         }
     }
 }
@@ -48,34 +48,38 @@ enum BoundMergingState {
     Merge,
 }
 
-// Similar to `TTFCache`, though this one is for actually working with the functions, `TTFCache` is for storing them.
+// Similar to `ApproxTTFContainer`, though this one is for actually working with the functions, `ApproxTTFContainer` is for storing them.
 #[derive(Debug)]
-pub enum TTF<'a> {
+pub enum ApproxTTF<'a> {
     Exact(PiecewiseLinearFunction<'a>),
     Approx(PiecewiseLinearFunction<'a>, PiecewiseLinearFunction<'a>),
 }
 
-impl<'a> From<&'a TTFCache<Box<[TTFPoint]>>> for TTF<'a> {
-    fn from(cache: &'a TTFCache<Box<[TTFPoint]>>) -> Self {
+impl<'a> From<&'a ApproxTTFContainer<Box<[TTFPoint]>>> for ApproxTTF<'a> {
+    fn from(cache: &'a ApproxTTFContainer<Box<[TTFPoint]>>) -> Self {
         match cache {
-            TTFCache::Exact(ipps) => TTF::Exact(PiecewiseLinearFunction::new(ipps)),
-            TTFCache::Approx(lower_ipps, upper_ipps) => TTF::Approx(PiecewiseLinearFunction::new(lower_ipps), PiecewiseLinearFunction::new(upper_ipps)),
+            ApproxTTFContainer::Exact(ipps) => ApproxTTF::Exact(PiecewiseLinearFunction::new(ipps)),
+            ApproxTTFContainer::Approx(lower_ipps, upper_ipps) => {
+                ApproxTTF::Approx(PiecewiseLinearFunction::new(lower_ipps), PiecewiseLinearFunction::new(upper_ipps))
+            }
         }
     }
 }
 
-impl<'a> From<&'a TTFCache<Vec<TTFPoint>>> for TTF<'a> {
-    fn from(cache: &'a TTFCache<Vec<TTFPoint>>) -> Self {
+impl<'a> From<&'a ApproxTTFContainer<Vec<TTFPoint>>> for ApproxTTF<'a> {
+    fn from(cache: &'a ApproxTTFContainer<Vec<TTFPoint>>) -> Self {
         match cache {
-            TTFCache::Exact(ipps) => TTF::Exact(PiecewiseLinearFunction::new(ipps)),
-            TTFCache::Approx(lower_ipps, upper_ipps) => TTF::Approx(PiecewiseLinearFunction::new(lower_ipps), PiecewiseLinearFunction::new(upper_ipps)),
+            ApproxTTFContainer::Exact(ipps) => ApproxTTF::Exact(PiecewiseLinearFunction::new(ipps)),
+            ApproxTTFContainer::Approx(lower_ipps, upper_ipps) => {
+                ApproxTTF::Approx(PiecewiseLinearFunction::new(lower_ipps), PiecewiseLinearFunction::new(upper_ipps))
+            }
         }
     }
 }
 
-impl<'a> TTF<'a> {
+impl<'a> ApproxTTF<'a> {
     pub fn exact(&self) -> bool {
-        use TTF::*;
+        use ApproxTTF::*;
 
         match &self {
             Exact(_) => true,
@@ -84,7 +88,7 @@ impl<'a> TTF<'a> {
     }
 
     pub fn static_lower_bound(&self) -> FlWeight {
-        use TTF::*;
+        use ApproxTTF::*;
 
         match self {
             Exact(plf) => plf.lower_bound(),
@@ -93,7 +97,7 @@ impl<'a> TTF<'a> {
     }
 
     pub fn static_upper_bound(&self) -> FlWeight {
-        use TTF::*;
+        use ApproxTTF::*;
 
         match self {
             Exact(plf) => plf.upper_bound(),
@@ -102,12 +106,12 @@ impl<'a> TTF<'a> {
     }
 
     // Link to TTFs, creating a new function
-    pub fn link(&self, second: &TTF) -> TTFCache<Vec<TTFPoint>> {
-        use TTF::*;
+    pub fn link(&self, second: &Self) -> ApproxTTFContainer<Vec<TTFPoint>> {
+        use ApproxTTF::*;
 
         // if both TTFs are exact, we can link exact
         if let (Exact(first), Exact(second)) = (self, second) {
-            return TTFCache::Exact(first.link(second));
+            return ApproxTTFContainer::Exact(first.link(second));
         }
         // else the result will be approximated anyway
 
@@ -115,7 +119,7 @@ impl<'a> TTF<'a> {
         let (second_lower, second_upper) = second.bound_plfs();
 
         // linking two upper bounds is a valid upper bound, same for lower bounds
-        TTFCache::Approx(first_lower.link(&second_lower), first_upper.link(&second_upper))
+        ApproxTTFContainer::Approx(first_lower.link(&second_lower), first_upper.link(&second_upper))
     }
 
     // this ones a bit ugly...
@@ -127,16 +131,16 @@ impl<'a> TTF<'a> {
     #[allow(clippy::type_complexity)]
     pub fn merge(
         &self,
-        other: &TTF,
+        other: &Self,
         buffers: &mut MergeBuffers,
         merge_exact: impl Fn(Timestamp, Timestamp, &mut MergeBuffers) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>),
-    ) -> (TTFCache<Box<[TTFPoint]>>, Vec<(Timestamp, bool)>) {
-        use TTF::*;
+    ) -> (ApproxTTFContainer<Box<[TTFPoint]>>, Vec<(Timestamp, bool)>) {
+        use ApproxTTF::*;
 
         // easy case, both functions are exact, we can just do actual function mering and are done
         if let (Exact(self_plf), Exact(other)) = (self, other) {
             let (plf, intersections) = self_plf.merge(other, &mut buffers.buffer);
-            return (TTFCache::Exact(plf), intersections);
+            return (ApproxTTFContainer::Exact(plf), intersections);
         }
 
         // get bound functions
@@ -534,7 +538,7 @@ impl<'a> TTF<'a> {
         }
 
         let ret = (
-            TTFCache::Approx(Box::from(&buffers.exact_result_lower[..]), Box::from(&buffers.exact_result_upper[..])),
+            ApproxTTFContainer::Approx(Box::from(&buffers.exact_result_lower[..]), Box::from(&buffers.exact_result_upper[..])),
             result,
         );
 
@@ -547,23 +551,25 @@ impl<'a> TTF<'a> {
         // alternatively just merge the complete lower and upper bounds, but the other variant turned out to be faster.
         // let (result_lower, _) = self_lower.merge(&other_lower, &mut buffers.buffer);
         // let (result_upper, _) = self_upper.merge(&other_upper, &mut buffers.buffer);
-        // (TTFCache::Approx(result_lower, result_upper), result)
+        // (ApproxTTFContainer::Approx(result_lower, result_upper), result)
     }
 
-    pub fn approximate(&self, buffers: &mut MergeBuffers) -> TTFCache<Box<[TTFPoint]>> {
-        use TTF::*;
+    pub fn approximate(&self, buffers: &mut MergeBuffers) -> ApproxTTFContainer<Box<[TTFPoint]>> {
+        use ApproxTTF::*;
 
         match self {
             Exact(plf) => {
                 let (lower, upper) = plf.bound_ttfs();
-                TTFCache::Approx(lower, upper)
+                ApproxTTFContainer::Approx(lower, upper)
             }
-            Approx(lower_plf, upper_plf) => TTFCache::Approx(lower_plf.lower_bound_ttf(&mut buffers.buffer), upper_plf.upper_bound_ttf(&mut buffers.buffer)),
+            Approx(lower_plf, upper_plf) => {
+                ApproxTTFContainer::Approx(lower_plf.lower_bound_ttf(&mut buffers.buffer), upper_plf.upper_bound_ttf(&mut buffers.buffer))
+            }
         }
     }
 
     pub fn bound_plfs(&self) -> (PiecewiseLinearFunction<'a>, PiecewiseLinearFunction<'a>) {
-        use TTF::*;
+        use ApproxTTF::*;
 
         match self {
             Exact(plf) => (*plf, *plf),
@@ -581,7 +587,7 @@ mod debug {
     use std::process::{Command, Stdio};
 
     #[allow(dead_code)]
-    pub(super) fn debug(f: &TTF, g: &TTF, state: &[(Timestamp, BoundMergingState)]) {
+    pub(super) fn debug(f: &ApproxTTF, g: &ApproxTTF, state: &[(Timestamp, BoundMergingState)]) {
         if let Ok(mut file) = File::create("debug.py") {
             write_python(&mut file, f, g, state).unwrap_or_else(|_| eprintln!("failed to write debug script to file"));
         }
@@ -595,7 +601,7 @@ mod debug {
         }
     }
 
-    fn write_python(output: &mut dyn Write, f: &TTF, g: &TTF, state: &[(Timestamp, BoundMergingState)]) -> Result<(), Error> {
+    fn write_python(output: &mut dyn Write, f: &ApproxTTF, g: &ApproxTTF, state: &[(Timestamp, BoundMergingState)]) -> Result<(), Error> {
         writeln!(
             output,
             "
