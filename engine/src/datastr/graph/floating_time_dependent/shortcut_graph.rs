@@ -688,7 +688,7 @@ impl<'a> ReconstructionGraph<'a> {
                     &mut inner_target,
                     target.storage_mut(),
                 );
-                PiecewiseLinearFunction::append_lower_bound_partials(&mut target, &inner_target, max(Timestamp::zero(), c.cur().0));
+                PeriodicPiecewiseLinearFunction::append_lower_bound_partials(&mut target, &inner_target, max(Timestamp::zero(), c.cur().0));
 
                 c.advance();
             }
@@ -709,7 +709,7 @@ impl<'a> ReconstructionGraph<'a> {
                     &mut inner_target,
                     target.storage_mut(),
                 );
-                PiecewiseLinearFunction::append_upper_bound_partials(&mut target, &inner_target, max(Timestamp::zero(), c.cur().0));
+                PeriodicPiecewiseLinearFunction::append_upper_bound_partials(&mut target, &inner_target, max(Timestamp::zero(), c.cur().0));
 
                 c.advance();
             }
@@ -895,7 +895,7 @@ impl<'a> ShortcutGraphTrt for ReconstructedGraph<'a> {
             return;
         }
         if let Some(ApproxTTF::Exact(ttf)) = self.get_ttf(shortcut_id) {
-            ttf.copy_range(start, end, target);
+            ttf.append_range(start, end, target);
         } else {
             match dir_graph.edge_sources(edge_id as usize) {
                 &[] => unreachable!("There are no TTFs for empty shortcuts"),

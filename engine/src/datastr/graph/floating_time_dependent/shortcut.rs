@@ -197,7 +197,7 @@ impl Shortcut {
                 ShortcutSource::from(other_data).exact_ttf_for(start, end, shortcut_graph, &mut other_target, &mut buffers.unpacking_tmp);
 
                 let (self_ipps, other_ipps) = other_target.storage().top_plfs();
-                PiecewiseLinearFunction::merge_partials(self_ipps, other_ipps, start, end, &mut buffers.buffer)
+                PartialPiecewiseLinearFunction::new(self_ipps).merge(&PartialPiecewiseLinearFunction::new(other_ipps), start, end, &mut buffers.buffer)
             });
             if cfg!(feature = "tdcch-approx") && merged.num_points() > APPROX_THRESHOLD {
                 let old = merged.num_points();

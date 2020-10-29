@@ -51,17 +51,18 @@ enum BoundMergingState {
 // Similar to `ApproxTTFContainer`, though this one is for actually working with the functions, `ApproxTTFContainer` is for storing them.
 #[derive(Debug)]
 pub enum ApproxTTF<'a> {
-    Exact(PiecewiseLinearFunction<'a>),
-    Approx(PiecewiseLinearFunction<'a>, PiecewiseLinearFunction<'a>),
+    Exact(PeriodicPiecewiseLinearFunction<'a>),
+    Approx(PeriodicPiecewiseLinearFunction<'a>, PeriodicPiecewiseLinearFunction<'a>),
 }
 
 impl<'a> From<&'a ApproxTTFContainer<Box<[TTFPoint]>>> for ApproxTTF<'a> {
     fn from(cache: &'a ApproxTTFContainer<Box<[TTFPoint]>>) -> Self {
         match cache {
-            ApproxTTFContainer::Exact(ipps) => ApproxTTF::Exact(PiecewiseLinearFunction::new(ipps)),
-            ApproxTTFContainer::Approx(lower_ipps, upper_ipps) => {
-                ApproxTTF::Approx(PiecewiseLinearFunction::new(lower_ipps), PiecewiseLinearFunction::new(upper_ipps))
-            }
+            ApproxTTFContainer::Exact(ipps) => ApproxTTF::Exact(PeriodicPiecewiseLinearFunction::new(ipps)),
+            ApproxTTFContainer::Approx(lower_ipps, upper_ipps) => ApproxTTF::Approx(
+                PeriodicPiecewiseLinearFunction::new(lower_ipps),
+                PeriodicPiecewiseLinearFunction::new(upper_ipps),
+            ),
         }
     }
 }
@@ -69,10 +70,11 @@ impl<'a> From<&'a ApproxTTFContainer<Box<[TTFPoint]>>> for ApproxTTF<'a> {
 impl<'a> From<&'a ApproxTTFContainer<Vec<TTFPoint>>> for ApproxTTF<'a> {
     fn from(cache: &'a ApproxTTFContainer<Vec<TTFPoint>>) -> Self {
         match cache {
-            ApproxTTFContainer::Exact(ipps) => ApproxTTF::Exact(PiecewiseLinearFunction::new(ipps)),
-            ApproxTTFContainer::Approx(lower_ipps, upper_ipps) => {
-                ApproxTTF::Approx(PiecewiseLinearFunction::new(lower_ipps), PiecewiseLinearFunction::new(upper_ipps))
-            }
+            ApproxTTFContainer::Exact(ipps) => ApproxTTF::Exact(PeriodicPiecewiseLinearFunction::new(ipps)),
+            ApproxTTFContainer::Approx(lower_ipps, upper_ipps) => ApproxTTF::Approx(
+                PeriodicPiecewiseLinearFunction::new(lower_ipps),
+                PeriodicPiecewiseLinearFunction::new(upper_ipps),
+            ),
         }
     }
 }
@@ -500,39 +502,38 @@ impl<'a> ApproxTTF<'a> {
         for (&(start_of_segment, state), end_of_segment) in bound_merge_state.iter().zip(end_of_segment_iter) {
             match state {
                 BoundMergingState::First => {
-                    self_lower.copy_append_to_partial(start_of_segment, end_of_segment, &mut buffers.exact_result_lower);
-                    self_upper.copy_append_to_partial(start_of_segment, end_of_segment, &mut buffers.exact_result_upper);
+                    self_lower.append_range(start_of_segment, end_of_segment, &mut buffers.exact_result_lower);
+                    self_upper.append_range(start_of_segment, end_of_segment, &mut buffers.exact_result_upper);
                 }
                 BoundMergingState::Second => {
-                    other_lower.copy_append_to_partial(start_of_segment, end_of_segment, &mut buffers.exact_result_lower);
-                    other_upper.copy_append_to_partial(start_of_segment, end_of_segment, &mut buffers.exact_result_upper);
+                    other_lower.append_range(start_of_segment, end_of_segment, &mut buffers.exact_result_lower);
+                    other_upper.append_range(start_of_segment, end_of_segment, &mut buffers.exact_result_upper);
                 }
                 BoundMergingState::Merge => {
+                    // TODO why cant we just take a subslice?
                     buffers.exact_self_buffer.clear();
-                    self_lower.copy_range(start_of_segment, end_of_segment, &mut buffers.exact_self_buffer);
+                    self_lower.append_range(start_of_segment, end_of_segment, &mut buffers.exact_self_buffer);
                     buffers.exact_other_buffer.clear();
-                    other_lower.copy_range(start_of_segment, end_of_segment, &mut buffers.exact_other_buffer);
-                    let (partial_lower, _) = PiecewiseLinearFunction::merge_partials(
-                        &buffers.exact_self_buffer,
-                        &buffers.exact_other_buffer,
+                    other_lower.append_range(start_of_segment, end_of_segment, &mut buffers.exact_other_buffer);
+                    let (partial_lower, _) = PartialPiecewiseLinearFunction::new(&buffers.exact_self_buffer).merge(
+                        &PartialPiecewiseLinearFunction::new(&buffers.exact_other_buffer),
                         start_of_segment,
                         end_of_segment,
                         &mut buffers.buffer,
                     );
-                    PiecewiseLinearFunction::append_partials(&mut buffers.exact_result_lower, &partial_lower, start_of_segment);
+                    PartialPiecewiseLinearFunction::new(&partial_lower).append(start_of_segment, &mut buffers.exact_result_lower);
 
                     buffers.exact_self_buffer.clear();
-                    self_upper.copy_range(start_of_segment, end_of_segment, &mut buffers.exact_self_buffer);
+                    self_upper.append_range(start_of_segment, end_of_segment, &mut buffers.exact_self_buffer);
                     buffers.exact_other_buffer.clear();
-                    other_upper.copy_range(start_of_segment, end_of_segment, &mut buffers.exact_other_buffer);
-                    let (partial_upper, _) = PiecewiseLinearFunction::merge_partials(
-                        &buffers.exact_self_buffer,
-                        &buffers.exact_other_buffer,
+                    other_upper.append_range(start_of_segment, end_of_segment, &mut buffers.exact_other_buffer);
+                    let (partial_upper, _) = PartialPiecewiseLinearFunction::new(&buffers.exact_self_buffer).merge(
+                        &PartialPiecewiseLinearFunction::new(&buffers.exact_other_buffer),
                         start_of_segment,
                         end_of_segment,
                         &mut buffers.buffer,
                     );
-                    PiecewiseLinearFunction::append_partials(&mut buffers.exact_result_upper, &partial_upper, start_of_segment);
+                    PartialPiecewiseLinearFunction::new(&partial_upper).append(start_of_segment, &mut buffers.exact_result_upper);
                 }
             }
         }
@@ -568,7 +569,7 @@ impl<'a> ApproxTTF<'a> {
         }
     }
 
-    pub fn bound_plfs(&self) -> (PiecewiseLinearFunction<'a>, PiecewiseLinearFunction<'a>) {
+    pub fn bound_plfs(&self) -> (PeriodicPiecewiseLinearFunction<'a>, PeriodicPiecewiseLinearFunction<'a>) {
         use ApproxTTF::*;
 
         match self {
@@ -617,42 +618,34 @@ def plot_coords(coords, *args, **kwargs):
 "
         )?;
         write!(output, "plot_coords([")?;
-        for p in f.bound_plfs().0.ipps() {
+        for p in f.bound_plfs().0.iter() {
             write!(output, "({}, {}), ", f64::from(p.at), f64::from(p.val))?;
         }
         writeln!(output, "], 'r+-', label='f', linewidth=1, markersize=5)")?;
 
         write!(output, "plot_coords([")?;
-        for p in f.bound_plfs().1.ipps() {
+        for p in f.bound_plfs().1.iter() {
             write!(output, "({}, {}), ", f64::from(p.at), f64::from(p.val))?;
         }
         writeln!(output, "], 'r+-', label='f', linewidth=1, markersize=5)")?;
 
         write!(output, "plot_coords([")?;
-        for p in g.bound_plfs().0.ipps() {
+        for p in g.bound_plfs().0.iter() {
             write!(output, "({}, {}), ", f64::from(p.at), f64::from(p.val))?;
         }
         writeln!(output, "], 'gx-', label='g', linewidth=1, markersize=5)")?;
 
         write!(output, "plot_coords([")?;
-        for p in g.bound_plfs().1.ipps() {
+        for p in g.bound_plfs().1.iter() {
             write!(output, "({}, {}), ", f64::from(p.at), f64::from(p.val))?;
         }
         writeln!(output, "], 'gx-', label='g', linewidth=1, markersize=5)")?;
 
-        // if !merged.is_empty() {
-        //     write!(output, "plot_coords([")?;
-        //     for p in merged {
-        //         write!(output, "({}, {}), ", f64::from(p.at), f64::from(p.val))?;
-        //     }
-        //     writeln!(output, "], 'bo-', label='merged', linewidth=1, markersize=1)")?;
-        // }
+        let max_val = f.bound_plfs().1.iter().map(|p| p.val).max().unwrap();
+        let max_val = max(g.bound_plfs().1.iter().map(|p| p.val).max().unwrap(), max_val);
 
-        let max_val = f.bound_plfs().1.ipps().iter().map(|p| p.val).max().unwrap();
-        let max_val = max(g.bound_plfs().1.ipps().iter().map(|p| p.val).max().unwrap(), max_val);
-
-        let min_val = f.bound_plfs().0.ipps().iter().map(|p| p.val).min().unwrap();
-        let min_val = std::cmp::min(g.bound_plfs().0.ipps().iter().map(|p| p.val).min().unwrap(), min_val);
+        let min_val = f.bound_plfs().0.iter().map(|p| p.val).min().unwrap();
+        let min_val = std::cmp::min(g.bound_plfs().0.iter().map(|p| p.val).min().unwrap(), min_val);
 
         for &(t, state) in state {
             writeln!(

@@ -16,7 +16,7 @@
 use super::*;
 
 mod piecewise_linear_function;
-pub use piecewise_linear_function::{PiecewiseLinearFunction, UpdatedPiecewiseLinearFunction, PLF};
+pub use piecewise_linear_function::{PartialPiecewiseLinearFunction, PeriodicPiecewiseLinearFunction, UpdatedPiecewiseLinearFunction, PLF};
 
 mod geometry;
 pub use self::geometry::TTFPoint;

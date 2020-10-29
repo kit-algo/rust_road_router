@@ -15,16 +15,57 @@ use std::cmp::{max, min, Ordering};
 pub mod cursor;
 use cursor::*;
 
-/// A struct borrowing a slice of points which implements all sorts of operations and algorithms for PLFs.
+pub trait PLF {
+    fn evaluate(&self, t: Timestamp) -> FlWeight;
+    fn append_range(&self, start: Timestamp, end: Timestamp, target: &mut impl PLFTarget);
+}
+
+// append point to a PLF making sure, that its not too close to the previous point
+fn append_point(points: &mut Vec<TTFPoint>, point: TTFPoint) {
+    debug_assert!(point.val >= FlWeight::new(0.0), "{:?}", point);
+    if let Some(p) = points.last() {
+        if p.at.fuzzy_eq(point.at) && p.val.fuzzy_eq(point.val) {
+            return;
+        }
+    }
+    debug_assert!(
+        points.last().map(|p| p.at.fuzzy_lt(point.at)).unwrap_or(true),
+        "last: {:?}, append: {:?}",
+        points.last(),
+        point
+    );
+
+    points.push(point)
+}
+
+/// A struct borrowing a slice of points which implements all sorts of operations and algorithms for PPLFs.
 #[derive(Debug, Clone, Copy)]
-pub struct PiecewiseLinearFunction<'a> {
+pub struct PeriodicPiecewiseLinearFunction<'a> {
     ipps: &'a [TTFPoint],
 }
 
-impl<'a> PiecewiseLinearFunction<'a> {
+impl<'a> PLF for PeriodicPiecewiseLinearFunction<'a> {
+    fn evaluate(&self, t: Timestamp) -> FlWeight {
+        let (_, t) = t.split_of_period();
+        PartialPiecewiseLinearFunction::from(self).eval(t)
+    }
+    fn append_range(&self, start: Timestamp, end: Timestamp, target: &mut impl PLFTarget) {
+        PeriodicPiecewiseLinearFunction::append_range(self, start, end, target)
+    }
+}
+
+impl<'a> std::ops::Deref for PeriodicPiecewiseLinearFunction<'a> {
+    type Target = [TTFPoint];
+
+    fn deref(&self) -> &Self::Target {
+        self.ipps
+    }
+}
+
+impl<'a> PeriodicPiecewiseLinearFunction<'a> {
     /// New PLF from slice of points.
     /// In debug will validate the invariants we need from the function.
-    pub fn new(ipps: &'a [TTFPoint]) -> PiecewiseLinearFunction<'a> {
+    pub fn new(ipps: &'a [TTFPoint]) -> Self {
         debug_assert!(ipps.first().unwrap().at == Timestamp::zero(), "{:?}", ipps);
         debug_assert!(ipps.first().unwrap().val.fuzzy_eq(ipps.last().unwrap().val), "{:?}", ipps);
         debug_assert!(ipps.len() == 1 || ipps.last().unwrap().at == period(), "{:?}", ipps);
@@ -34,101 +75,26 @@ impl<'a> PiecewiseLinearFunction<'a> {
             debug_assert!(!(points[1].val - points[0].val).fuzzy_lt(points[0].at - points[1].at), "{:#?}", points);
         }
 
-        PiecewiseLinearFunction { ipps }
-    }
-
-    pub fn len(&self) -> usize {
-        self.ipps.len()
-    }
-
-    pub fn ipps(&self) -> &'a [TTFPoint] {
-        self.ipps
+        Self { ipps }
     }
 
     pub fn lower_bound(&self) -> FlWeight {
-        self.ipps.iter().map(|p| p.val).min().unwrap()
+        PartialPiecewiseLinearFunction::from(self).lower_bound()
     }
 
     pub fn upper_bound(&self) -> FlWeight {
-        self.ipps.iter().map(|p| p.val).max().unwrap()
-    }
-
-    pub fn evaluate(&self, t: Timestamp) -> FlWeight {
-        let (_, t) = t.split_of_period();
-        self.eval(t)
-    }
-
-    pub(super) fn eval(&self, t: Timestamp) -> FlWeight {
-        debug_assert!(t < period());
-
-        if self.ipps.len() == 1 {
-            return self.ipps.first().unwrap().val;
-        }
-
-        let pos = self.ipps.binary_search_by(|p| {
-            if p.at.fuzzy_eq(t) {
-                Ordering::Equal
-            } else if p.at < t {
-                Ordering::Less
-            } else {
-                Ordering::Greater
-            }
-        });
-
-        match pos {
-            Ok(i) => unsafe { self.ipps.get_unchecked(i).val },
-            Err(i) => {
-                let prev = unsafe { self.ipps.get_unchecked(i - 1) };
-                let next = unsafe { self.ipps.get_unchecked(i) };
-
-                interpolate_linear(prev, next, t)
-            }
-        }
-    }
-
-    /// Copy range of points to target such that [start, end] is completely covered
-    /// (that is there may be one point before start and one after end in the result).
-    pub(super) fn copy_range(&self, start: Timestamp, end: Timestamp, target: &mut impl PLFTarget) {
-        debug_assert!(start.fuzzy_lt(end), "{:?} - {:?}", start, end);
-
-        let mut f = Cursor::starting_at_or_after(&self.ipps, start);
-
-        if start.fuzzy_lt(f.cur().at) {
-            target.push(f.prev());
-        }
-
-        while f.cur().at.fuzzy_lt(end) {
-            target.push(f.cur());
-            f.advance();
-        }
-
-        // this ons is on or after end
-        target.push(f.cur());
-
-        debug_assert!(target.len() > 1);
-
-        for points in target.windows(2) {
-            debug_assert!(points[0].at.fuzzy_lt(points[1].at), "{:?}", dbg_each!(&points[0], &target[..], start, end));
-        }
-
-        debug_assert!(!start.fuzzy_lt(target[0].at));
-        debug_assert!(start.fuzzy_lt(target[1].at));
-        debug_assert!(target[target.len() - 2].at.fuzzy_lt(end));
-        debug_assert!(!target[target.len() - 1].at.fuzzy_lt(end));
+        PartialPiecewiseLinearFunction::from(self).upper_bound()
     }
 
     /// Copy range of points to target such that [start, end] is completely covered but target may already contain points.
     /// When target already covers start, restrict those points to the range up to start, insert a point by linear interpolation
     /// and then insert points to cover everything up to (including) end.
-    pub(super) fn copy_append_to_partial(&self, start: Timestamp, end: Timestamp, target: &mut Vec<TTFPoint>) {
+    pub(super) fn append_range(&self, start: Timestamp, end: Timestamp, target: &mut impl PLFTarget) {
         debug_assert!(start.fuzzy_lt(end), "{:?} - {:?}", start, end);
 
         let mut f = Cursor::starting_at_or_after(&self.ipps, start);
 
         if target.is_empty() {
-            debug_assert_eq!(start, Timestamp::zero());
-            debug_assert_eq!(f.cur().at, Timestamp::zero());
-
             if start.fuzzy_lt(f.cur().at) {
                 target.push(f.prev());
             }
@@ -171,59 +137,9 @@ impl<'a> PiecewiseLinearFunction<'a> {
         for points in target.windows(2) {
             debug_assert!(points[0].at.fuzzy_lt(points[1].at));
         }
-    }
 
-    /// Copy full slice of points to target/first.
-    /// The difference here to the other copy/append methods is that we don't need the Cursor logig but can copy the entire slice.
-    /// When target already covers switchover, restrict those points to the range up to start, insert a point by linear interpolation
-    /// and then insert points to cover everything up to (including) end.
-    pub(super) fn append_partials(first: &mut impl PLFTarget, second: &[TTFPoint], switchover: Timestamp) {
-        debug_assert!(second.len() > 1);
-        if let Some(&TTFPoint { at, .. }) = first.split_last().map(|(_, rest)| rest.last()).unwrap_or(None) {
-            debug_assert!(at.fuzzy_lt(switchover));
-        }
-        if let Some(&TTFPoint { at, .. }) = first.last() {
-            debug_assert!(!at.fuzzy_lt(switchover));
-        }
-        debug_assert!(!switchover.fuzzy_lt(second[0].at));
-        debug_assert!(switchover.fuzzy_lt(second[1].at));
-
-        if first.is_empty() {
-            first.extend(second.iter().cloned());
-            return;
-        }
-
-        let first_last = first.pop().unwrap();
-
-        let switchover_val = if first_last.at.fuzzy_eq(switchover) {
-            first_last.val
-        } else {
-            interpolate_linear(first.last().unwrap(), &first_last, switchover)
-        };
-
-        if second[0].at.fuzzy_eq(switchover) {
-            debug_assert!(switchover_val.fuzzy_eq(second[0].val), "{:?}", dbg_each!(switchover_val, second[0].val));
-        } else {
-            let second_switchover_val = interpolate_linear(&second[0], &second[1], switchover);
-            debug_assert!(
-                switchover_val.fuzzy_eq(second_switchover_val),
-                "{:?}",
-                dbg_each!(first.last(), first_last, switchover_val, second_switchover_val, &second[..=1], switchover)
-            );
-        }
-
-        // ignore point when segments colinear
-        if first.last() != Some(&second[0]) {
-            first.push(TTFPoint {
-                at: switchover,
-                val: switchover_val,
-            });
-        }
-        first.extend(second[1..].iter().cloned());
-
-        for points in first.windows(2) {
-            debug_assert!(points[0].at.fuzzy_lt(points[1].at));
-        }
+        debug_assert!(target[target.len() - 2].at.fuzzy_lt(end));
+        debug_assert!(!target[target.len() - 1].at.fuzzy_lt(end));
     }
 
     pub(super) fn append_lower_bound_partials(first: &mut impl PLFTarget, second: &[TTFPoint], switchover: Timestamp) {
@@ -361,7 +277,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     val: zero_val + val,
                 }))
                 .fold(Vec::with_capacity(other.ipps.len() + 2), |mut acc, p| {
-                    Self::append_point(&mut acc, p);
+                    append_point(&mut acc, p);
                     acc
                 });
 
@@ -415,11 +331,11 @@ impl<'a> PiecewiseLinearFunction<'a> {
             x = min(x, period());
             x = max(x, Timestamp::zero());
 
-            Self::append_point(&mut result, TTFPoint { at: x, val: y });
+            append_point(&mut result, TTFPoint { at: x, val: y });
         }
 
         let zero_val = result[0].val;
-        Self::append_point(&mut result, TTFPoint { at: period(), val: zero_val });
+        append_point(&mut result, TTFPoint { at: period(), val: zero_val });
         result.last_mut().unwrap().at = period();
 
         debug_assert!(result.len() <= self.ipps.len() + other.ipps.len() + 1);
@@ -427,11 +343,260 @@ impl<'a> PiecewiseLinearFunction<'a> {
         result
     }
 
+    // Merge two complete and valid PLFs in the range between 0 and period and store the result in buffer.
+    pub fn merge(&self, other: &Self, buffer: &mut Vec<TTFPoint>) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
+        PartialPiecewiseLinearFunction::from(self).merge_in_bounds::<Cursor, True>(
+            &PartialPiecewiseLinearFunction::from(other),
+            Timestamp::zero(),
+            period(),
+            buffer,
+        )
+    }
+
+    // douglas peuker approximation implementaion
+
+    /// Approximate a PLF
+    #[cfg(not(feature = "tdcch-approx-imai-iri"))]
+    pub fn approximate(&self, buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
+        buffer.reserve(self.ipps.len());
+        PartialPiecewiseLinearFunction::from(self).douglas_peuker(buffer);
+        let result = Box::<[TTFPoint]>::from(&buffer[..]);
+        buffer.clear();
+        result
+    }
+
+    /// Generate an approximated function which is always less or equal to the original function
+    #[cfg(not(feature = "tdcch-approx-imai-iri"))]
+    pub fn lower_bound_ttf(&self, buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
+        buffer.reserve(self.ipps.len());
+        PartialPiecewiseLinearFunction::from(self).douglas_peuker_lower(buffer);
+
+        let wrap_min = min(buffer.first().unwrap().val, buffer.last().unwrap().val);
+
+        buffer.first_mut().unwrap().val = wrap_min;
+        buffer.last_mut().unwrap().val = wrap_min;
+
+        let mut result = Box::<[TTFPoint]>::from(&buffer[..]);
+        Self::fifoize_down(&mut result);
+        buffer.clear();
+        result
+    }
+
+    /// Generate an approximated function which is always greater or equal to the original function
+    #[cfg(not(feature = "tdcch-approx-imai-iri"))]
+    pub fn upper_bound_ttf(&self, buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
+        buffer.reserve(self.ipps.len());
+        PartialPiecewiseLinearFunction::from(self).douglas_peuker_upper(buffer);
+
+        let wrap_max = max(buffer.first().unwrap().val, buffer.last().unwrap().val);
+
+        buffer.first_mut().unwrap().val = wrap_max;
+        buffer.last_mut().unwrap().val = wrap_max;
+
+        let mut result = Box::<[TTFPoint]>::from(&buffer[..]);
+        Self::fifoize_up(&mut result);
+        buffer.clear();
+        result
+    }
+
+    /// Same result as `(lower_bound_ttf(), upper_bound_ttf())` but with just one call to DP
+    #[cfg(not(feature = "tdcch-approx-imai-iri"))]
+    pub fn bound_ttfs(&self) -> (Box<[TTFPoint]>, Box<[TTFPoint]>) {
+        let mut result_lower = Vec::with_capacity(self.ipps.len());
+        let mut result_upper = Vec::with_capacity(self.ipps.len());
+        PartialPiecewiseLinearFunction::from(self).douglas_peuker_combined(&mut result_lower, &mut result_upper);
+
+        let wrap_min = min(result_lower.first().unwrap().val, result_lower.last().unwrap().val);
+        let wrap_max = max(result_upper.first().unwrap().val, result_upper.last().unwrap().val);
+
+        result_lower.first_mut().unwrap().val = wrap_min;
+        result_lower.last_mut().unwrap().val = wrap_min;
+        result_upper.first_mut().unwrap().val = wrap_max;
+        result_upper.last_mut().unwrap().val = wrap_max;
+
+        Self::fifoize_down(&mut result_lower);
+        Self::fifoize_up(&mut result_upper);
+
+        (result_lower.into(), result_upper.into())
+    }
+
+    #[cfg(feature = "tdcch-approx-imai-iri")]
+    pub fn approximate(&self) -> Box<[TTFPoint]> {
+        Imai::new(self.ipps, APPROX.into(), APPROX.into(), true, true).compute().into_boxed_slice()
+    }
+
+    #[cfg(feature = "tdcch-approx-imai-iri")]
+    pub fn lower_bound_ttf(&self) -> Box<[TTFPoint]> {
+        let mut lower = Imai::new(self.ipps, 0.0, APPROX.into(), true, true).compute();
+
+        let wrap = min(lower.first().unwrap().val, lower.last().unwrap().val);
+        lower.first_mut().unwrap().val = wrap;
+        lower.last_mut().unwrap().val = wrap;
+
+        Self::fifoize_down(&mut lower);
+
+        lower.into_boxed_slice()
+    }
+
+    #[cfg(feature = "tdcch-approx-imai-iri")]
+    pub fn upper_bound_ttf(&self) -> Box<[TTFPoint]> {
+        let mut upper = Imai::new(self.ipps, APPROX.into(), 0.0, true, true).compute();
+
+        let wrap = max(upper.first().unwrap().val, upper.last().unwrap().val);
+        upper.first_mut().unwrap().val = wrap;
+        upper.last_mut().unwrap().val = wrap;
+
+        Self::fifoize_up(&mut upper);
+
+        upper.into_boxed_slice()
+    }
+
+    fn fifoize_down(plf: &mut [TTFPoint]) {
+        PartialPiecewiseLinearFunction::fifoize_down(plf);
+        if !plf.last_mut().unwrap().val.fuzzy_eq(plf[0].val) {
+            plf.last_mut().unwrap().val = plf[0].val;
+            PartialPiecewiseLinearFunction::fifoize_down(plf);
+        }
+    }
+
+    fn fifoize_up(plf: &mut [TTFPoint]) {
+        PartialPiecewiseLinearFunction::fifoize_up(plf);
+        if !plf[0].val.fuzzy_eq(plf.last().unwrap().val) {
+            plf[0].val = plf.last().unwrap().val;
+            PartialPiecewiseLinearFunction::fifoize_up(plf);
+        }
+    }
+}
+
+/// A struct borrowing a slice of points which implements all sorts of operations and algorithms for Partial PLFs (nonperiodic).
+#[derive(Debug, Clone, Copy)]
+pub struct PartialPiecewiseLinearFunction<'a> {
+    ipps: &'a [TTFPoint],
+}
+
+impl<'a> From<&'a PeriodicPiecewiseLinearFunction<'a>> for PartialPiecewiseLinearFunction<'a> {
+    fn from(pplf: &'a PeriodicPiecewiseLinearFunction<'a>) -> Self {
+        PartialPiecewiseLinearFunction { ipps: pplf.ipps }
+    }
+}
+
+impl<'a> std::ops::Deref for PartialPiecewiseLinearFunction<'a> {
+    type Target = [TTFPoint];
+
+    fn deref(&self) -> &Self::Target {
+        self.ipps
+    }
+}
+
+impl<'a> PartialPiecewiseLinearFunction<'a> {
+    /// New PartialPLF from slice of points.
+    /// In debug will validate the invariants we need from the function.
+    pub fn new(ipps: &'a [TTFPoint]) -> Self {
+        debug_assert!(!ipps.is_empty(), "{:?}", ipps);
+
+        for points in ipps.windows(2) {
+            debug_assert!(points[0].at.fuzzy_lt(points[1].at), "{:?}", ipps);
+            debug_assert!(!(points[1].val - points[0].val).fuzzy_lt(points[0].at - points[1].at), "{:#?}", points);
+        }
+
+        Self { ipps }
+    }
+
+    pub fn lower_bound(&self) -> FlWeight {
+        self.ipps.iter().map(|p| p.val).min().unwrap()
+    }
+
+    pub fn upper_bound(&self) -> FlWeight {
+        self.ipps.iter().map(|p| p.val).max().unwrap()
+    }
+
+    pub(super) fn eval(&self, t: Timestamp) -> FlWeight {
+        if self.ipps.len() == 1 {
+            return self.ipps.first().unwrap().val;
+        }
+
+        debug_assert!(!self.last().unwrap().at.fuzzy_lt(t));
+        debug_assert!(!t.fuzzy_lt(self.first().unwrap().at));
+
+        let pos = self.ipps.binary_search_by(|p| {
+            if p.at.fuzzy_eq(t) {
+                Ordering::Equal
+            } else if p.at < t {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            }
+        });
+
+        match pos {
+            Ok(i) => unsafe { self.ipps.get_unchecked(i).val },
+            Err(i) => {
+                let prev = unsafe { self.ipps.get_unchecked(i - 1) };
+                let next = unsafe { self.ipps.get_unchecked(i) };
+
+                interpolate_linear(prev, next, t)
+            }
+        }
+    }
+
+    /// Copy full slice of points to target/first.
+    /// The difference here to the other copy/append methods is that we don't need the Cursor logig but can copy the entire slice.
+    /// When target already covers switchover, restrict those points to the range up to start, insert a point by linear interpolation
+    /// and then insert points to cover everything up to (including) end.
+    pub(super) fn append(&self, switchover: Timestamp, target: &mut impl PLFTarget) {
+        debug_assert!(self.len() > 1);
+        if let Some(&TTFPoint { at, .. }) = target.split_last().map(|(_, rest)| rest.last()).unwrap_or(None) {
+            debug_assert!(at.fuzzy_lt(switchover));
+        }
+        if let Some(&TTFPoint { at, .. }) = target.last() {
+            debug_assert!(!at.fuzzy_lt(switchover));
+        }
+        debug_assert!(!switchover.fuzzy_lt(self[0].at));
+        debug_assert!(switchover.fuzzy_lt(self[1].at));
+
+        if target.is_empty() {
+            target.extend(self.iter().cloned());
+            return;
+        }
+
+        let target_last = target.pop().unwrap();
+
+        let switchover_val = if target_last.at.fuzzy_eq(switchover) {
+            target_last.val
+        } else {
+            interpolate_linear(target.last().unwrap(), &target_last, switchover)
+        };
+
+        if self[0].at.fuzzy_eq(switchover) {
+            debug_assert!(switchover_val.fuzzy_eq(self[0].val), "{:?}", dbg_each!(switchover_val, self[0].val));
+        } else {
+            let self_switchover_val = interpolate_linear(&self[0], &self[1], switchover);
+            debug_assert!(
+                switchover_val.fuzzy_eq(self_switchover_val),
+                "{:?}",
+                dbg_each!(target.last(), target_last, switchover_val, self_switchover_val, &self[..=1], switchover)
+            );
+        }
+
+        // ignore point when segments colinear
+        if target.last() != Some(&self[0]) {
+            target.push(TTFPoint {
+                at: switchover,
+                val: switchover_val,
+            });
+        }
+        target.extend(self[1..].iter().cloned());
+
+        for points in target.windows(2) {
+            debug_assert!(points[0].at.fuzzy_lt(points[1].at));
+        }
+    }
+
     /// Link to partial PLFs and append the result to target, taking care of overlap
     #[allow(clippy::cognitive_complexity)]
-    pub(super) fn link_partials(first: &[TTFPoint], second: &[TTFPoint], start: Timestamp, end: Timestamp, target: &mut MutTopPLF) {
-        let mut f = PartialPlfLinkCursor::new(first);
-        let mut g = PartialPlfLinkCursor::new(second);
+    pub(super) fn link(&self, other: &Self, start: Timestamp, end: Timestamp, target: &mut MutTopPLF) {
+        let mut f = PartialPlfLinkCursor::new(self.ipps);
+        let mut g = PartialPlfLinkCursor::new(other.ipps);
 
         loop {
             let x;
@@ -493,25 +658,25 @@ impl<'a> PiecewiseLinearFunction<'a> {
         if let [TTFPoint { val, .. }] = &target[..] {
             let val = *val;
             target.push(TTFPoint {
-                at: first.last().unwrap().at,
+                at: self.last().unwrap().at,
                 val,
             });
         }
 
         debug_assert!(target.len() > 1);
         debug_assert!(
-            target.len() <= first.len() + second.len() + 1,
+            target.len() <= self.len() + other.len() + 1,
             "{:?}",
             dbg_each!(
-                first.len(),
-                second.len(),
+                self.len(),
+                other.len(),
                 target.len(),
                 start,
                 end,
-                first.first(),
-                first.last(),
-                second.first(),
-                second.last()
+                self.first(),
+                self.last(),
+                other.first(),
+                other.last()
             )
         );
         for points in target.windows(2) {
@@ -524,24 +689,11 @@ impl<'a> PiecewiseLinearFunction<'a> {
     }
 
     // Merge two partial plfs in the range between start and end and store the result in buffer.
-    pub fn merge_partials(
-        first: &[TTFPoint],
-        second: &[TTFPoint],
-        start: Timestamp,
-        end: Timestamp,
-        buffer: &mut Vec<TTFPoint>,
-    ) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
+    pub fn merge(self, other: &Self, start: Timestamp, end: Timestamp, buffer: &mut Vec<TTFPoint>) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
         debug_assert!(start >= Timestamp::zero());
         debug_assert!(end <= period());
 
-        // We just put the partial PLFs into `PiecewiseLinearFunction` objects without caring about the invariants
-        // but use the CursorType to make sure a Cursor is used which handles them the right way.
-        PiecewiseLinearFunction { ipps: first }.merge_in_bounds::<PartialPlfMergeCursor, False>(&PiecewiseLinearFunction { ipps: second }, start, end, buffer)
-    }
-
-    // Merge two complete and valid PLFs in the range between 0 and period and store the result in buffer.
-    pub fn merge(&self, other: &Self, buffer: &mut Vec<TTFPoint>) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
-        self.merge_in_bounds::<Cursor, True>(other, Timestamp::zero(), period(), buffer)
+        self.merge_in_bounds::<PartialPlfMergeCursor, False>(other, start, end, buffer)
     }
 
     // Actual merging logic. Here be dragons.
@@ -639,7 +791,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
         let mut g = C::new(&other.ipps);
 
         if intersect_fuzzy_on_start {
-            Self::append_point(
+            append_point(
                 result,
                 TTFPoint {
                     at: start,
@@ -650,9 +802,9 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 at: start + FlWeight::new(EPSILON * 1.1),
                 val: interpolate_linear(&f.cur(), &f.next(), start + FlWeight::new(EPSILON * 1.1)),
             };
-            Self::append_point(result, p_after_start(if better.last().unwrap().1 { &f } else { &g }));
+            append_point(result, p_after_start(if better.last().unwrap().1 { &f } else { &g }));
         } else {
-            Self::append_point(result, if better.last().unwrap().1 { f.cur() } else { g.cur() });
+            append_point(result, if better.last().unwrap().1 { f.cur() } else { g.cur() });
         }
 
         f.advance();
@@ -671,16 +823,16 @@ impl<'a> PiecewiseLinearFunction<'a> {
                         dbg_each!(start, end, intersection)
                     );
                     better.push((intersection.at, counter_clockwise(&g.prev(), &f.cur(), &g.cur())));
-                    Self::append_point(result, intersection);
+                    append_point(result, intersection);
                 }
             }
 
             if f.cur().at.fuzzy_eq(g.cur().at) {
                 if f.cur().val.fuzzy_eq(g.cur().val) {
                     if better.last().unwrap().1 {
-                        Self::append_point(result, f.cur());
+                        append_point(result, f.cur());
                     } else {
-                        Self::append_point(result, g.cur());
+                        append_point(result, g.cur());
                     }
 
                     if !better.last().unwrap().1 && counter_clockwise(&f.cur(), &f.next(), &g.next()) {
@@ -701,7 +853,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                         better.push((f.cur().at, false));
                     }
                 } else if f.cur().val < g.cur().val {
-                    Self::append_point(result, f.cur());
+                    append_point(result, f.cur());
                     debug_assert!(
                         f.cur().val.fuzzy_lt(g.cur().val),
                         "{:?}",
@@ -719,7 +871,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                         better.push((intersection.at, true));
                     }
                 } else {
-                    Self::append_point(result, g.cur());
+                    append_point(result, g.cur());
                     debug_assert!(
                         g.cur().val < f.cur().val,
                         "{:?}",
@@ -744,7 +896,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 debug_assert!(f.cur().at.fuzzy_lt(g.cur().at), "f {:?} g {:?}", f.cur().at, g.cur().at);
 
                 if counter_clockwise(&g.prev(), &f.cur(), &g.cur()) {
-                    Self::append_point(result, f.cur());
+                    append_point(result, f.cur());
                     debug_assert!(
                         better.last().unwrap().1,
                         "{:?}",
@@ -762,7 +914,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     }
 
                     if counter_clockwise(&g.prev(), &f.prev(), &f.cur()) || counter_clockwise(&f.cur(), &f.next(), &g.cur()) {
-                        Self::append_point(result, f.cur());
+                        append_point(result, f.cur());
                         debug_assert!(
                             better.last().unwrap().1,
                             "{:?}",
@@ -780,7 +932,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                 debug_assert!(g.cur().at < f.cur().at);
 
                 if counter_clockwise(&f.prev(), &g.cur(), &f.cur()) {
-                    Self::append_point(result, g.cur());
+                    append_point(result, g.cur());
                     debug_assert!(
                         !better.last().unwrap().1,
                         "{:?}",
@@ -798,7 +950,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     }
 
                     if counter_clockwise(&g.prev(), &g.cur(), &f.prev()) || counter_clockwise(&g.cur(), &g.next(), &f.cur()) {
-                        Self::append_point(result, g.cur());
+                        append_point(result, g.cur());
                         debug_assert!(
                             !better.last().unwrap().1,
                             "{:?}",
@@ -837,7 +989,7 @@ impl<'a> PiecewiseLinearFunction<'a> {
                     debug_merge(&self.ipps, f.cur(), &other.ipps, g.cur(), &result, &better)
                 );
                 better.push((intersection.at, counter_clockwise(&g.prev(), &f.cur(), &g.cur())));
-                Self::append_point(result, intersection);
+                append_point(result, intersection);
             }
         }
 
@@ -845,10 +997,10 @@ impl<'a> PiecewiseLinearFunction<'a> {
         if FullRange::VALUE {
             if result.len() > 1 {
                 let p = TTFPoint { at: end, val: result[0].val };
-                Self::append_point(result, p);
+                append_point(result, p);
             }
         } else if result.last().unwrap().at.fuzzy_lt(end) {
-            Self::append_point(result, if better.last().unwrap().1 { f.cur() } else { g.cur() });
+            append_point(result, if better.last().unwrap().1 { f.cur() } else { g.cur() });
         }
 
         debug_assert!(result.len() <= 2 * self.ipps.len() + 2 * other.ipps.len() + 2);
@@ -887,91 +1039,6 @@ impl<'a> PiecewiseLinearFunction<'a> {
         ret
     }
 
-    // append point to a PLF making sure, that its not too close to the previous point
-    fn append_point(points: &mut Vec<TTFPoint>, point: TTFPoint) {
-        debug_assert!(point.val >= FlWeight::new(0.0), "{:?}", point);
-        if let Some(p) = points.last() {
-            if p.at.fuzzy_eq(point.at) && p.val.fuzzy_eq(point.val) {
-                return;
-            }
-        }
-        debug_assert!(
-            points.last().map(|p| p.at.fuzzy_lt(point.at)).unwrap_or(true),
-            "last: {:?}, append: {:?}",
-            points.last(),
-            point
-        );
-
-        points.push(point)
-    }
-
-    // douglas peuker approximation implementaion
-
-    /// Approximate a PLF
-    #[cfg(not(feature = "tdcch-approx-imai-iri"))]
-    pub fn approximate(&self, buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
-        buffer.reserve(self.ipps.len());
-        self.douglas_peuker(buffer);
-        let result = Box::<[TTFPoint]>::from(&buffer[..]);
-        buffer.clear();
-        result
-    }
-
-    /// Generate an approximated function which is always less or equal to the original function
-    #[cfg(not(feature = "tdcch-approx-imai-iri"))]
-    pub fn lower_bound_ttf(&self, buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
-        buffer.reserve(self.ipps.len());
-        self.douglas_peuker_lower(buffer);
-
-        let wrap_min = min(buffer.first().unwrap().val, buffer.last().unwrap().val);
-
-        buffer.first_mut().unwrap().val = wrap_min;
-        buffer.last_mut().unwrap().val = wrap_min;
-
-        let mut result = Box::<[TTFPoint]>::from(&buffer[..]);
-        Self::fifoize_down(&mut result);
-        buffer.clear();
-        result
-    }
-
-    /// Generate an approximated function which is always greater or equal to the original function
-    #[cfg(not(feature = "tdcch-approx-imai-iri"))]
-    pub fn upper_bound_ttf(&self, buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
-        buffer.reserve(self.ipps.len());
-        self.douglas_peuker_upper(buffer);
-
-        let wrap_max = max(buffer.first().unwrap().val, buffer.last().unwrap().val);
-
-        buffer.first_mut().unwrap().val = wrap_max;
-        buffer.last_mut().unwrap().val = wrap_max;
-
-        let mut result = Box::<[TTFPoint]>::from(&buffer[..]);
-        Self::fifoize_up(&mut result);
-        buffer.clear();
-        result
-    }
-
-    /// Same result as `(lower_bound_ttf(), upper_bound_ttf())` but with just one call to DP
-    #[cfg(not(feature = "tdcch-approx-imai-iri"))]
-    pub fn bound_ttfs(&self) -> (Box<[TTFPoint]>, Box<[TTFPoint]>) {
-        let mut result_lower = Vec::with_capacity(self.ipps.len());
-        let mut result_upper = Vec::with_capacity(self.ipps.len());
-        self.douglas_peuker_combined(&mut result_lower, &mut result_upper);
-
-        let wrap_min = min(result_lower.first().unwrap().val, result_lower.last().unwrap().val);
-        let wrap_max = max(result_upper.first().unwrap().val, result_upper.last().unwrap().val);
-
-        result_lower.first_mut().unwrap().val = wrap_min;
-        result_lower.last_mut().unwrap().val = wrap_min;
-        result_upper.first_mut().unwrap().val = wrap_max;
-        result_upper.last_mut().unwrap().val = wrap_max;
-
-        Self::fifoize_down(&mut result_lower);
-        Self::fifoize_up(&mut result_upper);
-
-        (result_lower.into(), result_upper.into())
-    }
-
     // calculate approximated function
     #[cfg(not(feature = "tdcch-approx-imai-iri"))]
     fn douglas_peuker(&self, result: &mut Vec<TTFPoint>) {
@@ -991,9 +1058,9 @@ impl<'a> PiecewiseLinearFunction<'a> {
             .unwrap();
 
         if delta > APPROX {
-            PiecewiseLinearFunction { ipps: &self.ipps[0..=i] }.douglas_peuker(result);
+            Self { ipps: &self.ipps[0..=i] }.douglas_peuker(result);
             result.pop();
-            PiecewiseLinearFunction {
+            Self {
                 ipps: &self.ipps[i..self.ipps.len()],
             }
             .douglas_peuker(result);
@@ -1030,11 +1097,11 @@ impl<'a> PiecewiseLinearFunction<'a> {
         };
 
         if delta > APPROX {
-            PiecewiseLinearFunction { ipps: &self.ipps[0..=i] }.douglas_peuker_combined(result_lower, result_upper);
+            Self { ipps: &self.ipps[0..=i] }.douglas_peuker_combined(result_lower, result_upper);
             let prev_min = result_lower.pop().map(|p| p.val).unwrap_or_else(FlWeight::zero);
             let prev_max = result_upper.pop().map(|p| p.val).unwrap_or_else(FlWeight::zero);
             let prev_len = result_lower.len();
-            PiecewiseLinearFunction {
+            Self {
                 ipps: &self.ipps[i..self.ipps.len()],
             }
             .douglas_peuker_combined(result_lower, result_upper);
@@ -1086,10 +1153,10 @@ impl<'a> PiecewiseLinearFunction<'a> {
         };
 
         if delta > APPROX {
-            PiecewiseLinearFunction { ipps: &self.ipps[0..=i] }.douglas_peuker_lower(result_lower);
+            Self { ipps: &self.ipps[0..=i] }.douglas_peuker_lower(result_lower);
             let prev_min = result_lower.pop().map(|p| p.val).unwrap_or_else(FlWeight::zero);
             let prev_len = result_lower.len();
-            PiecewiseLinearFunction {
+            Self {
                 ipps: &self.ipps[i..self.ipps.len()],
             }
             .douglas_peuker_lower(result_lower);
@@ -1132,10 +1199,10 @@ impl<'a> PiecewiseLinearFunction<'a> {
         };
 
         if delta > APPROX {
-            PiecewiseLinearFunction { ipps: &self.ipps[0..=i] }.douglas_peuker_upper(result_upper);
+            Self { ipps: &self.ipps[0..=i] }.douglas_peuker_upper(result_upper);
             let prev_max = result_upper.pop().map(|p| p.val).unwrap_or_else(FlWeight::zero);
             let prev_len = result_upper.len();
-            PiecewiseLinearFunction {
+            Self {
                 ipps: &self.ipps[i..self.ipps.len()],
             }
             .douglas_peuker_upper(result_upper);
@@ -1152,54 +1219,15 @@ impl<'a> PiecewiseLinearFunction<'a> {
         }
     }
 
-    #[cfg(feature = "tdcch-approx-imai-iri")]
-    pub fn approximate(&self) -> Box<[TTFPoint]> {
-        Imai::new(self.ipps, APPROX.into(), APPROX.into(), true, true).compute().into_boxed_slice()
-    }
-
-    #[cfg(feature = "tdcch-approx-imai-iri")]
-    pub fn lower_bound_ttf(&self) -> Box<[TTFPoint]> {
-        let mut lower = Imai::new(self.ipps, 0.0, APPROX.into(), true, true).compute();
-
-        let wrap = min(lower.first().unwrap().val, lower.last().unwrap().val);
-        lower.first_mut().unwrap().val = wrap;
-        lower.last_mut().unwrap().val = wrap;
-
-        Self::fifoize_down(&mut lower);
-
-        lower.into_boxed_slice()
-    }
-
-    #[cfg(feature = "tdcch-approx-imai-iri")]
-    pub fn upper_bound_ttf(&self) -> Box<[TTFPoint]> {
-        let mut upper = Imai::new(self.ipps, APPROX.into(), 0.0, true, true).compute();
-
-        let wrap = max(upper.first().unwrap().val, upper.last().unwrap().val);
-        upper.first_mut().unwrap().val = wrap;
-        upper.last_mut().unwrap().val = wrap;
-
-        Self::fifoize_up(&mut upper);
-
-        upper.into_boxed_slice()
-    }
-
-    // TODO safe second round if possible
     fn fifoize_down(plf: &mut [TTFPoint]) {
-        for _ in 0..2 {
-            for i in (0..plf.len() - 1).rev() {
-                plf[i].val = min(plf[i].val, plf[i + 1].val + plf[i + 1].at - plf[i].at);
-            }
-            plf.last_mut().unwrap().val = plf[0].val;
+        for i in (0..plf.len() - 1).rev() {
+            plf[i].val = min(plf[i].val, plf[i + 1].val + plf[i + 1].at - plf[i].at);
         }
     }
 
-    // TODO safe second round if possible
     fn fifoize_up(plf: &mut [TTFPoint]) {
-        for _ in 0..2 {
-            for i in 1..plf.len() {
-                plf[i].val = max(plf[i].val, plf[i - 1].val + plf[i - 1].at - plf[i].at);
-            }
-            plf[0].val = plf.last().unwrap().val;
+        for i in 1..plf.len() {
+            plf[i].val = max(plf[i].val, plf[i - 1].val + plf[i - 1].at - plf[i].at);
         }
     }
 }
@@ -1381,7 +1409,7 @@ mod tests {
                 },
             ];
 
-            let linked = PiecewiseLinearFunction::new(&ipps1).link(&PiecewiseLinearFunction::new(&ipps2));
+            let linked = PeriodicPiecewiseLinearFunction::new(&ipps1).link(&PeriodicPiecewiseLinearFunction::new(&ipps2));
             assert_eq!(5, linked.len())
         });
     }
@@ -1409,7 +1437,7 @@ mod tests {
                 },
             ];
 
-            let linked = PiecewiseLinearFunction::new(&ipps1).link(&PiecewiseLinearFunction::new(&ipps2));
+            let linked = PeriodicPiecewiseLinearFunction::new(&ipps1).link(&PeriodicPiecewiseLinearFunction::new(&ipps2));
             assert_eq!(4, linked.len())
         });
     }
@@ -1422,7 +1450,7 @@ mod tests {
                 val: FlWeight::new(10.0),
             }];
             let mut result = Vec::new();
-            PiecewiseLinearFunction::new(&ipps).copy_range(Timestamp::new(40.0), Timestamp::new(50.0), &mut result);
+            PeriodicPiecewiseLinearFunction::new(&ipps).append_range(Timestamp::new(40.0), Timestamp::new(50.0), &mut result);
             assert_eq!(
                 result,
                 vec![
@@ -1442,7 +1470,7 @@ mod tests {
     #[test]
     fn test_partial_merging_with_intersection_fuzzy_on_start() {
         run_test_with_periodicity(Timestamp::new(86400.0), || {
-            let first = [
+            let first = PartialPiecewiseLinearFunction::new(&[
                 TTFPoint {
                     at: Timestamp::new(52074.519796162815),
                     val: FlWeight::new(135.4043214842386),
@@ -1455,8 +1483,8 @@ mod tests {
                     at: Timestamp::new(52120.84202396357),
                     val: FlWeight::new(165.15049612794246),
                 },
-            ];
-            let second = [
+            ]);
+            let second = PartialPiecewiseLinearFunction::new(&[
                 TTFPoint {
                     at: Timestamp::new(52078.159999999996),
                     val: FlWeight::new(169.1520000000022),
@@ -1465,9 +1493,8 @@ mod tests {
                     at: Timestamp::new(52082.479999999996),
                     val: FlWeight::new(166.49300000000252),
                 },
-            ];
-            let (result, _) =
-                PiecewiseLinearFunction::merge_partials(&first, &second, Timestamp::new(52079.64118104493), Timestamp::new(52082.0), &mut Vec::new());
+            ]);
+            let (result, _) = first.merge(&second, Timestamp::new(52079.64118104493), Timestamp::new(52082.0), &mut Vec::new());
             assert_eq!(*result.last().unwrap(), second[1]);
         });
     }
@@ -1577,52 +1604,35 @@ def plot_coords(coords, *args, **kwargs):
 }
 
 pub struct UpdatedPiecewiseLinearFunction<'a> {
-    plf: PiecewiseLinearFunction<'a>,
+    plf: PeriodicPiecewiseLinearFunction<'a>,
     update: &'a [TTFPoint],
 }
 
 impl<'a> UpdatedPiecewiseLinearFunction<'a> {
-    pub fn new(plf: PiecewiseLinearFunction<'a>, update: &'a [TTFPoint]) -> Self {
+    pub fn new(plf: PeriodicPiecewiseLinearFunction<'a>, update: &'a [TTFPoint]) -> Self {
         Self { plf, update }
     }
 
+    fn update_plf(&self) -> Option<PartialPiecewiseLinearFunction> {
+        if self.update.is_empty() {
+            None
+        } else {
+            Some(PartialPiecewiseLinearFunction::new(self.update))
+        }
+    }
+
     pub fn lower_bound(&self) -> FlWeight {
-        min(self.plf.lower_bound(), self.update.iter().map(|p| p.val).min().unwrap_or(FlWeight::INFINITY))
+        min(
+            self.plf.lower_bound(),
+            self.update_plf().map(|plf| plf.lower_bound()).unwrap_or(FlWeight::INFINITY),
+        )
     }
 
     pub fn upper_bound(&self) -> FlWeight {
-        max(self.plf.upper_bound(), self.update.iter().map(|p| p.val).max().unwrap_or(FlWeight::zero()))
-    }
-
-    pub fn evaluate(&self, t: Timestamp) -> FlWeight {
-        debug_assert!(!t.fuzzy_lt(self.update[0].at));
-        if self.update.last().map(|p| t <= p.at).unwrap_or(false) {
-            self.eval(t)
-        } else {
-            self.plf.evaluate(t)
-        }
-    }
-
-    fn eval(&self, t: Timestamp) -> FlWeight {
-        let pos = self.update.binary_search_by(|p| {
-            if p.at.fuzzy_eq(t) {
-                Ordering::Equal
-            } else if p.at < t {
-                Ordering::Less
-            } else {
-                Ordering::Greater
-            }
-        });
-
-        match pos {
-            Ok(i) => unsafe { self.update.get_unchecked(i).val },
-            Err(i) => {
-                let prev = unsafe { self.update.get_unchecked(i - 1) };
-                let next = unsafe { self.update.get_unchecked(i) };
-
-                interpolate_linear(prev, next, t)
-            }
-        }
+        max(
+            self.plf.lower_bound(),
+            self.update_plf().map(|plf| plf.upper_bound()).unwrap_or(FlWeight::zero()),
+        )
     }
 
     pub fn t_switch(&self) -> Option<Timestamp> {
@@ -1630,36 +1640,27 @@ impl<'a> UpdatedPiecewiseLinearFunction<'a> {
     }
 }
 
-pub trait PLF {
-    fn evaluate(&self, t: Timestamp) -> FlWeight;
-    fn copy_range(&self, start: Timestamp, end: Timestamp, target: &mut impl PLFTarget);
-}
-
-impl<'a> PLF for PiecewiseLinearFunction<'a> {
-    fn evaluate(&self, t: Timestamp) -> FlWeight {
-        PiecewiseLinearFunction::evaluate(self, t)
-    }
-    fn copy_range(&self, start: Timestamp, end: Timestamp, target: &mut impl PLFTarget) {
-        PiecewiseLinearFunction::copy_range(self, start, end, target)
-    }
-}
-
 impl<'a> PLF for UpdatedPiecewiseLinearFunction<'a> {
     fn evaluate(&self, t: Timestamp) -> FlWeight {
-        UpdatedPiecewiseLinearFunction::evaluate(self, t)
+        debug_assert!(!t.fuzzy_lt(self.update[0].at));
+        if self.update.last().map(|p| t <= p.at).unwrap_or(false) {
+            PartialPiecewiseLinearFunction::new(self.update).eval(t)
+        } else {
+            self.plf.evaluate(t)
+        }
     }
-    fn copy_range(&self, start: Timestamp, end: Timestamp, target: &mut impl PLFTarget) {
+    fn append_range(&self, start: Timestamp, end: Timestamp, target: &mut impl PLFTarget) {
         if self.t_switch().map(|l| l.fuzzy_lt(start)).unwrap_or(true) {
-            self.plf.copy_range(start, end, target)
+            self.plf.append_range(start, end, target)
         } else {
             let live_until = self.t_switch().unwrap();
             if !live_until.fuzzy_lt(end) {
                 // TODO limit self to range
-                PiecewiseLinearFunction::append_partials(target, self.update, start)
+                PartialPiecewiseLinearFunction::new(self.update).append(start, target);
             } else {
                 // TODO limit self to range
-                PiecewiseLinearFunction::append_partials(target, self.update, start);
-                self.plf.copy_range(live_until, end, target);
+                PartialPiecewiseLinearFunction::new(self.update).append(start, target);
+                self.plf.append_range(live_until, end, target);
             }
         }
     }

@@ -78,9 +78,9 @@ impl Graph {
     }
 
     /// Borrow PLF
-    pub fn travel_time_function(&self, edge_id: EdgeId) -> PiecewiseLinearFunction {
+    pub fn travel_time_function(&self, edge_id: EdgeId) -> PeriodicPiecewiseLinearFunction {
         let edge_id = edge_id as usize;
-        PiecewiseLinearFunction::new(&self.ipps[self.first_ipp_of_arc[edge_id] as usize..self.first_ipp_of_arc[edge_id + 1] as usize])
+        PeriodicPiecewiseLinearFunction::new(&self.ipps[self.first_ipp_of_arc[edge_id] as usize..self.first_ipp_of_arc[edge_id + 1] as usize])
     }
 
     /// Outgoing edge iterator
@@ -210,12 +210,12 @@ impl LiveGraph {
         }
     }
 
-    fn switchpoint(plf: PiecewiseLinearFunction, live: FlWeight, t_soon: Timestamp) -> TTFPoint {
+    fn switchpoint(plf: PeriodicPiecewiseLinearFunction, live: FlWeight, t_soon: Timestamp) -> TTFPoint {
         let evaled = plf.evaluate(t_soon);
         if evaled.fuzzy_eq(live) {
             return TTFPoint { at: t_soon, val: live };
         }
-        let mut cursor = Cursor::starting_at_or_after(plf.ipps(), t_soon);
+        let mut cursor = Cursor::starting_at_or_after(&plf, t_soon);
         let pred_below = evaled.fuzzy_lt(live);
         loop {
             let live_at_cur = if pred_below {
@@ -262,7 +262,7 @@ pub trait TDGraphTrait<'a> {
 }
 
 impl<'a> TDGraphTrait<'a> for Graph {
-    type TTF = PiecewiseLinearFunction<'a>;
+    type TTF = PeriodicPiecewiseLinearFunction<'a>;
     fn travel_time_function(&'a self, edge_id: EdgeId) -> Self::TTF {
         Graph::travel_time_function(self, edge_id)
     }

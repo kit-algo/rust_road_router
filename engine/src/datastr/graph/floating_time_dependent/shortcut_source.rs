@@ -118,7 +118,7 @@ impl ShortcutSource {
                     shortcut_graph.exact_ttf_for(ShortcutId::Outgoing(up), second_start, second_end, &mut second_target, target.storage_mut());
 
                     let (first, second) = second_target.storage().top_plfs();
-                    PiecewiseLinearFunction::link_partials(first, second, start, end, target);
+                    PartialPiecewiseLinearFunction::new(first).link(&PartialPiecewiseLinearFunction::new(second), start, end, target);
 
                     debug_assert!(
                         !target.last().unwrap().at.fuzzy_lt(end),
@@ -140,7 +140,7 @@ impl ShortcutSource {
             }
             ShortcutSource::OriginalEdge(edge) => {
                 let ttf = shortcut_graph.original_graph().travel_time_function(edge);
-                ttf.copy_range(start, end, target);
+                ttf.append_range(start, end, target);
             }
             ShortcutSource::None => {
                 panic!("can't fetch ttf for None source");
@@ -165,7 +165,7 @@ impl ShortcutSource {
                     .ttf(ShortcutId::Incoming(down))
                     .bound_plfs()
                     .0
-                    .copy_range(start, end, &mut first_target);
+                    .append_range(start, end, &mut first_target);
 
                 debug_assert!(!first_target.last().unwrap().at.fuzzy_lt(end));
                 // for `up` PLF we need to shift the time range
@@ -178,14 +178,14 @@ impl ShortcutSource {
                     .ttf(ShortcutId::Outgoing(up))
                     .bound_plfs()
                     .0
-                    .copy_range(second_start, second_end, &mut second_target);
+                    .append_range(second_start, second_end, &mut second_target);
 
                 let (first, second) = second_target.storage().top_plfs();
-                PiecewiseLinearFunction::link_partials(first, second, start, end, target);
+                PartialPiecewiseLinearFunction::new(first).link(&PartialPiecewiseLinearFunction::new(second), start, end, target);
             }
             ShortcutSource::OriginalEdge(edge) => {
                 let ttf = shortcut_graph.original_graph().travel_time_function(edge);
-                ttf.copy_range(start, end, target);
+                ttf.append_range(start, end, target);
             }
             ShortcutSource::None => {
                 panic!("can't fetch ttf for None source");
@@ -210,7 +210,7 @@ impl ShortcutSource {
                     .ttf(ShortcutId::Incoming(down))
                     .bound_plfs()
                     .1
-                    .copy_range(start, end, &mut first_target);
+                    .append_range(start, end, &mut first_target);
 
                 debug_assert!(!first_target.last().unwrap().at.fuzzy_lt(end));
                 // for `up` PLF we need to shift the time range
@@ -223,14 +223,14 @@ impl ShortcutSource {
                     .ttf(ShortcutId::Outgoing(up))
                     .bound_plfs()
                     .1
-                    .copy_range(second_start, second_end, &mut second_target);
+                    .append_range(second_start, second_end, &mut second_target);
 
                 let (first, second) = second_target.storage().top_plfs();
-                PiecewiseLinearFunction::link_partials(first, second, start, end, target);
+                PartialPiecewiseLinearFunction::new(first).link(&PartialPiecewiseLinearFunction::new(second), start, end, target);
             }
             ShortcutSource::OriginalEdge(edge) => {
                 let ttf = shortcut_graph.original_graph().travel_time_function(edge);
-                ttf.copy_range(start, end, target);
+                ttf.append_range(start, end, target);
             }
             ShortcutSource::None => {
                 panic!("can't fetch ttf for None source");
@@ -381,7 +381,7 @@ impl Sources for [(Timestamp, ShortcutSourceData)] {
                 &mut inner_target,
                 target.storage_mut(),
             );
-            PiecewiseLinearFunction::append_partials(target, &inner_target, max(start, c.cur().0));
+            PartialPiecewiseLinearFunction::new(&inner_target).append(max(start, c.cur().0), target);
 
             c.advance();
         }
