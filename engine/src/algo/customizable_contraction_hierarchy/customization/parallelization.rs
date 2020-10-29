@@ -25,7 +25,7 @@ where
     /// The separator routine will be invoked only very few times in parallel, the final separator will be customized completely alone and nodes have high degrees.
     pub fn new(cch: &'a CCH, customize_cell: F, customize_separator: G) -> Self {
         let separators = cch.separators();
-        if cfg!(feature = "cch-disable-par") {
+        if !cfg!(feature = "cch-disable-par") {
             separators.validate_for_parallelization();
         }
 
