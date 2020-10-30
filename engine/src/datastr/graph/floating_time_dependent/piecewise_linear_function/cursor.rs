@@ -121,7 +121,7 @@ impl<'a> MergeCursor<'a> for Cursor<'a> {
 
 /// Cursor for partial TTFs.
 /// Needing no wrapping here.
-/// When we move beyond end, we just move in one second steps and keep the last value.
+/// When we move beyond end, we just move in steps and keep the last value.
 #[derive(Debug)]
 pub struct PartialPlfMergeCursor<'a> {
     iter: std::slice::Iter<'a, TTFPoint>,
@@ -135,7 +135,7 @@ impl<'a> MergeCursor<'a> for PartialPlfMergeCursor<'a> {
         let mut iter = ipps.iter();
         let next = iter.next().unwrap().clone();
         let cur = TTFPoint {
-            at: next.at - FlWeight::new(1.0),
+            at: next.at - FlWeight::from(period()),
             val: next.val,
         };
         let mut cursor = PartialPlfMergeCursor {
@@ -166,7 +166,7 @@ impl<'a> MergeCursor<'a> for PartialPlfMergeCursor<'a> {
         if let Some(next) = self.iter.next() {
             self.next = next.clone();
         } else {
-            self.next.at = self.next.at + FlWeight::new(1.0);
+            self.next.at = self.next.at + FlWeight::from(period());
         }
     }
 

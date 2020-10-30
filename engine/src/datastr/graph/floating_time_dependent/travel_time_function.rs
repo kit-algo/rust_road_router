@@ -510,30 +510,35 @@ impl<'a> ApproxTTF<'a> {
                     other_upper.append_range(start_of_segment, end_of_segment, &mut buffers.exact_result_upper);
                 }
                 BoundMergingState::Merge => {
-                    // TODO why cant we just take a subslice?
-                    buffers.exact_self_buffer.clear();
-                    self_lower.append_range(start_of_segment, end_of_segment, &mut buffers.exact_self_buffer);
-                    buffers.exact_other_buffer.clear();
-                    other_lower.append_range(start_of_segment, end_of_segment, &mut buffers.exact_other_buffer);
-                    let (partial_lower, _) = PartialPiecewiseLinearFunction::new(&buffers.exact_self_buffer).merge(
-                        &PartialPiecewiseLinearFunction::new(&buffers.exact_other_buffer),
-                        start_of_segment,
-                        end_of_segment,
-                        &mut buffers.buffer,
-                    );
-                    PartialPiecewiseLinearFunction::new(&partial_lower).append(start_of_segment, &mut buffers.exact_result_lower);
+                    let (partial_lower, _) = PartialPiecewiseLinearFunction::from(&self_lower)
+                        .sub_plf(start_of_segment, end_of_segment)
+                        .merge(
+                            &PartialPiecewiseLinearFunction::from(&other_lower).sub_plf(start_of_segment, end_of_segment),
+                            start_of_segment,
+                            end_of_segment,
+                            &mut buffers.buffer,
+                        );
+                    if let &[TTFPoint { val, .. }] = &partial_lower[..] {
+                        PartialPiecewiseLinearFunction::new(&[TTFPoint { at: start_of_segment, val }, TTFPoint { at: end_of_segment, val }])
+                            .append(start_of_segment, &mut buffers.exact_result_lower);
+                    } else {
+                        PartialPiecewiseLinearFunction::new(&partial_lower).append(start_of_segment, &mut buffers.exact_result_lower);
+                    }
 
-                    buffers.exact_self_buffer.clear();
-                    self_upper.append_range(start_of_segment, end_of_segment, &mut buffers.exact_self_buffer);
-                    buffers.exact_other_buffer.clear();
-                    other_upper.append_range(start_of_segment, end_of_segment, &mut buffers.exact_other_buffer);
-                    let (partial_upper, _) = PartialPiecewiseLinearFunction::new(&buffers.exact_self_buffer).merge(
-                        &PartialPiecewiseLinearFunction::new(&buffers.exact_other_buffer),
-                        start_of_segment,
-                        end_of_segment,
-                        &mut buffers.buffer,
-                    );
-                    PartialPiecewiseLinearFunction::new(&partial_upper).append(start_of_segment, &mut buffers.exact_result_upper);
+                    let (partial_upper, _) = PartialPiecewiseLinearFunction::new(&self_upper)
+                        .sub_plf(start_of_segment, end_of_segment)
+                        .merge(
+                            &PartialPiecewiseLinearFunction::new(&other_upper).sub_plf(start_of_segment, end_of_segment),
+                            start_of_segment,
+                            end_of_segment,
+                            &mut buffers.buffer,
+                        );
+                    if let &[TTFPoint { val, .. }] = &partial_upper[..] {
+                        PartialPiecewiseLinearFunction::new(&[TTFPoint { at: start_of_segment, val }, TTFPoint { at: end_of_segment, val }])
+                            .append(start_of_segment, &mut buffers.exact_result_upper);
+                    } else {
+                        PartialPiecewiseLinearFunction::new(&partial_upper).append(start_of_segment, &mut buffers.exact_result_upper);
+                    }
                 }
             }
         }

@@ -539,6 +539,51 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
         }
     }
 
+    pub fn sub_plf(&self, start: Timestamp, end: Timestamp) -> Self {
+        if self.len() == 1 {
+            return *self;
+        }
+        debug_assert!(!start.fuzzy_lt(self.first().unwrap().at));
+        debug_assert!(
+            !self.last().unwrap().at.fuzzy_lt(end),
+            "{:?} - {:?}, start {:?} end {:?}",
+            self.first(),
+            self.last(),
+            start,
+            end
+        );
+
+        let pos = self.ipps.binary_search_by(|p| {
+            if p.at.fuzzy_eq(start) {
+                Ordering::Equal
+            } else if p.at < start {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            }
+        });
+        let start = match pos {
+            Ok(i) => i,
+            Err(i) => i - 1,
+        };
+
+        let pos = self.ipps.binary_search_by(|p| {
+            if p.at.fuzzy_eq(end) {
+                Ordering::Equal
+            } else if p.at < end {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            }
+        });
+        let end = match pos {
+            Ok(i) => i,
+            Err(i) => i,
+        };
+
+        PartialPiecewiseLinearFunction { ipps: &self.ipps[start..=end] }
+    }
+
     /// Copy full slice of points to target/first.
     /// The difference here to the other copy/append methods is that we don't need the Cursor logig but can copy the entire slice.
     /// When target already covers switchover, restrict those points to the range up to start, insert a point by linear interpolation
@@ -1470,7 +1515,7 @@ mod tests {
     #[test]
     fn test_partial_merging_with_intersection_fuzzy_on_start() {
         run_test_with_periodicity(Timestamp::new(86400.0), || {
-            let first = PartialPiecewiseLinearFunction::new(&[
+            let first = [
                 TTFPoint {
                     at: Timestamp::new(52074.519796162815),
                     val: FlWeight::new(135.4043214842386),
@@ -1483,8 +1528,9 @@ mod tests {
                     at: Timestamp::new(52120.84202396357),
                     val: FlWeight::new(165.15049612794246),
                 },
-            ]);
-            let second = PartialPiecewiseLinearFunction::new(&[
+            ];
+            let first = PartialPiecewiseLinearFunction::new(&first);
+            let second = [
                 TTFPoint {
                     at: Timestamp::new(52078.159999999996),
                     val: FlWeight::new(169.1520000000022),
@@ -1493,7 +1539,8 @@ mod tests {
                     at: Timestamp::new(52082.479999999996),
                     val: FlWeight::new(166.49300000000252),
                 },
-            ]);
+            ];
+            let second = PartialPiecewiseLinearFunction::new(&second);
             let (result, _) = first.merge(&second, Timestamp::new(52079.64118104493), Timestamp::new(52082.0), &mut Vec::new());
             assert_eq!(*result.last().unwrap(), second[1]);
         });
@@ -1655,11 +1702,11 @@ impl<'a> PLF for UpdatedPiecewiseLinearFunction<'a> {
         } else {
             let live_until = self.t_switch().unwrap();
             if !live_until.fuzzy_lt(end) {
-                // TODO limit self to range
-                PartialPiecewiseLinearFunction::new(self.update).append(start, target);
+                PartialPiecewiseLinearFunction::new(self.update).sub_plf(start, end).append(start, target);
             } else {
-                // TODO limit self to range
-                PartialPiecewiseLinearFunction::new(self.update).append(start, target);
+                PartialPiecewiseLinearFunction::new(self.update)
+                    .sub_plf(start, live_until)
+                    .append(start, target);
                 self.plf.append_range(live_until, end, target);
             }
         }
