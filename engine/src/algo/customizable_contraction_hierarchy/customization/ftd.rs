@@ -774,28 +774,35 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) -> Custom
                     for (target, shortcut_edge_id) in cch.neighbor_iter(node).zip(shortcut_edge_ids) {
                         if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
                             unsafe {
-                                // TODO only if necessary by bounds
-                                //   maybe that happens by invalidating? - i dont think so
+                                if !(*upward.add(shortcut_edge_id as usize))
+                                    .upper_bound
+                                    .fuzzy_lt((*downward.add(edge_id as usize)).lower_bound + (*upward.add(other_edge_id as usize)).lower_bound)
+                                {
+                                    (*downward.add(edge_id as usize)).unpack =
+                                        max((*downward.add(edge_id as usize)).unpack, (*upward.add(shortcut_edge_id as usize)).live_until);
+                                    (*upward.add(other_edge_id as usize)).unpack = max(
+                                        (*upward.add(other_edge_id as usize)).unpack,
+                                        (*upward.add(shortcut_edge_id as usize))
+                                            .live_until
+                                            .map(|live_until| live_until + (*downward.add(edge_id as usize)).upper_bound),
+                                    );
+                                }
 
-                                (*downward.add(edge_id as usize)).unpack =
-                                    max((*downward.add(edge_id as usize)).unpack, (*upward.add(shortcut_edge_id as usize)).live_until);
-                                (*upward.add(other_edge_id as usize)).unpack = max(
-                                    (*upward.add(other_edge_id as usize)).unpack,
-                                    (*upward.add(shortcut_edge_id as usize))
-                                        .live_until
-                                        .map(|live_until| live_until + (*downward.add(edge_id as usize)).upper_bound),
-                                );
-
-                                (*downward.add(other_edge_id as usize)).unpack = max(
-                                    (*downward.add(other_edge_id as usize)).unpack,
-                                    (*downward.add(shortcut_edge_id as usize)).live_until,
-                                );
-                                (*upward.add(edge_id as usize)).unpack = max(
-                                    (*upward.add(edge_id as usize)).unpack,
-                                    (*downward.add(shortcut_edge_id as usize))
-                                        .live_until
-                                        .map(|live_until| live_until + (*downward.add(other_edge_id as usize)).upper_bound),
-                                );
+                                if !(*downward.add(shortcut_edge_id as usize))
+                                    .upper_bound
+                                    .fuzzy_lt((*downward.add(other_edge_id as usize)).lower_bound + (*upward.add(edge_id as usize)).lower_bound)
+                                {
+                                    (*downward.add(other_edge_id as usize)).unpack = max(
+                                        (*downward.add(other_edge_id as usize)).unpack,
+                                        (*downward.add(shortcut_edge_id as usize)).live_until,
+                                    );
+                                    (*upward.add(edge_id as usize)).unpack = max(
+                                        (*upward.add(edge_id as usize)).unpack,
+                                        (*downward.add(shortcut_edge_id as usize))
+                                            .live_until
+                                            .map(|live_until| live_until + (*downward.add(other_edge_id as usize)).upper_bound),
+                                    );
+                                }
                             }
                         }
                     }
