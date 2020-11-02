@@ -196,7 +196,6 @@ impl LiveShortcut {
             }
 
             // get cached (possibly approximated) TTFs
-            // TODO get live/reconstructed ttfs
             let first_plf = shortcut_graph.ttf(ShortcutId::Incoming(linked_ids.0));
             let second_plf = shortcut_graph.ttf(ShortcutId::Outgoing(linked_ids.1));
 
@@ -224,7 +223,6 @@ impl LiveShortcut {
             let self_plf = self.travel_time_function(shortcut_graph);
 
             // link TTFs in triangle
-            // TODO
             let linked_ipps = first_plf.link(&second_plf, live_from, live_until);
             if cfg!(feature = "detailed-stats") {
                 ACTUALLY_LINKED.fetch_add(1, Relaxed);

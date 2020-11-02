@@ -1077,7 +1077,6 @@ impl<'a> ApproxPartialTTF<'a> {
                         &mut buffers.buffer,
                     );
                     if let &[TTFPoint { val, .. }] = &partial_lower[..] {
-                        // TODO necessary edge case here?
                         PartialPiecewiseLinearFunction::new(&[TTFPoint { at: start_of_segment, val }, TTFPoint { at: end_of_segment, val }])
                             .append(start_of_segment, &mut buffers.exact_result_lower);
                     } else {
