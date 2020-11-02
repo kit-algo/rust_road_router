@@ -487,8 +487,8 @@ impl<'a> ApproxTTF<'a> {
 
         // we still need new upper and lower bounds for the merged function
         // do some preallocation
-        buffers.exact_self_buffer.reserve(max(self_lower.len(), self_upper.len()));
-        buffers.exact_other_buffer.reserve(max(other_lower.len(), other_upper.len()));
+        // buffers.exact_self_buffer.reserve(max(self_lower.len(), self_upper.len()));
+        // buffers.exact_other_buffer.reserve(max(other_lower.len(), other_upper.len()));
         buffers.exact_result_lower.reserve(2 * self_lower.len() + 2 * other_lower.len() + 2);
         buffers.exact_result_upper.reserve(2 * self_upper.len() + 2 * other_upper.len() + 2);
 
@@ -548,8 +548,8 @@ impl<'a> ApproxTTF<'a> {
             result,
         );
 
-        buffers.exact_self_buffer.clear();
-        buffers.exact_other_buffer.clear();
+        // buffers.exact_self_buffer.clear();
+        // buffers.exact_other_buffer.clear();
         buffers.exact_result_lower.clear();
         buffers.exact_result_upper.clear();
 

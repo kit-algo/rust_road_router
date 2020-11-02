@@ -454,8 +454,6 @@ pub struct MergeBuffers {
     pub unpacking_target: ReusablePLFStorage,
     pub unpacking_tmp: ReusablePLFStorage,
     buffer: Vec<TTFPoint>,
-    exact_self_buffer: Vec<TTFPoint>,
-    exact_other_buffer: Vec<TTFPoint>,
     exact_result_lower: Vec<TTFPoint>,
     exact_result_upper: Vec<TTFPoint>,
 }
@@ -472,8 +470,6 @@ impl MergeBuffers {
             unpacking_target: ReusablePLFStorage::new(),
             unpacking_tmp: ReusablePLFStorage::new(),
             buffer: Vec::new(),
-            exact_self_buffer: Vec::new(),
-            exact_other_buffer: Vec::new(),
             exact_result_lower: Vec::new(),
             exact_result_upper: Vec::new(),
         }

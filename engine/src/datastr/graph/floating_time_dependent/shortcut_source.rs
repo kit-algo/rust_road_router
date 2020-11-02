@@ -169,7 +169,6 @@ impl ShortcutSource {
 
                 debug_assert!(!first_target.last().unwrap().at.fuzzy_lt(end));
                 // for `up` PLF we need to shift the time range
-                // TODO is this correct????????
                 let second_start = start + interpolate_linear(&first_target[0], &first_target[1], start);
                 let second_end = end + interpolate_linear(&first_target[first_target.len() - 2], &first_target[first_target.len() - 1], end);
 
@@ -214,7 +213,6 @@ impl ShortcutSource {
 
                 debug_assert!(!first_target.last().unwrap().at.fuzzy_lt(end));
                 // for `up` PLF we need to shift the time range
-                // TODO is this correct????????
                 let second_start = start + interpolate_linear(&first_target[0], &first_target[1], start);
                 let second_end = end + interpolate_linear(&first_target[first_target.len() - 2], &first_target[first_target.len() - 1], end);
 
