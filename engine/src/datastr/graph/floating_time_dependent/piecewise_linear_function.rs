@@ -1270,6 +1270,43 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
         }
     }
 
+    /// Generate an approximated function which is always less or equal to the original function
+    #[cfg(not(feature = "tdcch-approx-imai-iri"))]
+    pub fn lower_bound_ttf(&self, buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
+        buffer.reserve(self.ipps.len());
+        self.douglas_peuker_lower(buffer);
+
+        let mut result = Box::<[TTFPoint]>::from(&buffer[..]);
+        Self::fifoize_down(&mut result);
+        buffer.clear();
+        result
+    }
+
+    /// Generate an approximated function which is always greater or equal to the original function
+    #[cfg(not(feature = "tdcch-approx-imai-iri"))]
+    pub fn upper_bound_ttf(&self, buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
+        buffer.reserve(self.ipps.len());
+        self.douglas_peuker_upper(buffer);
+
+        let mut result = Box::<[TTFPoint]>::from(&buffer[..]);
+        Self::fifoize_up(&mut result);
+        buffer.clear();
+        result
+    }
+
+    /// Same result as `(lower_bound_ttf(), upper_bound_ttf())` but with just one call to DP
+    #[cfg(not(feature = "tdcch-approx-imai-iri"))]
+    pub fn bound_ttfs(&self) -> (Box<[TTFPoint]>, Box<[TTFPoint]>) {
+        let mut result_lower = Vec::with_capacity(self.ipps.len());
+        let mut result_upper = Vec::with_capacity(self.ipps.len());
+        self.douglas_peuker_combined(&mut result_lower, &mut result_upper);
+
+        Self::fifoize_down(&mut result_lower);
+        Self::fifoize_up(&mut result_upper);
+
+        (result_lower.into(), result_upper.into())
+    }
+
     fn fifoize_down(plf: &mut [TTFPoint]) {
         for i in (0..plf.len() - 1).rev() {
             plf[i].val = min(plf[i].val, plf[i + 1].val + plf[i + 1].at - plf[i].at);

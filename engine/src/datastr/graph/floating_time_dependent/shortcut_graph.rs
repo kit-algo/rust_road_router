@@ -101,6 +101,117 @@ impl<'a> ShortcutGraphTrt<'a> for PartialShortcutGraph<'a> {
     }
 }
 
+#[derive(Debug)]
+pub struct PartialLiveShortcutGraph<'a> {
+    pub original_graph: &'a LiveGraph,
+    pub outgoing_live: &'a [LiveShortcut],
+    pub incoming_live: &'a [LiveShortcut],
+    pub outgoing: &'a [Shortcut],
+    pub incoming: &'a [Shortcut],
+    pub offset: usize,
+}
+
+impl<'a> PartialLiveShortcutGraph<'a> {
+    fn get(&self, shortcut_id: ShortcutId) -> &Shortcut {
+        match shortcut_id {
+            ShortcutId::Incoming(id) => self.get_incoming(id),
+            ShortcutId::Outgoing(id) => self.get_outgoing(id),
+        }
+    }
+
+    fn get_live(&self, shortcut_id: ShortcutId) -> &LiveShortcut {
+        match shortcut_id {
+            ShortcutId::Incoming(id) => self.get_incoming_live(id),
+            ShortcutId::Outgoing(id) => self.get_outgoing_live(id),
+        }
+    }
+
+    pub fn get_outgoing(&self, edge_id: EdgeId) -> &Shortcut {
+        &self.outgoing[edge_id as usize - self.offset]
+    }
+
+    pub fn get_incoming(&self, edge_id: EdgeId) -> &Shortcut {
+        &self.incoming[edge_id as usize - self.offset]
+    }
+
+    pub fn get_outgoing_live(&self, edge_id: EdgeId) -> &LiveShortcut {
+        &self.outgoing_live[edge_id as usize - self.offset]
+    }
+
+    pub fn get_incoming_live(&self, edge_id: EdgeId) -> &LiveShortcut {
+        &self.incoming_live[edge_id as usize - self.offset]
+    }
+}
+
+impl<'a> ShortcutGraphTrt<'a> for PartialLiveShortcutGraph<'a> {
+    type ApproxTTF = ApproxPartialTTF<'a>;
+    type OriginalGraph = LiveGraph;
+
+    fn ttf(&'a self, shortcut_id: ShortcutId) -> Self::ApproxTTF {
+        self.get_live(shortcut_id).travel_time_function(self)
+    }
+    fn is_valid_path(&self, shortcut_id: ShortcutId) -> bool {
+        self.get_live(shortcut_id).is_valid_path()
+    }
+    fn lower_bound(&self, shortcut_id: ShortcutId) -> FlWeight {
+        self.get_live(shortcut_id).lower_bound
+    }
+    fn upper_bound(&self, shortcut_id: ShortcutId) -> FlWeight {
+        self.get_live(shortcut_id).upper_bound
+    }
+    fn original_graph(&self) -> &LiveGraph {
+        &self.original_graph
+    }
+    fn exact_ttf_for(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
+        let live = self.get_live(shortcut_id);
+        if live.live_until.map(|l| l.fuzzy_lt(start)).unwrap_or(true) {
+            self.get(shortcut_id).exact_ttf_for(start, end, self, target, tmp);
+        } else {
+            let live_until = live.live_until.unwrap();
+            if !live_until.fuzzy_lt(end) {
+                live.exact_ttf_for(start, end, self, target, tmp);
+            } else {
+                live.exact_ttf_for(start, live_until, self, target, tmp);
+                let mut sub_target = tmp.push_plf();
+                self.get(shortcut_id)
+                    .exact_ttf_for(live_until, end, self, &mut sub_target, target.storage_mut());
+                PartialPiecewiseLinearFunction::new(&sub_target).append(live_until, target);
+            }
+        }
+    }
+    fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, switchpoints: &mut Vec<Timestamp>) -> (FlWeight, FlWeight) {
+        let live = self.get_live(shortcut_id);
+        if live.live_until.map(|l| l.fuzzy_lt(start)).unwrap_or(true) {
+            self.get(shortcut_id).get_switchpoints(start, end, self, switchpoints)
+        } else {
+            let live_until = live.live_until.unwrap();
+            if !live_until.fuzzy_lt(end) {
+                live.get_switchpoints(start, end, self, switchpoints)
+            } else {
+                let (ttf_at_start, _) = live.get_switchpoints(start, live_until, self, switchpoints);
+                let (_, ttf_at_end) = self.get(shortcut_id).get_switchpoints(live_until, end, self, switchpoints);
+                (ttf_at_start, ttf_at_end)
+            }
+        }
+    }
+    fn unpack_at(&self, shortcut_id: ShortcutId, t: Timestamp, result: &mut Vec<(EdgeId, Timestamp)>) {
+        let live = self.get_live(shortcut_id);
+        if live.live_until.map(|l| l.fuzzy_lt(t)).unwrap_or(true) {
+            self.get(shortcut_id).unpack_at(t, self, result);
+        } else {
+            live.unpack_at(t, self, result);
+        }
+    }
+    fn evaluate(&self, shortcut_id: ShortcutId, t: Timestamp) -> FlWeight {
+        let live = self.get_live(shortcut_id);
+        if live.live_until.map(|l| l.fuzzy_lt(t)).unwrap_or(true) {
+            self.get(shortcut_id).evaluate(t, self)
+        } else {
+            live.evaluate(t, self)
+        }
+    }
+}
+
 // Just a container to group some data
 #[derive(Debug)]
 struct ShortcutGraph<'a> {
