@@ -42,7 +42,7 @@ impl ShortcutSource {
         }
     }
 
-    pub(super) fn evaluate(&self, t: Timestamp, shortcut_graph: &impl ShortcutGraphTrt) -> FlWeight {
+    pub(super) fn evaluate<'g>(&self, t: Timestamp, shortcut_graph: &'g impl ShortcutGraphTrt<'g>) -> FlWeight {
         match *self {
             // recursively eval down edge, then up edge
             ShortcutSource::Shortcut(down, up) => {
@@ -64,7 +64,7 @@ impl ShortcutSource {
 
     /// Recursively unpack this source and append the path to `result`.
     /// The timestamp is just needed for the recursion.
-    pub(super) fn unpack_at(&self, t: Timestamp, shortcut_graph: &impl ShortcutGraphTrt, result: &mut Vec<(EdgeId, Timestamp)>) {
+    pub(super) fn unpack_at<'g>(&self, t: Timestamp, shortcut_graph: &'g impl ShortcutGraphTrt<'g>, result: &mut Vec<(EdgeId, Timestamp)>) {
         match *self {
             ShortcutSource::Shortcut(down, up) => {
                 shortcut_graph.unpack_at(ShortcutId::Incoming(down), t, result);
@@ -85,11 +85,11 @@ impl ShortcutSource {
     // Use two `ReusablePLFStorage`s to reduce allocations.
     // One storage will contain the functions of `up` and `down` - the other the result function.
     // That means when recursing, we need to use the two storages with flipped roles.
-    pub(super) fn exact_ttf_for(
+    pub(super) fn exact_ttf_for<'g>(
         &self,
         start: Timestamp,
         end: Timestamp,
-        shortcut_graph: &impl ShortcutGraphTrt,
+        shortcut_graph: &'g impl ShortcutGraphTrt<'g>,
         target: &mut MutTopPLF,
         tmp: &mut ReusablePLFStorage,
     ) {
@@ -148,11 +148,11 @@ impl ShortcutSource {
         }
     }
 
-    pub(super) fn partial_lower_bound(
+    pub(super) fn partial_lower_bound<'g>(
         &self,
         start: Timestamp,
         end: Timestamp,
-        shortcut_graph: &impl ShortcutGraphTrt,
+        shortcut_graph: &'g impl ShortcutGraphTrt<'g, ApproxTTF = ApproxTTF<'g>>,
         target: &mut MutTopPLF,
         tmp: &mut ReusablePLFStorage,
     ) {
@@ -192,11 +192,11 @@ impl ShortcutSource {
         }
     }
 
-    pub(super) fn partial_upper_bound(
+    pub(super) fn partial_upper_bound<'g>(
         &self,
         start: Timestamp,
         end: Timestamp,
-        shortcut_graph: &impl ShortcutGraphTrt,
+        shortcut_graph: &'g impl ShortcutGraphTrt<'g, ApproxTTF = ApproxTTF<'g>>,
         target: &mut MutTopPLF,
         tmp: &mut ReusablePLFStorage,
     ) {
@@ -245,11 +245,11 @@ impl ShortcutSource {
         }
     }
 
-    pub fn get_switchpoints(
+    pub fn get_switchpoints<'g>(
         &self,
         start: Timestamp,
         end: Timestamp,
-        shortcut_graph: &impl ShortcutGraphTrt,
+        shortcut_graph: &'g impl ShortcutGraphTrt<'g>,
         switchpoints: &mut Vec<Timestamp>,
     ) -> (FlWeight, FlWeight) {
         match *self {
@@ -350,13 +350,20 @@ impl Default for ShortcutSourceData {
 }
 
 pub trait Sources {
-    fn exact_ttf_for(&self, start: Timestamp, end: Timestamp, shortcut_graph: &impl ShortcutGraphTrt, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage);
-
-    fn get_switchpoints(
+    fn exact_ttf_for<'g>(
         &self,
         start: Timestamp,
         end: Timestamp,
-        shortcut_graph: &impl ShortcutGraphTrt,
+        shortcut_graph: &'g impl ShortcutGraphTrt<'g>,
+        target: &mut MutTopPLF,
+        tmp: &mut ReusablePLFStorage,
+    );
+
+    fn get_switchpoints<'g>(
+        &self,
+        start: Timestamp,
+        end: Timestamp,
+        shortcut_graph: &'g impl ShortcutGraphTrt<'g>,
         switchpoints: &mut Vec<Timestamp>,
     ) -> (FlWeight, FlWeight);
 
@@ -367,7 +374,14 @@ pub trait Sources {
 
 use std::cmp::{max, min};
 impl Sources for [(Timestamp, ShortcutSourceData)] {
-    fn exact_ttf_for(&self, start: Timestamp, end: Timestamp, shortcut_graph: &impl ShortcutGraphTrt, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
+    fn exact_ttf_for<'g>(
+        &self,
+        start: Timestamp,
+        end: Timestamp,
+        shortcut_graph: &'g impl ShortcutGraphTrt<'g>,
+        target: &mut MutTopPLF,
+        tmp: &mut ReusablePLFStorage,
+    ) {
         // when we have multiple source, we need to do unpacking (and append the results) for all sources which are relevant for the given time range.
         let mut c = SourceCursor::valid_at(self, start);
         while c.cur().0.fuzzy_lt(end) {
@@ -391,11 +405,11 @@ impl Sources for [(Timestamp, ShortcutSourceData)] {
         debug_assert!(!target.last().unwrap().at.fuzzy_lt(end), "{:?}", dbg_each!(self, start, end));
     }
 
-    fn get_switchpoints(
+    fn get_switchpoints<'g>(
         &self,
         start: Timestamp,
         end: Timestamp,
-        shortcut_graph: &impl ShortcutGraphTrt,
+        shortcut_graph: &'g impl ShortcutGraphTrt<'g>,
         switchpoints: &mut Vec<Timestamp>,
     ) -> (FlWeight, FlWeight) {
         let mut c = SourceCursor::valid_at(self, start);

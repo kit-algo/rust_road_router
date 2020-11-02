@@ -474,8 +474,14 @@ pub struct PartialPiecewiseLinearFunction<'a> {
     ipps: &'a [TTFPoint],
 }
 
-impl<'a> From<&'a PeriodicPiecewiseLinearFunction<'a>> for PartialPiecewiseLinearFunction<'a> {
-    fn from(pplf: &'a PeriodicPiecewiseLinearFunction<'a>) -> Self {
+impl<'a, 'b> From<&'b PeriodicPiecewiseLinearFunction<'a>> for PartialPiecewiseLinearFunction<'a> {
+    fn from(pplf: &'b PeriodicPiecewiseLinearFunction<'a>) -> Self {
+        PartialPiecewiseLinearFunction { ipps: pplf.ipps }
+    }
+}
+
+impl<'a> From<PeriodicPiecewiseLinearFunction<'a>> for PartialPiecewiseLinearFunction<'a> {
+    fn from(pplf: PeriodicPiecewiseLinearFunction<'a>) -> Self {
         PartialPiecewiseLinearFunction { ipps: pplf.ipps }
     }
 }
@@ -639,7 +645,7 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
 
     /// Link to partial PLFs and append the result to target, taking care of overlap
     #[allow(clippy::cognitive_complexity)]
-    pub(super) fn link(&self, other: &Self, start: Timestamp, end: Timestamp, target: &mut MutTopPLF) {
+    pub(super) fn link(&self, other: &Self, start: Timestamp, end: Timestamp, target: &mut impl PLFTarget) {
         let mut f = PartialPlfLinkCursor::new(self.ipps);
         let mut g = PartialPlfLinkCursor::new(other.ipps);
 
@@ -1660,12 +1666,16 @@ impl<'a> UpdatedPiecewiseLinearFunction<'a> {
         Self { plf, update }
     }
 
-    fn update_plf(&self) -> Option<PartialPiecewiseLinearFunction> {
+    pub fn update_plf(&self) -> Option<PartialPiecewiseLinearFunction<'a>> {
         if self.update.is_empty() {
             None
         } else {
             Some(PartialPiecewiseLinearFunction::new(self.update))
         }
+    }
+
+    pub fn unmodified_plf(&self) -> PeriodicPiecewiseLinearFunction<'a> {
+        self.plf
     }
 
     pub fn lower_bound(&self) -> FlWeight {

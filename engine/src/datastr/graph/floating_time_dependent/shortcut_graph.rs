@@ -14,10 +14,11 @@ pub enum ShortcutId {
     Incoming(EdgeId),
 }
 
-pub trait ShortcutGraphTrt {
-    type OriginalGraph: for<'a> TDGraphTrait<'a>;
+pub trait ShortcutGraphTrt<'a> {
+    type ApproxTTF;
+    type OriginalGraph: for<'g> TDGraphTrait<'g>;
 
-    fn ttf(&self, shortcut_id: ShortcutId) -> ApproxTTF;
+    fn ttf(&'a self, shortcut_id: ShortcutId) -> Self::ApproxTTF;
     fn is_valid_path(&self, shortcut_id: ShortcutId) -> bool;
     fn lower_bound(&self, shortcut_id: ShortcutId) -> FlWeight;
     fn upper_bound(&self, shortcut_id: ShortcutId) -> FlWeight;
@@ -67,10 +68,11 @@ impl<'a> PartialShortcutGraph<'a> {
     }
 }
 
-impl<'a> ShortcutGraphTrt for PartialShortcutGraph<'a> {
+impl<'a> ShortcutGraphTrt<'a> for PartialShortcutGraph<'a> {
+    type ApproxTTF = ApproxTTF<'a>;
     type OriginalGraph = TDGraph;
 
-    fn ttf(&self, shortcut_id: ShortcutId) -> ApproxTTF {
+    fn ttf(&'a self, shortcut_id: ShortcutId) -> Self::ApproxTTF {
         self.get(shortcut_id).travel_time_function(self)
     }
     fn is_valid_path(&self, shortcut_id: ShortcutId) -> bool {
@@ -581,11 +583,12 @@ impl CustomizedSingleDirGraph {
     }
 }
 
-impl<'a> ShortcutGraphTrt for CustomizedGraph<'a> {
+impl<'a> ShortcutGraphTrt<'a> for CustomizedGraph<'a> {
+    type ApproxTTF = ();
     type OriginalGraph = TDGraph;
 
-    fn ttf(&self, _: ShortcutId) -> ApproxTTF {
-        unimplemented!()
+    fn ttf(&self, _: ShortcutId) -> Self::ApproxTTF {
+        ()
     }
     fn is_valid_path(&self, _: ShortcutId) -> bool {
         true
@@ -851,10 +854,11 @@ impl<'a> ReconstructedGraph<'a> {
     }
 }
 
-impl<'a> ShortcutGraphTrt for ReconstructedGraph<'a> {
+impl<'a> ShortcutGraphTrt<'a> for ReconstructedGraph<'a> {
+    type ApproxTTF = ApproxTTF<'a>;
     type OriginalGraph = TDGraph;
 
-    fn ttf(&self, shortcut_id: ShortcutId) -> ApproxTTF {
+    fn ttf(&'a self, shortcut_id: ShortcutId) -> Self::ApproxTTF {
         self.get_ttf(shortcut_id)
             .expect("invalid state of shortcut: ipps must be cached when shortcut not trivial")
     }
@@ -953,10 +957,11 @@ impl<'a> ProfileGraphWrapper<'a> {
     }
 }
 
-impl<'a> ShortcutGraphTrt for ProfileGraphWrapper<'a> {
+impl<'a> ShortcutGraphTrt<'a> for ProfileGraphWrapper<'a> {
+    type ApproxTTF = ApproxTTF<'a>;
     type OriginalGraph = TDGraph;
 
-    fn ttf(&self, shortcut_id: ShortcutId) -> ApproxTTF {
+    fn ttf(&'a self, shortcut_id: ShortcutId) -> Self::ApproxTTF {
         if self.delegate(shortcut_id) {
             return self.profile_graph.ttf(shortcut_id);
         }
