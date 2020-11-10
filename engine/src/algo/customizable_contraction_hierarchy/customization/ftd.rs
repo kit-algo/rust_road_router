@@ -887,7 +887,7 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
                 PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::new(None); n as usize]), || cb());
             });
 
-            mark_for_unpacking.customize(&mut pre_upward[..], &mut pre_downward[..], |_| {});
+            mark_for_unpacking.customize(&mut pre_upward[..], &mut pre_downward[..], |cb| cb());
 
             upward.par_iter_mut().zip(pre_upward.par_iter()).for_each(|(s, p)| s.update_with(*p, t_live));
             downward
