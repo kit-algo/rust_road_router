@@ -29,7 +29,7 @@ mod shortcut;
 pub use self::shortcut::*;
 
 mod live_shortcut;
-pub use self::live_shortcut::LiveShortcut;
+pub use self::live_shortcut::*;
 
 pub mod shortcut_source;
 use self::shortcut_source::*;

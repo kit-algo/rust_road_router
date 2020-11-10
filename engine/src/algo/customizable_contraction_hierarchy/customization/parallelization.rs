@@ -10,6 +10,7 @@ pub struct SeperatorBasedParallelCustomization<'a, T, F, G> {
     customize_cell: F,
     customize_separator: G,
     _t: std::marker::PhantomData<T>,
+    reverse: bool,
 }
 
 impl<'a, T, F, G> SeperatorBasedParallelCustomization<'a, T, F, G>
@@ -24,17 +25,26 @@ where
     /// The cell routine will be invoked several times in parallel and nodes will mostly have low degrees.
     /// The separator routine will be invoked only very few times in parallel, the final separator will be customized completely alone and nodes have high degrees.
     pub fn new(cch: &'a CCH, customize_cell: F, customize_separator: G) -> Self {
+        Self::new_internal(cch, customize_cell, customize_separator, false)
+    }
+
+    pub fn new_reverse(cch: &'a CCH, customize_cell: F, customize_separator: G) -> Self {
+        Self::new_internal(cch, customize_cell, customize_separator, true)
+    }
+
+    fn new_internal(cch: &'a CCH, customize_cell: F, customize_separator: G, reverse: bool) -> Self {
         let separators = cch.separators();
         if !cfg!(feature = "cch-disable-par") {
             separators.validate_for_parallelization();
         }
 
-        SeperatorBasedParallelCustomization {
+        Self {
             cch,
             separators,
             customize_cell,
             customize_separator,
             _t: std::marker::PhantomData::<T>,
+            reverse,
         }
     }
 
@@ -66,6 +76,11 @@ where
             // if the current cell is small enough (load balancing parameters) run the customize_cell routine on it
             (self.customize_cell)(offset..offset + sep_tree.num_nodes, edge_offset, upward, downward);
         } else {
+            if self.reverse {
+                let sep_begin = offset + sep_tree.children.iter().map(|sub| sub.num_nodes).sum::<usize>();
+                (self.customize_separator)(sep_begin..offset + sep_tree.num_nodes, edge_offset, upward, downward);
+            }
+
             // if not, split at the separator, process all subcells independently in parallel and the separator afterwards
             let mut sub_offset = offset;
             let mut sub_edge_offset = edge_offset;
@@ -92,8 +107,10 @@ where
                 }
             });
 
-            // once all subcells are processed, process the separator itself
-            (self.customize_separator)(sub_offset..offset + sep_tree.num_nodes, edge_offset, upward, downward)
+            if !self.reverse {
+                // once all subcells are processed, process the separator itself
+                (self.customize_separator)(sub_offset..offset + sep_tree.num_nodes, edge_offset, upward, downward)
+            }
         }
     }
 }

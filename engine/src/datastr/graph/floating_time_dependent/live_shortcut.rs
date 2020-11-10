@@ -674,4 +674,50 @@ impl LiveShortcut {
         })
         .evaluate(t, shortcut_graph)
     }
+
+    pub fn to_pre_shortcut(&self) -> PreLiveShortcut {
+        PreLiveShortcut {
+            lower_bound: self.lower_bound,
+            upper_bound: self.upper_bound,
+            live_until: self.live_until,
+            unpack: self.unpack,
+        }
+    }
+
+    pub fn update_with(&mut self, mut pre: PreLiveShortcut, _t_live: Timestamp) {
+        if let Some(live) = pre.live_until {
+            debug_assert!(_t_live.fuzzy_lt(live));
+            if let Some(unpack) = pre.unpack {
+                if !live.fuzzy_lt(unpack) {
+                    pre.unpack = None;
+                }
+            }
+        }
+        if let Some(unpack) = pre.unpack {
+            debug_assert!(_t_live.fuzzy_lt(unpack));
+        }
+        self.lower_bound = pre.lower_bound;
+        self.upper_bound = pre.upper_bound;
+        self.live_until = pre.live_until;
+        self.unpack = pre.unpack;
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct PreLiveShortcut {
+    pub lower_bound: FlWeight,
+    pub upper_bound: FlWeight,
+    pub live_until: Option<Timestamp>,
+    pub unpack: Option<Timestamp>,
+}
+
+impl Default for PreLiveShortcut {
+    fn default() -> Self {
+        Self {
+            lower_bound: FlWeight::INFINITY,
+            upper_bound: FlWeight::INFINITY,
+            live_until: None,
+            unpack: None,
+        }
+    }
 }

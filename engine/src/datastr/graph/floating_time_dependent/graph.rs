@@ -2,7 +2,6 @@ use super::piecewise_linear_function::cursor::*;
 use super::*;
 use crate::datastr::graph::time_dependent::period as int_period;
 use crate::datastr::graph::Graph as GraphTrait;
-use crate::util::in_range_option::*;
 
 type IPPIndex = u32;
 
@@ -185,20 +184,27 @@ pub struct LiveGraph {
 }
 
 impl LiveGraph {
-    pub fn new(graph: Graph, t_live: Timestamp, t_soon: Timestamp, live: &[InRangeOption<u32>]) -> Self {
+    pub fn new(graph: Graph, t_live: Timestamp, live: &[Option<(u32, u32)>]) -> Self {
         let mut first_live_ipp_of_arc = Vec::with_capacity(graph.num_arcs() + 1);
         first_live_ipp_of_arc.push(0);
         let mut live_ipps = Vec::new();
 
         for (edge_id, live) in live.iter().enumerate() {
-            if let Some(live) = live.value() {
+            if let &Some((live, t_soon)) = live {
                 let live = FlWeight::new(f64::from(live) / 1000.0);
+                let t_soon = Timestamp::new(f64::from(t_soon) / 1000.0);
                 live_ipps.push(TTFPoint { at: t_live, val: live });
-                let switchpoint = Self::switchpoint(graph.travel_time_function(edge_id as EdgeId), live, t_soon);
+                let pred_plf = graph.travel_time_function(edge_id as EdgeId);
+                let switchpoint = Self::switchpoint(pred_plf, live, t_soon);
                 if t_soon.fuzzy_lt(switchpoint.at) {
                     live_ipps.push(TTFPoint { at: t_soon, val: live });
                 }
                 live_ipps.push(switchpoint);
+                debug_assert!(
+                    pred_plf.evaluate(switchpoint.at).fuzzy_eq(switchpoint.val),
+                    "{:?}",
+                    dbg_each!(&live_ipps[*first_live_ipp_of_arc.last().unwrap() as usize..])
+                );
             }
             first_live_ipp_of_arc.push(live_ipps.len() as u32);
         }

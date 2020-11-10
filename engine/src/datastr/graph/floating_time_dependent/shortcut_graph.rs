@@ -112,6 +112,24 @@ pub struct PartialLiveShortcutGraph<'a> {
 }
 
 impl<'a> PartialLiveShortcutGraph<'a> {
+    pub fn new(
+        original_graph: &'a LiveGraph,
+        outgoing_live: &'a [LiveShortcut],
+        incoming_live: &'a [LiveShortcut],
+        outgoing: &'a [Shortcut],
+        incoming: &'a [Shortcut],
+        offset: usize,
+    ) -> Self {
+        Self {
+            original_graph,
+            outgoing_live,
+            incoming_live,
+            outgoing,
+            incoming,
+            offset,
+        }
+    }
+
     fn get(&self, shortcut_id: ShortcutId) -> &Shortcut {
         match shortcut_id {
             ShortcutId::Incoming(id) => self.get_incoming(id),

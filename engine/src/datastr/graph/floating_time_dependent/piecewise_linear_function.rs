@@ -546,6 +546,7 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
     }
 
     pub fn sub_plf(&self, start: Timestamp, end: Timestamp) -> Self {
+        debug_assert!(!start.fuzzy_eq(end));
         if self.len() == 1 {
             return *self;
         }
@@ -568,7 +569,7 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
                 Ordering::Greater
             }
         });
-        let start = match pos {
+        let p_start = match pos {
             Ok(i) => i,
             Err(i) => i - 1,
         };
@@ -582,12 +583,12 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
                 Ordering::Greater
             }
         });
-        let end = match pos {
+        let p_end = match pos {
             Ok(i) => i,
             Err(i) => i,
         };
 
-        PartialPiecewiseLinearFunction { ipps: &self.ipps[start..=end] }
+        PartialPiecewiseLinearFunction::new(&self.ipps[p_start..=p_end])
     }
 
     /// Copy full slice of points to target/first.
@@ -603,7 +604,7 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
             debug_assert!(!at.fuzzy_lt(switchover));
         }
         debug_assert!(!switchover.fuzzy_lt(self[0].at));
-        debug_assert!(switchover.fuzzy_lt(self[1].at));
+        debug_assert!(switchover.fuzzy_lt(self[1].at), "{:?}", dbg_each!(&self[0..2], switchover));
 
         if target.is_empty() {
             target.extend(self.iter().cloned());
@@ -1693,6 +1694,7 @@ def plot_coords(coords, *args, **kwargs):
     }
 }
 
+#[derive(Debug)]
 pub struct UpdatedPiecewiseLinearFunction<'a> {
     plf: PeriodicPiecewiseLinearFunction<'a>,
     update: &'a [TTFPoint],
@@ -1700,6 +1702,10 @@ pub struct UpdatedPiecewiseLinearFunction<'a> {
 
 impl<'a> UpdatedPiecewiseLinearFunction<'a> {
     pub fn new(plf: PeriodicPiecewiseLinearFunction<'a>, update: &'a [TTFPoint]) -> Self {
+        debug_assert_ne!(update.len(), 1);
+        if let Some(p) = update.last() {
+            debug_assert!(plf.evaluate(p.at).fuzzy_eq(p.val));
+        }
         Self { plf, update }
     }
 
