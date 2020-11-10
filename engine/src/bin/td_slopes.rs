@@ -39,5 +39,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             .unwrap()
     );
 
+    for e in 0..graph.num_arcs() {
+        if graph.travel_time_function(e as EdgeId).min_slope() < -1.0 {
+            eprintln!("{:?}", e);
+        }
+    }
+
     Ok(())
 }
