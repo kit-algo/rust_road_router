@@ -820,11 +820,11 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
                 if start.fuzzy_lt(unpack) {
                     for (_, source) in upward_pred[edge_idx].sources_for(start, unpack) {
                         if let ShortcutSource::Shortcut(down, up) = source.into() {
-                            let down = down as usize;
-                            let up = up as usize;
+                            let down = down as usize - offset;
+                            let up = up as usize - offset;
                             downward_weights[down].unpack = max(downward_weights[down].unpack, upward_weights[edge_idx - offset].unpack);
-                            upward_weights[up - offset].unpack = max(
-                                upward_weights[up - offset].unpack,
+                            upward_weights[up].unpack = max(
+                                upward_weights[up].unpack,
                                 upward_weights[edge_idx - offset]
                                     .unpack
                                     .map(|unpack| unpack + downward_weights[down].upper_bound),
@@ -834,17 +834,19 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
                 }
             }
 
-            if let Some(unpack) = downward_weights[edge_idx].unpack {
-                let start = downward_weights[edge_idx].live_until.unwrap_or(t_live);
+            if let Some(unpack) = downward_weights[edge_idx - offset].unpack {
+                let start = downward_weights[edge_idx - offset].live_until.unwrap_or(t_live);
                 if start.fuzzy_lt(unpack) {
                     for (_, source) in downward_pred[edge_idx].sources_for(start, unpack) {
                         if let ShortcutSource::Shortcut(down, up) = source.into() {
-                            let down = down as usize;
-                            let up = up as usize;
-                            downward_weights[down].unpack = max(downward_weights[down].unpack, downward_weights[edge_idx].unpack);
-                            upward_weights[up - offset].unpack = max(
-                                upward_weights[up - offset].unpack,
-                                downward_weights[edge_idx].unpack.map(|unpack| unpack + downward_weights[down].upper_bound),
+                            let down = down as usize - offset;
+                            let up = up as usize - offset;
+                            downward_weights[down].unpack = max(downward_weights[down].unpack, downward_weights[edge_idx - offset].unpack);
+                            upward_weights[up].unpack = max(
+                                upward_weights[up].unpack,
+                                downward_weights[edge_idx - offset]
+                                    .unpack
+                                    .map(|unpack| unpack + downward_weights[down].upper_bound),
                             );
                         }
                     }
