@@ -93,9 +93,8 @@ impl LiveShortcut {
                     unreachable!()
                 }
             }
-            self.exact_ttf_for(unpack_start, unpack_end, shortcut_graph, &mut target, &mut buffers.unpacking_tmp);
+            pred_shortcut.exact_ttf_for(unpack_start, unpack_end, shortcut_graph, &mut target, &mut buffers.unpacking_tmp);
             self.cache = Some(ApproxTTFContainer::Exact(Box::<[TTFPoint]>::from(&target[..])));
-            // TODO update with bound info etc?
             return;
         }
 
