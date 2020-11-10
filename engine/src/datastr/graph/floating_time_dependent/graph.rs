@@ -232,7 +232,7 @@ impl LiveGraph {
 
             if live_at_cur.fuzzy_eq(cursor.cur().val) {
                 return cursor.cur();
-            } else if (pred_below && live_at_cur.fuzzy_lt(cursor.cur().val)) || cursor.cur().val.fuzzy_lt(live_at_cur) {
+            } else if (pred_below && live_at_cur.fuzzy_lt(cursor.cur().val)) || (!pred_below && cursor.cur().val.fuzzy_lt(live_at_cur)) {
                 return intersection_point(
                     &cursor.prev(),
                     &cursor.cur(),
