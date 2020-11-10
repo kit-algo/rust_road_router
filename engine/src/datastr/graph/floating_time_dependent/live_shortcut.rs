@@ -337,11 +337,10 @@ impl LiveShortcut {
         match self.sources {
             Sources::One(source) => match source.into() {
                 ShortcutSource::OriginalEdge(id) => ApproxPartialTTF::Exact(
-                    shortcut_graph
-                        .original_graph()
-                        .travel_time_function(id)
-                        .update_plf()
-                        .unwrap_or(shortcut_graph.original_graph().travel_time_function(id).unmodified_plf().into()),
+                    shortcut_graph.original_graph().travel_time_function(id).update_plf().unwrap_or(
+                        PartialPiecewiseLinearFunction::from(shortcut_graph.original_graph().travel_time_function(id).unmodified_plf())
+                            .sub_plf(shortcut_graph.original_graph().t_live(), self.live_until.unwrap()),
+                    ),
                 ),
                 _ => panic!("invalid state of shortcut: ipps must be cached when shortcut not trivial {:?}", self),
             },
@@ -360,11 +359,10 @@ impl LiveShortcut {
         match self.sources {
             Sources::One(source) => match source.into() {
                 ShortcutSource::OriginalEdge(id) => Some(ApproxPartialTTF::Exact(
-                    shortcut_graph
-                        .original_graph()
-                        .travel_time_function(id)
-                        .update_plf()
-                        .unwrap_or(shortcut_graph.original_graph().travel_time_function(id).unmodified_plf().into()),
+                    shortcut_graph.original_graph().travel_time_function(id).update_plf().unwrap_or(
+                        PartialPiecewiseLinearFunction::from(shortcut_graph.original_graph().travel_time_function(id).unmodified_plf())
+                            .sub_plf(shortcut_graph.original_graph().t_live(), self.live_until.unwrap()),
+                    ),
                 )),
                 _ => None,
             },
