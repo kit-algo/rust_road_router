@@ -1730,7 +1730,7 @@ impl<'a> UpdatedPiecewiseLinearFunction<'a> {
 
     pub fn upper_bound(&self) -> FlWeight {
         max(
-            self.plf.lower_bound(),
+            self.plf.upper_bound(),
             self.update_plf().map(|plf| plf.upper_bound()).unwrap_or(FlWeight::zero()),
         )
     }
