@@ -66,6 +66,11 @@ impl LiveShortcut {
         shortcut_graph: &'g impl ShortcutGraphTrt<'g, OriginalGraph = LiveGraph, ApproxTTF = ApproxPartialTTF<'g>>,
         buffers: &mut MergeBuffers,
     ) {
+        // We already know, we won't need this edge, so do nothing
+        if !self.required {
+            return;
+        }
+
         let live = self.live_until.is_some();
         let unpack_end = if let Some(unpack_end) = self.unpack { unpack_end } else { return };
         let unpack_start = self.live_until.unwrap_or(shortcut_graph.original_graph().t_live());
@@ -378,6 +383,14 @@ impl LiveShortcut {
     /// When we know or detect, that we don't need this shortcut, we set all bounds to infinity.
     pub fn finalize_bounds<'g>(&mut self, shortcut_graph: &'g impl ShortcutGraphTrt<'g, OriginalGraph = LiveGraph>) {
         if !self.required {
+            return;
+        }
+
+        if let Some(ttf_until) = max(self.unpack, self.live_until) {
+            let (lower, upper) = self.travel_time_function(shortcut_graph).bound_plfs();
+            debug_assert!(!lower.last().unwrap().at.fuzzy_lt(ttf_until));
+            debug_assert!(!upper.last().unwrap().at.fuzzy_lt(ttf_until));
+        } else {
             return;
         }
 
