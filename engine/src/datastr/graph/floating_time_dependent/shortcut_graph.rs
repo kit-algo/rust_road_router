@@ -182,7 +182,7 @@ impl<'a> ShortcutGraphTrt<'a> for PartialLiveShortcutGraph<'a> {
     }
     fn exact_ttf_for(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
         let live = self.get_live(shortcut_id);
-        if live.live_until.map(|l| l.fuzzy_lt(start)).unwrap_or(true) {
+        if live.live_until.map(|l| !start.fuzzy_lt(l)).unwrap_or(true) {
             self.get(shortcut_id).exact_ttf_for(start, end, self, target, tmp);
         } else {
             let live_until = live.live_until.unwrap();
@@ -199,7 +199,7 @@ impl<'a> ShortcutGraphTrt<'a> for PartialLiveShortcutGraph<'a> {
     }
     fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, switchpoints: &mut Vec<Timestamp>) -> (FlWeight, FlWeight) {
         let live = self.get_live(shortcut_id);
-        if live.live_until.map(|l| l.fuzzy_lt(start)).unwrap_or(true) {
+        if live.live_until.map(|l| !start.fuzzy_lt(l)).unwrap_or(true) {
             self.get(shortcut_id).get_switchpoints(start, end, self, switchpoints)
         } else {
             let live_until = live.live_until.unwrap();

@@ -1750,7 +1750,7 @@ impl<'a> PLF for UpdatedPiecewiseLinearFunction<'a> {
         }
     }
     fn append_range(&self, start: Timestamp, end: Timestamp, target: &mut impl PLFTarget) {
-        if self.t_switch().map(|l| l.fuzzy_lt(start)).unwrap_or(true) {
+        if self.t_switch().map(|l| !start.fuzzy_lt(l)).unwrap_or(true) {
             self.plf.append_range(start, end, target)
         } else {
             let live_until = self.t_switch().unwrap();
