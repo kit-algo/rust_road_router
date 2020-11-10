@@ -425,7 +425,6 @@ impl LiveShortcut {
         self.lower_bound = new_lower_bound;
 
         let new_upper_bound = min(self.upper_bound, self.travel_time_function(shortcut_graph).static_upper_bound());
-        debug_assert!(!new_upper_bound.fuzzy_lt(self.upper_bound), "{:?}, {:?}", new_upper_bound, self);
         debug_assert!(!new_upper_bound.fuzzy_lt(self.lower_bound), "{:?}, {:?}", new_upper_bound, self);
         self.upper_bound = new_upper_bound;
     }

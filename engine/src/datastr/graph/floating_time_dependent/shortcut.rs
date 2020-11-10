@@ -303,10 +303,8 @@ impl Shortcut {
         debug_assert!(!self.upper_bound.fuzzy_lt(new_lower_bound), "{:?}, {:?}", new_lower_bound, self);
         self.lower_bound = new_lower_bound;
 
-        let new_upper_bound = min(self.upper_bound, self.travel_time_function(shortcut_graph).static_upper_bound());
-        debug_assert!(!new_upper_bound.fuzzy_lt(self.upper_bound), "{:?}, {:?}", new_upper_bound, self);
-        debug_assert!(!new_upper_bound.fuzzy_lt(self.lower_bound), "{:?}, {:?}", new_upper_bound, self);
-        self.upper_bound = new_upper_bound;
+        // upper bound was already set as tight as possible during merging.
+        debug_assert!(!self.travel_time_function(shortcut_graph).static_upper_bound().fuzzy_lt(self.upper_bound));
     }
 
     /// If Shortcuts in skipped triangles are not required, the corresponding `Source` in this shortcut is also not required, so remove it
