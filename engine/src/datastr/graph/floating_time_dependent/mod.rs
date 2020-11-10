@@ -398,8 +398,18 @@ impl<'a> MutTopPLF<'a> {
 }
 
 impl<'a> PLFTarget for MutTopPLF<'a> {
-    fn push(&mut self, val: TTFPoint) {
-        self.storage.data.push(val);
+    fn push(&mut self, p: TTFPoint) {
+        if let Some(last) = self.storage.top_plf().last() {
+            if last.at.fuzzy_lt(p.at) {
+                self.storage.data.push(p);
+            } else if last.at.fuzzy_eq(p.at) && last.val.fuzzy_eq(p.val) {
+                return;
+            } else {
+                panic!("Trying to create non (time) monotone function");
+            }
+        } else {
+            self.storage.data.push(p);
+        }
     }
 
     fn pop(&mut self) -> Option<TTFPoint> {
