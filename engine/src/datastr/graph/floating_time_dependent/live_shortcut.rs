@@ -516,7 +516,7 @@ impl LiveShortcut {
 
         let dummy: ShortcutSourceData = ShortcutSource::None.into();
         let mut prev_source = dummy;
-        let mut new_sources = Vec::new();
+        let mut new_sources: Vec<(Timestamp, ShortcutSourceData)> = Vec::new();
 
         // iterate over all old sources.
         // while self is better we need to copy these over
@@ -525,6 +525,9 @@ impl LiveShortcut {
         for (at, source) in sources.iter() {
             if intersection_iter.peek().is_none() || at < intersection_iter.peek().unwrap().0 {
                 if self_currently_better {
+                    if new_sources.last().map(|&(last_at, _)| last_at.fuzzy_eq(at)).unwrap_or(false) {
+                        new_sources.pop();
+                    }
                     new_sources.push((at, source));
                 }
             } else {
@@ -537,9 +540,15 @@ impl LiveShortcut {
 
                     if self_currently_better {
                         if next_change < at {
+                            if new_sources.last().map(|&(last_at, _)| last_at.fuzzy_eq(next_change)).unwrap_or(false) {
+                                new_sources.pop();
+                            }
                             new_sources.push((next_change, prev_source));
                         }
                     } else {
+                        if new_sources.last().map(|&(last_at, _)| last_at.fuzzy_eq(next_change)).unwrap_or(false) {
+                            new_sources.pop();
+                        }
                         new_sources.push((next_change, other_data));
                     }
 
@@ -547,6 +556,9 @@ impl LiveShortcut {
                 }
 
                 if self_currently_better {
+                    if new_sources.last().map(|&(last_at, _)| last_at.fuzzy_eq(at)).unwrap_or(false) {
+                        new_sources.pop();
+                    }
                     new_sources.push((at, source));
                 }
             }
