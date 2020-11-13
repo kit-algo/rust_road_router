@@ -90,12 +90,23 @@ impl<'a, 'b> FloatingTDSteppedEliminationTree<'a, 'b> {
             self.next = self.elimination_tree[node as usize].value();
 
             for ((target, shortcut_id), (shortcut_lower_bound, shortcut_upper_bound)) in self.graph.neighbor_iter(node) {
-                let next = Label {
-                    parent: node,
-                    lower_bound: shortcut_lower_bound + current_state_lower_bound,
-                    shortcut_id,
-                };
-                let next_upper_bound = shortcut_upper_bound + current_state_upper_bound;
+                let next;
+                let next_upper_bound;
+                if cfg!(feature = "tdcch-query-corridor") {
+                    next = Label {
+                        parent: node,
+                        lower_bound: shortcut_lower_bound + current_state_lower_bound,
+                        shortcut_id,
+                    };
+                    next_upper_bound = shortcut_upper_bound + current_state_upper_bound;
+                } else {
+                    next = Label {
+                        parent: node,
+                        lower_bound: FlWeight::zero(),
+                        shortcut_id,
+                    };
+                    next_upper_bound = FlWeight::INFINITY;
+                }
 
                 debug_assert!(!next_upper_bound.fuzzy_lt(next.lower_bound), "{:?} {:?}", next, next_upper_bound);
 

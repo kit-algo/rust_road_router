@@ -276,14 +276,18 @@ impl<'a> Server<'a> {
                     // lazy label filtering
                     .filter(|label| !upper_bound.fuzzy_lt(label.lower_bound))
                 {
-                    debug_assert!(self.customized_graph.outgoing.bounds()[label.shortcut_id as usize]
-                        .0
-                        .fuzzy_eq(label.lower_bound - self.forward.node_data(label.parent).lower_bound));
-                    // update (relax) parent lower bound to target
-                    self.lower_bounds_to_target[label.parent as usize] = min(
-                        self.lower_bounds_to_target[label.parent as usize],
-                        reverse_lower + label.lower_bound - self.forward.node_data(label.parent).lower_bound,
-                    );
+                    if cfg!(feature = "tdcch-query-corridor") {
+                        debug_assert!(self.customized_graph.outgoing.bounds()[label.shortcut_id as usize]
+                            .0
+                            .fuzzy_eq(label.lower_bound - self.forward.node_data(label.parent).lower_bound));
+                        // update (relax) parent lower bound to target
+                        self.lower_bounds_to_target[label.parent as usize] = min(
+                            self.lower_bounds_to_target[label.parent as usize],
+                            reverse_lower + label.lower_bound - self.forward.node_data(label.parent).lower_bound,
+                        );
+                    } else {
+                        self.lower_bounds_to_target[label.parent as usize] = FlWeight::zero();
+                    }
                     // mark parent as in corridor
                     self.forward_tree_mask.set(label.parent as usize);
                     // mark edge as in search space
@@ -298,11 +302,11 @@ impl<'a> Server<'a> {
         let forward_select_time = timer.get_passed();
 
         let relevant_upward = &mut self.relevant_upward;
-        debug_assert!(
-            tentative_distance.0.fuzzy_eq(self.lower_bounds_to_target[self.from as usize]),
-            "{:?}",
-            dbg_each!(tentative_distance, self.lower_bounds_to_target[self.from as usize])
-        );
+        // debug_assert!(
+        //     tentative_distance.0.fuzzy_eq(self.lower_bounds_to_target[self.from as usize]),
+        //     "{:?}",
+        //     dbg_each!(tentative_distance, self.lower_bounds_to_target[self.from as usize])
+        // );
         debug_assert!(
             FlWeight::zero().fuzzy_eq(self.lower_bounds_to_target[self.to as usize]),
             "{:?}",
