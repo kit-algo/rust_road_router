@@ -5,14 +5,7 @@ use std::{env, error::Error, path::Path};
 
 #[macro_use]
 extern crate rust_road_router;
-use rust_road_router::{
-    algo::{catchup::Server, *},
-    cli::CliErr,
-    datastr::graph::floating_time_dependent::*,
-    experiments::catchup::setup,
-    io::*,
-    report::*,
-};
+use rust_road_router::{algo::catchup::profiles::Server, cli::CliErr, experiments::catchup::setup, io::*, report::*};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting();
@@ -38,33 +31,20 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         if let Some(path) = query_dir {
             let from = Vec::load_from(path.join("source_node"))?;
-            let at = Vec::<u32>::load_from(path.join("source_time"))?;
             let to = Vec::load_from(path.join("target_node"))?;
             let rank = Vec::<u32>::load_from(path.join("dij_rank"))?;
 
-            for q_idx in rand::seq::index::sample(rng, from.len(), from.len()).into_iter() {
+            for q_idx in rand::seq::index::sample(rng, from.len(), 2400).into_iter() {
                 let from = from[q_idx];
                 let to = to[q_idx];
-                let at = Timestamp::new(f64::from(at[q_idx]) / 1000.0);
 
                 let _tdcch_query_ctxt = algo_runs_ctxt.push_collection_item();
-                let (result, time) = measure(|| server.query(TDQuery { from, to, departure: at }));
+                let (_result, time) = measure(|| server.distance(from, to));
 
                 report!("from", from);
                 report!("to", to);
                 report!("rank", rank[q_idx]);
-                report!("departure_time", f64::from(at));
                 report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-                if let Some(mut result) = result {
-                    report!("earliest_arrival", f64::from(result.distance() + at));
-
-                    let (path, unpacking_duration) = measure(|| result.path());
-                    report!("num_nodes_on_shortest_path", path.len());
-                    report!(
-                        "unpacking_running_time_ms",
-                        unpacking_duration.to_std().unwrap().as_nanos() as f64 / 1_000_000.0
-                    );
-                }
             }
         }
 

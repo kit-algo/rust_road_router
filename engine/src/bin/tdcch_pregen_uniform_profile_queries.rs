@@ -5,20 +5,13 @@ use std::{env, error::Error, path::Path};
 
 #[macro_use]
 extern crate rust_road_router;
-use rust_road_router::{
-    algo::{catchup::Server, *},
-    cli::CliErr,
-    datastr::graph::floating_time_dependent::*,
-    experiments::catchup::setup,
-    io::*,
-    report::*,
-};
+use rust_road_router::{algo::catchup::profiles::Server, cli::CliErr, experiments::catchup::setup, io::*, report::*};
 
 use time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting();
-    report!("program", "tdcch_pregen_uniform_queries");
+    report!("program", "tdcch_pregen_uniform_profile_queries");
     let arg = env::args().skip(1).next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(&arg);
 
@@ -42,37 +35,24 @@ fn main() -> Result<(), Box<dyn Error>> {
             let mut tdcch_time = Duration::zero();
 
             let from = Vec::load_from(path.join("source_node"))?;
-            let at = Vec::<u32>::load_from(path.join("source_time"))?;
             let to = Vec::load_from(path.join("target_node"))?;
 
             let mut num_queries = 0;
 
-            for ((from, to), at) in from.into_iter().zip(to.into_iter()).zip(at.into_iter()) {
-                let at = Timestamp::new(f64::from(at) / 1000.0);
-
+            for (from, to) in from.into_iter().zip(to.into_iter()).take(1000) {
                 let _tdcch_query_ctxt = algo_runs_ctxt.push_collection_item();
-                let (result, time) = measure(|| server.query(TDQuery { from, to, departure: at }));
+                let (_result, time) = measure(|| server.distance(from, to));
 
                 report!("from", from);
                 report!("to", to);
-                report!("departure_time", f64::from(at));
                 report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
                 tdcch_time = tdcch_time + time;
-                if let Some(mut result) = result {
-                    report!("earliest_arrival", f64::from(result.distance() + at));
-                    let (path, unpacking_duration) = measure(|| result.path());
-                    report!("num_nodes_on_shortest_path", path.len());
-                    report!(
-                        "unpacking_running_time_ms",
-                        unpacking_duration.to_std().unwrap().as_nanos() as f64 / 1_000_000.0
-                    );
-                }
 
                 num_queries += 1;
             }
 
             if num_queries > 0 {
-                eprintln!("TDCCH {}", tdcch_time / num_queries);
+                eprintln!("TDCCH Profile {}", tdcch_time / num_queries);
             }
         }
 

@@ -6,4 +6,5 @@ pub const NUM_DIJKSTRA_QUERIES: usize = 1000;
 pub const NUM_DIJKSTRA_QUERIES: usize = include!(concat!(env!("OUT_DIR"), "/NUM_DIJKSTRA_QUERIES"));
 
 pub mod a_star;
+pub mod catchup;
 pub mod chpot;
