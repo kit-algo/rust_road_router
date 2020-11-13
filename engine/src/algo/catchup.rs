@@ -346,24 +346,32 @@ impl<'a> Server<'a> {
                     }
 
                     let lower_bound_target = lower_bounds_to_target[target as usize];
-                    // partially relax the edge
-                    // that means actually relax the first real edge that is on the path that the shortcut represents.
-                    // doing so requires to recursively unpack the first edge of each triangle.
-                    // while doing that we mark the second edge as contained in the search space
-                    // and update the lower bound to target for the middle node.
-                    // this all happens in this method
-                    let (time, next_on_path, evaled_edge_id) = self
-                        .customized_graph
-                        .outgoing
-                        .evaluate_next_segment_at::<True, _>(
+
+                    let (time, next_on_path, evaled_edge_id) = if cfg!(feature = "tdcch-query-lazy") {
+                        // partially relax the edge
+                        // that means actually relax the first real edge that is on the path that the shortcut represents.
+                        // doing so requires to recursively unpack the first edge of each triangle.
+                        // while doing that we mark the second edge as contained in the search space
+                        // and update the lower bound to target for the middle node.
+                        // this all happens in this method
+                        self.customized_graph
+                            .outgoing
+                            .evaluate_next_segment_at::<True, _>(
+                                shortcut_id,
+                                distance,
+                                lower_bound_target,
+                                self.customized_graph,
+                                lower_bounds_to_target,
+                                &mut |edge_id| relevant_upward.set(edge_id as usize),
+                            )
+                            .unwrap()
+                    } else {
+                        (
+                            self.customized_graph.evaluate(ShortcutId::Outgoing(shortcut_id), distance),
+                            self.customized_graph.outgoing.head()[shortcut_id as usize],
                             shortcut_id,
-                            distance,
-                            lower_bound_target,
-                            self.customized_graph,
-                            lower_bounds_to_target,
-                            &mut |edge_id| relevant_upward.set(edge_id as usize),
                         )
-                        .unwrap();
+                    };
                     let lower = if cfg!(feature = "tdcch-query-astar") {
                         lower_bounds_to_target[next_on_path as usize]
                     } else {
@@ -416,19 +424,26 @@ impl<'a> Server<'a> {
                         }
 
                         let lower_bound_target = lower_bounds_to_target[label.parent as usize];
-                        // if so do the same crazy relaxation as for upward edges
-                        let (time, next_on_path, evaled_edge_id) = self
-                            .customized_graph
-                            .incoming
-                            .evaluate_next_segment_at::<False, _>(
+                        let (time, next_on_path, evaled_edge_id) = if cfg!(feature = "tdcch-query-lazy") {
+                            // if so do the same crazy relaxation as for upward edges
+                            self.customized_graph
+                                .incoming
+                                .evaluate_next_segment_at::<False, _>(
+                                    label.shortcut_id,
+                                    distance,
+                                    lower_bound_target,
+                                    self.customized_graph,
+                                    lower_bounds_to_target,
+                                    &mut |edge_id| relevant_upward.set(edge_id as usize),
+                                )
+                                .unwrap()
+                        } else {
+                            (
+                                self.customized_graph.evaluate(ShortcutId::Incoming(label.shortcut_id), distance),
+                                label.parent,
                                 label.shortcut_id,
-                                distance,
-                                lower_bound_target,
-                                self.customized_graph,
-                                lower_bounds_to_target,
-                                &mut |edge_id| relevant_upward.set(edge_id as usize),
                             )
-                            .unwrap();
+                        };
                         let lower = if cfg!(feature = "tdcch-query-astar") {
                             lower_bounds_to_target[next_on_path as usize]
                         } else {
