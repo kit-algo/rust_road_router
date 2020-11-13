@@ -130,7 +130,9 @@ impl<'a> Server<'a> {
                 };
 
                 // skip the node if it cannot possibly be in the shortest path corridor
-                if self.forward.node_data(self.forward.peek_next().unwrap()).lower_bound > tentative_distance.1 || (cfg!(tdcch_stall_on_demand) && stall()) {
+                if self.forward.node_data(self.forward.peek_next().unwrap()).lower_bound > tentative_distance.1
+                    || (cfg!(feature = "tdcch-stall-on-demand") && stall())
+                {
                     self.forward.skip_next();
                 } else if let QueryProgress::Progress(node) = self.forward.next_step() {
                     if cfg!(feature = "detailed-stats") {
