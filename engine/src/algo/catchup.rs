@@ -230,7 +230,7 @@ impl<'a> Server<'a> {
         for &(node, _) in self
             .meeting_nodes
             .iter()
-            .filter(|(_, lower_bound)| !tentative_upper_bound.fuzzy_lt(*lower_bound))
+            .filter(|(_, lower_bound)| !tentative_upper_bound.fuzzy_lt(*lower_bound) && lower_bound.fuzzy_lt(FlWeight::INFINITY))
         {
             self.forward_tree_mask.set(node as usize);
             self.backward_tree_mask.set(node as usize);

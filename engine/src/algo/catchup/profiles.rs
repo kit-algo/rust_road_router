@@ -85,6 +85,7 @@ impl<'a> Server<'a> {
     #[allow(clippy::collapsible_if)]
     #[allow(clippy::cognitive_complexity)]
     pub fn distance(&mut self, from_node: NodeId, to_node: NodeId) -> Shortcut {
+        assert_ne!(from_node, to_node);
         report!("algo", "Floating TDCCH Profile Query");
 
         let mut timer = Timer::new();
@@ -212,7 +213,8 @@ impl<'a> Server<'a> {
         let tentative_upper_bound = tentative_distance.1;
 
         // all meeting nodes are in the corridor
-        self.meeting_nodes.retain(|(_, lower_bound)| !tentative_upper_bound.fuzzy_lt(*lower_bound));
+        self.meeting_nodes
+            .retain(|(_, lower_bound)| !tentative_upper_bound.fuzzy_lt(*lower_bound) && lower_bound.fuzzy_lt(FlWeight::INFINITY));
         for &(node, _) in &self.meeting_nodes {
             self.forward_tree_mask.set(node as usize);
             self.backward_tree_mask.set(node as usize);
@@ -292,24 +294,30 @@ impl<'a> Server<'a> {
         self.forward_tree_path.retain(|&node| forward_tree_mask.get(node as usize) && node != to);
         self.backward_tree_path.retain(|&node| backward_tree_mask.get(node as usize) && node != from);
 
-        for (offset, &node) in self.forward_tree_path[1..].iter().enumerate() {
+        for (offset, &node) in self.forward_tree_path.get(1..).unwrap_or(&[]).iter().enumerate() {
             self.downward_shortcut_offsets[node as usize] = offset;
         }
-        for (offset, &node) in self.backward_tree_path[1..].iter().enumerate() {
+        for (offset, &node) in self.backward_tree_path.get(1..).unwrap_or(&[]).iter().enumerate() {
             self.upward_shortcut_offsets[node as usize] = offset;
         }
 
         let downward_shortcut_offsets = &self.downward_shortcut_offsets;
         let upward_shortcut_offsets = &self.upward_shortcut_offsets;
 
-        let mut down_shortcuts: Vec<_> = self.forward_tree_path[1..]
+        let mut down_shortcuts: Vec<_> = self
+            .forward_tree_path
+            .get(1..)
+            .unwrap_or(&[])
             .iter()
             .map(|&node| {
                 let label = &forward.node_data(node);
                 Shortcut::new_finished(&[], (label.lower_bound, label.upper_bound), label.lower_bound.fuzzy_eq(label.upper_bound))
             })
             .collect();
-        let mut up_shortcuts: Vec<_> = self.backward_tree_path[1..]
+        let mut up_shortcuts: Vec<_> = self
+            .backward_tree_path
+            .get(1..)
+            .unwrap_or(&[])
             .iter()
             .map(|&node| {
                 let label = &backward.node_data(node);
@@ -420,7 +428,7 @@ impl<'a> Server<'a> {
 
         rayon::join(
             || {
-                for (offset, &node) in forward_tree_path[1..].iter().enumerate() {
+                for (offset, &node) in forward_tree_path.get(1..).unwrap_or(&[]).iter().enumerate() {
                     let mut shortcut = Shortcut::new(None, &customized_graph.original_graph);
                     std::mem::swap(&mut shortcut, &mut profile_graph_down.down_shortcuts[offset]);
                     customize_s_down(node, &mut shortcut, &profile_graph_down);
@@ -429,7 +437,7 @@ impl<'a> Server<'a> {
                 }
             },
             || {
-                for (offset, &node) in backward_tree_path[1..].iter().enumerate() {
+                for (offset, &node) in backward_tree_path.get(1..).unwrap_or(&[]).iter().enumerate() {
                     let mut shortcut = Shortcut::new(None, &customized_graph.original_graph);
                     std::mem::swap(&mut shortcut, &mut profile_graph_up.up_shortcuts[offset]);
                     customize_up_t(node, &mut shortcut, &profile_graph_up);
@@ -452,11 +460,15 @@ impl<'a> Server<'a> {
         customize_up_t(from, &mut st_shortcut, &profile_graph);
 
         self.meeting_nodes.sort_by_key(|&(node, _)| {
-            profile_graph.lower_bound(ShortcutId::Incoming(
-                (downward_shortcut_offsets[node as usize] + customized_graph.incoming.head().len()) as EdgeId,
-            )) + profile_graph.lower_bound(ShortcutId::Outgoing(
-                (upward_shortcut_offsets[node as usize] + customized_graph.outgoing.head().len()) as EdgeId,
-            ))
+            if node == from || node == to {
+                FlWeight::zero()
+            } else {
+                profile_graph.lower_bound(ShortcutId::Incoming(
+                    (downward_shortcut_offsets[node as usize] + customized_graph.incoming.head().len()) as EdgeId,
+                )) + profile_graph.lower_bound(ShortcutId::Outgoing(
+                    (upward_shortcut_offsets[node as usize] + customized_graph.outgoing.head().len()) as EdgeId,
+                ))
+            }
         });
 
         for &(node, _) in &self.meeting_nodes {
@@ -477,26 +489,37 @@ impl<'a> Server<'a> {
         timer.restart();
 
         let mut target = self.buffers.unpacking_target.push_plf();
-        st_shortcut.exact_ttf_for(Timestamp::zero(), period(), &profile_graph, &mut target, &mut self.buffers.unpacking_tmp);
+        if st_shortcut.is_valid_path() {
+            st_shortcut.exact_ttf_for(Timestamp::zero(), period(), &profile_graph, &mut target, &mut self.buffers.unpacking_tmp);
+        }
         report!("profile_complexity", target.len());
 
         report!("exact_profile_time", timer.get_passed().num_milliseconds());
         timer.restart();
 
         let mut switchpoints = Vec::new();
-        st_shortcut.get_switchpoints(Timestamp::zero(), period(), &profile_graph, &mut switchpoints);
+        if st_shortcut.is_valid_path() {
+            st_shortcut.get_switchpoints(Timestamp::zero(), period(), &profile_graph, &mut switchpoints);
+        }
         report!("path_switches", switchpoints.len());
-        let mut paths: Vec<_> = std::iter::once(&Timestamp::zero())
-            .chain(switchpoints.iter())
-            .map(|t| {
-                let mut path = Vec::new();
-                st_shortcut.unpack_at(*t + FlWeight::new(EPSILON), &profile_graph, &mut path);
-                path
-            })
-            .collect();
-        paths.sort_by(|p1, p2| p1.iter().map(|(e, _)| e).partial_cmp(p2.iter().map(|(e, _)| e)).unwrap());
-        paths.dedup_by(|p1, p2| p1.iter().map(|(e, _)| e).eq(p2.iter().map(|(e, _)| e)));
-        report!("num_distinct_paths", paths.len());
+        report!(
+            "num_distinct_paths",
+            if st_shortcut.is_valid_path() {
+                let mut paths: Vec<_> = std::iter::once(&Timestamp::zero())
+                    .chain(switchpoints.iter())
+                    .map(|t| {
+                        let mut path = Vec::new();
+                        st_shortcut.unpack_at(*t + FlWeight::new(EPSILON), &profile_graph, &mut path);
+                        path
+                    })
+                    .collect();
+                paths.sort_by(|p1, p2| p1.iter().map(|(e, _)| e).partial_cmp(p2.iter().map(|(e, _)| e)).unwrap());
+                paths.dedup_by(|p1, p2| p1.iter().map(|(e, _)| e).eq(p2.iter().map(|(e, _)| e)));
+                paths.len()
+            } else {
+                0
+            }
+        );
         report!("switchpoints_time", timer.get_passed().num_milliseconds());
         timer.restart();
 
