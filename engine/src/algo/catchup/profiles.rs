@@ -329,7 +329,7 @@ impl<'a> Server<'a> {
             .collect();
 
         for ((head, edge_id), _) in self.customized_graph.upward_bounds_graph().neighbor_iter(self.from) {
-            if self.forward_tree_mask.get(head as usize) {
+            if self.forward_tree_mask.get(head as usize) && head != to {
                 let shortcut = &mut down_shortcuts[self.downward_shortcut_offsets[head as usize]];
                 shortcut.set_sources(self.customized_graph.outgoing.edge_sources(edge_id as usize));
                 shortcut.set_cache(reconstruction_graph.take_cache(ShortcutId::Outgoing(edge_id)));
@@ -337,7 +337,7 @@ impl<'a> Server<'a> {
         }
 
         for ((head, edge_id), _) in self.customized_graph.downward_bounds_graph().neighbor_iter(self.to) {
-            if self.backward_tree_mask.get(head as usize) {
+            if self.backward_tree_mask.get(head as usize) && head != from {
                 let shortcut = &mut up_shortcuts[self.upward_shortcut_offsets[head as usize]];
                 shortcut.set_sources(self.customized_graph.incoming.edge_sources(edge_id as usize));
                 shortcut.set_cache(reconstruction_graph.take_cache(ShortcutId::Incoming(edge_id)));
@@ -373,7 +373,7 @@ impl<'a> Server<'a> {
                 .labels
                 .iter()
                 .enumerate()
-                .filter(|(_, label)| label.parent != from && !upper_bound.fuzzy_lt(label.lower_bound))
+                .filter(|(_, label)| label.parent != from && label.parent != to && !upper_bound.fuzzy_lt(label.lower_bound))
                 .map(|(i, _)| i)
                 .collect();
 
@@ -404,7 +404,7 @@ impl<'a> Server<'a> {
                 .labels
                 .iter()
                 .enumerate()
-                .filter(|(_, label)| label.parent != to && !upper_bound.fuzzy_lt(label.lower_bound))
+                .filter(|(_, label)| label.parent != from && label.parent != to && !upper_bound.fuzzy_lt(label.lower_bound))
                 .map(|(i, _)| i)
                 .collect();
 
