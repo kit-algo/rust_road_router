@@ -122,6 +122,11 @@ impl<'a> Server<'a> {
         while self.forward.peek_next().is_some() || self.backward.peek_next().is_some() {
             // advance the direction which currently is at the lower rank
             if self.forward.peek_next().unwrap_or(n as NodeId) <= self.backward.peek_next().unwrap_or(n as NodeId) {
+                // while we're here, clean up the forward_tree_mask
+                // this is fine because we only check the flag for nodes on the tree path
+                // we only set this to true when the node is guaranteed to be in the corridor.
+                self.forward_tree_mask.unset_all_around(self.forward.peek_next().unwrap() as usize);
+
                 // experimental stall on demand
                 // only works for forward search
                 // currently deactivated by default
@@ -151,10 +156,6 @@ impl<'a> Server<'a> {
                         relaxed_elimination_tree_arcs += self.customized_graph.outgoing.degree(node);
                     }
 
-                    // while we're here, clean up the forward_tree_mask
-                    // this is fine because we only check the flag for nodes on the tree path
-                    // we only set this to true when the node is guaranteed to be in the corridor.
-                    self.forward_tree_mask.unset_all_around(node as usize);
                     // push node to tree path so we can efficiently walk back down later
                     self.forward_tree_path.push(node);
 
@@ -177,6 +178,11 @@ impl<'a> Server<'a> {
                     unreachable!("inconsistent elimination tree state");
                 }
             } else {
+                // while we're here, clean up the forward_tree_mask
+                // this is fine because we only check the flag for nodes on the tree path
+                // we only set this to true when the node is guaranteed to be in the corridor.
+                self.backward_tree_mask.unset_all_around(self.backward.peek_next().unwrap() as usize);
+
                 // skip the node if it cannot possibly be in the shortest path corridor
                 if self.backward.node_data(self.backward.peek_next().unwrap()).lower_bound > tentative_distance.1 {
                     self.backward.skip_next();
@@ -188,10 +194,6 @@ impl<'a> Server<'a> {
                         relaxed_elimination_tree_arcs += self.customized_graph.incoming.degree(node);
                     }
 
-                    // while we're here, clean up the forward_tree_mask
-                    // this is fine because we only check the flag for nodes on the tree path
-                    // we only set this to true when the node is guaranteed to be in the corridor.
-                    self.backward_tree_mask.unset_all_around(node as usize);
                     // push node to tree path so we can efficiently walk back down later
                     self.backward_tree_path.push(node);
 
