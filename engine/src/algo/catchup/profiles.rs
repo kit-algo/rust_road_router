@@ -215,6 +215,7 @@ impl<'a> Server<'a> {
         let tentative_upper_bound = tentative_distance.1;
 
         // all meeting nodes are in the corridor
+        self.meeting_nodes.dedup_by_key(|&mut (node, _)| node);
         self.meeting_nodes
             .retain(|(_, lower_bound)| !tentative_upper_bound.fuzzy_lt(*lower_bound) && lower_bound.fuzzy_lt(FlWeight::INFINITY));
         for &(node, _) in &self.meeting_nodes {
@@ -458,8 +459,12 @@ impl<'a> Server<'a> {
             up_shortcuts: &mut up_shortcuts[..],
         };
 
-        customize_s_down(to, &mut st_shortcut, &profile_graph);
-        customize_up_t(from, &mut st_shortcut, &profile_graph);
+        if self.forward_tree_mask.get(to as usize) {
+            customize_s_down(to, &mut st_shortcut, &profile_graph);
+        }
+        if self.backward_tree_mask.get(from as usize) {
+            customize_up_t(from, &mut st_shortcut, &profile_graph);
+        }
 
         self.meeting_nodes.sort_by_key(|&(node, _)| {
             if node == from || node == to {
