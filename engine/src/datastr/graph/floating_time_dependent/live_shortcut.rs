@@ -86,15 +86,19 @@ impl LiveShortcut {
 
         if exact_ttfs_available && (!live || self.travel_time_function(shortcut_graph).exact()) {
             let mut target = buffers.unpacking_target.push_plf();
+            pred_shortcut.exact_ttf_for(unpack_start, unpack_end, shortcut_graph, &mut target, &mut buffers.unpacking_tmp);
             if live {
+                let mut sub_target = buffers.unpacking_tmp.push_plf();
                 if let ApproxPartialTTF::Exact(plf) = self.travel_time_function(shortcut_graph) {
-                    plf.append(shortcut_graph.original_graph().t_live(), &mut target)
+                    plf.append(shortcut_graph.original_graph().t_live(), &mut sub_target);
                 } else {
                     unreachable!()
                 }
+                PartialPiecewiseLinearFunction::new(target.storage().top_plf()).append(unpack_start, &mut sub_target);
+                self.cache = Some(ApproxTTFContainer::Exact(Box::<[TTFPoint]>::from(&sub_target[..])));
+            } else {
+                self.cache = Some(ApproxTTFContainer::Exact(Box::<[TTFPoint]>::from(&target[..])));
             }
-            pred_shortcut.exact_ttf_for(unpack_start, unpack_end, shortcut_graph, &mut target, &mut buffers.unpacking_tmp);
-            self.cache = Some(ApproxTTFContainer::Exact(Box::<[TTFPoint]>::from(&target[..])));
             return;
         }
 
