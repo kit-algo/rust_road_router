@@ -917,8 +917,9 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
                 .par_iter_mut()
                 .zip(pre_downward.par_iter())
                 .for_each(|(s, p)| s.update_with(*p, t_live));
-            upward.par_iter_mut().zip(upward_preliminary_bounds.par_iter()).for_each(disable_dominated);
-            downward.par_iter_mut().zip(downward_preliminary_bounds.par_iter()).for_each(disable_dominated);
+            // TODO reenable
+            // upward.par_iter_mut().zip(upward_preliminary_bounds.par_iter()).for_each(disable_dominated);
+            // downward.par_iter_mut().zip(downward_preliminary_bounds.par_iter()).for_each(disable_dominated);
         });
     }
 
