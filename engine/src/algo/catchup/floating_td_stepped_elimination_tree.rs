@@ -108,8 +108,6 @@ impl<'a, 'b> FloatingTDSteppedEliminationTree<'a, 'b> {
                     next_upper_bound = FlWeight::INFINITY;
                 }
 
-                debug_assert!(!next_upper_bound.fuzzy_lt(next.lower_bound), "{:?} {:?}", next, next_upper_bound);
-
                 if !self.distances[target as usize].upper_bound.fuzzy_lt(next.lower_bound) {
                     self.distances[target as usize].lower_bound = min(next.lower_bound, self.distances[target as usize].lower_bound);
                     self.distances[target as usize].upper_bound = min(next_upper_bound, self.distances[target as usize].upper_bound);
