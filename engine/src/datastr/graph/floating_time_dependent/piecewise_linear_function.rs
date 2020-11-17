@@ -72,7 +72,11 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
 
         for points in ipps.windows(2) {
             debug_assert!(points[0].at.fuzzy_lt(points[1].at), "{:?}", ipps);
-            debug_assert!(!(points[1].val - points[0].val).fuzzy_lt(points[0].at - points[1].at), "{:#?}", points);
+            debug_assert!(
+                !(points[1].val - points[0].val).fuzzy_lt(points[0].at - points[1].at),
+                "FiFo broken {:#?}",
+                points
+            );
         }
 
         Self { ipps }
@@ -140,112 +144,6 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
 
         debug_assert!(target[target.len() - 2].at.fuzzy_lt(end));
         debug_assert!(!target[target.len() - 1].at.fuzzy_lt(end));
-    }
-
-    pub(super) fn append_lower_bound_partials(first: &mut impl PLFTarget, second: &[TTFPoint], switchover: Timestamp) {
-        debug_assert!(second.len() > 1);
-        if let Some(&TTFPoint { at, .. }) = first.split_last().map(|(_, rest)| rest.last()).unwrap_or(None) {
-            debug_assert!(at.fuzzy_lt(switchover));
-        }
-        if let Some(&TTFPoint { at, .. }) = first.last() {
-            debug_assert!(!at.fuzzy_lt(switchover));
-        }
-        debug_assert!(!switchover.fuzzy_lt(second[0].at));
-        debug_assert!(switchover.fuzzy_lt(second[1].at));
-
-        if first.is_empty() {
-            first.extend(second.iter().cloned());
-            return;
-        }
-
-        let first_last = first.pop().unwrap();
-
-        let first_switchover_val = if first_last.at.fuzzy_eq(switchover) {
-            first_last.val
-        } else {
-            interpolate_linear(first.last().unwrap(), &first_last, switchover)
-        };
-
-        let second_switchover_val = if second[0].at.fuzzy_eq(switchover) {
-            second[0].val
-        } else {
-            interpolate_linear(&second[0], &second[1], switchover)
-        };
-
-        // ignore point when segments colinear
-        if first.last() != Some(&second[0]) {
-            first.push(TTFPoint {
-                at: switchover,
-                val: min(first_switchover_val, second_switchover_val),
-            });
-        }
-        let debug_start = first.len().saturating_sub(2);
-        first.extend(second[1..].iter().cloned());
-
-        for points in first[debug_start..].windows(2).take(2) {
-            debug_assert!(points[0].at.fuzzy_lt(points[1].at));
-            // debug_assert!(
-            //     !(points[1].at - points[0].at).fuzzy_lt(points[0].val - points[1].val),
-            //     "FiFo broken {:?}",
-            //     points
-            // );
-            // if (points[1].at - points[0].at).fuzzy_lt(points[0].val - points[1].val) {
-            //     eprintln!("FiFo broken {:?}", points);
-            // }
-        }
-    }
-
-    pub(super) fn append_upper_bound_partials(first: &mut impl PLFTarget, second: &[TTFPoint], switchover: Timestamp) {
-        debug_assert!(second.len() > 1);
-        if let Some(&TTFPoint { at, .. }) = first.split_last().map(|(_, rest)| rest.last()).unwrap_or(None) {
-            debug_assert!(at.fuzzy_lt(switchover));
-        }
-        if let Some(&TTFPoint { at, .. }) = first.last() {
-            debug_assert!(!at.fuzzy_lt(switchover));
-        }
-        debug_assert!(!switchover.fuzzy_lt(second[0].at));
-        debug_assert!(switchover.fuzzy_lt(second[1].at));
-
-        if first.is_empty() {
-            first.extend(second.iter().cloned());
-            return;
-        }
-
-        let first_last = first.pop().unwrap();
-
-        let first_switchover_val = if first_last.at.fuzzy_eq(switchover) {
-            first_last.val
-        } else {
-            interpolate_linear(first.last().unwrap(), &first_last, switchover)
-        };
-
-        let second_switchover_val = if second[0].at.fuzzy_eq(switchover) {
-            second[0].val
-        } else {
-            interpolate_linear(&second[0], &second[1], switchover)
-        };
-
-        // ignore point when segments colinear
-        if first.last() != Some(&second[0]) {
-            first.push(TTFPoint {
-                at: switchover,
-                val: max(first_switchover_val, second_switchover_val),
-            });
-        }
-        let debug_start = first.len().saturating_sub(2);
-        first.extend(second[1..].iter().cloned());
-
-        for points in first[debug_start..].windows(2).take(2) {
-            debug_assert!(points[0].at.fuzzy_lt(points[1].at));
-            // debug_assert!(
-            //     !(points[1].at - points[0].at).fuzzy_lt(points[0].val - points[1].val),
-            //     "FiFo broken {:?}",
-            //     points
-            // );
-            // if (points[1].at - points[0].at).fuzzy_lt(points[0].val - points[1].val) {
-            //     eprintln!("FiFo broken {:?}", points);
-            // }
-        }
     }
 
     /// Link two complete and valid PLFs.
@@ -451,7 +349,7 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
         upper.into_boxed_slice()
     }
 
-    fn fifoize_down(plf: &mut [TTFPoint]) {
+    pub fn fifoize_down(plf: &mut [TTFPoint]) {
         PartialPiecewiseLinearFunction::fifoize_down(plf);
         if !plf.last_mut().unwrap().val.fuzzy_eq(plf[0].val) {
             plf.last_mut().unwrap().val = plf[0].val;
@@ -459,7 +357,7 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
         }
     }
 
-    fn fifoize_up(plf: &mut [TTFPoint]) {
+    pub fn fifoize_up(plf: &mut [TTFPoint]) {
         PartialPiecewiseLinearFunction::fifoize_up(plf);
         if !plf[0].val.fuzzy_eq(plf.last().unwrap().val) {
             plf[0].val = plf.last().unwrap().val;
@@ -640,6 +538,52 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
         target.extend(self[1..].iter().cloned());
 
         for points in target.windows(2) {
+            debug_assert!(points[0].at.fuzzy_lt(points[1].at));
+        }
+    }
+
+    // This function return something non-FiFo
+    pub(super) fn append_bound(&self, switchover: Timestamp, target: &mut impl PLFTarget, select: impl FnOnce(FlWeight, FlWeight) -> FlWeight) {
+        debug_assert!(self.len() > 1);
+        if let Some(&TTFPoint { at, .. }) = target.split_last().map(|(_, rest)| rest.last()).unwrap_or(None) {
+            debug_assert!(at.fuzzy_lt(switchover));
+        }
+        if let Some(&TTFPoint { at, .. }) = target.last() {
+            debug_assert!(!at.fuzzy_lt(switchover));
+        }
+        debug_assert!(!switchover.fuzzy_lt(self[0].at));
+        debug_assert!(switchover.fuzzy_lt(self[1].at));
+
+        if target.is_empty() {
+            target.extend(self.iter().cloned());
+            return;
+        }
+
+        let target_last = target.pop().unwrap();
+
+        let target_switchover_val = if target_last.at.fuzzy_eq(switchover) {
+            target_last.val
+        } else {
+            interpolate_linear(target.last().unwrap(), &target_last, switchover)
+        };
+
+        let self_switchover_val = if self[0].at.fuzzy_eq(switchover) {
+            self[0].val
+        } else {
+            interpolate_linear(&self[0], &self[1], switchover)
+        };
+
+        // ignore point when segments colinear
+        if target.last() != Some(&self[0]) {
+            target.push(TTFPoint {
+                at: switchover,
+                val: select(target_switchover_val, self_switchover_val),
+            });
+        }
+        let debug_start = target.len().saturating_sub(2);
+        target.extend(self[1..].iter().cloned());
+
+        for points in target[debug_start..].windows(2).take(2) {
             debug_assert!(points[0].at.fuzzy_lt(points[1].at));
         }
     }
@@ -1308,13 +1252,13 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
         (result_lower.into(), result_upper.into())
     }
 
-    fn fifoize_down(plf: &mut [TTFPoint]) {
+    pub fn fifoize_down(plf: &mut [TTFPoint]) {
         for i in (0..plf.len() - 1).rev() {
             plf[i].val = min(plf[i].val, plf[i + 1].val + plf[i + 1].at - plf[i].at);
         }
     }
 
-    fn fifoize_up(plf: &mut [TTFPoint]) {
+    pub fn fifoize_up(plf: &mut [TTFPoint]) {
         for i in 1..plf.len() {
             plf[i].val = max(plf[i].val, plf[i - 1].val + plf[i - 1].at - plf[i].at);
         }

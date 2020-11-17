@@ -820,12 +820,13 @@ impl<'a> ReconstructionGraph<'a> {
                     &mut inner_target,
                     target.storage_mut(),
                 );
-                PeriodicPiecewiseLinearFunction::append_lower_bound_partials(&mut target, &inner_target, max(Timestamp::zero(), c.cur().0));
+                PartialPiecewiseLinearFunction::new(&inner_target[..]).append_bound(max(Timestamp::zero(), c.cur().0), &mut target, min);
 
                 c.advance();
             }
 
-            let lower = Box::<[TTFPoint]>::from(&target[..]);
+            let mut lower = Box::<[TTFPoint]>::from(&target[..]);
+            PeriodicPiecewiseLinearFunction::fifoize_down(&mut lower[..]);
             drop(target);
 
             let mut target = buffers.unpacking_target.push_plf();
@@ -841,12 +842,13 @@ impl<'a> ReconstructionGraph<'a> {
                     &mut inner_target,
                     target.storage_mut(),
                 );
-                PeriodicPiecewiseLinearFunction::append_upper_bound_partials(&mut target, &inner_target, max(Timestamp::zero(), c.cur().0));
+                PartialPiecewiseLinearFunction::new(&inner_target[..]).append_bound(max(Timestamp::zero(), c.cur().0), &mut target, max);
 
                 c.advance();
             }
 
-            let upper = Box::<[TTFPoint]>::from(&target[..]);
+            let mut upper = Box::<[TTFPoint]>::from(&target[..]);
+            PeriodicPiecewiseLinearFunction::fifoize_up(&mut upper[..]);
 
             ApproxTTFContainer::Approx(lower, upper)
         };

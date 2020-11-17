@@ -126,10 +126,11 @@ impl LiveShortcut {
                 &mut inner_target,
                 target.storage_mut(),
             );
-            PeriodicPiecewiseLinearFunction::append_lower_bound_partials(&mut target, &inner_target, max(unpack_start, range_start));
+            PartialPiecewiseLinearFunction::new(&inner_target[..]).append_bound(max(unpack_start, range_start), &mut target, min);
         }
 
-        let lower = Box::<[TTFPoint]>::from(&target[..]);
+        let mut lower = Box::<[TTFPoint]>::from(&target[..]);
+        PartialPiecewiseLinearFunction::fifoize_down(&mut lower[..]);
         drop(target);
 
         let mut target = buffers.unpacking_target.push_plf();
@@ -150,10 +151,11 @@ impl LiveShortcut {
                 &mut inner_target,
                 target.storage_mut(),
             );
-            PeriodicPiecewiseLinearFunction::append_upper_bound_partials(&mut target, &inner_target, max(unpack_start, range_start));
+            PartialPiecewiseLinearFunction::new(&inner_target[..]).append_bound(max(unpack_start, range_start), &mut target, max);
         }
 
-        let upper = Box::<[TTFPoint]>::from(&target[..]);
+        let mut upper = Box::<[TTFPoint]>::from(&target[..]);
+        PartialPiecewiseLinearFunction::fifoize_up(&mut upper[..]);
 
         self.cache = Some(ApproxTTFContainer::Approx(lower, upper));
     }
