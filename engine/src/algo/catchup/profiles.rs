@@ -92,6 +92,8 @@ impl<'a> Server<'a> {
 
         self.from = self.cch_graph.node_order().rank(from_node);
         self.to = self.cch_graph.node_order().rank(to_node);
+        let to = self.to;
+        let from = self.from;
 
         let n = self.customized_graph.original_graph.num_nodes();
 
@@ -218,6 +220,7 @@ impl<'a> Server<'a> {
         self.meeting_nodes.dedup_by_key(|&mut (node, _)| node);
         self.meeting_nodes
             .retain(|(_, lower_bound)| !tentative_upper_bound.fuzzy_lt(*lower_bound) && lower_bound.fuzzy_lt(FlWeight::INFINITY));
+
         for &(node, _) in &self.meeting_nodes {
             self.forward_tree_mask.set(node as usize);
             self.backward_tree_mask.set(node as usize);
@@ -228,6 +231,9 @@ impl<'a> Server<'a> {
             outgoing_cache: &mut self.outgoing_profiles,
             incoming_cache: &mut self.incoming_profiles,
         };
+
+        let mut shortcuts_from_s_in_corridor = Vec::new();
+        let mut shortcuts_to_t_in_corridor = Vec::new();
 
         // for all nodes on the path from root to target
         for &node in self.backward_tree_path.iter().rev() {
@@ -248,6 +254,10 @@ impl<'a> Server<'a> {
                     self.backward_tree_mask.set(label.parent as usize);
 
                     reconstruction_graph.cache_recursive(ShortcutId::Incoming(label.shortcut_id), &mut self.buffers);
+
+                    if label.parent == to {
+                        shortcuts_to_t_in_corridor.push((node, label.shortcut_id));
+                    }
                 }
             }
         }
@@ -279,6 +289,10 @@ impl<'a> Server<'a> {
                     // mark edge as in search space
                     self.relevant_upward.set(label.shortcut_id as usize);
                     reconstruction_graph.cache_recursive(ShortcutId::Outgoing(label.shortcut_id), &mut self.buffers);
+
+                    if label.parent == from {
+                        shortcuts_from_s_in_corridor.push((node, label.shortcut_id));
+                    }
                 }
             }
         }
@@ -290,8 +304,6 @@ impl<'a> Server<'a> {
         let backward = &self.backward;
         let forward_tree_mask = &self.forward_tree_mask;
         let backward_tree_mask = &self.backward_tree_mask;
-        let to = self.to;
-        let from = self.from;
         let customized_graph = &self.customized_graph;
 
         self.forward_tree_path.retain(|&node| forward_tree_mask.get(node as usize) && node != to);
@@ -328,20 +340,26 @@ impl<'a> Server<'a> {
             })
             .collect();
 
-        for ((head, edge_id), _) in self.customized_graph.upward_bounds_graph().neighbor_iter(self.from) {
-            if self.forward_tree_mask.get(head as usize) && head != to {
-                let shortcut = &mut down_shortcuts[self.downward_shortcut_offsets[head as usize]];
-                shortcut.set_sources(self.customized_graph.outgoing.edge_sources(edge_id as usize));
-                shortcut.set_cache(reconstruction_graph.take_cache(ShortcutId::Outgoing(edge_id)));
-            }
+        let mut st_shortcut = Shortcut::new_finished(&[], tentative_distance, false);
+
+        for (head, edge_id) in shortcuts_from_s_in_corridor {
+            let shortcut = if head == to {
+                &mut st_shortcut
+            } else {
+                &mut down_shortcuts[self.downward_shortcut_offsets[head as usize]]
+            };
+            shortcut.set_sources(self.customized_graph.outgoing.edge_sources(edge_id as usize));
+            shortcut.set_cache(reconstruction_graph.take_cache(ShortcutId::Outgoing(edge_id)));
         }
 
-        for ((head, edge_id), _) in self.customized_graph.downward_bounds_graph().neighbor_iter(self.to) {
-            if self.backward_tree_mask.get(head as usize) && head != from {
-                let shortcut = &mut up_shortcuts[self.upward_shortcut_offsets[head as usize]];
-                shortcut.set_sources(self.customized_graph.incoming.edge_sources(edge_id as usize));
-                shortcut.set_cache(reconstruction_graph.take_cache(ShortcutId::Incoming(edge_id)));
-            }
+        for (head, edge_id) in shortcuts_to_t_in_corridor {
+            let shortcut = if head == from {
+                &mut st_shortcut
+            } else {
+                &mut up_shortcuts[self.upward_shortcut_offsets[head as usize]]
+            };
+            shortcut.set_sources(self.customized_graph.incoming.edge_sources(edge_id as usize));
+            shortcut.set_cache(reconstruction_graph.take_cache(ShortcutId::Incoming(edge_id)));
         }
 
         let profile_graph_down = ProfileGraphWrapper {
@@ -358,8 +376,6 @@ impl<'a> Server<'a> {
 
         report!("transfer_time", timer.get_passed().num_milliseconds());
         timer.restart();
-
-        let mut st_shortcut = Shortcut::new_finished(&[], tentative_distance, false);
 
         let forward_tree_path = &self.forward_tree_path;
         let backward_tree_path = &self.backward_tree_path;
