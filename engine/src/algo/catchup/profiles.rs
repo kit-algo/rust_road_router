@@ -350,6 +350,10 @@ impl<'a> Server<'a> {
             };
             shortcut.set_sources(self.customized_graph.outgoing.edge_sources(edge_id as usize));
             shortcut.set_cache(reconstruction_graph.take_cache(ShortcutId::Outgoing(edge_id)));
+            shortcut.upper_bound = min(
+                shortcut.upper_bound,
+                shortcut.travel_time_function(&reconstruction_graph.as_reconstructed()).static_upper_bound(),
+            );
         }
 
         for (head, edge_id) in shortcuts_to_t_in_corridor {
@@ -360,6 +364,10 @@ impl<'a> Server<'a> {
             };
             shortcut.set_sources(self.customized_graph.incoming.edge_sources(edge_id as usize));
             shortcut.set_cache(reconstruction_graph.take_cache(ShortcutId::Incoming(edge_id)));
+            shortcut.upper_bound = min(
+                shortcut.upper_bound,
+                shortcut.travel_time_function(&reconstruction_graph.as_reconstructed()).static_upper_bound(),
+            );
         }
 
         let profile_graph_down = ProfileGraphWrapper {

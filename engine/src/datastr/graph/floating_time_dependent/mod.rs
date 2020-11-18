@@ -63,6 +63,9 @@ mod time {
     fn fuzzy_lt(x: f64, y: f64) -> bool {
         (x - y) < -EPSILON
     }
+    fn fuzzy_leq(x: f64, y: f64) -> bool {
+        !fuzzy_lt(y, x)
+    }
 
     /// `f64` wrapper for time dependent edge weight values
     /// for some additional type safety.
@@ -98,6 +101,9 @@ mod time {
         /// Fuzzy less than comparison (based on `EPSILON`) of two weights
         pub fn fuzzy_lt(self, other: Self) -> bool {
             fuzzy_lt(self.0, other.0)
+        }
+        pub fn fuzzy_leq(self, other: Self) -> bool {
+            fuzzy_leq(self.0, other.0)
         }
 
         /// Take absolute value of this Weight
@@ -216,6 +222,9 @@ mod time {
         /// Fuzzy less than comparison (based on `EPSILON`) of two timestamps
         pub fn fuzzy_lt(self, other: Self) -> bool {
             fuzzy_lt(self.0, other.0)
+        }
+        pub fn fuzzy_leq(self, other: Self) -> bool {
+            fuzzy_leq(self.0, other.0)
         }
 
         /// Split this value into sum of multiple of `period` (first value) and rest (second value).
