@@ -41,10 +41,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             for (from, to) in from.into_iter().zip(to.into_iter()).take(1000) {
                 let _tdcch_query_ctxt = algo_runs_ctxt.push_collection_item();
-                let (_result, time) = measure(|| server.distance(from, to));
-
                 report!("from", from);
                 report!("to", to);
+
+                let (_result, time) = measure(|| server.distance(from, to));
+
                 report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
                 tdcch_time = tdcch_time + time;
 

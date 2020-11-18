@@ -39,11 +39,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let to = to[q_idx];
 
                 let _tdcch_query_ctxt = algo_runs_ctxt.push_collection_item();
-                let (_result, time) = measure(|| server.distance(from, to));
-
                 report!("from", from);
                 report!("to", to);
                 report!("rank", rank[q_idx]);
+
+                let (_result, time) = measure(|| server.distance(from, to));
+
                 report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
             }
         }
