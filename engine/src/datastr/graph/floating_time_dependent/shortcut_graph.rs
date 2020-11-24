@@ -24,7 +24,7 @@ pub trait ShortcutGraphTrt<'a> {
     fn upper_bound(&self, shortcut_id: ShortcutId) -> FlWeight;
     fn original_graph(&self) -> &Self::OriginalGraph;
     fn exact_ttf_for(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage);
-    fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, switchpoints: &mut Vec<Timestamp>) -> (FlWeight, FlWeight);
+    fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight);
     fn unpack_at(&self, shortcut_id: ShortcutId, t: Timestamp, result: &mut Vec<(EdgeId, Timestamp)>);
     fn evaluate(&self, shortcut_id: ShortcutId, t: Timestamp) -> FlWeight;
 }
@@ -90,8 +90,8 @@ impl<'a> ShortcutGraphTrt<'a> for PartialShortcutGraph<'a> {
     fn exact_ttf_for(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
         self.get(shortcut_id).exact_ttf_for(start, end, self, target, tmp)
     }
-    fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, switchpoints: &mut Vec<Timestamp>) -> (FlWeight, FlWeight) {
-        self.get(shortcut_id).get_switchpoints(start, end, self, switchpoints)
+    fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight) {
+        self.get(shortcut_id).get_switchpoints(start, end, self)
     }
     fn unpack_at(&self, shortcut_id: ShortcutId, t: Timestamp, result: &mut Vec<(EdgeId, Timestamp)>) {
         self.get(shortcut_id).unpack_at(t, self, result);
@@ -197,18 +197,19 @@ impl<'a> ShortcutGraphTrt<'a> for PartialLiveShortcutGraph<'a> {
             }
         }
     }
-    fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, switchpoints: &mut Vec<Timestamp>) -> (FlWeight, FlWeight) {
+    fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight) {
         let live = self.get_live(shortcut_id);
         if live.live_until.map(|l| !start.fuzzy_lt(l)).unwrap_or(true) {
-            self.get(shortcut_id).get_switchpoints(start, end, self, switchpoints)
+            self.get(shortcut_id).get_switchpoints(start, end, self)
         } else {
             let live_until = live.live_until.unwrap();
             if !live_until.fuzzy_lt(end) {
-                live.get_switchpoints(start, end, self, switchpoints)
+                live.get_switchpoints(start, end, self)
             } else {
-                let (ttf_at_start, _) = live.get_switchpoints(start, live_until, self, switchpoints);
-                let (_, ttf_at_end) = self.get(shortcut_id).get_switchpoints(live_until, end, self, switchpoints);
-                (ttf_at_start, ttf_at_end)
+                let (mut switchpoints, _) = live.get_switchpoints(start, live_until, self);
+                let (mut second_switchpoints, ttf_at_end) = self.get(shortcut_id).get_switchpoints(live_until, end, self);
+                switchpoints.append(&mut second_switchpoints);
+                (switchpoints, ttf_at_end)
             }
         }
     }
@@ -743,10 +744,10 @@ impl<'a> ShortcutGraphTrt<'a> for CustomizedGraph<'a> {
             ShortcutId::Outgoing(id) => self.outgoing.edge_sources(id as usize).exact_ttf_for(start, end, self, target, tmp),
         }
     }
-    fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, switchpoints: &mut Vec<Timestamp>) -> (FlWeight, FlWeight) {
+    fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight) {
         match shortcut_id {
-            ShortcutId::Incoming(id) => self.incoming.edge_sources(id as usize).get_switchpoints(start, end, self, switchpoints),
-            ShortcutId::Outgoing(id) => self.outgoing.edge_sources(id as usize).get_switchpoints(start, end, self, switchpoints),
+            ShortcutId::Incoming(id) => self.incoming.edge_sources(id as usize).get_switchpoints(start, end, self),
+            ShortcutId::Outgoing(id) => self.outgoing.edge_sources(id as usize).get_switchpoints(start, end, self),
         }
     }
     fn unpack_at(&self, shortcut_id: ShortcutId, t: Timestamp, result: &mut Vec<(EdgeId, Timestamp)>) {
@@ -1044,15 +1045,15 @@ impl<'a> ShortcutGraphTrt<'a> for ReconstructedGraph<'a> {
             }
         }
     }
-    fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, switchpoints: &mut Vec<Timestamp>) -> (FlWeight, FlWeight) {
+    fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight) {
         let (dir_graph, edge_id) = match shortcut_id {
             ShortcutId::Incoming(id) => (&self.customized_graph.incoming, id),
             ShortcutId::Outgoing(id) => (&self.customized_graph.outgoing, id),
         };
         match dir_graph.edge_sources(edge_id as usize) {
             &[] => unreachable!("There are no switchpoints for empty shortcuts"),
-            &[(_, source)] => ShortcutSource::from(source).get_switchpoints(start, end, self, switchpoints),
-            sources => sources.get_switchpoints(start, end, self, switchpoints),
+            &[(_, source)] => ShortcutSource::from(source).get_switchpoints(start, end, self),
+            sources => sources.get_switchpoints(start, end, self),
         }
     }
     fn unpack_at(&self, shortcut_id: ShortcutId, t: Timestamp, result: &mut Vec<(EdgeId, Timestamp)>) {
@@ -1127,11 +1128,11 @@ impl<'a> ShortcutGraphTrt<'a> for ProfileGraphWrapper<'a> {
         }
         self.get(shortcut_id).exact_ttf_for(start, end, self, target, tmp)
     }
-    fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, switchpoints: &mut Vec<Timestamp>) -> (FlWeight, FlWeight) {
+    fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight) {
         if self.delegate(shortcut_id) {
-            return self.profile_graph.get_switchpoints(shortcut_id, start, end, switchpoints);
+            return self.profile_graph.get_switchpoints(shortcut_id, start, end);
         }
-        self.get(shortcut_id).get_switchpoints(start, end, self, switchpoints)
+        self.get(shortcut_id).get_switchpoints(start, end, self)
     }
     fn unpack_at(&self, shortcut_id: ShortcutId, t: Timestamp, result: &mut Vec<(EdgeId, Timestamp)>) {
         if self.delegate(shortcut_id) {

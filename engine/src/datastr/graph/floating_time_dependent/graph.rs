@@ -265,6 +265,22 @@ impl LiveGraph {
 pub trait TDGraphTrait<'a> {
     type TTF: PLF;
     fn travel_time_function(&'a self, edge_id: EdgeId) -> Self::TTF;
+
+    fn evaluate_path(&'a self, path: &[EdgeId], t: Timestamp) -> FlWeight {
+        let mut tt = FlWeight::zero();
+        for &edge in path {
+            tt = tt + self.travel_time_function(edge).evaluate(t + tt);
+        }
+        tt
+    }
+
+    fn inverse_evaluate_path(&'a self, path: &[EdgeId], t: Timestamp) -> Timestamp {
+        let mut departure = t;
+        for &edge in path.iter().rev() {
+            departure = self.travel_time_function(edge).inverse_evaluate(departure);
+        }
+        departure
+    }
 }
 
 impl<'a> TDGraphTrait<'a> for Graph {

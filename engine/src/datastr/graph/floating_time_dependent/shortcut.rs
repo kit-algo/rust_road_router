@@ -543,12 +543,11 @@ impl Shortcut {
         start: Timestamp,
         end: Timestamp,
         shortcut_graph: &'g impl ShortcutGraphTrt<'g>,
-        switchpoints: &mut Vec<Timestamp>,
-    ) -> (FlWeight, FlWeight) {
+    ) -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight) {
         match &self.sources {
             Sources::None => unreachable!("There are no TTFs for empty shortcuts"),
-            Sources::One(source) => ShortcutSource::from(*source).get_switchpoints(start, end, shortcut_graph, switchpoints),
-            Sources::Multi(sources) => sources.get_switchpoints(start, end, shortcut_graph, switchpoints),
+            Sources::One(source) => ShortcutSource::from(*source).get_switchpoints(start, end, shortcut_graph),
+            Sources::Multi(sources) => sources.get_switchpoints(start, end, shortcut_graph),
         }
     }
 

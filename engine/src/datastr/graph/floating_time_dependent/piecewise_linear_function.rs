@@ -17,6 +17,7 @@ use cursor::*;
 
 pub trait PLF {
     fn evaluate(&self, t: Timestamp) -> FlWeight;
+    fn inverse_evaluate(&self, t: Timestamp) -> Timestamp;
     fn append_range(&self, start: Timestamp, end: Timestamp, target: &mut impl PLFTarget);
 }
 
@@ -51,6 +52,45 @@ impl<'a> PLF for PeriodicPiecewiseLinearFunction<'a> {
     }
     fn append_range(&self, start: Timestamp, end: Timestamp, target: &mut impl PLFTarget) {
         PeriodicPiecewiseLinearFunction::append_range(self, start, end, target)
+    }
+    fn inverse_evaluate(&self, t: Timestamp) -> Timestamp {
+        if self.ipps.len() == 1 {
+            return t - self.ipps.first().unwrap().val;
+        }
+
+        let wrap_val = self.ipps.first().unwrap().val;
+        let (p, t) = (t - wrap_val).split_of_period();
+        let t = t + wrap_val;
+
+        let first = self.first().unwrap();
+        let last = self.last().unwrap();
+        debug_assert!(!(last.at + last.val).fuzzy_lt(t));
+        debug_assert!(!t.fuzzy_lt(first.at + first.val));
+
+        let pos = self.ipps.binary_search_by(|p| {
+            let arrival_time = p.at + p.val;
+            if arrival_time.fuzzy_eq(t) {
+                Ordering::Equal
+            } else if arrival_time < t {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            }
+        });
+
+        p + match pos {
+            Ok(i) => unsafe { self.ipps.get_unchecked(i).at },
+            Err(i) => {
+                let prev = unsafe { self.ipps.get_unchecked(i - 1) };
+                let next = unsafe { self.ipps.get_unchecked(i) };
+
+                let prev_art = prev.at + prev.val;
+                let next_art = next.at + next.val;
+
+                let frac = (t - prev_art) / (next_art - prev_art);
+                prev.at + (next.at - prev.at) * frac
+            }
+        }
     }
 }
 
@@ -1707,5 +1747,8 @@ impl<'a> PLF for UpdatedPiecewiseLinearFunction<'a> {
                 self.plf.append_range(live_until, end, target);
             }
         }
+    }
+    fn inverse_evaluate(&self, _t: Timestamp) -> Timestamp {
+        unimplemented!()
     }
 }

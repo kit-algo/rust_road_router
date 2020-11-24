@@ -528,29 +528,17 @@ impl<'a> Server<'a> {
         report!("exact_profile_time", timer.get_passed().num_milliseconds());
         timer.restart();
 
-        let mut switchpoints = Vec::new();
         if st_shortcut.is_valid_path() {
-            st_shortcut.get_switchpoints(Timestamp::zero(), period(), &profile_graph, &mut switchpoints);
+            let switchpoints = st_shortcut.get_switchpoints(Timestamp::zero(), period(), &profile_graph).0;
+            report!("path_switches", switchpoints.len() - 1);
+            let mut paths: Vec<_> = switchpoints.into_iter().map(|(_, path, _)| path).collect();
+            paths.sort();
+            paths.dedup();
+            report!("num_distinct_paths", paths.len());
+        } else {
+            report!("path_switches", 0);
+            report!("num_distinct_paths", 0);
         }
-        report!("path_switches", switchpoints.len());
-        report!(
-            "num_distinct_paths",
-            if st_shortcut.is_valid_path() {
-                let mut paths: Vec<_> = std::iter::once(&Timestamp::zero())
-                    .chain(switchpoints.iter())
-                    .map(|t| {
-                        let mut path = Vec::new();
-                        st_shortcut.unpack_at(*t + FlWeight::new(EPSILON), &profile_graph, &mut path);
-                        path
-                    })
-                    .collect();
-                paths.sort_by(|p1, p2| p1.iter().map(|(e, _)| e).partial_cmp(p2.iter().map(|(e, _)| e)).unwrap());
-                paths.dedup_by(|p1, p2| p1.iter().map(|(e, _)| e).eq(p2.iter().map(|(e, _)| e)));
-                paths.len()
-            } else {
-                0
-            }
-        );
         report!("switchpoints_time", timer.get_passed().num_milliseconds());
         timer.restart();
 
