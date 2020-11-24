@@ -417,6 +417,13 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
                     s.upper_bound = FlWeight::INFINITY;
                 }
             });
+
+            upward
+                .par_iter()
+                .for_each(|s| debug_assert!(!s.required || s.lower_bound.fuzzy_lt(FlWeight::INFINITY)));
+            downward
+                .par_iter()
+                .for_each(|s| debug_assert!(!s.required || s.lower_bound.fuzzy_lt(FlWeight::INFINITY)));
         });
     }
 

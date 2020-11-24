@@ -323,8 +323,6 @@ impl Shortcut {
             Sources::One(source) => {
                 if !ShortcutSource::from(*source).required(shortcut_graph) {
                     self.required = false;
-                    self.lower_bound = FlWeight::INFINITY;
-                    self.upper_bound = FlWeight::INFINITY;
                 }
             }
             Sources::Multi(sources) => {
@@ -336,8 +334,6 @@ impl Shortcut {
                 }
                 if !any_required {
                     self.required = false;
-                    self.lower_bound = FlWeight::INFINITY;
-                    self.upper_bound = FlWeight::INFINITY;
                 }
             }
         }

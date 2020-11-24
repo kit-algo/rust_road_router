@@ -1019,6 +1019,11 @@ impl<'a> ShortcutGraphTrt<'a> for ReconstructedGraph<'a> {
             ShortcutId::Outgoing(id) => (&self.customized_graph.outgoing, id),
         };
         if dir_graph.constant.get(edge_id as usize) {
+            debug_assert!(
+                dir_graph.bounds[edge_id as usize].0.fuzzy_lt(FlWeight::INFINITY),
+                "{:#?}",
+                (shortcut_id, dir_graph.bounds[edge_id as usize], dir_graph.edge_sources(edge_id as usize))
+            );
             target.push(TTFPoint {
                 at: start,
                 val: dir_graph.bounds[edge_id as usize].0,
