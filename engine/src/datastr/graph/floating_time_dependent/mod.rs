@@ -46,7 +46,7 @@ mod time {
         borrow::Borrow,
         cmp::Ordering,
         f64::NAN,
-        ops::{Add, Div, Mul, Sub},
+        ops::{Add, AddAssign, Div, Mul, Sub},
     };
 
     // TODO switch to something ULP based?
@@ -126,6 +126,12 @@ mod time {
 
         fn add(self, other: W) -> Self::Output {
             FlWeight::new(self.0 + other.borrow().0)
+        }
+    }
+
+    impl<W: Borrow<FlWeight>> AddAssign<W> for FlWeight {
+        fn add_assign(&mut self, rhs: W) {
+            self.0 += rhs.borrow().0;
         }
     }
 

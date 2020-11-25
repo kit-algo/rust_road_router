@@ -2,6 +2,7 @@ use super::piecewise_linear_function::cursor::*;
 use super::*;
 use crate::datastr::graph::time_dependent::period as int_period;
 use crate::datastr::graph::Graph as GraphTrait;
+use crate::report::*;
 
 type IPPIndex = u32;
 
@@ -130,6 +131,50 @@ impl Graph {
             .map(|firsts| firsts[1] - firsts[0])
             .filter(|&deg| deg == 1)
             .count()
+    }
+
+    pub fn report_relative_delays(&self) {
+        let mut num_constant = 0;
+        let mut sum_lower = FlWeight::zero();
+        let mut sum_upper = FlWeight::zero();
+        let mut sum_nonconst_lower = FlWeight::zero();
+        let mut sum_nonconst_upper = FlWeight::zero();
+        let mut sum_rel_delays = 0.0;
+        let mut sum_nonconst_rel_delays = 0.0;
+
+        for edge_id in 0..self.num_arcs() {
+            let ttf = self.travel_time_function(edge_id as EdgeId);
+
+            let lower = ttf.lower_bound();
+            let upper = ttf.upper_bound();
+
+            sum_lower += lower;
+            sum_upper += upper;
+            if FlWeight::zero().fuzzy_lt(lower) {
+                sum_rel_delays += f64::from((upper - lower) / lower);
+            }
+
+            if !ttf.constant() {
+                sum_nonconst_lower += lower;
+                sum_nonconst_upper += upper;
+                if FlWeight::zero().fuzzy_lt(lower) {
+                    sum_nonconst_rel_delays += f64::from((upper - lower) / lower);
+                }
+            } else {
+                num_constant += 1;
+            }
+        }
+
+        debug_assert_eq!(num_constant, self.num_constant());
+
+        let nonconst_total_relative_dekay = f64::from((sum_nonconst_upper - sum_nonconst_lower) / sum_nonconst_lower);
+        let total_relative_dekay = f64::from((sum_upper - sum_lower) / sum_lower);
+        report!("relative_delays", {
+            "nonconst_mean": sum_nonconst_rel_delays / (self.num_arcs() - num_constant) as f64,
+            "mean": sum_rel_delays / self.num_arcs() as f64,
+            "nonconst_total_relative_dekay": nonconst_total_relative_dekay,
+            "total_relative_dekay": total_relative_dekay
+        });
     }
 }
 

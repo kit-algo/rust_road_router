@@ -122,6 +122,10 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
         Self { ipps }
     }
 
+    pub fn constant(&self) -> bool {
+        PartialPiecewiseLinearFunction::from(self).constant()
+    }
+
     pub fn lower_bound(&self) -> FlWeight {
         PartialPiecewiseLinearFunction::from(self).lower_bound()
     }
@@ -452,6 +456,10 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
 
     pub fn upper_bound(&self) -> FlWeight {
         self.ipps.iter().map(|p| p.val).max().unwrap()
+    }
+
+    pub fn constant(&self) -> bool {
+        self.len() == 1 || self.lower_bound().fuzzy_eq(self.upper_bound())
     }
 
     pub(super) fn eval(&self, t: Timestamp) -> FlWeight {
