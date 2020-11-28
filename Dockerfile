@@ -1,15 +1,15 @@
 # Use an official Rust nightly compiler as a parent image
 FROM archlinux/base
 
+RUN pacman -Sy --noconfirm rustup cmake gcc make intel-tbb; \
+  rustup install nightly; \
+  rustup default nightly;
+
 # Set the working directory to /app
 WORKDIR /app
 
 # Copy the current directory contents into the container at /app
 ADD . /app
-
-RUN pacman -Sy --noconfirm rustup cmake gcc make intel-tbb; \
-  rustup install nightly; \
-  rustup default nightly;
 
 # Build flow cutter
 RUN mkdir -p lib/InertialFlowCutter/build/ && cd lib/InertialFlowCutter/build/ && cmake -DCMAKE_BUILD_TYPE=Release -DUSE_KAHIP=OFF .. && make console && cd ../../..
