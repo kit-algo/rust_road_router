@@ -172,8 +172,8 @@ impl Graph {
         report!("relative_delays", {
             "nonconst_mean": sum_nonconst_rel_delays / (self.num_arcs() - num_constant) as f64,
             "mean": sum_rel_delays / self.num_arcs() as f64,
-            "nonconst_total_relative_dekay": nonconst_total_relative_dekay,
-            "total_relative_dekay": total_relative_dekay
+            "nonconst_total_relative_delay": nonconst_total_relative_dekay,
+            "total_relative_delay": total_relative_dekay
         });
     }
 }
