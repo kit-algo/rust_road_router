@@ -266,6 +266,8 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
                     report!("at_s", timer.get_passed_ms() / 1000);
                     report!("nodes_customized", NODES_CUSTOMIZED.load(Ordering::Relaxed));
                     if cfg!(feature = "detailed-stats") {
+                        report!("arcs_processed", ARCS_PROCESSED.load(Ordering::Relaxed));
+                        report!("triangles_processed", TRIANGLES_PROCESSED.load(Ordering::Relaxed));
                         report!("num_ipps_stored", IPP_COUNT.load(Ordering::Relaxed));
                         report!("num_shortcuts_active", ACTIVE_SHORTCUTS.load(Ordering::Relaxed));
                         report!("num_ipps_reduced_by_approx", SAVED_BY_APPROX.load(Ordering::Relaxed));
@@ -280,6 +282,8 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
                         events.push((
                             timer.get_passed_ms() / 1000,
                             NODES_CUSTOMIZED.load(Ordering::Relaxed),
+                            ARCS_PROCESSED.load(Ordering::Relaxed),
+                            TRIANGLES_PROCESSED.load(Ordering::Relaxed),
                             IPP_COUNT.load(Ordering::Relaxed),
                             ACTIVE_SHORTCUTS.load(Ordering::Relaxed),
                             SAVED_BY_APPROX.load(Ordering::Relaxed),
@@ -290,10 +294,37 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
                             UNNECESSARY_LINKED.load(Ordering::Relaxed),
                         ));
                     } else {
-                        events.push((timer.get_passed_ms() / 1000, NODES_CUSTOMIZED.load(Ordering::Relaxed), 0, 0, 0, 0, 0, 0, 0, 0));
+                        events.push((
+                            timer.get_passed_ms() / 1000,
+                            NODES_CUSTOMIZED.load(Ordering::Relaxed),
+                            0,
+                            0,
+                            0,
+                            0,
+                            0,
+                            0,
+                            0,
+                            0,
+                            0,
+                            0,
+                        ));
                     }
 
                     if let Ok(()) | Err(RecvTimeoutError::Disconnected) = rx.recv_timeout(std::time::Duration::from_secs(3)) {
+                        events.push((
+                            timer.get_passed_ms() / 1000,
+                            NODES_CUSTOMIZED.load(Ordering::Relaxed),
+                            ARCS_PROCESSED.load(Ordering::Relaxed),
+                            TRIANGLES_PROCESSED.load(Ordering::Relaxed),
+                            IPP_COUNT.load(Ordering::Relaxed),
+                            ACTIVE_SHORTCUTS.load(Ordering::Relaxed),
+                            SAVED_BY_APPROX.load(Ordering::Relaxed),
+                            CONSIDERED_FOR_APPROX.load(Ordering::Relaxed),
+                            PATH_SOURCES_COUNT.load(Ordering::Relaxed),
+                            ACTUALLY_MERGED.load(Ordering::Relaxed),
+                            ACTUALLY_LINKED.load(Ordering::Relaxed),
+                            UNNECESSARY_LINKED.load(Ordering::Relaxed),
+                        ));
                         events_tx.send(events).unwrap();
                         break;
                     }
@@ -322,14 +353,16 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
                 report_silent!("at_s", event.0);
                 report_silent!("nodes_customized", event.1);
                 if cfg!(feature = "detailed-stats") {
-                    report_silent!("num_ipps_stored", event.2);
-                    report_silent!("num_shortcuts_active", event.3);
-                    report_silent!("num_ipps_reduced_by_approx", event.4);
-                    report_silent!("num_ipps_considered_for_approx", event.5);
-                    report_silent!("num_shortcut_merge_points", event.6);
-                    report_silent!("num_performed_merges", event.7);
-                    report_silent!("num_performed_links", event.8);
-                    report_silent!("num_performed_unnecessary_links", event.9);
+                    report_silent!("arcs_processed", event.2);
+                    report_silent!("triangles_processed", event.3);
+                    report_silent!("num_ipps_stored", event.4);
+                    report_silent!("num_shortcuts_active", event.5);
+                    report_silent!("num_ipps_reduced_by_approx", event.6);
+                    report_silent!("num_ipps_considered_for_approx", event.7);
+                    report_silent!("num_shortcut_merge_points", event.8);
+                    report_silent!("num_performed_merges", event.9);
+                    report_silent!("num_performed_links", event.10);
+                    report_silent!("num_performed_unnecessary_links", event.11);
                 }
             }
         }
@@ -338,6 +371,8 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
     }
 
     if cfg!(feature = "detailed-stats") {
+        report!("arcs_processed", ARCS_PROCESSED.load(Ordering::Relaxed));
+        report!("triangles_processed", TRIANGLES_PROCESSED.load(Ordering::Relaxed));
         report!("num_ipps_stored", IPP_COUNT.load(Ordering::Relaxed));
         report!("num_shortcuts_active", ACTIVE_SHORTCUTS.load(Ordering::Relaxed));
         report!("num_ipps_reduced_by_approx", SAVED_BY_APPROX.load(Ordering::Relaxed));
@@ -501,8 +536,14 @@ where
                         for &edges in &triangles {
                             // main work happening here
                             upward_shortcut.merge(edges, &shortcut_graph, &mut buffers);
+                            if cfg!(feature = "detailed-stats") {
+                                TRIANGLES_PROCESSED.fetch_add(1, Ordering::Relaxed);
+                            }
                         }
                         upward_shortcut.finalize_bounds(&shortcut_graph);
+                        if cfg!(feature = "detailed-stats") {
+                            ARCS_PROCESSED.fetch_add(1, Ordering::Relaxed);
+                        }
 
                         if cfg!(feature = "tdcch-triangle-sorting") {
                             triangles.sort_by_key(|&(up, down)| shortcut_graph.get_incoming(down).lower_bound + shortcut_graph.get_outgoing(up).lower_bound);
@@ -510,8 +551,14 @@ where
                         for &(up, down) in &triangles {
                             // an here
                             downward_shortcut.merge((down, up), &shortcut_graph, &mut buffers);
+                            if cfg!(feature = "detailed-stats") {
+                                TRIANGLES_PROCESSED.fetch_add(1, Ordering::Relaxed);
+                            }
                         }
                         downward_shortcut.finalize_bounds(&shortcut_graph);
+                        if cfg!(feature = "detailed-stats") {
+                            ARCS_PROCESSED.fetch_add(1, Ordering::Relaxed);
+                        }
                     });
                 },
             );
