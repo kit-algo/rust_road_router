@@ -209,7 +209,7 @@ impl<'a> Server<'a> {
             report!("num_meeting_nodes", self.meeting_nodes.len());
         }
 
-        report!("elimination_tree_time", timer.get_passed().num_milliseconds());
+        report!("elimination_tree_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         timer.restart();
 
         // elimination tree query done, now we want to retrieve the corridor
@@ -297,7 +297,7 @@ impl<'a> Server<'a> {
             }
         }
 
-        report!("reconstruct_time", timer.get_passed().num_milliseconds());
+        report!("reconstruct_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         timer.restart();
 
         let forward = &self.forward;
@@ -382,7 +382,7 @@ impl<'a> Server<'a> {
             up_shortcuts: &mut up_shortcuts[..],
         };
 
-        report!("transfer_time", timer.get_passed().num_milliseconds());
+        report!("transfer_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         timer.restart();
 
         let forward_tree_path = &self.forward_tree_path;
@@ -474,7 +474,7 @@ impl<'a> Server<'a> {
             },
         );
 
-        report!("contract_time", timer.get_passed().num_milliseconds());
+        report!("contract_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         timer.restart();
 
         let profile_graph = ProfileGraphWrapper {
@@ -516,7 +516,7 @@ impl<'a> Server<'a> {
             )
         }
 
-        report!("st_contract_time", timer.get_passed().num_milliseconds());
+        report!("st_contract_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         timer.restart();
 
         let mut target = self.buffers.unpacking_target.push_plf();
@@ -525,7 +525,7 @@ impl<'a> Server<'a> {
         }
         report!("profile_complexity", target.len());
 
-        report!("exact_profile_time", timer.get_passed().num_milliseconds());
+        report!("exact_profile_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         timer.restart();
 
         if st_shortcut.is_valid_path() {
@@ -539,7 +539,7 @@ impl<'a> Server<'a> {
             report!("path_switches", 0);
             report!("num_distinct_paths", 0);
         }
-        report!("switchpoints_time", timer.get_passed().num_milliseconds());
+        report!("switchpoints_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         timer.restart();
 
         while let Some(node) = self.backward_tree_path.pop() {
