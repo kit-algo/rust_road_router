@@ -368,11 +368,14 @@ impl<'a> Server<'a> {
                             )
                             .unwrap()
                     } else {
-                        (
-                            self.customized_graph.evaluate(ShortcutId::Outgoing(shortcut_id), distance),
-                            self.customized_graph.outgoing.head()[shortcut_id as usize],
-                            shortcut_id,
-                        )
+                        let val = if cfg!(feature = "detailed-stats") {
+                            let (val, len) = self.customized_graph.evaluate_and_path_length(ShortcutId::Outgoing(shortcut_id), distance);
+                            relaxed_shortcut_arcs += len - 1;
+                            val
+                        } else {
+                            self.customized_graph.evaluate(ShortcutId::Outgoing(shortcut_id), distance)
+                        };
+                        (val, self.customized_graph.outgoing.head()[shortcut_id as usize], shortcut_id)
                     };
                     let lower = if cfg!(feature = "tdcch-query-astar") {
                         lower_bounds_to_target[next_on_path as usize]
@@ -440,11 +443,16 @@ impl<'a> Server<'a> {
                                 )
                                 .unwrap()
                         } else {
-                            (
-                                self.customized_graph.evaluate(ShortcutId::Incoming(label.shortcut_id), distance),
-                                label.parent,
-                                label.shortcut_id,
-                            )
+                            let val = if cfg!(feature = "detailed-stats") {
+                                let (val, len) = self
+                                    .customized_graph
+                                    .evaluate_and_path_length(ShortcutId::Incoming(label.shortcut_id), distance);
+                                relaxed_shortcut_arcs += len - 1;
+                                val
+                            } else {
+                                self.customized_graph.evaluate(ShortcutId::Incoming(label.shortcut_id), distance)
+                            };
+                            (val, label.parent, label.shortcut_id)
                         };
                         let lower = if cfg!(feature = "tdcch-query-astar") {
                             lower_bounds_to_target[next_on_path as usize]

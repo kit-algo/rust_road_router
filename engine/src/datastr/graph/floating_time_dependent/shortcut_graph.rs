@@ -457,6 +457,13 @@ impl<'a> CustomizedGraph<'a> {
 
         (incoming_unique, outgoing_unique)
     }
+
+    pub fn evaluate_and_path_length(&self, shortcut_id: ShortcutId, t: Timestamp) -> (FlWeight, usize) {
+        match shortcut_id {
+            ShortcutId::Incoming(id) => ShortcutSource::from(*self.incoming.edge_source_at(id as usize, t).unwrap()).evaluate_and_path_length(t, self),
+            ShortcutId::Outgoing(id) => ShortcutSource::from(*self.outgoing.edge_source_at(id as usize, t).unwrap()).evaluate_and_path_length(t, self),
+        }
+    }
 }
 
 impl<'a> Deconstruct for CustomizedGraph<'a> {
