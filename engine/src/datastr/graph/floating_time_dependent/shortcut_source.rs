@@ -62,6 +62,26 @@ impl ShortcutSource {
         }
     }
 
+    pub fn evaluate_and_path_length(&self, t: Timestamp, shortcut_graph: &CustomizedGraph) -> (FlWeight, usize) {
+        match *self {
+            // recursively eval down edge, then up edge
+            ShortcutSource::Shortcut(down, up) => {
+                let (first_val, first_len) = shortcut_graph.evaluate_and_path_length(ShortcutId::Incoming(down), t);
+                debug_assert!(first_val >= FlWeight::zero());
+                let t_mid = t + first_val;
+                let (second_val, second_len) = shortcut_graph.evaluate_and_path_length(ShortcutId::Outgoing(up), t_mid);
+                debug_assert!(second_val >= FlWeight::zero());
+                (first_val + second_val, first_len + second_len)
+            }
+            ShortcutSource::OriginalEdge(edge) => {
+                let res = shortcut_graph.original_graph().travel_time_function(edge).evaluate(t);
+                debug_assert!(res >= FlWeight::zero());
+                (res, 1)
+            }
+            ShortcutSource::None => (FlWeight::INFINITY, 0),
+        }
+    }
+
     /// Recursively unpack this source and append the path to `result`.
     /// The timestamp is just needed for the recursion.
     pub(super) fn unpack_at<'g>(&self, t: Timestamp, shortcut_graph: &'g impl ShortcutGraphTrt<'g>, result: &mut Vec<(EdgeId, Timestamp)>) {
