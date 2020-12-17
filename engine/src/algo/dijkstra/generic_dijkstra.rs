@@ -3,6 +3,7 @@
 use super::*;
 use crate::algo::dijkstra::gen_topo_dijkstra::Neutral;
 use crate::datastr::{index_heap::*, timestamped_vector::*};
+use std::borrow::Borrow;
 
 pub trait DijkstraOps<Graph> {
     type Label: super::Label + Clone;
@@ -41,8 +42,8 @@ impl Default for DefaultOps {
     }
 }
 
-pub struct GenericDijkstra<Ops: DijkstraOps<Graph>, Graph> {
-    graph: Graph,
+pub struct GenericDijkstra<Ops: DijkstraOps<Graph>, Graph, A = Graph> {
+    graph: A,
 
     distances: TimestampedVector<Ops::Label>,
     predecessors: Vec<NodeId>,
@@ -54,16 +55,17 @@ pub struct GenericDijkstra<Ops: DijkstraOps<Graph>, Graph> {
     num_queue_pushs: usize,
 }
 
-impl<Ops, Graph> GenericDijkstra<Ops, Graph>
+impl<Ops, Graph, A> GenericDijkstra<Ops, Graph, A>
 where
     Ops: DijkstraOps<Graph>,
     Graph: for<'a> LinkIterable<'a, Ops::Arc>,
+    A: Borrow<Graph>,
 {
-    pub fn new(graph: Graph) -> Self
+    pub fn new(graph: A) -> Self
     where
         Ops: Default,
     {
-        let n = graph.num_nodes();
+        let n = graph.borrow().num_nodes();
 
         GenericDijkstra {
             graph,
@@ -82,11 +84,11 @@ where
     /// For CH preprocessing we reuse the distance array and the queue to reduce allocations.
     /// This method creates an algo struct from recycled data.
     /// The counterpart is the `recycle` method.
-    pub fn from_recycled(graph: Graph, recycled: Trash<Ops::Label>) -> Self
+    pub fn from_recycled(graph: A, recycled: Trash<Ops::Label>) -> Self
     where
         Ops: Default,
     {
-        let n = graph.num_nodes();
+        let n = graph.borrow().num_nodes();
         assert!(recycled.distances.len() >= n);
         assert!(recycled.predecessors.len() >= n);
 
@@ -141,10 +143,10 @@ where
         O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
     {
         self.queue.pop().map(|State { node, .. }| {
-            for link in self.graph.link_iter(node) {
+            for link in self.graph.borrow().link_iter(node) {
                 if edge_predicate(&link) {
                     self.num_relaxed_arcs += 1;
-                    let linked = self.ops.link(&self.graph, &self.distances[node as usize], &link);
+                    let linked = self.ops.link(self.graph.borrow(), &self.distances[node as usize], &link);
 
                     if self.ops.merge(&mut self.distances[link.head() as usize], linked) {
                         self.predecessors[link.head() as usize] = node;
@@ -176,7 +178,7 @@ where
     }
 
     pub fn graph(&self) -> &Graph {
-        &self.graph
+        self.graph.borrow()
     }
 
     pub fn queue(&self) -> &IndexdMinHeap<State<<Ops::Label as super::Label>::Key>> {
@@ -203,10 +205,11 @@ where
     }
 }
 
-impl<Ops, Graph> Iterator for GenericDijkstra<Ops, Graph>
+impl<Ops, Graph, A> Iterator for GenericDijkstra<Ops, Graph, A>
 where
     Ops: DijkstraOps<Graph>,
     Graph: for<'a> LinkIterable<'a, Ops::Arc>,
+    A: Borrow<Graph>,
 {
     type Item = NodeId;
 

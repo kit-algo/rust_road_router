@@ -2,7 +2,7 @@ use super::*;
 use crate::algo::{
     ch_potentials::Potential,
     dijkstra::{
-        generic_dijkstra::{DefaultOps, StandardDijkstra},
+        generic_dijkstra::{DefaultOps, GenericDijkstra},
         query::dijkstra::Server,
     },
 };
@@ -46,13 +46,13 @@ impl ALTPotential {
         }
     }
 
-    pub fn farthest_landmarks<G>(graph: G, num_landmarks: usize, initial_landmark: NodeId) -> Vec<NodeId>
+    pub fn farthest_landmarks<G>(graph: &G, num_landmarks: usize, initial_landmark: NodeId) -> Vec<NodeId>
     where
         G: for<'a> LinkIterable<'a, Link>,
     {
         let n = graph.num_nodes() as NodeId;
         let mut landmarks = Vec::with_capacity(num_landmarks);
-        let mut dijkstra = StandardDijkstra::new(graph);
+        let mut dijkstra = GenericDijkstra::<DefaultOps, G, &G>::new(graph);
 
         dijkstra.initialize_query(Query { from: initial_landmark, to: n });
         let mut last_node = initial_landmark;
