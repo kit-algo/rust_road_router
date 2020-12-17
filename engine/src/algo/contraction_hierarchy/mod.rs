@@ -163,8 +163,8 @@ impl ContractionGraph {
         let mut graph = self.partial_graph();
         // witness search servers with recycling for reduced allocations
         let mut recycled = (
-            StandardDijkstra::new(ForwardWrapper { graph: &graph }).recycle(),
-            StandardDijkstra::new(BackwardWrapper { graph: &graph }).recycle(),
+            GenericDijkstra::<ForwardWrapper>::new(ForwardWrapper { graph: &graph }).recycle(),
+            GenericDijkstra::<BackwardWrapper>::new(BackwardWrapper { graph: &graph }).recycle(),
         );
 
         // split of the lowest node, the one that will be contracted
@@ -279,8 +279,8 @@ impl<'a> PartialContractionGraph<'a> {
 
         // create server from recycled stuff
         let mut server = crate::algo::dijkstra::query::bidirectional_dijkstra::Server {
-            forward_dijkstra: StandardDijkstra::from_recycled(ForwardWrapper { graph: &self }, recycled.0),
-            backward_dijkstra: StandardDijkstra::from_recycled(BackwardWrapper { graph: &self }, recycled.1),
+            forward_dijkstra: GenericDijkstra::from_recycled(ForwardWrapper { graph: &self }, recycled.0),
+            backward_dijkstra: GenericDijkstra::from_recycled(BackwardWrapper { graph: &self }, recycled.1),
             tentative_distance: INFINITY,
             meeting_node: 0,
         };

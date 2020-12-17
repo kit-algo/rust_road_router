@@ -2,8 +2,8 @@ use super::*;
 use crate::algo::dijkstra::generic_dijkstra::*;
 
 pub struct Server<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>> {
-    pub forward_dijkstra: StandardDijkstra<G>,
-    pub backward_dijkstra: StandardDijkstra<H>,
+    pub forward_dijkstra: GenericDijkstra<G>,
+    pub backward_dijkstra: GenericDijkstra<H>,
     pub tentative_distance: Weight,
     pub meeting_node: NodeId,
 }
@@ -13,8 +13,8 @@ impl<G: for<'a> LinkIterGraph<'a>> Server<G, OwnedGraph> {
         let reversed = OwnedGraph::reversed(&graph);
 
         Server {
-            forward_dijkstra: StandardDijkstra::new(graph),
-            backward_dijkstra: StandardDijkstra::new(reversed),
+            forward_dijkstra: GenericDijkstra::new(graph),
+            backward_dijkstra: GenericDijkstra::new(reversed),
             tentative_distance: INFINITY,
             meeting_node: 0,
         }

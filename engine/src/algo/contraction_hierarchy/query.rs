@@ -8,8 +8,8 @@
 use super::*;
 
 pub struct Server {
-    forward_dijkstra: StandardDijkstra<OwnedGraph>,
-    backward_dijkstra: StandardDijkstra<OwnedGraph>,
+    forward_dijkstra: GenericDijkstra<OwnedGraph>,
+    backward_dijkstra: GenericDijkstra<OwnedGraph>,
     tentative_distance: Weight,
     meeting_node: NodeId,
     shortcut_middle_nodes: Option<(Vec<NodeId>, Vec<NodeId>)>,
@@ -19,8 +19,8 @@ pub struct Server {
 impl Server {
     pub fn new(ch: ContractionHierarchy, order: NodeOrder) -> Server {
         Server {
-            forward_dijkstra: StandardDijkstra::new(ch.forward),
-            backward_dijkstra: StandardDijkstra::new(ch.backward),
+            forward_dijkstra: GenericDijkstra::new(ch.forward),
+            backward_dijkstra: GenericDijkstra::new(ch.backward),
             tentative_distance: INFINITY,
             meeting_node: 0,
             shortcut_middle_nodes: ch.middle_nodes,

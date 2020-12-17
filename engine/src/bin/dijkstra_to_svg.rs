@@ -32,7 +32,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let in_bounding_box = |node| lat[node] >= min_lat && lat[node] <= max_lat && lng[node] >= min_lon && lng[node] <= max_lon;
 
-    let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
+    let graph = FirstOutGraph::new(first_out, head, travel_time);
 
     println!("<svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" viewBox=\"{} {} {} {}\" style=\"transform: scale(1,-1);\" preserveAspectRatio=\"none\">", min_lon, min_lat, max_lon - min_lon, max_lat - min_lat);
     println!("<g>");
@@ -66,7 +66,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     println!("</g>");
 
-    let mut dijkstra = StandardDijkstra::new(graph.clone());
+    let mut dijkstra = GenericDijkstra::<OwnedGraph, DefaultOps, &OwnedGraph>::new(&graph);
     dijkstra.initialize_query(Query {
         from: start_node as NodeId,
         to: std::u32::MAX,

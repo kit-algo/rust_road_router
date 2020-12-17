@@ -97,7 +97,7 @@ pub struct CHPotential {
     order: NodeOrder,
     potentials: TimestampedVector<InRangeOption<Weight>>,
     forward: OwnedGraph,
-    backward_dijkstra: StandardDijkstra<OwnedGraph>,
+    backward_dijkstra: GenericDijkstra<OwnedGraph>,
     num_pot_evals: usize,
 }
 
@@ -108,7 +108,7 @@ impl CHPotential {
             order,
             potentials: TimestampedVector::new(n, InRangeOption::new(None)),
             forward,
-            backward_dijkstra: StandardDijkstra::new(backward),
+            backward_dijkstra: GenericDijkstra::new(backward),
             num_pot_evals: 0,
         }
     }
@@ -116,7 +116,7 @@ impl CHPotential {
     fn potential_internal(
         potentials: &mut TimestampedVector<InRangeOption<Weight>>,
         forward: &OwnedGraph,
-        backward: &StandardDijkstra<OwnedGraph>,
+        backward: &GenericDijkstra<OwnedGraph>,
         node: NodeId,
         num_pot_evals: &mut usize,
     ) -> Weight {
@@ -196,7 +196,7 @@ impl<P: Potential> Potential for TurnExpandedPotential<P> {
 }
 
 pub struct BaselinePotential {
-    dijkstra: StandardDijkstra<OwnedGraph>,
+    dijkstra: GenericDijkstra<OwnedGraph>,
     num_pot_evals: usize,
 }
 
@@ -206,7 +206,7 @@ impl BaselinePotential {
         OwnedGraph: BuildReversed<G>,
     {
         Self {
-            dijkstra: StandardDijkstra::new(OwnedGraph::reversed(&graph)),
+            dijkstra: GenericDijkstra::new(OwnedGraph::reversed(&graph)),
             num_pot_evals: 0,
         }
     }

@@ -222,8 +222,6 @@ where
     }
 }
 
-pub type StandardDijkstra<G> = GenericDijkstra<G, DefaultOps>;
-
 pub struct Trash<Label: super::Label> {
     distances: TimestampedVector<Label>,
     predecessors: Vec<NodeId>,
