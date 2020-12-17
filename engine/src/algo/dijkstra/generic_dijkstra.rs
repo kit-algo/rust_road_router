@@ -103,17 +103,21 @@ where
     }
 
     pub fn initialize_query(&mut self, query: impl GenQuery<Ops::Label>) {
-        let from = query.from();
-        // initialize
+        // reset
         self.queue.clear();
-        let init = query.initial_state();
-        self.queue.push(State { key: init.key(), node: from });
-
         self.distances.reset();
-        self.distances[from as usize] = init;
 
         self.num_relaxed_arcs = 0;
         self.num_queue_pushs = 0;
+
+        self.add_start_node(query);
+    }
+
+    pub fn add_start_node(&mut self, query: impl GenQuery<Ops::Label>) {
+        let from = query.from();
+        let init = query.initial_state();
+        self.queue.push(State { key: init.key(), node: from });
+        self.distances[from as usize] = init;
     }
 
     #[inline]

@@ -4,6 +4,7 @@ use crate::datastr::{graph::*, node_order::NodeOrder};
 
 use self::dijkstra::{QueryProgress, State};
 
+pub mod alt;
 pub mod catchup;
 pub mod ch_potentials;
 pub mod contraction_hierarchy;
