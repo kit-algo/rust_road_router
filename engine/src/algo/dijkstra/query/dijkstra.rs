@@ -3,14 +3,23 @@ use crate::datastr::graph::time_dependent::Timestamp;
 use crate::report::*;
 use ch_potentials::{Potential, ZeroPotential};
 use generic_dijkstra::*;
+use std::borrow::Borrow;
 
-pub struct Server<Ops: DijkstraOps<Graph>, Graph, P> {
-    dijkstra: GenericDijkstra<Graph, Ops>,
+pub struct Server<Ops = DefaultOps, Graph = OwnedGraph, P = ZeroPotential, GraphBorrow = Graph>
+where
+    Ops: DijkstraOps<Graph>,
+{
+    dijkstra: GenericDijkstra<Graph, Ops, GraphBorrow>,
     potential: P,
 }
 
-impl<Ops: DijkstraOps<Graph, Label = Weight>, Graph: for<'a> LinkIterable<'a, Ops::Arc>> Server<Ops, Graph, ZeroPotential> {
-    pub fn new(graph: Graph) -> Self
+impl<Ops, Graph, GraphBorrow> Server<Ops, Graph, ZeroPotential, GraphBorrow>
+where
+    Ops: DijkstraOps<Graph, Label = Weight>,
+    Graph: for<'a> LinkIterable<'a, Ops::Arc>,
+    GraphBorrow: Borrow<Graph>,
+{
+    pub fn new(graph: GraphBorrow) -> Self
     where
         Ops: Default,
     {
@@ -21,13 +30,14 @@ impl<Ops: DijkstraOps<Graph, Label = Weight>, Graph: for<'a> LinkIterable<'a, Op
     }
 }
 
-impl<Ops, Graph, P> Server<Ops, Graph, P>
+impl<Ops, Graph, P, GraphBorrow> Server<Ops, Graph, P, GraphBorrow>
 where
     Ops: DijkstraOps<Graph, Label = Weight>,
     Graph: for<'a> LinkIterable<'a, Ops::Arc>,
     P: Potential,
+    GraphBorrow: Borrow<Graph>,
 {
-    pub fn with_potential(graph: Graph, potential: P) -> Self
+    pub fn with_potential(graph: GraphBorrow, potential: P) -> Self
     where
         Ops: Default,
     {
@@ -96,7 +106,7 @@ where
         }
     }
 
-    pub fn one_to_all(&mut self, from: NodeId) -> ServerWrapper<Ops, Graph, P> {
+    pub fn one_to_all(&mut self, from: NodeId) -> ServerWrapper<Ops, Graph, P, GraphBorrow> {
         self.distance(Query {
             from,
             to: self.dijkstra.graph().num_nodes() as NodeId,
@@ -145,9 +155,9 @@ where
     }
 }
 
-pub struct ServerWrapper<'s, O: DijkstraOps<G>, G, P>(&'s Server<O, G, P>);
+pub struct ServerWrapper<'s, O: DijkstraOps<G>, G, P, B>(&'s Server<O, G, P, B>);
 
-impl<'s, O: DijkstraOps<G, Label = Weight>, G: for<'a> LinkIterable<'a, O::Arc>, P: Potential> ServerWrapper<'s, O, G, P> {
+impl<'s, O: DijkstraOps<G, Label = Weight>, G: for<'a> LinkIterable<'a, O::Arc>, P: Potential, B: Borrow<G>> ServerWrapper<'s, O, G, P, B> {
     pub fn distance(&self, node: NodeId) -> Weight {
         *self.0.dijkstra.tentative_distance(node)
     }

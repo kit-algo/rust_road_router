@@ -17,15 +17,15 @@ pub struct ALTPotential {
 }
 
 impl ALTPotential {
-    pub fn new<G>(graph: G, landmarks: Vec<NodeId>) -> Self
+    pub fn new<G>(graph: &G, landmarks: Vec<NodeId>) -> Self
     where
         G: for<'a> LinkIterable<'a, Link>,
         OwnedGraph: BuildReversed<G>,
     {
         let n = graph.num_nodes() as NodeId;
-        let reversed = OwnedGraph::reversed(&graph);
-        let mut server = Server::<DefaultOps, _, _>::new(graph);
-        let mut reversed_server = Server::<DefaultOps, _, _>::new(reversed);
+        let reversed = OwnedGraph::reversed(graph);
+        let mut server = Server::<DefaultOps, G, _, &G>::new(graph);
+        let mut reversed_server = Server::<DefaultOps>::new(reversed);
 
         let (landmark_forward_distances, landmark_backward_distances) = landmarks
             .iter()
