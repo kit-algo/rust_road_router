@@ -52,7 +52,7 @@ impl ALTPotential {
     {
         let n = graph.num_nodes() as NodeId;
         let mut landmarks = Vec::with_capacity(num_landmarks);
-        let mut dijkstra = GenericDijkstra::<DefaultOps, G, &G>::new(graph);
+        let mut dijkstra = GenericDijkstra::<G, DefaultOps, &G>::new(graph);
 
         dijkstra.initialize_query(Query { from: initial_landmark, to: n });
         let mut last_node = initial_landmark;

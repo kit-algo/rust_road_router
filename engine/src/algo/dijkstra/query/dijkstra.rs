@@ -5,7 +5,7 @@ use ch_potentials::{Potential, ZeroPotential};
 use generic_dijkstra::*;
 
 pub struct Server<Ops: DijkstraOps<Graph>, Graph, P> {
-    dijkstra: GenericDijkstra<Ops, Graph>,
+    dijkstra: GenericDijkstra<Graph, Ops>,
     potential: P,
 }
 

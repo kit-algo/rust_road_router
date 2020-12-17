@@ -4,7 +4,7 @@ use crate::datastr::graph::floating_time_dependent::*;
 use crate::report::*;
 
 pub struct Server {
-    dijkstra: GenericDijkstra<FlTDDijkstraOps, TDGraph>,
+    dijkstra: GenericDijkstra<TDGraph, FlTDDijkstraOps>,
 }
 
 impl Server {

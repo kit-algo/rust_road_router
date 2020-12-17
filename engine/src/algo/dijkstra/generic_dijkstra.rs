@@ -42,8 +42,11 @@ impl Default for DefaultOps {
     }
 }
 
-pub struct GenericDijkstra<Ops: DijkstraOps<Graph>, Graph, A = Graph> {
-    graph: A,
+pub struct GenericDijkstra<Graph = OwnedGraph, Ops = DefaultOps, BorrowGraph = Graph>
+where
+    Ops: DijkstraOps<Graph>,
+{
+    graph: BorrowGraph,
 
     distances: TimestampedVector<Ops::Label>,
     predecessors: Vec<NodeId>,
@@ -55,13 +58,13 @@ pub struct GenericDijkstra<Ops: DijkstraOps<Graph>, Graph, A = Graph> {
     num_queue_pushs: usize,
 }
 
-impl<Ops, Graph, A> GenericDijkstra<Ops, Graph, A>
+impl<Graph, Ops, BorrowGraph> GenericDijkstra<Graph, Ops, BorrowGraph>
 where
-    Ops: DijkstraOps<Graph>,
     Graph: for<'a> LinkIterable<'a, Ops::Arc>,
-    A: Borrow<Graph>,
+    Ops: DijkstraOps<Graph>,
+    BorrowGraph: Borrow<Graph>,
 {
-    pub fn new(graph: A) -> Self
+    pub fn new(graph: BorrowGraph) -> Self
     where
         Ops: Default,
     {
@@ -84,7 +87,7 @@ where
     /// For CH preprocessing we reuse the distance array and the queue to reduce allocations.
     /// This method creates an algo struct from recycled data.
     /// The counterpart is the `recycle` method.
-    pub fn from_recycled(graph: A, recycled: Trash<Ops::Label>) -> Self
+    pub fn from_recycled(graph: BorrowGraph, recycled: Trash<Ops::Label>) -> Self
     where
         Ops: Default,
     {
@@ -205,7 +208,7 @@ where
     }
 }
 
-impl<Ops, Graph, A> Iterator for GenericDijkstra<Ops, Graph, A>
+impl<Ops, Graph, A> Iterator for GenericDijkstra<Graph, Ops, A>
 where
     Ops: DijkstraOps<Graph>,
     Graph: for<'a> LinkIterable<'a, Ops::Arc>,
@@ -219,7 +222,7 @@ where
     }
 }
 
-pub type StandardDijkstra<G> = GenericDijkstra<DefaultOps, G>;
+pub type StandardDijkstra<G> = GenericDijkstra<G, DefaultOps>;
 
 pub struct Trash<Label: super::Label> {
     distances: TimestampedVector<Label>,

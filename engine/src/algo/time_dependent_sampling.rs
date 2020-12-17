@@ -23,7 +23,7 @@ use std::ops::Range;
 /// Implements the common query trait.
 pub struct Server<'a> {
     // The Dijkstra algo on the original graph
-    dijkstra: GenericDijkstra<TDDijkstraOps, TDGraph>,
+    dijkstra: GenericDijkstra<TDGraph, TDDijkstraOps>,
     // A CCH Server for each time window
     samples: Vec<CCHServer<'a, CCH>>,
     // marking edges in the subgraph we perform dijkstra on
