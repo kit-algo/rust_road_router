@@ -607,6 +607,7 @@ struct ParIter<'c>(&'c CCH);
 
 impl<'s, 'c, S: 's> ForEachIter<'s, 'c, S> for ParIter<'c>
 where
+    S: Send,
     &'s mut [S]: IntoParallelIterator<Item = &'s mut S>,
     <&'s mut [S] as IntoParallelIterator>::Iter: IndexedParallelIterator,
 {
