@@ -14,7 +14,7 @@ use contraction::*;
 mod customization;
 pub use customization::ftd as ftd_cch;
 pub use customization::{customize, customize_directed};
-mod separator_decomposition;
+pub mod separator_decomposition;
 use separator_decomposition::*;
 mod reorder;
 pub use reorder::*;
@@ -164,7 +164,7 @@ impl CCH {
     }
 
     #[inline]
-    fn neighbor_iter(&self, node: NodeId) -> std::iter::Cloned<std::slice::Iter<NodeId>> {
+    pub fn neighbor_iter(&self, node: NodeId) -> std::iter::Cloned<std::slice::Iter<NodeId>> {
         let range = self.neighbor_edge_indices_usize(node);
         self.head[range].iter().cloned()
     }
