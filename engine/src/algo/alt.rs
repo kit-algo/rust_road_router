@@ -6,6 +6,7 @@ use crate::algo::{
         query::dijkstra::Server,
     },
 };
+use crate::report::*;
 
 #[derive(Debug)]
 pub struct ALTPotential {
@@ -22,6 +23,7 @@ impl ALTPotential {
         G: for<'a> LinkIterable<'a, Link>,
         OwnedGraph: BuildReversed<G>,
     {
+        let mut landmark_runs_ctxt = push_collection_context("landmark_dijkstras".to_string());
         let n = graph.num_nodes() as NodeId;
         let reversed = OwnedGraph::reversed(graph);
         let mut server = Server::<G, DefaultOps, _, &G>::new(graph);
@@ -30,8 +32,12 @@ impl ALTPotential {
         let (landmark_forward_distances, landmark_backward_distances) = landmarks
             .iter()
             .map(|&l| {
+                let ctx = landmark_runs_ctxt.push_collection_item();
                 let forward = server.one_to_all(l);
+                drop(ctx);
+                let ctx = landmark_runs_ctxt.push_collection_item();
                 let backward = reversed_server.one_to_all(l);
+                drop(ctx);
 
                 (0..n).into_iter().map(|node| (forward.distance(node), backward.distance(node))).unzip()
             })
@@ -50,6 +56,8 @@ impl ALTPotential {
     where
         G: for<'a> LinkIterable<'a, Link>,
     {
+        report!("algo", "Farthest Landmarks");
+        report!("num_landmarks", num_landmarks);
         let n = graph.num_nodes() as NodeId;
         let mut landmarks = Vec::with_capacity(num_landmarks);
         let mut dijkstra = GenericDijkstra::<G, DefaultOps, &G>::new(graph);
@@ -57,17 +65,19 @@ impl ALTPotential {
         dijkstra.initialize_query(Query { from: initial_landmark, to: n });
         let mut last_node = initial_landmark;
 
-        while landmarks.len() < num_landmarks {
-            while let Some(node) = dijkstra.next() {
-                last_node = node;
-            }
+        report_time("landmark_selection", || {
+            while landmarks.len() < num_landmarks {
+                while let Some(node) = dijkstra.next() {
+                    last_node = node;
+                }
 
-            dijkstra.initialize_query(Query { from: last_node, to: n });
-            for &l in &landmarks {
-                dijkstra.add_start_node(Query { from: l, to: n })
+                dijkstra.initialize_query(Query { from: last_node, to: n });
+                for &l in &landmarks {
+                    dijkstra.add_start_node(Query { from: l, to: n })
+                }
+                landmarks.push(last_node);
             }
-            landmarks.push(last_node);
-        }
+        });
 
         landmarks
     }

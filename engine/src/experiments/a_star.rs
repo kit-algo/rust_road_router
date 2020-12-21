@@ -1,3 +1,5 @@
+#[cfg(feature = "chpot-alt")]
+use crate::algo::alt::ALTPotential;
 #[cfg(feature = "chpot-cch")]
 use crate::algo::customizable_contraction_hierarchy::*;
 use crate::{
@@ -83,7 +85,15 @@ pub fn run(
                 let _potential_ctxt = algo_runs_ctxt.push_collection_item();
                 CCHPotential::new(&cch, &graph)
             }
-            #[cfg(not(feature = "chpot-cch"))]
+            #[cfg(feature = "chpot-alt")]
+            {
+                let _potential_ctxt = algo_runs_ctxt.push_collection_item();
+                ALTPotential::new(
+                    &graph,
+                    ALTPotential::farthest_landmarks(&graph, 64, rng.gen_range(0, graph.num_nodes() as NodeId)),
+                )
+            }
+            #[cfg(all(not(feature = "chpot-cch"), not(feature = "chpot-alt")))]
             {
                 let forward_first_out = Vec::<EdgeId>::load_from(path.join("lower_bound_ch/forward_first_out"))?;
                 let forward_head = Vec::<NodeId>::load_from(path.join("lower_bound_ch/forward_head"))?;
