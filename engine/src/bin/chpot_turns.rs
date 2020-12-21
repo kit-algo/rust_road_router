@@ -169,7 +169,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         eprintln!("Avg. query time {}", total_query_time / (query_count as i32))
     };
 
-    let mut server = DijkServer::<DefaultOps, _, _>::new(exp_graph);
+    let mut server = DijkServer::<_, DefaultOps>::new(exp_graph);
 
     for _i in 0..rust_road_router::experiments::NUM_DIJKSTRA_QUERIES {
         let _query_ctxt = algo_runs_ctxt.push_collection_item();

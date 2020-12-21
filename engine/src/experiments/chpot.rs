@@ -162,7 +162,7 @@ pub fn run(
         eprintln!("Avg. query time {}", total_query_time / (query_count as i32))
     };
 
-    let mut server = DijkServer::<DefaultOps, _, _>::new(modified_graph);
+    let mut server = DijkServer::<_, DefaultOps>::new(modified_graph);
 
     for _i in 0..super::NUM_DIJKSTRA_QUERIES {
         let _query_ctxt = algo_runs_ctxt.push_collection_item();

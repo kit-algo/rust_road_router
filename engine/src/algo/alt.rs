@@ -24,8 +24,8 @@ impl ALTPotential {
     {
         let n = graph.num_nodes() as NodeId;
         let reversed = OwnedGraph::reversed(graph);
-        let mut server = Server::<DefaultOps, G, _, &G>::new(graph);
-        let mut reversed_server = Server::<DefaultOps>::new(reversed);
+        let mut server = Server::<G, DefaultOps, _, &G>::new(graph);
+        let mut reversed_server = Server::<_, DefaultOps>::new(reversed);
 
         let (landmark_forward_distances, landmark_backward_distances) = landmarks
             .iter()

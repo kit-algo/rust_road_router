@@ -110,7 +110,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let n = graph.num_nodes();
 
-    let mut server = DijkServer::<DefaultOps, _, _>::new(graph);
+    let mut server = DijkServer::<_, DefaultOps, _>::new(graph);
 
     for _i in 0..rust_road_router::experiments::NUM_DIJKSTRA_QUERIES {
         let from: NodeId = rng.gen_range(0, n as NodeId);

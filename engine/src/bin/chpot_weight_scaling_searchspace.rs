@@ -20,13 +20,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let head = Vec::load_from(path.join("head"))?;
     let travel_time = Vec::load_from(path.join("travel_time"))?;
 
-    let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
+    let graph = FirstOutGraph::new(first_out, head, travel_time);
     let reversed = OwnedGraph::reversed(&graph);
 
     let n = graph.num_nodes();
 
-    let mut forward_dijkstra = DijkServer::<DefaultOps, _, _>::new(graph);
-    let mut backward_dijkstra = DijkServer::<DefaultOps, _, _>::new(reversed);
+    let mut forward_dijkstra = DijkServer::<_, DefaultOps>::new(graph);
+    let mut backward_dijkstra = DijkServer::<_, DefaultOps>::new(reversed);
     let forward_dists = forward_dijkstra.one_to_all(from);
     let backward_dists = backward_dijkstra.one_to_all(to);
 

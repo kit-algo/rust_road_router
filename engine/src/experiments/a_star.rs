@@ -112,7 +112,7 @@ pub fn run(
     };
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
-    let mut topocore: DijkServer<DefaultOps, _, _> = DijkServer::with_potential(modified_graph, potential);
+    let mut topocore = DijkServer::<_, DefaultOps, _>::with_potential(modified_graph, potential);
     drop(virtual_topocore_ctxt);
 
     let mut query_count = 0;
