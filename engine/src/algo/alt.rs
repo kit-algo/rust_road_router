@@ -11,11 +11,11 @@ use rand::prelude::*;
 
 #[derive(Debug)]
 pub struct ALTPotential {
-    landmark_forward_distances: Vec<Vec<Weight>>,
-    landmark_backward_distances: Vec<Vec<Weight>>,
-    target_forward_distances: Vec<Weight>,
-    target_backward_distances: Vec<Weight>,
+    landmark_forward_distances: Vec<Weight>,
+    landmark_backward_distances: Vec<Weight>,
     num_pot_evals: usize,
+    num_landmarks: usize,
+    target: NodeId,
 }
 
 impl ALTPotential {
@@ -44,12 +44,29 @@ impl ALTPotential {
             })
             .unzip();
 
+        Self::new_with_landmark_distances(landmark_forward_distances, landmark_backward_distances)
+    }
+
+    fn new_with_landmark_distances(forward: Vec<Vec<Weight>>, backward: Vec<Vec<Weight>>) -> Self {
+        let n = forward[0].len();
+        let k = forward.len();
+
+        let mut landmark_forward_distances = Vec::with_capacity(n * k);
+        let mut landmark_backward_distances = Vec::with_capacity(n * k);
+
+        for node in 0..n {
+            for landmark in 0..k {
+                landmark_forward_distances.push(forward[landmark][node]);
+                landmark_backward_distances.push(backward[landmark][node]);
+            }
+        }
+
         Self {
             landmark_forward_distances,
             landmark_backward_distances,
-            target_forward_distances: vec![0; landmarks.len()],
-            target_backward_distances: vec![0; landmarks.len()],
+            num_landmarks: k,
             num_pot_evals: 0,
+            target: n as NodeId,
         }
     }
 
@@ -128,13 +145,7 @@ impl ALTPotential {
             landmark_backward_distances.push(backward_distances);
         }
 
-        Self {
-            landmark_forward_distances,
-            landmark_backward_distances,
-            target_forward_distances: vec![0; landmarks.len()],
-            target_backward_distances: vec![0; landmarks.len()],
-            num_pot_evals: 0,
-        }
+        Self::new_with_landmark_distances(landmark_forward_distances, landmark_backward_distances)
     }
 
     fn dfs_set_sizes<G>(
@@ -200,34 +211,37 @@ impl ALTPotential {
 
         landmarks
     }
+
+    fn landmark_dists_to(&self, node: NodeId) -> &[Weight] {
+        let begin = node as usize * self.num_landmarks;
+        &self.landmark_forward_distances[begin..begin + self.num_landmarks]
+    }
+
+    fn landmark_dists_from(&self, node: NodeId) -> &[Weight] {
+        let begin = node as usize * self.num_landmarks;
+        &self.landmark_backward_distances[begin..begin + self.num_landmarks]
+    }
 }
 
 impl Potential for ALTPotential {
     fn init(&mut self, target: NodeId) {
-        for (target_dist, distances) in self
-            .target_forward_distances
-            .iter_mut()
-            .zip(self.landmark_forward_distances.iter())
-            .chain(self.target_backward_distances.iter_mut().zip(self.landmark_backward_distances.iter()))
-        {
-            *target_dist = distances[target as usize];
-        }
         self.num_pot_evals = 0;
+        self.target = target;
     }
 
     fn potential(&mut self, node: NodeId) -> Option<Weight> {
         self.num_pot_evals += 1;
 
         let max_pot = self
-            .landmark_forward_distances
+            .landmark_dists_to(node)
             .iter()
-            .zip(self.target_forward_distances.iter())
-            .map(|(distances, target_dist)| target_dist.saturating_sub(distances[node as usize]))
+            .zip(self.landmark_dists_to(self.target).iter())
+            .map(|(node_dist, target_dist)| target_dist.saturating_sub(*node_dist))
             .chain(
-                self.landmark_backward_distances
+                self.landmark_dists_from(node)
                     .iter()
-                    .zip(self.target_backward_distances.iter())
-                    .map(|(distances, target_dist)| distances[node as usize].saturating_sub(*target_dist)),
+                    .zip(self.landmark_dists_from(self.target).iter())
+                    .map(|(node_dist, target_dist)| node_dist.saturating_sub(*target_dist)),
             )
             .max()
             .unwrap();
