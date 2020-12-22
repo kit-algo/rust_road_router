@@ -167,6 +167,10 @@ impl<'s, G: for<'a> LinkIterable<'a, O::Arc>, O: DijkstraOps<G, Label = Weight>,
     pub fn distance(&self, node: NodeId) -> Weight {
         *self.0.dijkstra.tentative_distance(node)
     }
+
+    pub fn predecessor(&self, node: NodeId) -> NodeId {
+        self.0.dijkstra.predecessor(node)
+    }
 }
 
 impl<'s, G: 's + for<'a> LinkIterable<'a, O::Arc>, O: 's + DijkstraOps<G, Label = Weight>, P: Potential + 's, B: Borrow<G> + 's> QueryServer<'s>

@@ -92,10 +92,7 @@ pub fn run(
             #[cfg(feature = "chpot-alt")]
             {
                 let _potential_ctxt = algo_runs_ctxt.push_collection_item();
-                ALTPotential::new(
-                    &graph,
-                    ALTPotential::farthest_landmarks(&graph, 16, rng.gen_range(0, graph.num_nodes() as NodeId)),
-                )
+                ALTPotential::new_with_avoid(&graph, 16, &mut rng)
             }
             #[cfg(all(not(feature = "chpot-cch"), not(feature = "chpot-alt")))]
             #[cfg(not(feature = "chpot-cch"))]

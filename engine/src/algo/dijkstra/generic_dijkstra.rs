@@ -123,6 +123,7 @@ where
         let init = query.initial_state();
         self.queue.push(State { key: init.key(), node: from });
         self.distances[from as usize] = init;
+        self.predecessors[from as usize] = from;
     }
 
     #[inline]
