@@ -128,7 +128,7 @@ where
 
     #[inline]
     pub fn next_filtered_edges(&mut self, edge_predicate: impl FnMut(&Ops::Arc) -> bool) -> Option<NodeId> {
-        self.settle_next_node(edge_predicate, |_| Some(Neutral()))
+        self.settle_next_node(edge_predicate, |_, _| true, |_| Some(Neutral()))
     }
 
     #[inline(always)]
@@ -137,12 +137,18 @@ where
         P: FnMut(NodeId) -> Option<O>,
         O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
     {
-        self.settle_next_node(|_| true, potential)
+        self.settle_next_node(|_| true, |_, _| true, potential)
+    }
+
+    #[inline(always)]
+    pub fn next_with_improve_callback(&mut self, improve_callback: impl FnMut(NodeId, &Ops::Label) -> bool) -> Option<NodeId> {
+        self.settle_next_node(|_| true, improve_callback, |_| Some(Neutral()))
     }
 
     #[inline]
-    fn settle_next_node<P, O>(&mut self, mut edge_predicate: impl FnMut(&Ops::Arc) -> bool, mut potential: P) -> Option<NodeId>
+    fn settle_next_node<I, P, O>(&mut self, mut edge_predicate: impl FnMut(&Ops::Arc) -> bool, mut improve_callback: I, mut potential: P) -> Option<NodeId>
     where
+        I: FnMut(NodeId, &Ops::Label) -> bool,
         P: FnMut(NodeId) -> Option<O>,
         O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
     {
@@ -156,13 +162,15 @@ where
                         self.predecessors[link.head() as usize] = node;
                         let next_distance = &self.distances[link.head() as usize];
 
-                        if let Some(key) = potential(link.head()).map(|p| p + next_distance.key()) {
-                            let next = State { key, node: link.head() };
-                            if self.queue.contains_index(next.as_index()) {
-                                self.queue.decrease_key(next);
-                            } else {
-                                self.num_queue_pushs += 1;
-                                self.queue.push(next);
+                        if improve_callback(link.head(), next_distance) {
+                            if let Some(key) = potential(link.head()).map(|p| p + next_distance.key()) {
+                                let next = State { key, node: link.head() };
+                                if self.queue.contains_index(next.as_index()) {
+                                    self.queue.decrease_key(next);
+                                } else {
+                                    self.num_queue_pushs += 1;
+                                    self.queue.push(next);
+                                }
                             }
                         }
                     }
@@ -219,7 +227,7 @@ where
 
     #[inline]
     fn next(&mut self) -> Option<NodeId> {
-        self.settle_next_node(|_| true, |_| Some(Neutral()))
+        self.settle_next_node(|_| true, |_, _| true, |_| Some(Neutral()))
     }
 }
 
