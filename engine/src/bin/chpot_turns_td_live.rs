@@ -8,6 +8,7 @@ extern crate rust_road_router;
 use rust_road_router::algo::customizable_contraction_hierarchy::*;
 use rust_road_router::{
     algo::{
+        a_star::*,
         ch_potentials::{query::Server, *},
         dijkstra::query::{dijkstra::Server as DijkServer, td_dijkstra::LiveTDDijkstraOps},
         *,

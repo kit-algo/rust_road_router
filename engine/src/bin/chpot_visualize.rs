@@ -1,9 +1,5 @@
 use rust_road_router::{
-    algo::{
-        ch_potentials::{query::Server as TopoServer, *},
-        dijkstra::generic_dijkstra::DefaultOps,
-        *,
-    },
+    algo::{a_star::*, ch_potentials::query::Server as TopoServer, dijkstra::generic_dijkstra::DefaultOps, *},
     cli::CliErr,
     datastr::graph::*,
     io::*,

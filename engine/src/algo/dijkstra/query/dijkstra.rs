@@ -1,7 +1,7 @@
 use super::*;
 use crate::datastr::graph::time_dependent::Timestamp;
 use crate::report::*;
-use ch_potentials::{Potential, ZeroPotential};
+use a_star::{Potential, ZeroPotential};
 use generic_dijkstra::*;
 use std::borrow::Borrow;
 

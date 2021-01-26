@@ -2,7 +2,7 @@ use super::*;
 use crate::report::*;
 use crate::{
     algo::{
-        ch_potentials::*,
+        a_star::*,
         dijkstra::{generic_dijkstra::*, query::dijkstra::*},
     },
     datastr::rank_select_map::BitVec,

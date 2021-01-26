@@ -4,6 +4,7 @@ extern crate rust_road_router;
 use rust_road_router::algo::customizable_contraction_hierarchy::*;
 use rust_road_router::{
     algo::{
+        a_star::*,
         ch_potentials::{query::Server as TopoServer, *},
         dijkstra::{generic_dijkstra::DefaultOps, query::dijkstra::Server as DijkServer},
         *,
