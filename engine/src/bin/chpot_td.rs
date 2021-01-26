@@ -130,6 +130,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         let (mut res, time) = measure(|| TDQueryServer::query(&mut server, TDQuery { from, to, departure: at }));
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         report!("result", res.as_ref().map(|res| res.distance()));
+        #[cfg(all(not(feature = "chpot-only-topo"), not(feature = "chpot-alt")))]
+        report!(
+            "num_pot_computations",
+            res.as_mut().map(|res| res.data().potential().num_pot_computations()).unwrap_or(0)
+        );
         report!("lower_bound", res.as_mut().map(|res| res.data().lower_bound(from)).flatten());
         astar_time = astar_time + time;
     }

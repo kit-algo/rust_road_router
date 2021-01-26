@@ -246,7 +246,6 @@ where
 
         report!("num_queue_pops", num_queue_pops);
         report!("num_queue_pushs", forward_dijkstra.num_queue_pushs());
-        report!("num_pot_evals", potential.num_pot_evals());
         report!("num_relaxed_arcs", forward_dijkstra.num_relaxed_arcs());
 
         let dist = *forward_dijkstra.tentative_distance(query.to());
@@ -313,6 +312,10 @@ where
                 (pot + dist) / 1000
             );
         }
+    }
+
+    pub fn potential(&self) -> &P {
+        &self.0.potential
     }
 
     pub fn lower_bound(&mut self, node: NodeId) -> Option<Weight> {

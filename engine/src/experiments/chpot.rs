@@ -95,7 +95,6 @@ pub fn run(
                 ALTPotential::new_with_avoid(&graph, 16, &mut rng)
             }
             #[cfg(all(not(feature = "chpot-cch"), not(feature = "chpot-alt")))]
-            #[cfg(not(feature = "chpot-cch"))]
             {
                 let forward_first_out = Vec::<EdgeId>::load_from(path.join("lower_bound_ch/forward_first_out"))?;
                 let forward_head = Vec::<NodeId>::load_from(path.join("lower_bound_ch/forward_head"))?;
@@ -161,6 +160,11 @@ pub fn run(
         let dist = res.as_ref().map(|res| res.distance());
         report!("result", dist);
         res.as_mut().map(|res| res.path());
+        #[cfg(all(not(feature = "chpot-only-topo"), not(feature = "chpot-alt")))]
+        report!(
+            "num_pot_computations",
+            res.as_mut().map(|res| res.data().potential().num_pot_computations()).unwrap_or(0)
+        );
         report!("lower_bound", res.as_mut().map(|res| res.data().lower_bound(from)).flatten());
 
         total_query_time = total_query_time + time;

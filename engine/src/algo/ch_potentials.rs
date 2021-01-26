@@ -14,7 +14,6 @@ pub mod query;
 pub trait Potential {
     fn init(&mut self, target: NodeId);
     fn potential(&mut self, node: NodeId) -> Option<Weight>;
-    fn num_pot_evals(&self) -> usize;
 }
 
 #[derive(Debug)]
@@ -24,7 +23,7 @@ pub struct CCHPotential<'a> {
     potentials: TimestampedVector<InRangeOption<Weight>>,
     forward_cch_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], Vec<Weight>>,
     backward_elimination_tree: SteppedEliminationTree<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], Vec<Weight>>>,
-    num_pot_evals: usize,
+    num_pot_computations: usize,
 }
 
 impl<'a> CCHPotential<'a> {
@@ -42,8 +41,12 @@ impl<'a> CCHPotential<'a> {
             forward_cch_graph: forward_up_graph,
             backward_elimination_tree,
             potentials: TimestampedVector::new(cch.num_nodes(), InRangeOption::new(None)),
-            num_pot_evals: 0,
+            num_pot_computations: 0,
         }
+    }
+
+    pub fn num_pot_computations(&self) -> usize {
+        self.num_pot_computations
     }
 }
 
@@ -54,7 +57,7 @@ impl<'a> Potential for CCHPotential<'a> {
         while self.backward_elimination_tree.next().is_some() {
             self.backward_elimination_tree.next_step();
         }
-        self.num_pot_evals = 0;
+        self.num_pot_computations = 0;
     }
 
     fn potential(&mut self, node: NodeId) -> Option<u32> {
@@ -62,7 +65,7 @@ impl<'a> Potential for CCHPotential<'a> {
 
         let mut cur_node = node;
         while self.potentials[cur_node as usize].value().is_none() {
-            self.num_pot_evals += 1;
+            self.num_pot_computations += 1;
             self.stack.push(cur_node);
             if let Some(parent) = self.backward_elimination_tree.parent(cur_node).value() {
                 cur_node = parent;
@@ -87,10 +90,6 @@ impl<'a> Potential for CCHPotential<'a> {
             None
         }
     }
-
-    fn num_pot_evals(&self) -> usize {
-        self.num_pot_evals
-    }
 }
 
 pub struct CHPotential {
@@ -98,7 +97,7 @@ pub struct CHPotential {
     potentials: TimestampedVector<InRangeOption<Weight>>,
     forward: OwnedGraph,
     backward_dijkstra: GenericDijkstra<OwnedGraph>,
-    num_pot_evals: usize,
+    num_pot_computations: usize,
 }
 
 impl CHPotential {
@@ -109,8 +108,12 @@ impl CHPotential {
             potentials: TimestampedVector::new(n, InRangeOption::new(None)),
             forward,
             backward_dijkstra: GenericDijkstra::new(backward),
-            num_pot_evals: 0,
+            num_pot_computations: 0,
         }
+    }
+
+    pub fn num_pot_computations(&self) -> usize {
+        self.num_pot_computations
     }
 
     fn potential_internal(
@@ -118,15 +121,15 @@ impl CHPotential {
         forward: &OwnedGraph,
         backward: &GenericDijkstra<OwnedGraph>,
         node: NodeId,
-        num_pot_evals: &mut usize,
+        num_pot_computations: &mut usize,
     ) -> Weight {
         if let Some(pot) = potentials[node as usize].value() {
             return pot;
         }
-        *num_pot_evals += 1;
+        *num_pot_computations += 1;
 
         let min_by_up = LinkIterable::<Link>::link_iter(forward, node)
-            .map(|edge| edge.weight + Self::potential_internal(potentials, forward, backward, edge.node, num_pot_evals))
+            .map(|edge| edge.weight + Self::potential_internal(potentials, forward, backward, edge.node, num_pot_computations))
             .min()
             .unwrap_or(INFINITY);
 
@@ -138,7 +141,7 @@ impl CHPotential {
 
 impl Potential for CHPotential {
     fn init(&mut self, target: NodeId) {
-        self.num_pot_evals = 0;
+        self.num_pot_computations = 0;
         self.potentials.reset();
         self.backward_dijkstra.initialize_query(Query {
             from: self.order.rank(target),
@@ -150,17 +153,19 @@ impl Potential for CHPotential {
     fn potential(&mut self, node: NodeId) -> Option<Weight> {
         let node = self.order.rank(node);
 
-        let dist = Self::potential_internal(&mut self.potentials, &self.forward, &self.backward_dijkstra, node, &mut self.num_pot_evals);
+        let dist = Self::potential_internal(
+            &mut self.potentials,
+            &self.forward,
+            &self.backward_dijkstra,
+            node,
+            &mut self.num_pot_computations,
+        );
 
         if dist < INFINITY {
             Some(dist)
         } else {
             None
         }
-    }
-
-    fn num_pot_evals(&self) -> usize {
-        self.num_pot_evals
     }
 }
 
@@ -181,6 +186,10 @@ impl<P> TurnExpandedPotential<P> {
 
         Self { potential, tail }
     }
+
+    pub fn inner(&self) -> &P {
+        &self.potential
+    }
 }
 
 impl<P: Potential> Potential for TurnExpandedPotential<P> {
@@ -190,14 +199,10 @@ impl<P: Potential> Potential for TurnExpandedPotential<P> {
     fn potential(&mut self, node: NodeId) -> Option<Weight> {
         self.potential.potential(self.tail[node as usize])
     }
-    fn num_pot_evals(&self) -> usize {
-        self.potential.num_pot_evals()
-    }
 }
 
 pub struct BaselinePotential {
     dijkstra: GenericDijkstra<OwnedGraph>,
-    num_pot_evals: usize,
 }
 
 impl BaselinePotential {
@@ -207,14 +212,12 @@ impl BaselinePotential {
     {
         Self {
             dijkstra: GenericDijkstra::new(OwnedGraph::reversed(&graph)),
-            num_pot_evals: 0,
         }
     }
 }
 
 impl Potential for BaselinePotential {
     fn init(&mut self, target: NodeId) {
-        self.num_pot_evals = 0;
         report_time_with_key("BaselinePotential init", "baseline_pot_init", || {
             self.dijkstra.initialize_query(Query {
                 from: target,
@@ -230,10 +233,6 @@ impl Potential for BaselinePotential {
         } else {
             None
         }
-    }
-
-    fn num_pot_evals(&self) -> usize {
-        self.num_pot_evals
     }
 }
 
@@ -259,9 +258,6 @@ impl<P: Potential> Potential for RecyclingPotential<P> {
     fn potential(&mut self, node: NodeId) -> Option<Weight> {
         self.potential.potential(node)
     }
-    fn num_pot_evals(&self) -> usize {
-        self.potential.num_pot_evals()
-    }
 }
 
 #[derive(Debug)]
@@ -271,8 +267,5 @@ impl Potential for ZeroPotential {
     fn init(&mut self, _target: NodeId) {}
     fn potential(&mut self, _node: NodeId) -> Option<Weight> {
         Some(0)
-    }
-    fn num_pot_evals(&self) -> usize {
-        0
     }
 }

@@ -126,6 +126,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             let dist = res.as_ref().map(|res| res.distance());
             report!("result", dist);
             res.as_mut().map(|res| res.path());
+            #[cfg(all(not(feature = "chpot-only-topo"), not(feature = "chpot-alt")))]
+            report!(
+                "num_pot_computations",
+                res.as_mut().map(|res| res.data().potential().num_pot_computations()).unwrap_or(0)
+            );
             report!("lower_bound", res.as_mut().map(|res| res.data().lower_bound(from)).flatten());
         });
     }

@@ -13,7 +13,6 @@ use rand::prelude::*;
 pub struct ALTPotential {
     landmark_forward_distances: Vec<Weight>,
     landmark_backward_distances: Vec<Weight>,
-    num_pot_evals: usize,
     num_landmarks: usize,
     target: NodeId,
 }
@@ -65,7 +64,6 @@ impl ALTPotential {
             landmark_forward_distances,
             landmark_backward_distances,
             num_landmarks: k,
-            num_pot_evals: 0,
             target: n as NodeId,
         }
     }
@@ -225,13 +223,10 @@ impl ALTPotential {
 
 impl Potential for ALTPotential {
     fn init(&mut self, target: NodeId) {
-        self.num_pot_evals = 0;
         self.target = target;
     }
 
     fn potential(&mut self, node: NodeId) -> Option<Weight> {
-        self.num_pot_evals += 1;
-
         let max_pot = self
             .landmark_dists_to(node)
             .iter()
@@ -252,9 +247,5 @@ impl Potential for ALTPotential {
         } else {
             None
         }
-    }
-
-    fn num_pot_evals(&self) -> usize {
-        self.num_pot_evals
     }
 }
