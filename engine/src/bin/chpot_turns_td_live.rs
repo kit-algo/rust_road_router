@@ -228,7 +228,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         #[cfg(all(not(feature = "chpot-only-topo"), not(feature = "chpot-alt")))]
         report!(
             "num_pot_computations",
-            res.as_mut().map(|res| res.data().potential().num_pot_computations()).unwrap_or(0)
+            res.as_mut().map(|res| res.data().potential().inner().num_pot_computations()).unwrap_or(0)
         );
         report!("lower_bound", res.as_mut().map(|res| res.data().lower_bound(from)).flatten());
         astar_time = astar_time + time;
