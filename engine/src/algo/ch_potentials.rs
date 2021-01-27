@@ -88,16 +88,16 @@ impl<'a> Potential for CCHPotential<'a> {
     }
 }
 
-pub struct CHPotential {
+pub struct CHPotential<GF, GB> {
     order: NodeOrder,
     potentials: TimestampedVector<InRangeOption<Weight>>,
-    forward: OwnedGraph,
-    backward_dijkstra: GenericDijkstra<OwnedGraph>,
+    forward: GF,
+    backward_dijkstra: GenericDijkstra<GB>,
     num_pot_computations: usize,
 }
 
-impl CHPotential {
-    pub fn new(forward: OwnedGraph, backward: OwnedGraph, order: NodeOrder) -> Self {
+impl<GF: for<'a> LinkIterGraph<'a>, GB: for<'a> LinkIterGraph<'a>> CHPotential<GF, GB> {
+    pub fn new(forward: GF, backward: GB, order: NodeOrder) -> Self {
         let n = forward.num_nodes();
         Self {
             order,
@@ -114,8 +114,8 @@ impl CHPotential {
 
     fn potential_internal(
         potentials: &mut TimestampedVector<InRangeOption<Weight>>,
-        forward: &OwnedGraph,
-        backward: &GenericDijkstra<OwnedGraph>,
+        forward: &GF,
+        backward: &GenericDijkstra<GB>,
         node: NodeId,
         num_pot_computations: &mut usize,
     ) -> Weight {
@@ -135,7 +135,7 @@ impl CHPotential {
     }
 }
 
-impl Potential for CHPotential {
+impl<GF: for<'a> LinkIterGraph<'a>, GB: for<'a> LinkIterGraph<'a>> Potential for CHPotential<GF, GB> {
     fn init(&mut self, target: NodeId) {
         self.num_pot_computations = 0;
         self.potentials.reset();
