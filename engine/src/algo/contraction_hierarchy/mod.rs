@@ -4,7 +4,7 @@
 //! No node ordering implemented yet, depends on getting a precalculated order.
 
 use super::*;
-use crate::algo::dijkstra::generic_dijkstra::*;
+use crate::algo::{a_star::*, dijkstra::generic_dijkstra::*};
 use crate::datastr::node_order::NodeOrder;
 
 pub mod query;
@@ -283,6 +283,7 @@ impl<'a> PartialContractionGraph<'a> {
             backward_dijkstra: GenericDijkstra::from_recycled(BackwardWrapper { graph: &self }, recycled.1),
             tentative_distance: INFINITY,
             meeting_node: 0,
+            potential: std::cell::RefCell::new(AveragePotential::new(ZeroPotential(), ZeroPotential())),
         };
 
         // witness search is a bidirection dijkstra capped to the length of the path over the contracted node

@@ -126,7 +126,7 @@ where
         self.predecessors[from as usize] = from;
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn next_filtered_edges(&mut self, edge_predicate: impl FnMut(&Ops::Arc) -> bool) -> Option<NodeId> {
         self.settle_next_node(edge_predicate, |_, _| true, |_| Some(Neutral()))
     }
@@ -145,7 +145,16 @@ where
         self.settle_next_node(|_| true, improve_callback, |_| Some(Neutral()))
     }
 
-    #[inline]
+    #[inline(always)]
+    pub fn next_with_improve_callback_and_potential<P, O>(&mut self, improve_callback: impl FnMut(NodeId, &Ops::Label) -> bool, potential: P) -> Option<NodeId>
+    where
+        P: FnMut(NodeId) -> Option<O>,
+        O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
+    {
+        self.settle_next_node(|_| true, improve_callback, potential)
+    }
+
+    #[inline(always)]
     fn settle_next_node<I, P, O>(&mut self, mut edge_predicate: impl FnMut(&Ops::Arc) -> bool, mut improve_callback: I, mut potential: P) -> Option<NodeId>
     where
         I: FnMut(NodeId, &Ops::Label) -> bool,

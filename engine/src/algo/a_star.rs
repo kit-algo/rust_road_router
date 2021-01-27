@@ -114,6 +114,20 @@ pub struct AveragePotential<PF, PB> {
 }
 
 impl<PF: Potential, PB: Potential> AveragePotential<PF, PB> {
+    pub fn new(forward_potential: PF, backward_potential: PB) -> Self {
+        AveragePotential {
+            forward_potential,
+            backward_potential,
+        }
+    }
+
+    pub fn forward_potential(&mut self, node: NodeId) -> Option<Weight> {
+        self.forward_potential.potential(node)
+    }
+    pub fn backward_potential(&mut self, node: NodeId) -> Option<Weight> {
+        self.backward_potential.potential(node)
+    }
+
     pub fn init(&mut self, source: NodeId, target: NodeId) {
         self.forward_potential.init(target);
         self.backward_potential.init(source);
