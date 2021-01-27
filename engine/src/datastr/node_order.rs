@@ -3,6 +3,8 @@
 use crate::datastr::graph::*;
 use crate::io::*;
 
+use std::sync::Arc;
+
 pub type Rank = NodeId;
 
 /// A type for node orders which allows efficiently retrieving both the rank in the order of a node
@@ -11,9 +13,9 @@ pub type Rank = NodeId;
 #[derive(Debug, Clone)]
 pub struct NodeOrder {
     // NodeIds ordered by their ranks - that is ascending in importance
-    node_order: Vec<NodeId>,
+    node_order: Arc<[NodeId]>,
     // The rank of each node - 0 is the lowest importance, n-1 the highest
-    ranks: Vec<Rank>,
+    ranks: Arc<[Rank]>,
 }
 
 impl NodeOrder {
@@ -37,7 +39,10 @@ impl NodeOrder {
 
         debug_assert_eq!(ranks.iter().position(|&rank| rank == n as Rank), None);
 
-        NodeOrder { node_order, ranks }
+        NodeOrder {
+            node_order: node_order.into(),
+            ranks: ranks.into(),
+        }
     }
 
     /// Create a `NodeOrder` from a rank vector, that is a vector where `rank[id]` contains the rank for node `id`
@@ -52,7 +57,10 @@ impl NodeOrder {
 
         debug_assert_eq!(node_order.iter().position(|&node| node == n as NodeId), None);
 
-        NodeOrder { node_order, ranks }
+        NodeOrder {
+            node_order: node_order.into(),
+            ranks: ranks.into(),
+        }
     }
 
     /// Get node order (rank -> node) as a slice
@@ -88,7 +96,7 @@ impl NodeOrder {
 
 impl Deconstruct for NodeOrder {
     fn store_each(&self, store: &dyn Fn(&str, &dyn Store) -> std::io::Result<()>) -> std::io::Result<()> {
-        store("ranks", &self.ranks)
+        store("ranks", &&self.ranks[..])
     }
 }
 
