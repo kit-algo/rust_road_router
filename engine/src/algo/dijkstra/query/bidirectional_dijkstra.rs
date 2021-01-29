@@ -1,5 +1,6 @@
 use super::*;
 use crate::algo::{a_star::*, dijkstra::generic_dijkstra::*};
+use crate::report::*;
 
 use std::cell::RefCell;
 
@@ -37,6 +38,7 @@ impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>, P: Potential> S
     }
 
     pub fn distance_with_cap(&mut self, from: NodeId, to: NodeId, maximum_distance: Weight) -> Option<Weight> {
+        report!("algo", "Bidrectional Dijkstra Query");
         // initialize
         self.tentative_distance = INFINITY;
 
@@ -45,68 +47,86 @@ impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>, P: Potential> S
 
         self.potential.borrow_mut().init(from, to);
 
-        let forward_add = (self.potential.borrow_mut().backward_potential(to)? / 2) as i32;
-        let backward_add = (self.potential.borrow_mut().forward_potential(from)? / 2) as i32;
-        let mu_add = (self.potential.borrow_mut().potential(from)? + forward_add) as Weight;
+        let mut num_queue_pops = 0;
 
-        let forward_dijkstra = &mut self.forward_dijkstra;
-        let backward_dijkstra = &mut self.backward_dijkstra;
-        let meeting_node = &mut self.meeting_node;
-        let tentative_distance = &mut self.tentative_distance;
-        let potential = &self.potential;
+        let result = (|| {
+            let forward_add = (self.potential.borrow_mut().backward_potential(to)? / 2) as i32;
+            let backward_add = (self.potential.borrow_mut().forward_potential(from)? / 2) as i32;
+            let mu_add = (self.potential.borrow_mut().potential(from)? + forward_add) as Weight;
 
-        while forward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY) + backward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY)
-            < std::cmp::min(*tentative_distance, maximum_distance) + mu_add
-        {
-            if forward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY) <= backward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY) {
-                if let Some(node) = forward_dijkstra.next_with_improve_callback_and_potential(
-                    |head, &dist| {
-                        if dist + potential.borrow_mut().forward_potential(head).unwrap_or(INFINITY) >= *tentative_distance {
-                            return false;
+            let forward_dijkstra = &mut self.forward_dijkstra;
+            let backward_dijkstra = &mut self.backward_dijkstra;
+            let meeting_node = &mut self.meeting_node;
+            let tentative_distance = &mut self.tentative_distance;
+            let potential = &self.potential;
+
+            while forward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY) + backward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY)
+                < std::cmp::min(*tentative_distance, maximum_distance) + mu_add
+            {
+                if forward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY) <= backward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY) {
+                    if let Some(node) = forward_dijkstra.next_with_improve_callback_and_potential(
+                        |head, &dist| {
+                            if dist + potential.borrow_mut().forward_potential(head).unwrap_or(INFINITY) >= *tentative_distance {
+                                return false;
+                            }
+                            if dist + backward_dijkstra.tentative_distance(head) < *tentative_distance {
+                                *tentative_distance = dist + backward_dijkstra.tentative_distance(head);
+                                *meeting_node = head;
+                            }
+                            true
+                        },
+                        |node| potential.borrow_mut().potential(node).map(|p| (p + forward_add) as Weight),
+                    ) {
+                        num_queue_pops += 1;
+                        if node == to {
+                            self.meeting_node = to;
+                            return Some(*tentative_distance);
                         }
-                        if dist + backward_dijkstra.tentative_distance(head) < *tentative_distance {
-                            *tentative_distance = dist + backward_dijkstra.tentative_distance(head);
-                            *meeting_node = head;
-                        }
-                        true
-                    },
-                    |node| potential.borrow_mut().potential(node).map(|p| (p + forward_add) as Weight),
-                ) {
-                    if node == to {
-                        self.meeting_node = to;
-                        return Some(*tentative_distance);
+                    } else {
+                        return None;
                     }
                 } else {
-                    return None;
-                }
-            } else {
-                if let Some(node) = backward_dijkstra.next_with_improve_callback_and_potential(
-                    |head, &dist| {
-                        if dist + potential.borrow_mut().backward_potential(head).unwrap_or(INFINITY) >= *tentative_distance {
-                            return false;
+                    if let Some(node) = backward_dijkstra.next_with_improve_callback_and_potential(
+                        |head, &dist| {
+                            if dist + potential.borrow_mut().backward_potential(head).unwrap_or(INFINITY) >= *tentative_distance {
+                                return false;
+                            }
+                            if dist + forward_dijkstra.tentative_distance(head) < *tentative_distance {
+                                *tentative_distance = dist + forward_dijkstra.tentative_distance(head);
+                                *meeting_node = head;
+                            }
+                            true
+                        },
+                        |node| potential.borrow_mut().potential(node).map(|p| (backward_add - p) as Weight),
+                    ) {
+                        num_queue_pops += 1;
+                        if node == from {
+                            self.meeting_node = from;
+                            return Some(*tentative_distance);
                         }
-                        if dist + forward_dijkstra.tentative_distance(head) < *tentative_distance {
-                            *tentative_distance = dist + forward_dijkstra.tentative_distance(head);
-                            *meeting_node = head;
-                        }
-                        true
-                    },
-                    |node| potential.borrow_mut().potential(node).map(|p| (backward_add - p) as Weight),
-                ) {
-                    if node == from {
-                        self.meeting_node = from;
-                        return Some(*tentative_distance);
+                    } else {
+                        return None;
                     }
-                } else {
-                    return None;
                 }
             }
-        }
 
-        match self.tentative_distance {
-            INFINITY => None,
-            dist => Some(dist),
-        }
+            match self.tentative_distance {
+                INFINITY => None,
+                dist => Some(dist),
+            }
+        })();
+
+        report!("num_queue_pops", num_queue_pops);
+        report!(
+            "num_queue_pushs",
+            self.forward_dijkstra.num_queue_pushs() + self.backward_dijkstra.num_queue_pushs()
+        );
+        report!(
+            "num_relaxed_arcs",
+            self.forward_dijkstra.num_relaxed_arcs() + self.backward_dijkstra.num_queue_pushs()
+        );
+
+        result
     }
 
     fn path(&self, query: Query) -> Vec<NodeId> {
