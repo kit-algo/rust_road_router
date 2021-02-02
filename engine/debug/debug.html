@@ -80,9 +80,10 @@ map.on('keypress', (event) => {
 </script>
 <script src="events.js"></script>
 <script type="text/javascript">
+let num_markers = document.getElementsByClassName("leaflet-marker-icon").length;
 for (icon of document.getElementsByClassName("leaflet-marker-icon")) {
   icon.classList.remove("leaflet-div-icon");
-  icon.style.filter = `hue-rotate(${parseInt(icon.dataset.popped) / 228 * -0.7 + 0.1}turn)`;
+  icon.style.filter = `hue-rotate(${parseInt(icon.dataset.popped) / num_markers * -0.7 + 0.1}turn)`;
 }
 </script>
 </body>

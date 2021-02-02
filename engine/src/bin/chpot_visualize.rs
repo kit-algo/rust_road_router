@@ -16,24 +16,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     let first_out = Vec::<NodeId>::load_from(path.join("first_out"))?;
     let head = Vec::<EdgeId>::load_from(path.join("head"))?;
     let travel_time = Vec::<EdgeId>::load_from(path.join("travel_time"))?;
-    let lat: std::rc::Rc<[f32]> = Vec::<f32>::load_from(path.join("latitude"))?.into();
-    let lng: std::rc::Rc<[f32]> = Vec::<f32>::load_from(path.join("longitude"))?.into();
+    let lat = Vec::<f32>::load_from(path.join("latitude"))?;
+    let lng = Vec::<f32>::load_from(path.join("longitude"))?;
     let modified_travel_time: Vec<Weight> = travel_time.iter().map(|&weight| (weight as f64 * 1.5) as Weight).collect();
 
     let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
     let modified_graph = FirstOutGraph::new(&first_out[..], &head[..], &modified_travel_time[..]);
 
     let potential = BaselinePotential::new(&graph);
-    let mut topocore: TopoServer<_, _, OwnedGraph> = {
-        #[cfg(feature = "chpot-visualize")]
-        {
-            TopoServer::new(&modified_graph, potential, DefaultOps::default(), lat.clone(), lng.clone())
-        }
-        #[cfg(not(feature = "chpot-visualize"))]
-        {
-            TopoServer::new(&modified_graph, potential, DefaultOps::default())
-        }
-    };
+    let mut topocore: TopoServer<_, _, OwnedGraph> = TopoServer::new(&modified_graph, potential, DefaultOps::default());
 
     let n = graph.num_nodes();
     let from_lat = 49.0138685;
@@ -57,7 +48,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         })
         .unwrap() as NodeId;
 
-    QueryServer::query(&mut topocore, Query { from, to });
+    topocore.visualize_query(Query { from, to }, &lat[..], &lng[..]);
 
     Ok(())
 }

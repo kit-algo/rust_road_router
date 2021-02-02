@@ -5,8 +5,6 @@ use crate::{
     algo::{dijkstra::gen_topo_dijkstra::*, topocore::*},
     datastr::graph::time_dependent::*,
 };
-#[cfg(feature = "chpot-visualize")]
-use std::rc::Rc;
 
 pub struct Server<P, Ops: DijkstraOps<Graph>, Graph> {
     forward_dijkstra: GenTopoDijkstra<VirtualTopocoreOps<Ops>, VirtualTopocoreGraph<Graph>>,
@@ -20,24 +18,13 @@ pub struct Server<P, Ops: DijkstraOps<Graph>, Graph> {
     reversed: UnweightedOwnedGraph,
     virtual_topocore: VirtualTopocore,
     visited: FastClearBitVec,
-
-    #[cfg(feature = "chpot-visualize")]
-    lat: Rc<[f32]>,
-    #[cfg(feature = "chpot-visualize")]
-    lng: Rc<[f32]>,
 }
 
 impl<P: Potential, Ops: DijkstraOps<Graph, Label = Timestamp>, Graph> Server<P, Ops, Graph>
 where
     Graph: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, Ops::Arc>,
 {
-    pub fn new<G>(
-        graph: &G,
-        potential: P,
-        ops: Ops,
-        #[cfg(feature = "chpot-visualize")] lat: Rc<[f32]>,
-        #[cfg(feature = "chpot-visualize")] lng: Rc<[f32]>,
-    ) -> Self
+    pub fn new<G>(graph: &G, potential: P, ops: Ops) -> Self
     where
         G: for<'a> LinkIterable<'a, NodeId>,
         Graph: BuildPermutated<G>,
@@ -55,11 +42,6 @@ where
                     reversed,
                     virtual_topocore,
                     visited: FastClearBitVec::new(n),
-
-                    #[cfg(feature = "chpot-visualize")]
-                    lat,
-                    #[cfg(feature = "chpot-visualize")]
-                    lng,
                 }
             }
             #[cfg(not(feature = "chpot-no-bcc"))]
@@ -77,11 +59,6 @@ where
                     reversed,
                     virtual_topocore,
                     visited: FastClearBitVec::new(n),
-
-                    #[cfg(feature = "chpot-visualize")]
-                    lat,
-                    #[cfg(feature = "chpot-visualize")]
-                    lng,
                 }
             }
         })
@@ -125,26 +102,18 @@ where
         border
     }
 
-    fn distance(&mut self, mut query: impl GenQuery<Timestamp> + Copy) -> Option<Weight> {
+    fn distance(
+        &mut self,
+        mut query: impl GenQuery<Timestamp> + Copy,
+        mut inspect: impl FnMut(NodeId, &NodeOrder, &GenTopoDijkstra<VirtualTopocoreOps<Ops>, VirtualTopocoreGraph<Graph>>, &mut P),
+    ) -> Option<Weight> {
         let to = query.to();
-        let _from = query.from();
         query.permutate(&self.virtual_topocore.order);
 
         report!("algo", "CH Potentials Query");
 
         let departure = query.initial_state();
 
-        #[cfg(feature = "chpot-visualize")]
-        {
-            println!(
-                "L.marker([{}, {}], {{ title: \"from\", icon: blackIcon }}).addTo(map);",
-                self.lat[_from as usize], self.lng[_from as usize]
-            );
-            println!(
-                "L.marker([{}, {}], {{ title: \"from\", icon: blackIcon }}).addTo(map);",
-                self.lat[to as usize], self.lng[to as usize]
-            );
-        };
         let mut num_queue_pops = 0;
 
         self.forward_dijkstra.initialize_query(query);
@@ -183,20 +152,7 @@ where
 
             while let Some(node) = forward_dijkstra.next_step_with_potential(|node| potential.potential(virtual_topocore.order.node(node))) {
                 num_queue_pops += 1;
-                #[cfg(feature = "chpot-visualize")]
-                {
-                    let node_id = virtual_topocore.order.node(node) as usize;
-                    println!(
-                        "var marker = L.marker([{}, {}], {{ icon: L.dataIcon({{ data: {{ popped: {} }}, ...blueIconOptions }}) }}).addTo(map);",
-                        self.lat[node_id], self.lng[node_id], num_queue_pops
-                    );
-                    println!(
-                        "marker.bindPopup(\"id: {}<br>distance: {}<br>potential: {}\");",
-                        node_id,
-                        forward_dijkstra.tentative_distance(node),
-                        potential.potential(node_id as NodeId).unwrap()
-                    );
-                };
+                inspect(node, &virtual_topocore.order, forward_dijkstra, potential);
 
                 if node == query.to()
                     || forward_dijkstra
@@ -215,20 +171,7 @@ where
 
         while let Some(node) = forward_dijkstra.next_step_with_potential(|node| potential.potential(virtual_topocore.order.node(node))) {
             num_queue_pops += 1;
-            #[cfg(feature = "chpot-visualize")]
-            {
-                let node_id = virtual_topocore.order.node(node) as usize;
-                println!(
-                    "var marker = L.marker([{}, {}], {{ icon: L.dataIcon({{ data: {{ popped: {} }}, ...blueIconOptions }}) }}).addTo(map);",
-                    self.lat[node_id], self.lng[node_id], num_queue_pops
-                );
-                println!(
-                    "marker.bindPopup(\"id: {}<br>distance: {}<br>potential: {}\");",
-                    node_id,
-                    forward_dijkstra.tentative_distance(node),
-                    potential.potential(node_id as NodeId).unwrap()
-                );
-            };
+            inspect(node, &virtual_topocore.order, forward_dijkstra, potential);
 
             if node == query.to()
                 || forward_dijkstra
@@ -254,6 +197,35 @@ where
         } else {
             None
         }
+    }
+
+    pub fn visualize_query(&mut self, query: impl GenQuery<Timestamp> + Copy, lat: &[f32], lng: &[f32]) -> Option<Weight> {
+        let mut num_settled_nodes = 0;
+        let res = self.distance(query, |node, order, dijk, pot| {
+            let node_id = order.node(node) as usize;
+            println!(
+                "var marker = L.marker([{}, {}], {{ icon: L.dataIcon({{ data: {{ popped: {} }}, ...blueIconOptions }}) }}).addTo(map);",
+                lat[node_id], lng[node_id], num_settled_nodes
+            );
+            println!(
+                "marker.bindPopup(\"id: {}<br>distance: {}<br>potential: {}\");",
+                node_id,
+                dijk.tentative_distance(node),
+                pot.potential(node_id as NodeId).unwrap()
+            );
+            num_settled_nodes += 1;
+        });
+        println!(
+            "L.marker([{}, {}], {{ title: \"from\", icon: blackIcon }}).addTo(map);",
+            lat[query.from() as usize],
+            lng[query.from() as usize]
+        );
+        println!(
+            "L.marker([{}, {}], {{ title: \"from\", icon: blackIcon }}).addTo(map);",
+            lat[query.to() as usize],
+            lng[query.to() as usize]
+        );
+        res
     }
 
     fn path(&self, mut query: impl GenQuery<Timestamp>) -> Vec<NodeId> {
@@ -332,7 +304,7 @@ where
     type P = PathServerWrapper<'s, P, O, G, TDQuery<Timestamp>>;
 
     fn query(&'s mut self, query: TDQuery<Timestamp>) -> Option<QueryResult<Self::P, Weight>> {
-        self.distance(query)
+        self.distance(query, |_, _, _, _| ())
             .map(move |distance| QueryResult::new(distance, PathServerWrapper(self, query)))
     }
 }
@@ -346,7 +318,7 @@ where
     type P = PathServerWrapper<'s, P, O, G, Query>;
 
     fn query(&'s mut self, query: Query) -> Option<QueryResult<Self::P, Weight>> {
-        self.distance(query)
+        self.distance(query, |_, _, _, _| ())
             .map(move |distance| QueryResult::new(distance, PathServerWrapper(self, query)))
     }
 }
