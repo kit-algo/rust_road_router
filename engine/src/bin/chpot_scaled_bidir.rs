@@ -1,11 +1,7 @@
 #[macro_use]
 extern crate rust_road_router;
 use rust_road_router::{
-    algo::{
-        ch_potentials::*,
-        dijkstra::{generic_dijkstra::DefaultOps, query::bidirectional_dijkstra::Server},
-        *,
-    },
+    algo::{ch_potentials::*, dijkstra::query::bidirectional_dijkstra::Server, *},
     cli::CliErr,
     datastr::{graph::*, node_order::NodeOrder},
     experiments::a_star::NUM_QUERIES,
@@ -40,7 +36,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         report!("experiment", "weight_scale");
         report!("factor", factor);
 
-        rust_road_router::experiments::chpot::run(path, |_graph, _rng, travel_time| {
+        run(path, |_graph, _rng, travel_time| {
             for weight in travel_time.iter_mut() {
                 *weight = (*weight as f64 * factor) as Weight;
             }
