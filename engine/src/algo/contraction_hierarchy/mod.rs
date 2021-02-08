@@ -287,7 +287,7 @@ impl<'a> PartialContractionGraph<'a> {
         };
 
         // witness search is a bidirection dijkstra capped to the length of the path over the contracted node
-        let res = match server.distance_with_cap(from - self.id_offset, to - self.id_offset, shortcut_weight) {
+        let res = match server.distance_with_cap(from - self.id_offset, to - self.id_offset, shortcut_weight, |_, _, _, _| ()) {
             Some(length) if length < shortcut_weight => false,
             Some(_) => true,
             None => true,

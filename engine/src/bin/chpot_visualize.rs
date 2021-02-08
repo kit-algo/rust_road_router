@@ -21,12 +21,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     let modified_travel_time: Vec<Weight> = travel_time.iter().map(|&weight| (weight as f64 * 1.5) as Weight).collect();
 
     let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
+    let n = graph.num_nodes();
     let modified_graph = FirstOutGraph::new(&first_out[..], &head[..], &modified_travel_time[..]);
 
+    // let reversed = OwnedGraph::reversed(&graph);
     let potential = BaselinePotential::new(&graph);
+    // let backward_potential = BaselinePotential::new(&reversed);
     let mut topocore: TopoServer<_, _, OwnedGraph> = TopoServer::new(&modified_graph, potential, DefaultOps::default());
+    // let mut bidir_dijk_server = BiDirServer::new_with_potentials(modified_graph, potential, backward_potential);
 
-    let n = graph.num_nodes();
     let from_lat = 49.0138685;
     let from_lng = 8.4173883;
     let to_lat = 49.0019405;
@@ -49,6 +52,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .unwrap() as NodeId;
 
     topocore.visualize_query(Query { from, to }, &lat[..], &lng[..]);
+    // bidir_dijk_server.visualize_query(from, to, &lat[..], &lng[..]);
 
     Ok(())
 }

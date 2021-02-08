@@ -34,10 +34,16 @@ impl<G: for<'a> LinkIterGraph<'a>, P: Potential> Server<G, OwnedGraph, P> {
 
 impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>, P: Potential> Server<G, H, P> {
     fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
-        self.distance_with_cap(from, to, INFINITY)
+        self.distance_with_cap(from, to, INFINITY, |_, _, _, _| ())
     }
 
-    pub fn distance_with_cap(&mut self, from: NodeId, to: NodeId, maximum_distance: Weight) -> Option<Weight> {
+    pub fn distance_with_cap(
+        &mut self,
+        from: NodeId,
+        to: NodeId,
+        maximum_distance: Weight,
+        mut inspect: impl FnMut(NodeId, Weight, &mut AveragePotential<P, P>, i32),
+    ) -> Option<Weight> {
         report!("algo", "Bidrectional Dijkstra Query");
         // initialize
         self.tentative_distance = INFINITY;
@@ -78,6 +84,7 @@ impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>, P: Potential> S
                         |node| potential.borrow_mut().potential(node).map(|p| (p + forward_add) as Weight),
                     ) {
                         num_queue_pops += 1;
+                        inspect(node, *forward_dijkstra.tentative_distance(node), &mut potential.borrow_mut(), forward_add);
                         if node == to {
                             self.meeting_node = to;
                             return Some(*tentative_distance);
@@ -100,6 +107,7 @@ impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>, P: Potential> S
                         |node| potential.borrow_mut().potential(node).map(|p| (backward_add - p) as Weight),
                     ) {
                         num_queue_pops += 1;
+                        inspect(node, *backward_dijkstra.tentative_distance(node), &mut potential.borrow_mut(), -backward_add);
                         if node == from {
                             self.meeting_node = from;
                             return Some(*tentative_distance);
@@ -127,6 +135,34 @@ impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>, P: Potential> S
         );
 
         result
+    }
+
+    pub fn visualize_query(&mut self, from: NodeId, to: NodeId, lat: &[f32], lng: &[f32]) -> Option<Weight> {
+        let mut num_settled_nodes = 0;
+        let res = self.distance_with_cap(from, to, INFINITY, |node, dist, pot, pot_add| {
+            let node_id = node as usize;
+            println!(
+                "var marker = L.marker([{}, {}], {{ icon: L.dataIcon({{ data: {{ popped: {} }}, ...blueIconOptions }}) }}).addTo(map);",
+                lat[node_id], lng[node_id], num_settled_nodes
+            );
+            println!(
+                "marker.bindPopup(\"id: {}<br>distance: {}<br>potential: {}<br>ugly_pot: {}\");",
+                node_id,
+                dist,
+                pot.potential(node_id as NodeId).unwrap() + pot_add,
+                pot.potential(node_id as NodeId).unwrap()
+            );
+            num_settled_nodes += 1;
+        });
+        println!(
+            "L.marker([{}, {}], {{ title: \"from\", icon: blackIcon }}).addTo(map);",
+            lat[from as usize], lng[from as usize]
+        );
+        println!(
+            "L.marker([{}, {}], {{ title: \"from\", icon: blackIcon }}).addTo(map);",
+            lat[to as usize], lng[to as usize]
+        );
+        res
     }
 
     fn path(&self, query: Query) -> Vec<NodeId> {
