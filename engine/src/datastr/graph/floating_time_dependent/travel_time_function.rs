@@ -9,18 +9,10 @@ pub enum ApproxTTFContainer<D> {
     Approx(D, D),
 }
 
-impl ApproxTTFContainer<Vec<TTFPoint>> {
-    pub fn num_points(&self) -> usize {
-        use ApproxTTFContainer::*;
-
-        match &self {
-            Exact(points) => points.len(),
-            Approx(lower, upper) => lower.len() + upper.len(),
-        }
-    }
-}
-
-impl ApproxTTFContainer<Box<[TTFPoint]>> {
+impl<D> ApproxTTFContainer<D>
+where
+    D: std::ops::Deref<Target = [TTFPoint]>,
+{
     pub fn num_points(&self) -> usize {
         use ApproxTTFContainer::*;
 
@@ -55,20 +47,11 @@ pub enum ApproxTTF<'a> {
     Approx(PeriodicPiecewiseLinearFunction<'a>, PeriodicPiecewiseLinearFunction<'a>),
 }
 
-impl<'a> From<&'a ApproxTTFContainer<Box<[TTFPoint]>>> for ApproxTTF<'a> {
-    fn from(cache: &'a ApproxTTFContainer<Box<[TTFPoint]>>) -> Self {
-        match cache {
-            ApproxTTFContainer::Exact(ipps) => ApproxTTF::Exact(PeriodicPiecewiseLinearFunction::new(ipps)),
-            ApproxTTFContainer::Approx(lower_ipps, upper_ipps) => ApproxTTF::Approx(
-                PeriodicPiecewiseLinearFunction::new(lower_ipps),
-                PeriodicPiecewiseLinearFunction::new(upper_ipps),
-            ),
-        }
-    }
-}
-
-impl<'a> From<&'a ApproxTTFContainer<Vec<TTFPoint>>> for ApproxTTF<'a> {
-    fn from(cache: &'a ApproxTTFContainer<Vec<TTFPoint>>) -> Self {
+impl<'a, D> From<&'a ApproxTTFContainer<D>> for ApproxTTF<'a>
+where
+    D: std::ops::Deref<Target = [TTFPoint]>,
+{
+    fn from(cache: &'a ApproxTTFContainer<D>) -> Self {
         match cache {
             ApproxTTFContainer::Exact(ipps) => ApproxTTF::Exact(PeriodicPiecewiseLinearFunction::new(ipps)),
             ApproxTTFContainer::Approx(lower_ipps, upper_ipps) => ApproxTTF::Approx(
@@ -590,19 +573,11 @@ pub enum ApproxPartialTTF<'a> {
     Approx(PartialPiecewiseLinearFunction<'a>, PartialPiecewiseLinearFunction<'a>),
 }
 
-impl<'a> From<&'a ApproxTTFContainer<Box<[TTFPoint]>>> for ApproxPartialTTF<'a> {
-    fn from(cache: &'a ApproxTTFContainer<Box<[TTFPoint]>>) -> Self {
-        match cache {
-            ApproxTTFContainer::Exact(ipps) => ApproxPartialTTF::Exact(PartialPiecewiseLinearFunction::new(ipps)),
-            ApproxTTFContainer::Approx(lower_ipps, upper_ipps) => {
-                ApproxPartialTTF::Approx(PartialPiecewiseLinearFunction::new(lower_ipps), PartialPiecewiseLinearFunction::new(upper_ipps))
-            }
-        }
-    }
-}
-
-impl<'a> From<&'a ApproxTTFContainer<Vec<TTFPoint>>> for ApproxPartialTTF<'a> {
-    fn from(cache: &'a ApproxTTFContainer<Vec<TTFPoint>>) -> Self {
+impl<'a, D> From<&'a ApproxTTFContainer<D>> for ApproxPartialTTF<'a>
+where
+    D: std::ops::Deref<Target = [TTFPoint]>,
+{
+    fn from(cache: &'a ApproxTTFContainer<D>) -> Self {
         match cache {
             ApproxTTFContainer::Exact(ipps) => ApproxPartialTTF::Exact(PartialPiecewiseLinearFunction::new(ipps)),
             ApproxTTFContainer::Approx(lower_ipps, upper_ipps) => {
