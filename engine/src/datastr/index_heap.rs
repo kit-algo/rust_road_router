@@ -86,6 +86,11 @@ impl<T: Ord + Indexing> IndexdMinHeap<T> {
         self.data.get(self.positions[id])
     }
 
+    /// Returns an slice of all elements in no particular guaranteed order.
+    pub fn elements(&self) -> &[T] {
+        &self.data
+    }
+
     /// Drops all items from the heap.
     pub fn clear(&mut self) {
         for element in &self.data {
@@ -124,9 +129,17 @@ impl<T: Ord + Indexing> IndexdMinHeap<T> {
         self.move_up_in_tree(insert_position);
     }
 
+    // Updates the key of an element.
+    pub fn update_key(&mut self, element: T) {
+        match element.cmp(&self.data[self.positions[element.as_index()]]) {
+            std::cmp::Ordering::Less => self.decrease_key(element),
+            std::cmp::Ordering::Greater => self.increase_key(element),
+            _ => (),
+        }
+    }
+
     // Updates the key of an element if the new key is smaller than the old key.
     // Does nothing if the new key is larger.
-    // Undefined if the element is not part of the queue.
     pub fn decrease_key(&mut self, element: T) {
         let position = self.positions[element.as_index()];
         self.data[position] = element;
@@ -135,8 +148,6 @@ impl<T: Ord + Indexing> IndexdMinHeap<T> {
 
     // Updates the key of an element if the new key is larger than the old key.
     // Does nothing if the new key is smaller.
-    // Undefined if the element is not part of the queue.
-    #[allow(dead_code)]
     pub fn increase_key(&mut self, element: T) {
         let position = self.positions[element.as_index()];
         self.data[position] = element;

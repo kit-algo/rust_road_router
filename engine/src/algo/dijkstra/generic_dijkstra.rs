@@ -190,6 +190,20 @@ where
         })
     }
 
+    pub fn exchange_potential<P, O>(&mut self, mut potential: P)
+    where
+        P: FnMut(NodeId) -> Option<O>,
+        O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
+    {
+        let active_nodes: Vec<_> = self.queue.elements().iter().map(|e| e.node).collect();
+        for node in active_nodes {
+            self.queue.update_key(State {
+                node,
+                key: potential(node).map(|p| p + self.distances[node as usize].key()).unwrap(),
+            })
+        }
+    }
+
     pub fn tentative_distance(&self, node: NodeId) -> &Ops::Label {
         &self.distances[node as usize]
     }

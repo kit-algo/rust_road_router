@@ -69,6 +69,7 @@ impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>, P: Potential> S
             while forward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY) + backward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY)
                 < std::cmp::min(*tentative_distance, maximum_distance) + mu_add
             {
+                let searches_met = *tentative_distance < INFINITY;
                 if forward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY) <= backward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY) {
                     if let Some(node) = forward_dijkstra.next_with_improve_callback_and_potential(
                         |head, &dist| {
@@ -81,7 +82,13 @@ impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>, P: Potential> S
                             }
                             true
                         },
-                        |node| potential.borrow_mut().potential(node).map(|p| (p + forward_add) as Weight),
+                        |node| {
+                            if searches_met {
+                                potential.borrow_mut().potential(node).map(|p| (p + forward_add) as Weight)
+                            } else {
+                                potential.borrow_mut().forward_potential(node)
+                            }
+                        },
                     ) {
                         num_queue_pops += 1;
                         inspect(node, *forward_dijkstra.tentative_distance(node), &mut potential.borrow_mut(), forward_add);
@@ -104,7 +111,13 @@ impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>, P: Potential> S
                             }
                             true
                         },
-                        |node| potential.borrow_mut().potential(node).map(|p| (backward_add - p) as Weight),
+                        |node| {
+                            if searches_met {
+                                potential.borrow_mut().potential(node).map(|p| (backward_add - p) as Weight)
+                            } else {
+                                potential.borrow_mut().backward_potential(node)
+                            }
+                        },
                     ) {
                         num_queue_pops += 1;
                         inspect(node, *backward_dijkstra.tentative_distance(node), &mut potential.borrow_mut(), -backward_add);
@@ -115,6 +128,10 @@ impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>, P: Potential> S
                     } else {
                         return None;
                     }
+                }
+                if !searches_met && *tentative_distance < INFINITY {
+                    forward_dijkstra.exchange_potential(|node| potential.borrow_mut().potential(node).map(|p| (p + forward_add) as Weight));
+                    backward_dijkstra.exchange_potential(|node| potential.borrow_mut().potential(node).map(|p| (backward_add - p) as Weight));
                 }
             }
 
