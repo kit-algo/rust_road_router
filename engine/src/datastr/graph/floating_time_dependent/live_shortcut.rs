@@ -125,11 +125,12 @@ impl LiveShortcut {
 
         for ((range_start, source), range_end) in sources_iter() {
             let mut inner_target = buffers.unpacking_tmp.push_plf();
-            ShortcutSource::from(source).partial_lower_bound_from_partial(
+            ShortcutSource::from(source).reconstruct_lower_bound(
                 max(unpack_start, range_start),
                 min(unpack_end, range_end),
                 shortcut_graph,
                 &mut inner_target,
+                target.storage_mut(),
             );
             PartialPiecewiseLinearFunction::new(&inner_target[..]).append_bound(max(unpack_start, range_start), &mut target, min);
         }
@@ -150,11 +151,12 @@ impl LiveShortcut {
 
         for ((range_start, source), range_end) in sources_iter() {
             let mut inner_target = buffers.unpacking_tmp.push_plf();
-            ShortcutSource::from(source).partial_upper_bound_from_partial(
+            ShortcutSource::from(source).reconstruct_upper_bound(
                 max(unpack_start, range_start),
                 min(unpack_end, range_end),
                 shortcut_graph,
                 &mut inner_target,
+                target.storage_mut(),
             );
             PartialPiecewiseLinearFunction::new(&inner_target[..]).append_bound(max(unpack_start, range_start), &mut target, max);
         }

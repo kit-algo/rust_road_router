@@ -827,7 +827,7 @@ impl<'a> ReconstructionGraph<'a> {
 
             while c.cur().0.fuzzy_lt(period()) {
                 let mut inner_target = buffers.unpacking_tmp.push_plf();
-                ShortcutSource::from(c.cur().1).partial_lower_bound(
+                ShortcutSource::from(c.cur().1).reconstruct_lower_bound(
                     max(Timestamp::zero(), c.cur().0),
                     min(period(), c.next().0),
                     &self.as_reconstructed(),
@@ -849,7 +849,7 @@ impl<'a> ReconstructionGraph<'a> {
 
             while c.cur().0.fuzzy_lt(period()) {
                 let mut inner_target = buffers.unpacking_tmp.push_plf();
-                ShortcutSource::from(c.cur().1).partial_upper_bound(
+                ShortcutSource::from(c.cur().1).reconstruct_upper_bound(
                     max(Timestamp::zero(), c.cur().0),
                     min(period(), c.next().0),
                     &self.as_reconstructed(),
