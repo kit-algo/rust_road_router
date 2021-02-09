@@ -128,7 +128,6 @@ impl LiveShortcut {
                 min(unpack_end, range_end),
                 shortcut_graph,
                 &mut inner_target,
-                target.storage_mut(),
             );
             PartialPiecewiseLinearFunction::new(&inner_target[..]).append_bound(max(unpack_start, range_start), &mut target, min);
         }
@@ -153,7 +152,6 @@ impl LiveShortcut {
                 min(unpack_end, range_end),
                 shortcut_graph,
                 &mut inner_target,
-                target.storage_mut(),
             );
             PartialPiecewiseLinearFunction::new(&inner_target[..]).append_bound(max(unpack_start, range_start), &mut target, max);
         }

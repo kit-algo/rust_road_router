@@ -262,35 +262,20 @@ impl ShortcutSource {
         end: Timestamp,
         shortcut_graph: &'g impl ShortcutGraphTrt<'g, ApproxTTF = ApproxPartialTTF<'g>>,
         target: &mut MutTopPLF,
-        tmp: &mut ReusablePLFStorage,
     ) {
         debug_assert!(start.fuzzy_lt(end), "{:?} - {:?}", start, end);
 
         match *self {
             ShortcutSource::Shortcut(down, up) => {
-                let mut first_target = tmp.push_plf();
-                shortcut_graph
-                    .ttf(ShortcutId::Incoming(down))
-                    .bound_plfs()
-                    .0
-                    .sub_plf(start, end)
-                    .append(start, &mut first_target);
+                let first = shortcut_graph.ttf(ShortcutId::Incoming(down)).bound_plfs().0.sub_plf(start, end);
 
-                debug_assert!(!first_target.last().unwrap().at.fuzzy_lt(end));
+                debug_assert!(!first.last().unwrap().at.fuzzy_lt(end));
                 // for `up` PLF we need to shift the time range
-                let second_start = start + interpolate_linear(&first_target[0], &first_target[1], start);
-                let second_end = end + interpolate_linear(&first_target[first_target.len() - 2], &first_target[first_target.len() - 1], end);
+                let second_start = start + interpolate_linear(&first[0], &first[1], start);
+                let second_end = end + interpolate_linear(&first[first.len() - 2], &first[first.len() - 1], end);
+                let second = shortcut_graph.ttf(ShortcutId::Outgoing(up)).bound_plfs().0.sub_plf(second_start, second_end);
 
-                let mut second_target = first_target.storage_mut().push_plf();
-                shortcut_graph
-                    .ttf(ShortcutId::Outgoing(up))
-                    .bound_plfs()
-                    .0
-                    .sub_plf(second_start, second_end)
-                    .append(second_start, &mut second_target);
-
-                let (first, second) = second_target.storage().top_plfs();
-                PartialPiecewiseLinearFunction::new(first).link(&PartialPiecewiseLinearFunction::new(second), start, end, target);
+                first.link(&second, start, end, target);
             }
             ShortcutSource::OriginalEdge(edge) => {
                 let ttf = shortcut_graph.original_graph().travel_time_function(edge);
@@ -308,35 +293,20 @@ impl ShortcutSource {
         end: Timestamp,
         shortcut_graph: &'g impl ShortcutGraphTrt<'g, ApproxTTF = ApproxPartialTTF<'g>>,
         target: &mut MutTopPLF,
-        tmp: &mut ReusablePLFStorage,
     ) {
         debug_assert!(start.fuzzy_lt(end), "{:?} - {:?}", start, end);
 
         match *self {
             ShortcutSource::Shortcut(down, up) => {
-                let mut first_target = tmp.push_plf();
-                shortcut_graph
-                    .ttf(ShortcutId::Incoming(down))
-                    .bound_plfs()
-                    .1
-                    .sub_plf(start, end)
-                    .append(start, &mut first_target);
+                let first = shortcut_graph.ttf(ShortcutId::Incoming(down)).bound_plfs().1.sub_plf(start, end);
 
-                debug_assert!(!first_target.last().unwrap().at.fuzzy_lt(end));
+                debug_assert!(!first.last().unwrap().at.fuzzy_lt(end));
                 // for `up` PLF we need to shift the time range
-                let second_start = start + interpolate_linear(&first_target[0], &first_target[1], start);
-                let second_end = end + interpolate_linear(&first_target[first_target.len() - 2], &first_target[first_target.len() - 1], end);
+                let second_start = start + interpolate_linear(&first[0], &first[1], start);
+                let second_end = end + interpolate_linear(&first[first.len() - 2], &first[first.len() - 1], end);
+                let second = shortcut_graph.ttf(ShortcutId::Outgoing(up)).bound_plfs().1.sub_plf(second_start, second_end);
 
-                let mut second_target = first_target.storage_mut().push_plf();
-                shortcut_graph
-                    .ttf(ShortcutId::Outgoing(up))
-                    .bound_plfs()
-                    .1
-                    .sub_plf(second_start, second_end)
-                    .append(second_start, &mut second_target);
-
-                let (first, second) = second_target.storage().top_plfs();
-                PartialPiecewiseLinearFunction::new(first).link(&PartialPiecewiseLinearFunction::new(second), start, end, target);
+                first.link(&second, start, end, target);
             }
             ShortcutSource::OriginalEdge(edge) => {
                 let ttf = shortcut_graph.original_graph().travel_time_function(edge);
