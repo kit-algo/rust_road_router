@@ -42,7 +42,7 @@ impl ShortcutSource {
         }
     }
 
-    pub(super) fn evaluate<'g>(&self, t: Timestamp, shortcut_graph: &'g impl ShortcutGraphTrt<'g>) -> FlWeight {
+    pub(super) fn evaluate(&self, t: Timestamp, shortcut_graph: &impl ShortcutGraphTrt) -> FlWeight {
         match *self {
             // recursively eval down edge, then up edge
             ShortcutSource::Shortcut(down, up) => {
@@ -84,7 +84,7 @@ impl ShortcutSource {
 
     /// Recursively unpack this source and append the path to `result`.
     /// The timestamp is just needed for the recursion.
-    pub(super) fn unpack_at<'g>(&self, t: Timestamp, shortcut_graph: &'g impl ShortcutGraphTrt<'g>, result: &mut Vec<(EdgeId, Timestamp)>) {
+    pub(super) fn unpack_at(&self, t: Timestamp, shortcut_graph: &impl ShortcutGraphTrt, result: &mut Vec<(EdgeId, Timestamp)>) {
         match *self {
             ShortcutSource::Shortcut(down, up) => {
                 shortcut_graph.unpack_at(ShortcutId::Incoming(down), t, result);
@@ -109,7 +109,7 @@ impl ShortcutSource {
         &self,
         start: Timestamp,
         end: Timestamp,
-        shortcut_graph: &'g impl ShortcutGraphTrt<'g>,
+        shortcut_graph: &impl ShortcutGraphTrt,
         target: &mut MutTopPLF,
         tmp: &mut ReusablePLFStorage,
     ) {
@@ -168,11 +168,11 @@ impl ShortcutSource {
         }
     }
 
-    pub(super) fn partial_lower_bound<'g>(
+    pub(super) fn partial_lower_bound(
         &self,
         start: Timestamp,
         end: Timestamp,
-        shortcut_graph: &'g impl ShortcutGraphTrt<'g, ApproxTTF = ApproxTTF<'g>>,
+        shortcut_graph: &impl ShortcutGraphTrt,
         target: &mut MutTopPLF,
         tmp: &mut ReusablePLFStorage,
     ) {
@@ -182,7 +182,8 @@ impl ShortcutSource {
             ShortcutSource::Shortcut(down, up) => {
                 let mut first_target = tmp.push_plf();
                 shortcut_graph
-                    .ttf(ShortcutId::Incoming(down))
+                    .periodic_ttf(ShortcutId::Incoming(down))
+                    .unwrap()
                     .bound_plfs()
                     .0
                     .append_range(start, end, &mut first_target);
@@ -194,7 +195,8 @@ impl ShortcutSource {
 
                 let mut second_target = first_target.storage_mut().push_plf();
                 shortcut_graph
-                    .ttf(ShortcutId::Outgoing(up))
+                    .periodic_ttf(ShortcutId::Outgoing(up))
+                    .unwrap()
                     .bound_plfs()
                     .0
                     .append_range(second_start, second_end, &mut second_target);
@@ -212,11 +214,11 @@ impl ShortcutSource {
         }
     }
 
-    pub(super) fn partial_upper_bound<'g>(
+    pub(super) fn partial_upper_bound(
         &self,
         start: Timestamp,
         end: Timestamp,
-        shortcut_graph: &'g impl ShortcutGraphTrt<'g, ApproxTTF = ApproxTTF<'g>>,
+        shortcut_graph: &impl ShortcutGraphTrt,
         target: &mut MutTopPLF,
         tmp: &mut ReusablePLFStorage,
     ) {
@@ -226,7 +228,8 @@ impl ShortcutSource {
             ShortcutSource::Shortcut(down, up) => {
                 let mut first_target = tmp.push_plf();
                 shortcut_graph
-                    .ttf(ShortcutId::Incoming(down))
+                    .periodic_ttf(ShortcutId::Incoming(down))
+                    .unwrap()
                     .bound_plfs()
                     .1
                     .append_range(start, end, &mut first_target);
@@ -238,7 +241,8 @@ impl ShortcutSource {
 
                 let mut second_target = first_target.storage_mut().push_plf();
                 shortcut_graph
-                    .ttf(ShortcutId::Outgoing(up))
+                    .periodic_ttf(ShortcutId::Outgoing(up))
+                    .unwrap()
                     .bound_plfs()
                     .1
                     .append_range(second_start, second_end, &mut second_target);
@@ -256,24 +260,22 @@ impl ShortcutSource {
         }
     }
 
-    pub(super) fn partial_lower_bound_from_partial<'g>(
-        &self,
-        start: Timestamp,
-        end: Timestamp,
-        shortcut_graph: &'g impl ShortcutGraphTrt<'g, ApproxTTF = ApproxPartialTTF<'g>>,
-        target: &mut MutTopPLF,
-    ) {
+    pub(super) fn partial_lower_bound_from_partial(&self, start: Timestamp, end: Timestamp, shortcut_graph: &impl ShortcutGraphTrt, target: &mut MutTopPLF) {
         debug_assert!(start.fuzzy_lt(end), "{:?} - {:?}", start, end);
 
         match *self {
             ShortcutSource::Shortcut(down, up) => {
-                let first = shortcut_graph.ttf(ShortcutId::Incoming(down)).bound_plfs().0.sub_plf(start, end);
+                let first = shortcut_graph.partial_ttf(ShortcutId::Incoming(down), start, end).unwrap().bound_plfs().0;
 
                 debug_assert!(!first.last().unwrap().at.fuzzy_lt(end));
                 // for `up` PLF we need to shift the time range
                 let second_start = start + interpolate_linear(&first[0], &first[1], start);
                 let second_end = end + interpolate_linear(&first[first.len() - 2], &first[first.len() - 1], end);
-                let second = shortcut_graph.ttf(ShortcutId::Outgoing(up)).bound_plfs().0.sub_plf(second_start, second_end);
+                let second = shortcut_graph
+                    .partial_ttf(ShortcutId::Outgoing(up), second_start, second_end)
+                    .unwrap()
+                    .bound_plfs()
+                    .0;
 
                 first.link(&second, start, end, target);
             }
@@ -287,24 +289,22 @@ impl ShortcutSource {
         }
     }
 
-    pub(super) fn partial_upper_bound_from_partial<'g>(
-        &self,
-        start: Timestamp,
-        end: Timestamp,
-        shortcut_graph: &'g impl ShortcutGraphTrt<'g, ApproxTTF = ApproxPartialTTF<'g>>,
-        target: &mut MutTopPLF,
-    ) {
+    pub(super) fn partial_upper_bound_from_partial(&self, start: Timestamp, end: Timestamp, shortcut_graph: &impl ShortcutGraphTrt, target: &mut MutTopPLF) {
         debug_assert!(start.fuzzy_lt(end), "{:?} - {:?}", start, end);
 
         match *self {
             ShortcutSource::Shortcut(down, up) => {
-                let first = shortcut_graph.ttf(ShortcutId::Incoming(down)).bound_plfs().1.sub_plf(start, end);
+                let first = shortcut_graph.partial_ttf(ShortcutId::Incoming(down), start, end).unwrap().bound_plfs().1;
 
                 debug_assert!(!first.last().unwrap().at.fuzzy_lt(end));
                 // for `up` PLF we need to shift the time range
                 let second_start = start + interpolate_linear(&first[0], &first[1], start);
                 let second_end = end + interpolate_linear(&first[first.len() - 2], &first[first.len() - 1], end);
-                let second = shortcut_graph.ttf(ShortcutId::Outgoing(up)).bound_plfs().1.sub_plf(second_start, second_end);
+                let second = shortcut_graph
+                    .partial_ttf(ShortcutId::Outgoing(up), second_start, second_end)
+                    .unwrap()
+                    .bound_plfs()
+                    .1;
 
                 first.link(&second, start, end, target);
             }
@@ -327,11 +327,11 @@ impl ShortcutSource {
         }
     }
 
-    pub fn get_switchpoints<'g>(
+    pub fn get_switchpoints(
         &self,
         start: Timestamp,
         end: Timestamp,
-        shortcut_graph: &'g impl ShortcutGraphTrt<'g>,
+        shortcut_graph: &impl ShortcutGraphTrt,
     ) -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight) {
         match *self {
             ShortcutSource::Shortcut(down, up) => {
@@ -459,21 +459,10 @@ impl Default for ShortcutSourceData {
 }
 
 pub trait Sources {
-    fn exact_ttf_for<'g>(
-        &self,
-        start: Timestamp,
-        end: Timestamp,
-        shortcut_graph: &'g impl ShortcutGraphTrt<'g>,
-        target: &mut MutTopPLF,
-        tmp: &mut ReusablePLFStorage,
-    );
+    fn exact_ttf_for(&self, start: Timestamp, end: Timestamp, shortcut_graph: &impl ShortcutGraphTrt, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage);
 
-    fn get_switchpoints<'g>(
-        &self,
-        start: Timestamp,
-        end: Timestamp,
-        shortcut_graph: &'g impl ShortcutGraphTrt<'g>,
-    ) -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight);
+    fn get_switchpoints(&self, start: Timestamp, end: Timestamp, shortcut_graph: &impl ShortcutGraphTrt)
+        -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight);
 
     fn edge_source_at(&self, t: Timestamp) -> Option<&ShortcutSourceData>;
 
@@ -482,14 +471,7 @@ pub trait Sources {
 
 use std::cmp::{max, min};
 impl Sources for [(Timestamp, ShortcutSourceData)] {
-    fn exact_ttf_for<'g>(
-        &self,
-        start: Timestamp,
-        end: Timestamp,
-        shortcut_graph: &'g impl ShortcutGraphTrt<'g>,
-        target: &mut MutTopPLF,
-        tmp: &mut ReusablePLFStorage,
-    ) {
+    fn exact_ttf_for(&self, start: Timestamp, end: Timestamp, shortcut_graph: &impl ShortcutGraphTrt, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
         // when we have multiple source, we need to do unpacking (and append the results) for all sources which are relevant for the given time range.
         let mut c = SourceCursor::valid_at(self, start);
         while c.cur().0.fuzzy_lt(end) {
@@ -513,11 +495,11 @@ impl Sources for [(Timestamp, ShortcutSourceData)] {
         debug_assert!(!target.last().unwrap().at.fuzzy_lt(end), "{:?}", dbg_each!(self, start, end));
     }
 
-    fn get_switchpoints<'g>(
+    fn get_switchpoints(
         &self,
         start: Timestamp,
         end: Timestamp,
-        shortcut_graph: &'g impl ShortcutGraphTrt<'g>,
+        shortcut_graph: &impl ShortcutGraphTrt,
     ) -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight) {
         let mut c = SourceCursor::valid_at(self, start);
 

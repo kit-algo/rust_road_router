@@ -587,6 +587,15 @@ where
     }
 }
 
+impl<'a> From<ApproxTTF<'a>> for ApproxPartialTTF<'a> {
+    fn from(ttf: ApproxTTF<'a>) -> Self {
+        match ttf {
+            ApproxTTF::Exact(plf) => ApproxPartialTTF::Exact(plf.into()),
+            ApproxTTF::Approx(lower_plf, upper_plf) => ApproxPartialTTF::Approx(lower_plf.into(), upper_plf.into()),
+        }
+    }
+}
+
 impl<'a> ApproxPartialTTF<'a> {
     pub fn exact(&self) -> bool {
         use ApproxPartialTTF::*;
@@ -1109,6 +1118,13 @@ impl<'a> ApproxPartialTTF<'a> {
         match self {
             Exact(plf) => (*plf, *plf),
             Approx(lower_plf, upper_plf) => (*lower_plf, *upper_plf),
+        }
+    }
+
+    pub fn sub_ttf(&self, start: Timestamp, end: Timestamp) -> Self {
+        match self {
+            Self::Exact(plf) => Self::Exact(plf.sub_plf(start, end)),
+            Self::Approx(lower, upper) => Self::Approx(lower.sub_plf(start, end), upper.sub_plf(start, end)),
         }
     }
 }

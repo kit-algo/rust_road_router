@@ -78,12 +78,7 @@ impl Shortcut {
 
     /// Merge this Shortcut with the lower triangle made up of the two EdgeIds (first down, then up).
     /// The `shortcut_graph` has to contain all the edges we may need to unpack.
-    pub fn merge<'g>(
-        &mut self,
-        linked_ids: (EdgeId, EdgeId),
-        shortcut_graph: &'g impl ShortcutGraphTrt<'g, ApproxTTF = ApproxTTF<'g>, OriginalGraph = TDGraph>,
-        buffers: &mut MergeBuffers,
-    ) {
+    pub fn merge(&mut self, linked_ids: (EdgeId, EdgeId), shortcut_graph: &impl ShortcutGraphTrt<OriginalGraph = TDGraph>, buffers: &mut MergeBuffers) {
         // We already know, we won't need this edge, so do nothing
         if !self.required {
             return;
@@ -115,8 +110,8 @@ impl Shortcut {
             }
 
             // get cached (possibly approximated) TTFs
-            let first_plf = shortcut_graph.ttf(ShortcutId::Incoming(linked_ids.0));
-            let second_plf = shortcut_graph.ttf(ShortcutId::Outgoing(linked_ids.1));
+            let first_plf = shortcut_graph.periodic_ttf(ShortcutId::Incoming(linked_ids.0)).unwrap();
+            let second_plf = shortcut_graph.periodic_ttf(ShortcutId::Outgoing(linked_ids.1)).unwrap();
 
             // when the current shortcut is always infinity, the linked paths will always be better.
             if !self.is_valid_path() {
@@ -139,7 +134,7 @@ impl Shortcut {
             }
 
             // get own cached TTF
-            let self_plf = self.travel_time_function(shortcut_graph);
+            let self_plf = self.periodic_ttf(shortcut_graph).unwrap();
 
             // link TTFs in triangle
             let linked_ipps = first_plf.link(&second_plf);
@@ -243,18 +238,32 @@ impl Shortcut {
         }
     }
 
-    pub fn travel_time_function<'s, 'g: 's>(&'s self, shortcut_graph: &'g impl ShortcutGraphTrt<'g, OriginalGraph = TDGraph>) -> ApproxTTF<'s> {
+    pub fn periodic_ttf<'s, 'g: 's>(&'s self, shortcut_graph: &'g impl ShortcutGraphTrt<OriginalGraph = TDGraph>) -> Option<ApproxTTF<'s>> {
         if let Some(cache) = &self.cache {
-            return cache.into();
+            return Some(cache.into());
         }
 
         match self.sources {
             Sources::One(source) => match source.into() {
-                ShortcutSource::OriginalEdge(id) => ApproxTTF::Exact(shortcut_graph.original_graph().travel_time_function(id)),
-                _ => panic!("invalid state of shortcut: ipps must be cached when shortcut not trivial {:?}", self),
+                ShortcutSource::OriginalEdge(id) => return Some(ApproxTTF::Exact(shortcut_graph.original_graph().travel_time_function(id))),
+                _ => (),
             },
-            _ => panic!("invalid state of shortcut: ipps must be cached when shortcut not trivial {:?}", self),
+            _ => (),
         }
+
+        None
+    }
+
+    pub fn partial_ttf<'s, 'g: 's>(
+        &'s self,
+        shortcut_graph: &'g impl ShortcutGraphTrt<OriginalGraph = TDGraph>,
+        start: Timestamp,
+        end: Timestamp,
+    ) -> Option<ApproxPartialTTF<'s>> {
+        if start < Timestamp::zero() || end > period() {
+            return None;
+        }
+        self.periodic_ttf(shortcut_graph).map(|ttf| ApproxPartialTTF::from(ttf).sub_ttf(start, end))
     }
 
     pub fn is_valid_path(&self) -> bool {
@@ -266,7 +275,7 @@ impl Shortcut {
 
     /// Once the TTF of this Shortcut is final, we can tighten the lower bound.
     /// When we know or detect, that we don't need this shortcut, we set all bounds to infinity.
-    pub fn finalize_bounds<'g>(&mut self, shortcut_graph: &'g impl ShortcutGraphTrt<'g, OriginalGraph = TDGraph>) {
+    pub fn finalize_bounds(&mut self, shortcut_graph: &impl ShortcutGraphTrt<OriginalGraph = TDGraph>) {
         if !self.required {
             return;
         }
@@ -279,9 +288,9 @@ impl Shortcut {
         }
 
         let new_lower_bound = if cfg!(feature = "tdcch-precustomization") {
-            max(self.lower_bound, self.travel_time_function(shortcut_graph).static_lower_bound())
+            max(self.lower_bound, self.periodic_ttf(shortcut_graph).unwrap().static_lower_bound())
         } else {
-            self.travel_time_function(shortcut_graph).static_lower_bound()
+            self.periodic_ttf(shortcut_graph).unwrap().static_lower_bound()
         };
 
         // The final functions lower bound is worse than the upper bound this shortcut got during pre/post/perfect customization
@@ -305,13 +314,13 @@ impl Shortcut {
 
         // upper bound was already set as tight as possible during merging.
         debug_assert!(
-            self.upper_bound.fuzzy_leq(self.travel_time_function(shortcut_graph).static_upper_bound()),
+            self.upper_bound.fuzzy_leq(self.periodic_ttf(shortcut_graph).unwrap().static_upper_bound()),
             "{:#?}",
             (
                 self.lower_bound,
                 self.upper_bound,
                 &self.sources,
-                self.travel_time_function(shortcut_graph).static_upper_bound()
+                self.periodic_ttf(shortcut_graph).unwrap().static_upper_bound()
             )
         );
     }
@@ -490,11 +499,11 @@ impl Shortcut {
     // Use two `ReusablePLFStorage`s to reduce allocations.
     // One storage will contain the functions for each source - the other the complete resulting function.
     // That means when fetching the functions for each source, we need to use the two storages with flipped roles.
-    pub fn exact_ttf_for<'g>(
+    pub fn exact_ttf_for(
         &self,
         start: Timestamp,
         end: Timestamp,
-        shortcut_graph: &'g impl ShortcutGraphTrt<'g>,
+        shortcut_graph: &impl ShortcutGraphTrt,
         target: &mut MutTopPLF,
         tmp: &mut ReusablePLFStorage,
     ) {
@@ -538,11 +547,11 @@ impl Shortcut {
         self.constant
     }
 
-    pub fn get_switchpoints<'g>(
+    pub fn get_switchpoints(
         &self,
         start: Timestamp,
         end: Timestamp,
-        shortcut_graph: &'g impl ShortcutGraphTrt<'g>,
+        shortcut_graph: &impl ShortcutGraphTrt,
     ) -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight) {
         match &self.sources {
             Sources::None => unreachable!("There are no TTFs for empty shortcuts"),
@@ -551,7 +560,7 @@ impl Shortcut {
         }
     }
 
-    pub fn unpack_at<'g>(&self, t: Timestamp, shortcut_graph: &'g impl ShortcutGraphTrt<'g>, result: &mut Vec<(EdgeId, Timestamp)>) {
+    pub fn unpack_at(&self, t: Timestamp, shortcut_graph: &impl ShortcutGraphTrt, result: &mut Vec<(EdgeId, Timestamp)>) {
         ShortcutSource::from(*match &self.sources {
             Sources::None => unreachable!("There are no paths for empty shortcuts"),
             Sources::One(source) => source,
@@ -560,7 +569,7 @@ impl Shortcut {
         .unpack_at(t, shortcut_graph, result)
     }
 
-    pub fn evaluate<'g>(&self, t: Timestamp, shortcut_graph: &'g impl ShortcutGraphTrt<'g>) -> FlWeight {
+    pub fn evaluate(&self, t: Timestamp, shortcut_graph: &impl ShortcutGraphTrt) -> FlWeight {
         if self.constant {
             return self.lower_bound;
         }

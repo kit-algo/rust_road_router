@@ -60,10 +60,10 @@ impl LiveShortcut {
         }
     }
 
-    pub fn reconstruct_cache<'g>(
+    pub fn reconstruct_cache(
         &mut self,
         pred_shortcut: &Shortcut,
-        shortcut_graph: &'g impl ShortcutGraphTrt<'g, OriginalGraph = LiveGraph, ApproxTTF = ApproxPartialTTF<'g>>,
+        shortcut_graph: &impl ShortcutGraphTrt<OriginalGraph = LiveGraph>,
         buffers: &mut MergeBuffers,
     ) {
         // We already know, we won't need this edge, so do nothing
@@ -79,17 +79,18 @@ impl LiveShortcut {
             .sources_for(unpack_start, unpack_end)
             .all(|(_, source)| match ShortcutSource::from(source) {
                 ShortcutSource::Shortcut(down, up) => {
-                    shortcut_graph.ttf(ShortcutId::Incoming(down)).exact() && shortcut_graph.ttf(ShortcutId::Outgoing(up)).exact()
+                    shortcut_graph.partial_ttf(ShortcutId::Incoming(down), todo!(), todo!()).unwrap().exact()
+                        && shortcut_graph.partial_ttf(ShortcutId::Outgoing(up), todo!(), todo!()).unwrap().exact()
                 }
                 _ => true,
             });
 
-        if exact_ttfs_available && (!live || self.travel_time_function(shortcut_graph).exact()) {
+        if exact_ttfs_available && (!live || self.live_ttf(shortcut_graph).unwrap().exact()) {
             let mut target = buffers.unpacking_target.push_plf();
             pred_shortcut.exact_ttf_for(unpack_start, unpack_end, shortcut_graph, &mut target, &mut buffers.unpacking_tmp);
             if live {
                 let mut sub_target = buffers.unpacking_tmp.push_plf();
-                if let ApproxPartialTTF::Exact(plf) = self.travel_time_function(shortcut_graph) {
+                if let Some(ApproxPartialTTF::Exact(plf)) = self.live_ttf(shortcut_graph) {
                     plf.append(shortcut_graph.original_graph().t_live(), &mut sub_target);
                 } else {
                     unreachable!()
@@ -115,7 +116,8 @@ impl LiveShortcut {
         let mut target = buffers.unpacking_target.push_plf();
 
         if live {
-            self.travel_time_function(shortcut_graph)
+            self.live_ttf(shortcut_graph)
+                .unwrap()
                 .bound_plfs()
                 .0
                 .append(shortcut_graph.original_graph().t_live(), &mut target);
@@ -139,7 +141,8 @@ impl LiveShortcut {
         let mut target = buffers.unpacking_target.push_plf();
 
         if live {
-            self.travel_time_function(shortcut_graph)
+            self.live_ttf(shortcut_graph)
+                .unwrap()
                 .bound_plfs()
                 .1
                 .append(shortcut_graph.original_graph().t_live(), &mut target);
@@ -164,12 +167,7 @@ impl LiveShortcut {
 
     /// Merge this LiveShortcut with the lower triangle made up of the two EdgeIds (first down, then up).
     /// The `shortcut_graph` has to contain all the edges we may need to unpack.
-    pub fn merge<'g>(
-        &mut self,
-        linked_ids: (EdgeId, EdgeId),
-        shortcut_graph: &'g impl ShortcutGraphTrt<'g, OriginalGraph = LiveGraph, ApproxTTF = ApproxPartialTTF<'g>>,
-        buffers: &mut MergeBuffers,
-    ) {
+    pub fn merge(&mut self, linked_ids: (EdgeId, EdgeId), shortcut_graph: &impl ShortcutGraphTrt<OriginalGraph = LiveGraph>, buffers: &mut MergeBuffers) {
         // We already know, we won't need this edge, so do nothing
         if !self.required {
             return;
@@ -204,8 +202,8 @@ impl LiveShortcut {
             }
 
             // get cached (possibly approximated) TTFs
-            let first_plf = shortcut_graph.ttf(ShortcutId::Incoming(linked_ids.0));
-            let second_plf = shortcut_graph.ttf(ShortcutId::Outgoing(linked_ids.1));
+            let first_plf = shortcut_graph.partial_ttf(ShortcutId::Incoming(linked_ids.0), todo!(), todo!()).unwrap();
+            let second_plf = shortcut_graph.partial_ttf(ShortcutId::Outgoing(linked_ids.1), todo!(), todo!()).unwrap();
 
             // when the current shortcut is always infinity, the linked paths will always be better.
             if !self.is_valid_path() {
@@ -228,7 +226,7 @@ impl LiveShortcut {
             }
 
             // get own cached TTF
-            let self_plf = self.travel_time_function(shortcut_graph);
+            let self_plf = self.live_ttf(shortcut_graph).unwrap();
 
             // link TTFs in triangle
             let linked_ipps = first_plf.link(&second_plf, live_from, live_until);
@@ -332,39 +330,26 @@ impl LiveShortcut {
         }
     }
 
-    pub fn travel_time_function<'s, 'g: 's>(&'s self, shortcut_graph: &'g impl ShortcutGraphTrt<'g, OriginalGraph = LiveGraph>) -> ApproxPartialTTF<'s> {
-        if let Some(cache) = &self.cache {
-            return cache.into();
-        }
-
-        match self.sources {
-            Sources::One(source) => match source.into() {
-                ShortcutSource::OriginalEdge(id) => ApproxPartialTTF::Exact(
-                    shortcut_graph.original_graph().travel_time_function(id).update_plf().unwrap_or(
-                        PartialPiecewiseLinearFunction::from(shortcut_graph.original_graph().travel_time_function(id).unmodified_plf())
-                            .sub_plf(shortcut_graph.original_graph().t_live(), self.live_until.unwrap()),
-                    ),
-                ),
-                _ => panic!("invalid state of shortcut: ipps must be cached when shortcut not trivial {:?}", self),
-            },
-            _ => panic!("invalid state of shortcut: ipps must be cached when shortcut not trivial {:?}", self),
-        }
+    fn live_ttf<'s, 'g: 's>(&'s self, shortcut_graph: &'g impl ShortcutGraphTrt<OriginalGraph = LiveGraph>) -> Option<ApproxPartialTTF<'s>> {
+        self.partial_ttf(shortcut_graph, shortcut_graph.original_graph().t_live(), self.live_until.unwrap())
     }
 
-    fn get_travel_time_function<'s, 'g: 's>(
+    pub fn partial_ttf<'s, 'g: 's>(
         &'s self,
-        shortcut_graph: &'g impl ShortcutGraphTrt<'g, OriginalGraph = LiveGraph>,
+        shortcut_graph: &'g impl ShortcutGraphTrt<OriginalGraph = LiveGraph>,
+        start: Timestamp,
+        end: Timestamp,
     ) -> Option<ApproxPartialTTF<'s>> {
         if let Some(cache) = &self.cache {
-            return Some(cache.into());
+            return Some(ApproxPartialTTF::from(cache).sub_ttf(start, end));
         }
 
         match self.sources {
             Sources::One(source) => match source.into() {
+                // TODO get correct times
                 ShortcutSource::OriginalEdge(id) => Some(ApproxPartialTTF::Exact(
                     shortcut_graph.original_graph().travel_time_function(id).update_plf().unwrap_or(
-                        PartialPiecewiseLinearFunction::from(shortcut_graph.original_graph().travel_time_function(id).unmodified_plf())
-                            .sub_plf(shortcut_graph.original_graph().t_live(), self.live_until.unwrap()),
+                        PartialPiecewiseLinearFunction::from(shortcut_graph.original_graph().travel_time_function(id).unmodified_plf()).sub_plf(start, end),
                     ),
                 )),
                 _ => None,
@@ -382,13 +367,13 @@ impl LiveShortcut {
 
     /// Once the TTF of this Shortcut is final, we can tighten the lower bound.
     /// When we know or detect, that we don't need this shortcut, we set all bounds to infinity.
-    pub fn finalize_bounds<'g>(&mut self, shortcut_graph: &'g impl ShortcutGraphTrt<'g, OriginalGraph = LiveGraph>) {
+    pub fn finalize_bounds(&mut self, shortcut_graph: &impl ShortcutGraphTrt<OriginalGraph = LiveGraph>) {
         if !self.required {
             return;
         }
 
         if let Some(ttf_until) = max(self.unpack, self.live_until) {
-            let (lower, upper) = self.travel_time_function(shortcut_graph).bound_plfs();
+            let (lower, upper) = self.live_ttf(shortcut_graph).unwrap().bound_plfs();
             debug_assert!(!lower.last().unwrap().at.fuzzy_lt(ttf_until));
             debug_assert!(!upper.last().unwrap().at.fuzzy_lt(ttf_until));
         } else {
@@ -403,9 +388,9 @@ impl LiveShortcut {
         }
 
         let new_lower_bound = if cfg!(feature = "tdcch-precustomization") {
-            max(self.lower_bound, self.travel_time_function(shortcut_graph).static_lower_bound())
+            max(self.lower_bound, self.live_ttf(shortcut_graph).unwrap().static_lower_bound())
         } else {
-            self.travel_time_function(shortcut_graph).static_lower_bound()
+            self.live_ttf(shortcut_graph).unwrap().static_lower_bound()
         };
 
         // The final functions lower bound is worse than the upper bound this shortcut got during pre/post/perfect customization
@@ -427,7 +412,7 @@ impl LiveShortcut {
         debug_assert!(!self.upper_bound.fuzzy_lt(new_lower_bound), "{:?}, {:?}", new_lower_bound, self);
         self.lower_bound = new_lower_bound;
 
-        let new_upper_bound = min(self.upper_bound, self.travel_time_function(shortcut_graph).static_upper_bound());
+        let new_upper_bound = min(self.upper_bound, self.live_ttf(shortcut_graph).unwrap().static_upper_bound());
         debug_assert!(!new_upper_bound.fuzzy_lt(self.lower_bound), "{:?}, {:?}", new_upper_bound, self);
         self.upper_bound = new_upper_bound;
     }
@@ -606,11 +591,11 @@ impl LiveShortcut {
     // Use two `ReusablePLFStorage`s to reduce allocations.
     // One storage will contain the functions for each source - the other the complete resulting function.
     // That means when fetching the functions for each source, we need to use the two storages with flipped roles.
-    pub fn exact_ttf_for<'g>(
+    pub fn exact_ttf_for(
         &self,
         start: Timestamp,
         end: Timestamp,
-        shortcut_graph: &'g impl ShortcutGraphTrt<'g, OriginalGraph = LiveGraph>,
+        shortcut_graph: &impl ShortcutGraphTrt<OriginalGraph = LiveGraph>,
         target: &mut MutTopPLF,
         tmp: &mut ReusablePLFStorage,
     ) {
@@ -628,7 +613,8 @@ impl LiveShortcut {
             return;
         }
 
-        if let Some(ApproxPartialTTF::Exact(ttf)) = self.get_travel_time_function(shortcut_graph) {
+        // TODO why exactly do we need this
+        if let Some(ApproxPartialTTF::Exact(ttf)) = self.live_ttf(shortcut_graph) {
             if self.unpack.map(|u| !u.fuzzy_lt(end)).unwrap_or(false) || self.live_until.map(|l| !l.fuzzy_lt(end)).unwrap_or(false) {
                 ttf.sub_plf(start, end).append(start, target);
                 return;
@@ -660,11 +646,11 @@ impl LiveShortcut {
         self.constant
     }
 
-    pub fn get_switchpoints<'g>(
+    pub fn get_switchpoints(
         &self,
         start: Timestamp,
         end: Timestamp,
-        shortcut_graph: &'g impl ShortcutGraphTrt<'g>,
+        shortcut_graph: &impl ShortcutGraphTrt,
     ) -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight) {
         match &self.sources {
             Sources::None => unreachable!("There are no TTFs for empty shortcuts"),
@@ -673,7 +659,7 @@ impl LiveShortcut {
         }
     }
 
-    pub fn unpack_at<'g>(&self, t: Timestamp, shortcut_graph: &'g impl ShortcutGraphTrt<'g>, result: &mut Vec<(EdgeId, Timestamp)>) {
+    pub fn unpack_at(&self, t: Timestamp, shortcut_graph: &impl ShortcutGraphTrt, result: &mut Vec<(EdgeId, Timestamp)>) {
         ShortcutSource::from(*match &self.sources {
             Sources::None => unreachable!("There are no paths for empty shortcuts"),
             Sources::One(source) => source,
@@ -682,7 +668,7 @@ impl LiveShortcut {
         .unpack_at(t, shortcut_graph, result)
     }
 
-    pub fn evaluate<'g>(&self, t: Timestamp, shortcut_graph: &'g impl ShortcutGraphTrt<'g>) -> FlWeight {
+    pub fn evaluate(&self, t: Timestamp, shortcut_graph: &impl ShortcutGraphTrt) -> FlWeight {
         if self.constant {
             return self.lower_bound;
         }

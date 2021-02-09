@@ -352,7 +352,7 @@ impl<'a> Server<'a> {
             shortcut.set_cache(reconstruction_graph.take_cache(ShortcutId::Outgoing(edge_id)));
             shortcut.upper_bound = min(
                 shortcut.upper_bound,
-                shortcut.travel_time_function(&reconstruction_graph.as_reconstructed()).static_upper_bound(),
+                shortcut.periodic_ttf(&reconstruction_graph.as_reconstructed()).unwrap().static_upper_bound(),
             );
         }
 
@@ -366,7 +366,7 @@ impl<'a> Server<'a> {
             shortcut.set_cache(reconstruction_graph.take_cache(ShortcutId::Incoming(edge_id)));
             shortcut.upper_bound = min(
                 shortcut.upper_bound,
-                shortcut.travel_time_function(&reconstruction_graph.as_reconstructed()).static_upper_bound(),
+                shortcut.periodic_ttf(&reconstruction_graph.as_reconstructed()).unwrap().static_upper_bound(),
             );
         }
 

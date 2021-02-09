@@ -14,11 +14,11 @@ pub enum ShortcutId {
     Incoming(EdgeId),
 }
 
-pub trait ShortcutGraphTrt<'a> {
-    type ApproxTTF;
+pub trait ShortcutGraphTrt {
     type OriginalGraph: for<'g> TDGraphTrait<'g>;
 
-    fn ttf(&'a self, shortcut_id: ShortcutId) -> Self::ApproxTTF;
+    fn periodic_ttf(&self, shortcut_id: ShortcutId) -> Option<ApproxTTF>;
+    fn partial_ttf(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> Option<ApproxPartialTTF>;
     fn is_valid_path(&self, shortcut_id: ShortcutId) -> bool;
     fn lower_bound(&self, shortcut_id: ShortcutId) -> FlWeight;
     fn upper_bound(&self, shortcut_id: ShortcutId) -> FlWeight;
@@ -68,12 +68,14 @@ impl<'a> PartialShortcutGraph<'a> {
     }
 }
 
-impl<'a> ShortcutGraphTrt<'a> for PartialShortcutGraph<'a> {
-    type ApproxTTF = ApproxTTF<'a>;
+impl<'a> ShortcutGraphTrt for PartialShortcutGraph<'a> {
     type OriginalGraph = TDGraph;
 
-    fn ttf(&'a self, shortcut_id: ShortcutId) -> Self::ApproxTTF {
-        self.get(shortcut_id).travel_time_function(self)
+    fn periodic_ttf(&self, shortcut_id: ShortcutId) -> Option<ApproxTTF> {
+        self.get(shortcut_id).periodic_ttf(self)
+    }
+    fn partial_ttf(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> Option<ApproxPartialTTF> {
+        self.get(shortcut_id).partial_ttf(self, start, end)
     }
     fn is_valid_path(&self, shortcut_id: ShortcutId) -> bool {
         self.get(shortcut_id).is_valid_path()
@@ -161,12 +163,14 @@ impl<'a> PartialLiveShortcutGraph<'a> {
     }
 }
 
-impl<'a> ShortcutGraphTrt<'a> for PartialLiveShortcutGraph<'a> {
-    type ApproxTTF = ApproxPartialTTF<'a>;
+impl<'a> ShortcutGraphTrt for PartialLiveShortcutGraph<'a> {
     type OriginalGraph = LiveGraph;
 
-    fn ttf(&'a self, shortcut_id: ShortcutId) -> Self::ApproxTTF {
-        self.get_live(shortcut_id).travel_time_function(self)
+    fn periodic_ttf(&self, _: ShortcutId) -> Option<ApproxTTF> {
+        None
+    }
+    fn partial_ttf(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> Option<ApproxPartialTTF> {
+        self.get_live(shortcut_id).partial_ttf(self, start, end)
     }
     fn is_valid_path(&self, shortcut_id: ShortcutId) -> bool {
         self.get_live(shortcut_id).is_valid_path()
@@ -720,12 +724,14 @@ impl CustomizedSingleDirGraph {
     }
 }
 
-impl<'a> ShortcutGraphTrt<'a> for CustomizedGraph<'a> {
-    type ApproxTTF = ();
+impl<'a> ShortcutGraphTrt for CustomizedGraph<'a> {
     type OriginalGraph = TDGraph;
 
-    fn ttf(&self, _: ShortcutId) -> Self::ApproxTTF {
-        ()
+    fn periodic_ttf(&self, _: ShortcutId) -> Option<ApproxTTF> {
+        None
+    }
+    fn partial_ttf(&self, _: ShortcutId, _start: Timestamp, _end: Timestamp) -> Option<ApproxPartialTTF> {
+        None
     }
     fn is_valid_path(&self, _: ShortcutId) -> bool {
         true
@@ -870,7 +876,7 @@ impl<'a> ReconstructionGraph<'a> {
     }
 
     pub fn cache_recursive(&mut self, shortcut_id: ShortcutId, buffers: &mut MergeBuffers) {
-        if self.as_reconstructed().get_ttf(shortcut_id).is_some() {
+        if self.as_reconstructed().periodic_ttf(shortcut_id).is_some() {
             return;
         }
 
@@ -910,7 +916,8 @@ impl<'a> ReconstructionGraph<'a> {
     }
 
     pub fn clear_recursive(&mut self, shortcut_id: ShortcutId) {
-        if self.as_reconstructed().get_ttf(shortcut_id).is_none() {
+        if self.as_reconstructed().periodic_ttf(shortcut_id).is_none() {
+            // TODO weird recursion stop condition
             return;
         }
         let (dir_graph, edge_id) = match shortcut_id {
@@ -953,7 +960,28 @@ pub struct ReconstructedGraph<'a> {
 }
 
 impl<'a> ReconstructedGraph<'a> {
-    fn get_ttf(&self, shortcut_id: ShortcutId) -> Option<ApproxTTF> {
+    fn all_sources_exact(&self, shortcut_id: ShortcutId) -> bool {
+        let (dir_graph, edge_id) = match shortcut_id {
+            ShortcutId::Incoming(id) => (&self.customized_graph.incoming, id),
+            ShortcutId::Outgoing(id) => (&self.customized_graph.outgoing, id),
+        };
+
+        dir_graph
+            .edge_sources(edge_id as usize)
+            .iter()
+            .all(|(_, source)| match ShortcutSource::from(*source) {
+                ShortcutSource::Shortcut(down, up) => {
+                    self.periodic_ttf(ShortcutId::Incoming(down)).unwrap().exact() && self.periodic_ttf(ShortcutId::Outgoing(up)).unwrap().exact()
+                }
+                _ => true,
+            })
+    }
+}
+
+impl<'a> ShortcutGraphTrt for ReconstructedGraph<'a> {
+    type OriginalGraph = TDGraph;
+
+    fn periodic_ttf(&self, shortcut_id: ShortcutId) -> Option<ApproxTTF> {
         let cache = match shortcut_id {
             ShortcutId::Incoming(id) => &self.incoming_cache[id as usize],
             ShortcutId::Outgoing(id) => &self.outgoing_cache[id as usize],
@@ -976,30 +1004,8 @@ impl<'a> ReconstructedGraph<'a> {
             _ => None,
         }
     }
-
-    fn all_sources_exact(&self, shortcut_id: ShortcutId) -> bool {
-        let (dir_graph, edge_id) = match shortcut_id {
-            ShortcutId::Incoming(id) => (&self.customized_graph.incoming, id),
-            ShortcutId::Outgoing(id) => (&self.customized_graph.outgoing, id),
-        };
-
-        dir_graph
-            .edge_sources(edge_id as usize)
-            .iter()
-            .all(|(_, source)| match ShortcutSource::from(*source) {
-                ShortcutSource::Shortcut(down, up) => self.ttf(ShortcutId::Incoming(down)).exact() && self.ttf(ShortcutId::Outgoing(up)).exact(),
-                _ => true,
-            })
-    }
-}
-
-impl<'a> ShortcutGraphTrt<'a> for ReconstructedGraph<'a> {
-    type ApproxTTF = ApproxTTF<'a>;
-    type OriginalGraph = TDGraph;
-
-    fn ttf(&'a self, shortcut_id: ShortcutId) -> Self::ApproxTTF {
-        self.get_ttf(shortcut_id)
-            .expect("invalid state of shortcut: ipps must be cached when shortcut not trivial")
+    fn partial_ttf(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> Option<ApproxPartialTTF> {
+        todo!()
     }
     fn is_valid_path(&self, _shortcut_id: ShortcutId) -> bool {
         true
@@ -1042,7 +1048,7 @@ impl<'a> ShortcutGraphTrt<'a> for ReconstructedGraph<'a> {
             });
             return;
         }
-        if let Some(ApproxTTF::Exact(ttf)) = self.get_ttf(shortcut_id) {
+        if let Some(ApproxTTF::Exact(ttf)) = self.periodic_ttf(shortcut_id) {
             ttf.append_range(start, end, target);
         } else {
             match dir_graph.edge_sources(edge_id as usize) {
@@ -1101,15 +1107,20 @@ impl<'a> ProfileGraphWrapper<'a> {
     }
 }
 
-impl<'a> ShortcutGraphTrt<'a> for ProfileGraphWrapper<'a> {
-    type ApproxTTF = ApproxTTF<'a>;
+impl<'a> ShortcutGraphTrt for ProfileGraphWrapper<'a> {
     type OriginalGraph = TDGraph;
 
-    fn ttf(&'a self, shortcut_id: ShortcutId) -> Self::ApproxTTF {
+    fn periodic_ttf(&self, shortcut_id: ShortcutId) -> Option<ApproxTTF> {
         if self.delegate(shortcut_id) {
-            return self.profile_graph.ttf(shortcut_id);
+            return self.profile_graph.periodic_ttf(shortcut_id);
         }
-        self.get(shortcut_id).travel_time_function(self)
+        self.get(shortcut_id).periodic_ttf(self)
+    }
+    fn partial_ttf(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> Option<ApproxPartialTTF> {
+        if self.delegate(shortcut_id) {
+            return self.profile_graph.partial_ttf(shortcut_id, start, end);
+        }
+        self.get(shortcut_id).partial_ttf(self, start, end)
     }
     fn is_valid_path(&self, _shortcut_id: ShortcutId) -> bool {
         true
