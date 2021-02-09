@@ -118,11 +118,28 @@ impl ShortcutSource {
         match *self {
             ShortcutSource::Shortcut(down, up) => {
                 let mut first_target = tmp.push_plf();
-                shortcut_graph.reconstruct_exact_ttf(ShortcutId::Incoming(down), start, end, &mut first_target, target.storage_mut());
-                debug_assert!(!first_target.last().unwrap().at.fuzzy_lt(end));
+
+                let partial_first = if let Some(ApproxPartialTTF::Exact(plf)) = shortcut_graph.partial_ttf(ShortcutId::Incoming(down), start, end) {
+                    Some(plf)
+                } else {
+                    None
+                };
+
+                let first = if let Some(partial_plf) = &partial_first {
+                    &partial_plf[..]
+                } else {
+                    if let Some(ApproxTTF::Exact(plf)) = shortcut_graph.periodic_ttf(ShortcutId::Incoming(down)) {
+                        plf.append_range(start, end, &mut first_target)
+                    } else {
+                        shortcut_graph.reconstruct_exact_ttf(ShortcutId::Incoming(down), start, end, &mut first_target, target.storage_mut());
+                    }
+                    &first_target[..]
+                };
+
+                debug_assert!(!first.last().unwrap().at.fuzzy_lt(end));
                 // for `up` PLF we need to shift the time range
-                let second_start = start + interpolate_linear(&first_target[0], &first_target[1], start);
-                let second_end = end + interpolate_linear(&first_target[first_target.len() - 2], &first_target[first_target.len() - 1], end);
+                let second_start = start + interpolate_linear(&first[0], &first[1], start);
+                let second_end = end + interpolate_linear(&first[first.len() - 2], &first[first.len() - 1], end);
 
                 if second_start.fuzzy_eq(second_end) {
                     debug_assert_eq!(first_target.len(), 2);
@@ -135,10 +152,20 @@ impl ShortcutSource {
                     }
                 } else {
                     let mut second_target = first_target.storage_mut().push_plf();
-                    shortcut_graph.reconstruct_exact_ttf(ShortcutId::Outgoing(up), second_start, second_end, &mut second_target, target.storage_mut());
+                    let second = if let Some(ApproxPartialTTF::Exact(plf)) = shortcut_graph.partial_ttf(ShortcutId::Outgoing(up), second_start, second_end) {
+                        plf
+                    } else {
+                        if let Some(ApproxTTF::Exact(plf)) = shortcut_graph.periodic_ttf(ShortcutId::Outgoing(up)) {
+                            plf.append_range(second_start, second_end, &mut second_target)
+                        } else {
+                            shortcut_graph.reconstruct_exact_ttf(ShortcutId::Outgoing(up), second_start, second_end, &mut second_target, target.storage_mut());
+                        }
+                        PartialPiecewiseLinearFunction::new(&second_target[..])
+                    };
 
-                    let (first, second) = second_target.storage().top_plfs();
-                    PartialPiecewiseLinearFunction::new(first).link(&PartialPiecewiseLinearFunction::new(second), start, end, target);
+                    let first = partial_first.unwrap_or(PartialPiecewiseLinearFunction::new(second_target.storage().top_plfs().0));
+
+                    first.link(&second, start, end, target);
 
                     debug_assert!(
                         !target.last().unwrap().at.fuzzy_lt(end),
