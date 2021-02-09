@@ -136,7 +136,7 @@ impl ShortcutSource {
                     &first_target[..]
                 };
 
-                debug_assert!(!first.last().unwrap().at.fuzzy_lt(end));
+                debug_assert!(!first.last().unwrap().at.fuzzy_lt(end), "{:#?}", (start, end, &first[..]));
                 // for `up` PLF we need to shift the time range
                 let second_start = start + interpolate_linear(&first[0], &first[1], start);
                 let second_end = end + interpolate_linear(&first[first.len() - 2], &first[first.len() - 1], end);
@@ -163,7 +163,7 @@ impl ShortcutSource {
                         PartialPiecewiseLinearFunction::new(&second_target[..])
                     };
 
-                    let first = partial_first.unwrap_or(PartialPiecewiseLinearFunction::new(second_target.storage().top_plfs().0));
+                    let first = partial_first.unwrap_or_else(|| PartialPiecewiseLinearFunction::new(second_target.storage().top_plfs().0));
 
                     first.link(&second, start, end, target);
 
@@ -242,7 +242,7 @@ impl ShortcutSource {
                     PartialPiecewiseLinearFunction::new(&second_target[..])
                 };
 
-                let first = partial_first.unwrap_or(PartialPiecewiseLinearFunction::new(second_target.storage().top_plfs().0));
+                let first = partial_first.unwrap_or_else(|| PartialPiecewiseLinearFunction::new(second_target.storage().top_plfs().0));
 
                 first.link(&second, start, end, target);
             }
@@ -303,7 +303,7 @@ impl ShortcutSource {
                     PartialPiecewiseLinearFunction::new(&second_target[..])
                 };
 
-                let first = partial_first.unwrap_or(PartialPiecewiseLinearFunction::new(second_target.storage().top_plfs().0));
+                let first = partial_first.unwrap_or_else(|| PartialPiecewiseLinearFunction::new(second_target.storage().top_plfs().0));
 
                 first.link(&second, start, end, target);
             }

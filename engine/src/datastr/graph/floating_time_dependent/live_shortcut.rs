@@ -4,6 +4,7 @@ use super::shortcut::Sources;
 use super::shortcut_source::Sources as _;
 use super::*;
 use std::cmp::{max, min};
+use std::convert::TryFrom;
 use std::sync::atomic::Ordering::Relaxed;
 
 /// Shortcut data for a CCH edge.
@@ -351,7 +352,9 @@ impl LiveShortcut {
                 // TODO get correct times
                 ShortcutSource::OriginalEdge(id) => Some(ApproxPartialTTF::Exact(
                     shortcut_graph.original_graph().travel_time_function(id).update_plf().unwrap_or(
-                        PartialPiecewiseLinearFunction::from(shortcut_graph.original_graph().travel_time_function(id).unmodified_plf()).sub_plf(start, end),
+                        PartialPiecewiseLinearFunction::try_from(shortcut_graph.original_graph().travel_time_function(id).unmodified_plf())
+                            .unwrap()
+                            .sub_plf(start, end),
                     ),
                 )),
                 _ => None,

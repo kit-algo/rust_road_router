@@ -10,7 +10,10 @@
 use self::debug::debug_merge;
 use super::*;
 use crate::util::*;
-use std::cmp::{max, min, Ordering};
+use std::{
+    cmp::{max, min, Ordering},
+    convert::TryFrom,
+};
 
 pub mod cursor;
 use cursor::*;
@@ -48,7 +51,7 @@ pub struct PeriodicPiecewiseLinearFunction<'a> {
 impl<'a> PLF for PeriodicPiecewiseLinearFunction<'a> {
     fn evaluate(&self, t: Timestamp) -> FlWeight {
         let (_, t) = t.split_of_period();
-        PartialPiecewiseLinearFunction::from(self).eval(t)
+        PartialPiecewiseLinearFunction { ipps: self.ipps }.eval(t)
     }
     fn append_range(&self, start: Timestamp, end: Timestamp, target: &mut impl PLFTarget) {
         PeriodicPiecewiseLinearFunction::append_range(self, start, end, target)
@@ -123,15 +126,15 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
     }
 
     pub fn constant(&self) -> bool {
-        PartialPiecewiseLinearFunction::from(self).constant()
+        PartialPiecewiseLinearFunction { ipps: self.ipps }.constant()
     }
 
     pub fn lower_bound(&self) -> FlWeight {
-        PartialPiecewiseLinearFunction::from(self).lower_bound()
+        PartialPiecewiseLinearFunction { ipps: self.ipps }.lower_bound()
     }
 
     pub fn upper_bound(&self) -> FlWeight {
-        PartialPiecewiseLinearFunction::from(self).upper_bound()
+        PartialPiecewiseLinearFunction { ipps: self.ipps }.upper_bound()
     }
 
     /// Copy range of points to target such that [start, end] is completely covered but target may already contain points.
@@ -287,8 +290,8 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
 
     // Merge two complete and valid PLFs in the range between 0 and period and store the result in buffer.
     pub fn merge(&self, other: &Self, buffer: &mut Vec<TTFPoint>) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
-        PartialPiecewiseLinearFunction::from(self).merge_in_bounds::<Cursor, True>(
-            &PartialPiecewiseLinearFunction::from(other),
+        PartialPiecewiseLinearFunction { ipps: self.ipps }.merge_in_bounds::<Cursor, True>(
+            &PartialPiecewiseLinearFunction { ipps: other.ipps },
             Timestamp::zero(),
             period(),
             buffer,
@@ -301,7 +304,7 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
     #[cfg(not(feature = "tdcch-approx-imai-iri"))]
     pub fn approximate(&self, buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
         buffer.reserve(self.ipps.len());
-        PartialPiecewiseLinearFunction::from(self).douglas_peuker(buffer);
+        PartialPiecewiseLinearFunction::try_from(self).unwrap().douglas_peuker(buffer);
         let result = Box::<[TTFPoint]>::from(&buffer[..]);
         buffer.clear();
         result
@@ -311,7 +314,7 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
     #[cfg(not(feature = "tdcch-approx-imai-iri"))]
     pub fn lower_bound_ttf(&self, buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
         buffer.reserve(self.ipps.len());
-        PartialPiecewiseLinearFunction::from(self).douglas_peuker_lower(buffer);
+        PartialPiecewiseLinearFunction::try_from(self).unwrap().douglas_peuker_lower(buffer);
 
         let wrap_min = min(buffer.first().unwrap().val, buffer.last().unwrap().val);
 
@@ -328,7 +331,7 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
     #[cfg(not(feature = "tdcch-approx-imai-iri"))]
     pub fn upper_bound_ttf(&self, buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
         buffer.reserve(self.ipps.len());
-        PartialPiecewiseLinearFunction::from(self).douglas_peuker_upper(buffer);
+        PartialPiecewiseLinearFunction::try_from(self).unwrap().douglas_peuker_upper(buffer);
 
         let wrap_max = max(buffer.first().unwrap().val, buffer.last().unwrap().val);
 
@@ -346,7 +349,9 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
     pub fn bound_ttfs(&self) -> (Box<[TTFPoint]>, Box<[TTFPoint]>) {
         let mut result_lower = Vec::with_capacity(self.ipps.len());
         let mut result_upper = Vec::with_capacity(self.ipps.len());
-        PartialPiecewiseLinearFunction::from(self).douglas_peuker_combined(&mut result_lower, &mut result_upper);
+        PartialPiecewiseLinearFunction::try_from(self)
+            .unwrap()
+            .douglas_peuker_combined(&mut result_lower, &mut result_upper);
 
         let wrap_min = min(result_lower.first().unwrap().val, result_lower.last().unwrap().val);
         let wrap_max = max(result_upper.first().unwrap().val, result_upper.last().unwrap().val);
@@ -416,15 +421,25 @@ pub struct PartialPiecewiseLinearFunction<'a> {
     ipps: &'a [TTFPoint],
 }
 
-impl<'a, 'b> From<&'b PeriodicPiecewiseLinearFunction<'a>> for PartialPiecewiseLinearFunction<'a> {
-    fn from(pplf: &'b PeriodicPiecewiseLinearFunction<'a>) -> Self {
-        PartialPiecewiseLinearFunction { ipps: pplf.ipps }
+impl<'a, 'b> TryFrom<&'b PeriodicPiecewiseLinearFunction<'a>> for PartialPiecewiseLinearFunction<'a> {
+    type Error = ();
+    fn try_from(pplf: &'b PeriodicPiecewiseLinearFunction<'a>) -> Result<Self, Self::Error> {
+        if pplf.len() > 1 {
+            Ok(PartialPiecewiseLinearFunction { ipps: pplf.ipps })
+        } else {
+            Err(())
+        }
     }
 }
 
-impl<'a> From<PeriodicPiecewiseLinearFunction<'a>> for PartialPiecewiseLinearFunction<'a> {
-    fn from(pplf: PeriodicPiecewiseLinearFunction<'a>) -> Self {
-        PartialPiecewiseLinearFunction { ipps: pplf.ipps }
+impl<'a> TryFrom<PeriodicPiecewiseLinearFunction<'a>> for PartialPiecewiseLinearFunction<'a> {
+    type Error = ();
+    fn try_from(pplf: PeriodicPiecewiseLinearFunction<'a>) -> Result<Self, Self::Error> {
+        if pplf.len() > 1 {
+            Ok(PartialPiecewiseLinearFunction { ipps: pplf.ipps })
+        } else {
+            Err(())
+        }
     }
 }
 
@@ -590,7 +605,7 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
         }
     }
 
-    // This function return something non-FiFo
+    // This function may return something non-FiFo
     pub(super) fn append_bound(&self, switchover: Timestamp, target: &mut impl PLFTarget, select: impl FnOnce(FlWeight, FlWeight) -> FlWeight) {
         debug_assert!(self.len() > 1);
         if let Some(&TTFPoint { at, .. }) = target.split_last().map(|(_, rest)| rest.last()).unwrap_or(None) {

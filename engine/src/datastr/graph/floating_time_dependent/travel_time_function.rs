@@ -1,5 +1,8 @@
 use super::*;
-use std::cmp::max;
+use std::{
+    cmp::{max, min, Ordering},
+    convert::{TryFrom, TryInto},
+};
 
 // During customization we need to store PLFs.
 // For each shortcut we either have the exact function (`Exact`) or an approximation through less complex upper and lower bounds (`Approx`).
@@ -493,10 +496,13 @@ impl<'a> ApproxTTF<'a> {
                     other_upper.append_range(start_of_segment, end_of_segment, &mut buffers.exact_result_upper);
                 }
                 BoundMergingState::Merge => {
-                    let (partial_lower, _) = PartialPiecewiseLinearFunction::from(&self_lower)
+                    let (partial_lower, _) = PartialPiecewiseLinearFunction::try_from(&self_lower)
+                        .unwrap()
                         .sub_plf(start_of_segment, end_of_segment)
                         .merge(
-                            &PartialPiecewiseLinearFunction::from(&other_lower).sub_plf(start_of_segment, end_of_segment),
+                            &PartialPiecewiseLinearFunction::try_from(&other_lower)
+                                .unwrap()
+                                .sub_plf(start_of_segment, end_of_segment),
                             start_of_segment,
                             end_of_segment,
                             &mut buffers.buffer,
@@ -587,12 +593,13 @@ where
     }
 }
 
-impl<'a> From<ApproxTTF<'a>> for ApproxPartialTTF<'a> {
-    fn from(ttf: ApproxTTF<'a>) -> Self {
-        match ttf {
-            ApproxTTF::Exact(plf) => ApproxPartialTTF::Exact(plf.into()),
-            ApproxTTF::Approx(lower_plf, upper_plf) => ApproxPartialTTF::Approx(lower_plf.into(), upper_plf.into()),
-        }
+impl<'a> TryFrom<ApproxTTF<'a>> for ApproxPartialTTF<'a> {
+    type Error = ();
+    fn try_from(ttf: ApproxTTF<'a>) -> Result<Self, Self::Error> {
+        Ok(match ttf {
+            ApproxTTF::Exact(plf) => ApproxPartialTTF::Exact(plf.try_into()?),
+            ApproxTTF::Approx(lower_plf, upper_plf) => ApproxPartialTTF::Approx(lower_plf.try_into()?, upper_plf.try_into()?),
+        })
     }
 }
 

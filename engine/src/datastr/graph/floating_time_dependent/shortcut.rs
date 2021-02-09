@@ -3,6 +3,7 @@
 use super::shortcut_source::Sources as _;
 use super::*;
 use std::cmp::{max, min};
+use std::convert::TryFrom;
 use std::sync::atomic::Ordering::Relaxed;
 
 /// Number of points that a PLF is allowed to have before reduction by approximation is triggered.
@@ -263,7 +264,10 @@ impl Shortcut {
         if start < Timestamp::zero() || end > period() {
             return None;
         }
-        self.periodic_ttf(shortcut_graph).map(|ttf| ApproxPartialTTF::from(ttf).sub_ttf(start, end))
+        self.periodic_ttf(shortcut_graph)
+            .map(|ttf| ApproxPartialTTF::try_from(ttf).ok())
+            .flatten()
+            .map(|ttf| ttf.sub_ttf(start, end))
     }
 
     pub fn is_valid_path(&self) -> bool {
