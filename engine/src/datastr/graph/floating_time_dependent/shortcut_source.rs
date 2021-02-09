@@ -105,7 +105,7 @@ impl ShortcutSource {
     // Use two `ReusablePLFStorage`s to reduce allocations.
     // One storage will contain the functions of `up` and `down` - the other the result function.
     // That means when recursing, we need to use the two storages with flipped roles.
-    pub(super) fn exact_ttf_for<'g>(
+    pub(super) fn reconstruct_exact_ttf<'g>(
         &self,
         start: Timestamp,
         end: Timestamp,
@@ -118,7 +118,7 @@ impl ShortcutSource {
         match *self {
             ShortcutSource::Shortcut(down, up) => {
                 let mut first_target = tmp.push_plf();
-                shortcut_graph.exact_ttf_for(ShortcutId::Incoming(down), start, end, &mut first_target, target.storage_mut());
+                shortcut_graph.reconstruct_exact_ttf(ShortcutId::Incoming(down), start, end, &mut first_target, target.storage_mut());
                 debug_assert!(!first_target.last().unwrap().at.fuzzy_lt(end));
                 // for `up` PLF we need to shift the time range
                 let second_start = start + interpolate_linear(&first_target[0], &first_target[1], start);
@@ -135,7 +135,7 @@ impl ShortcutSource {
                     }
                 } else {
                     let mut second_target = first_target.storage_mut().push_plf();
-                    shortcut_graph.exact_ttf_for(ShortcutId::Outgoing(up), second_start, second_end, &mut second_target, target.storage_mut());
+                    shortcut_graph.reconstruct_exact_ttf(ShortcutId::Outgoing(up), second_start, second_end, &mut second_target, target.storage_mut());
 
                     let (first, second) = second_target.storage().top_plfs();
                     PartialPiecewiseLinearFunction::new(first).link(&PartialPiecewiseLinearFunction::new(second), start, end, target);
@@ -459,7 +459,14 @@ impl Default for ShortcutSourceData {
 }
 
 pub trait Sources {
-    fn exact_ttf_for(&self, start: Timestamp, end: Timestamp, shortcut_graph: &impl ShortcutGraphTrt, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage);
+    fn reconstruct_exact_ttf(
+        &self,
+        start: Timestamp,
+        end: Timestamp,
+        shortcut_graph: &impl ShortcutGraphTrt,
+        target: &mut MutTopPLF,
+        tmp: &mut ReusablePLFStorage,
+    );
 
     fn get_switchpoints(&self, start: Timestamp, end: Timestamp, shortcut_graph: &impl ShortcutGraphTrt)
         -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight);
@@ -471,12 +478,19 @@ pub trait Sources {
 
 use std::cmp::{max, min};
 impl Sources for [(Timestamp, ShortcutSourceData)] {
-    fn exact_ttf_for(&self, start: Timestamp, end: Timestamp, shortcut_graph: &impl ShortcutGraphTrt, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
+    fn reconstruct_exact_ttf(
+        &self,
+        start: Timestamp,
+        end: Timestamp,
+        shortcut_graph: &impl ShortcutGraphTrt,
+        target: &mut MutTopPLF,
+        tmp: &mut ReusablePLFStorage,
+    ) {
         // when we have multiple source, we need to do unpacking (and append the results) for all sources which are relevant for the given time range.
         let mut c = SourceCursor::valid_at(self, start);
         while c.cur().0.fuzzy_lt(end) {
             let mut inner_target = tmp.push_plf();
-            ShortcutSource::from(c.cur().1).exact_ttf_for(
+            ShortcutSource::from(c.cur().1).reconstruct_exact_ttf(
                 max(start, c.cur().0),
                 min(end, c.next().0),
                 shortcut_graph,

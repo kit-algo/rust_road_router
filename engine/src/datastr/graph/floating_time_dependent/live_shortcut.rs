@@ -87,7 +87,7 @@ impl LiveShortcut {
 
         if exact_ttfs_available && (!live || self.live_ttf(shortcut_graph).unwrap().exact()) {
             let mut target = buffers.unpacking_target.push_plf();
-            pred_shortcut.exact_ttf_for(unpack_start, unpack_end, shortcut_graph, &mut target, &mut buffers.unpacking_tmp);
+            pred_shortcut.reconstruct_exact_ttf(unpack_start, unpack_end, shortcut_graph, &mut target, &mut buffers.unpacking_tmp);
             if live {
                 let mut sub_target = buffers.unpacking_tmp.push_plf();
                 if let Some(ApproxPartialTTF::Exact(plf)) = self.live_ttf(shortcut_graph) {
@@ -283,10 +283,10 @@ impl LiveShortcut {
             // the callback executes exact merging for small time ranges where the bounds overlap, the function takes care of all the rest around that.
             let (mut merged, intersection_data) = self_plf.merge(&linked, live_from, live_until, buffers, |start, end, buffers| {
                 let mut self_target = buffers.unpacking_target.push_plf();
-                self.exact_ttf_for(start, end, shortcut_graph, &mut self_target, &mut buffers.unpacking_tmp);
+                self.reconstruct_exact_ttf(start, end, shortcut_graph, &mut self_target, &mut buffers.unpacking_tmp);
 
                 let mut other_target = self_target.storage_mut().push_plf();
-                ShortcutSource::from(other_data).exact_ttf_for(start, end, shortcut_graph, &mut other_target, &mut buffers.unpacking_tmp);
+                ShortcutSource::from(other_data).reconstruct_exact_ttf(start, end, shortcut_graph, &mut other_target, &mut buffers.unpacking_tmp);
 
                 let (self_ipps, other_ipps) = other_target.storage().top_plfs();
                 PartialPiecewiseLinearFunction::new(self_ipps).merge(&PartialPiecewiseLinearFunction::new(other_ipps), start, end, &mut buffers.buffer)
@@ -591,7 +591,7 @@ impl LiveShortcut {
     // Use two `ReusablePLFStorage`s to reduce allocations.
     // One storage will contain the functions for each source - the other the complete resulting function.
     // That means when fetching the functions for each source, we need to use the two storages with flipped roles.
-    pub fn exact_ttf_for(
+    pub fn reconstruct_exact_ttf(
         &self,
         start: Timestamp,
         end: Timestamp,
@@ -622,8 +622,8 @@ impl LiveShortcut {
         }
         match &self.sources {
             Sources::None => unreachable!("There are no TTFs for empty shortcuts"),
-            Sources::One(source) => ShortcutSource::from(*source).exact_ttf_for(start, end, shortcut_graph, target, tmp),
-            Sources::Multi(sources) => sources.exact_ttf_for(start, end, shortcut_graph, target, tmp),
+            Sources::One(source) => ShortcutSource::from(*source).reconstruct_exact_ttf(start, end, shortcut_graph, target, tmp),
+            Sources::Multi(sources) => sources.reconstruct_exact_ttf(start, end, shortcut_graph, target, tmp),
         }
 
         debug_assert!(!target.last().unwrap().at.fuzzy_lt(end), "{:?}", dbg_each!(self, start, end));

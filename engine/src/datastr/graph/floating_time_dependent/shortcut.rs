@@ -191,10 +191,10 @@ impl Shortcut {
             // the callback executes exact merging for small time ranges where the bounds overlap, the function takes care of all the rest around that.
             let (mut merged, intersection_data) = self_plf.merge(&linked, buffers, |start, end, buffers| {
                 let mut self_target = buffers.unpacking_target.push_plf();
-                self.exact_ttf_for(start, end, shortcut_graph, &mut self_target, &mut buffers.unpacking_tmp);
+                self.reconstruct_exact_ttf(start, end, shortcut_graph, &mut self_target, &mut buffers.unpacking_tmp);
 
                 let mut other_target = self_target.storage_mut().push_plf();
-                ShortcutSource::from(other_data).exact_ttf_for(start, end, shortcut_graph, &mut other_target, &mut buffers.unpacking_tmp);
+                ShortcutSource::from(other_data).reconstruct_exact_ttf(start, end, shortcut_graph, &mut other_target, &mut buffers.unpacking_tmp);
 
                 let (self_ipps, other_ipps) = other_target.storage().top_plfs();
                 PartialPiecewiseLinearFunction::new(self_ipps).merge(&PartialPiecewiseLinearFunction::new(other_ipps), start, end, &mut buffers.buffer)
@@ -499,7 +499,7 @@ impl Shortcut {
     // Use two `ReusablePLFStorage`s to reduce allocations.
     // One storage will contain the functions for each source - the other the complete resulting function.
     // That means when fetching the functions for each source, we need to use the two storages with flipped roles.
-    pub fn exact_ttf_for(
+    pub fn reconstruct_exact_ttf(
         &self,
         start: Timestamp,
         end: Timestamp,
@@ -523,8 +523,8 @@ impl Shortcut {
 
         match &self.sources {
             Sources::None => unreachable!("There are no TTFs for empty shortcuts"),
-            Sources::One(source) => ShortcutSource::from(*source).exact_ttf_for(start, end, shortcut_graph, target, tmp),
-            Sources::Multi(sources) => sources.exact_ttf_for(start, end, shortcut_graph, target, tmp),
+            Sources::One(source) => ShortcutSource::from(*source).reconstruct_exact_ttf(start, end, shortcut_graph, target, tmp),
+            Sources::Multi(sources) => sources.reconstruct_exact_ttf(start, end, shortcut_graph, target, tmp),
         }
 
         debug_assert!(!target.last().unwrap().at.fuzzy_lt(end), "{:?}", dbg_each!(self, start, end));

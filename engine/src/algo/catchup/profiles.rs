@@ -521,7 +521,7 @@ impl<'a> Server<'a> {
 
         let mut target = self.buffers.unpacking_target.push_plf();
         if st_shortcut.is_valid_path() {
-            st_shortcut.exact_ttf_for(Timestamp::zero(), period(), &profile_graph, &mut target, &mut self.buffers.unpacking_tmp);
+            st_shortcut.reconstruct_exact_ttf(Timestamp::zero(), period(), &profile_graph, &mut target, &mut self.buffers.unpacking_tmp);
         }
         report!("profile_complexity", target.len());
 

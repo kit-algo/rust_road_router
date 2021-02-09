@@ -23,7 +23,7 @@ pub trait ShortcutGraphTrt {
     fn lower_bound(&self, shortcut_id: ShortcutId) -> FlWeight;
     fn upper_bound(&self, shortcut_id: ShortcutId) -> FlWeight;
     fn original_graph(&self) -> &Self::OriginalGraph;
-    fn exact_ttf_for(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage);
+    fn reconstruct_exact_ttf(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage);
     fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight);
     fn unpack_at(&self, shortcut_id: ShortcutId, t: Timestamp, result: &mut Vec<(EdgeId, Timestamp)>);
     fn evaluate(&self, shortcut_id: ShortcutId, t: Timestamp) -> FlWeight;
@@ -89,8 +89,8 @@ impl<'a> ShortcutGraphTrt for PartialShortcutGraph<'a> {
     fn original_graph(&self) -> &TDGraph {
         &self.original_graph
     }
-    fn exact_ttf_for(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
-        self.get(shortcut_id).exact_ttf_for(start, end, self, target, tmp)
+    fn reconstruct_exact_ttf(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
+        self.get(shortcut_id).reconstruct_exact_ttf(start, end, self, target, tmp)
     }
     fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight) {
         self.get(shortcut_id).get_switchpoints(start, end, self)
@@ -184,19 +184,19 @@ impl<'a> ShortcutGraphTrt for PartialLiveShortcutGraph<'a> {
     fn original_graph(&self) -> &LiveGraph {
         &self.original_graph
     }
-    fn exact_ttf_for(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
+    fn reconstruct_exact_ttf(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
         let live = self.get_live(shortcut_id);
         if live.live_until.map(|l| !start.fuzzy_lt(l)).unwrap_or(true) {
-            self.get(shortcut_id).exact_ttf_for(start, end, self, target, tmp);
+            self.get(shortcut_id).reconstruct_exact_ttf(start, end, self, target, tmp);
         } else {
             let live_until = live.live_until.unwrap();
             if !live_until.fuzzy_lt(end) {
-                live.exact_ttf_for(start, end, self, target, tmp);
+                live.reconstruct_exact_ttf(start, end, self, target, tmp);
             } else {
-                live.exact_ttf_for(start, live_until, self, target, tmp);
+                live.reconstruct_exact_ttf(start, live_until, self, target, tmp);
                 let mut sub_target = tmp.push_plf();
                 self.get(shortcut_id)
-                    .exact_ttf_for(live_until, end, self, &mut sub_target, target.storage_mut());
+                    .reconstruct_exact_ttf(live_until, end, self, &mut sub_target, target.storage_mut());
                 PartialPiecewiseLinearFunction::new(&sub_target).append(live_until, target);
             }
         }
@@ -671,7 +671,7 @@ impl CustomizedSingleDirGraph {
     {
         let edge_idx = edge_id as usize;
 
-        // TODO constant?? pruning with bounds?? avoid duplicate unpacking ops??
+        // constant?? pruning with bounds?? avoid duplicate unpacking ops??
 
         for &(_, source) in self.edge_sources(edge_idx) {
             match source.into() {
@@ -751,10 +751,10 @@ impl<'a> ShortcutGraphTrt for CustomizedGraph<'a> {
     fn original_graph(&self) -> &TDGraph {
         &self.original_graph
     }
-    fn exact_ttf_for(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
+    fn reconstruct_exact_ttf(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
         match shortcut_id {
-            ShortcutId::Incoming(id) => self.incoming.edge_sources(id as usize).exact_ttf_for(start, end, self, target, tmp),
-            ShortcutId::Outgoing(id) => self.outgoing.edge_sources(id as usize).exact_ttf_for(start, end, self, target, tmp),
+            ShortcutId::Incoming(id) => self.incoming.edge_sources(id as usize).reconstruct_exact_ttf(start, end, self, target, tmp),
+            ShortcutId::Outgoing(id) => self.outgoing.edge_sources(id as usize).reconstruct_exact_ttf(start, end, self, target, tmp),
         }
     }
     fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight) {
@@ -813,7 +813,7 @@ impl<'a> ReconstructionGraph<'a> {
         let cache = if self.as_reconstructed().all_sources_exact(shortcut_id) {
             let mut target = buffers.unpacking_target.push_plf();
             self.as_reconstructed()
-                .exact_ttf_for(shortcut_id, Timestamp::zero(), period(), &mut target, &mut buffers.unpacking_tmp);
+                .reconstruct_exact_ttf(shortcut_id, Timestamp::zero(), period(), &mut target, &mut buffers.unpacking_tmp);
             ApproxTTFContainer::Exact(Box::<[TTFPoint]>::from(&target[..]))
         } else {
             let mut target = buffers.unpacking_target.push_plf();
@@ -1027,7 +1027,7 @@ impl<'a> ShortcutGraphTrt for ReconstructedGraph<'a> {
     fn original_graph(&self) -> &TDGraph {
         &self.customized_graph.original_graph
     }
-    fn exact_ttf_for(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
+    fn reconstruct_exact_ttf(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
         let (dir_graph, edge_id) = match shortcut_id {
             ShortcutId::Incoming(id) => (&self.customized_graph.incoming, id),
             ShortcutId::Outgoing(id) => (&self.customized_graph.outgoing, id),
@@ -1053,8 +1053,8 @@ impl<'a> ShortcutGraphTrt for ReconstructedGraph<'a> {
         } else {
             match dir_graph.edge_sources(edge_id as usize) {
                 &[] => unreachable!("There are no TTFs for empty shortcuts"),
-                &[(_, source)] => ShortcutSource::from(source).exact_ttf_for(start, end, self, target, tmp),
-                sources => sources.exact_ttf_for(start, end, self, target, tmp),
+                &[(_, source)] => ShortcutSource::from(source).reconstruct_exact_ttf(start, end, self, target, tmp),
+                sources => sources.reconstruct_exact_ttf(start, end, self, target, tmp),
             }
         }
     }
@@ -1140,11 +1140,11 @@ impl<'a> ShortcutGraphTrt for ProfileGraphWrapper<'a> {
     fn original_graph(&self) -> &TDGraph {
         &self.profile_graph.customized_graph.original_graph
     }
-    fn exact_ttf_for(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
+    fn reconstruct_exact_ttf(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
         if self.delegate(shortcut_id) {
-            return self.profile_graph.exact_ttf_for(shortcut_id, start, end, target, tmp);
+            return self.profile_graph.reconstruct_exact_ttf(shortcut_id, start, end, target, tmp);
         }
-        self.get(shortcut_id).exact_ttf_for(start, end, self, target, tmp)
+        self.get(shortcut_id).reconstruct_exact_ttf(start, end, self, target, tmp)
     }
     fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight) {
         if self.delegate(shortcut_id) {
