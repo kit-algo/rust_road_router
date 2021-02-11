@@ -6,7 +6,10 @@ use crate::datastr::graph::first_out_graph::degrees_to_first_out;
 use crate::datastr::rank_select_map::*;
 use crate::io::*;
 use crate::util::*;
-use std::cmp::{max, min};
+use std::{
+    cmp::{max, min},
+    convert::TryInto,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub enum ShortcutId {
@@ -804,96 +807,126 @@ impl<'a> SingleDirBoundsGraph<'a> {
 #[derive(Debug)]
 pub struct ReconstructionGraph<'a> {
     pub customized_graph: &'a CustomizedGraph<'a>,
-    pub outgoing_cache: &'a mut [Option<ApproxTTFContainer<Box<[TTFPoint]>>>],
-    pub incoming_cache: &'a mut [Option<ApproxTTFContainer<Box<[TTFPoint]>>>],
+    pub outgoing_cache: &'a mut [Option<ApproxPartialsContainer<Box<[TTFPoint]>>>],
+    pub incoming_cache: &'a mut [Option<ApproxPartialsContainer<Box<[TTFPoint]>>>],
 }
 
 impl<'a> ReconstructionGraph<'a> {
-    pub fn cache(&mut self, shortcut_id: ShortcutId, buffers: &mut MergeBuffers) {
-        let cache = if self.as_reconstructed().all_sources_exact(shortcut_id) {
-            let mut target = buffers.unpacking_target.push_plf();
-            self.as_reconstructed()
-                .reconstruct_exact_ttf(shortcut_id, Timestamp::zero(), period(), &mut target, &mut buffers.unpacking_tmp);
-            ApproxTTFContainer::Exact(Box::<[TTFPoint]>::from(&target[..]))
+    fn cache(&mut self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, buffers: &mut MergeBuffers) {
+        let times = if let Some(cache) = match shortcut_id {
+            ShortcutId::Incoming(id) => &self.incoming_cache[id as usize],
+            ShortcutId::Outgoing(id) => &self.outgoing_cache[id as usize],
+        } {
+            let mut times = Vec::new();
+            let mut generator = cache.missing(start, end);
+            use std::ops::Generator as _;
+            while let std::ops::GeneratorState::Yielded(time) = std::pin::Pin::new(&mut generator).resume(()) {
+                times.push(time);
+            }
+            times
         } else {
-            let mut target = buffers.unpacking_target.push_plf();
+            vec![(start, end)]
+        };
 
-            let (dir_graph, edge_id) = match shortcut_id {
-                ShortcutId::Incoming(id) => (&self.customized_graph.incoming, id),
-                ShortcutId::Outgoing(id) => (&self.customized_graph.outgoing, id),
+        for (start, end) in times {
+            let cache = if self.as_reconstructed().all_sources_exact(shortcut_id, start, end) {
+                let mut target = buffers.unpacking_target.push_plf();
+                self.as_reconstructed()
+                    .reconstruct_exact_ttf(shortcut_id, start, end, &mut target, &mut buffers.unpacking_tmp);
+                ApproxPartialsContainer::Exact(Box::<[TTFPoint]>::from(&target[..]))
+            } else {
+                let mut target = buffers.unpacking_target.push_plf();
+
+                let (dir_graph, edge_id) = match shortcut_id {
+                    ShortcutId::Incoming(id) => (&self.customized_graph.incoming, id),
+                    ShortcutId::Outgoing(id) => (&self.customized_graph.outgoing, id),
+                };
+
+                let mut c = SourceCursor::valid_at(dir_graph.edge_sources(edge_id as usize), start);
+
+                while c.cur().0.fuzzy_lt(end) {
+                    let mut inner_target = buffers.unpacking_tmp.push_plf();
+                    ShortcutSource::from(c.cur().1).reconstruct_lower_bound(
+                        max(start, c.cur().0),
+                        min(end, c.next().0),
+                        &self.as_reconstructed(),
+                        &mut inner_target,
+                        target.storage_mut(),
+                    );
+                    PartialPiecewiseLinearFunction::new(&inner_target[..]).append_bound(max(start, c.cur().0), &mut target, min);
+
+                    c.advance();
+                }
+
+                let mut lower = Box::<[TTFPoint]>::from(&target[..]);
+                PeriodicPiecewiseLinearFunction::fifoize_down(&mut lower[..]);
+                drop(target);
+
+                let mut target = buffers.unpacking_target.push_plf();
+
+                let mut c = SourceCursor::valid_at(dir_graph.edge_sources(edge_id as usize), start);
+
+                while c.cur().0.fuzzy_lt(end) {
+                    let mut inner_target = buffers.unpacking_tmp.push_plf();
+                    ShortcutSource::from(c.cur().1).reconstruct_upper_bound(
+                        max(start, c.cur().0),
+                        min(end, c.next().0),
+                        &self.as_reconstructed(),
+                        &mut inner_target,
+                        target.storage_mut(),
+                    );
+                    PartialPiecewiseLinearFunction::new(&inner_target[..]).append_bound(max(start, c.cur().0), &mut target, max);
+
+                    c.advance();
+                }
+
+                let mut upper = Box::<[TTFPoint]>::from(&target[..]);
+                PeriodicPiecewiseLinearFunction::fifoize_up(&mut upper[..]);
+
+                ApproxPartialsContainer::Approx(lower, upper)
             };
 
-            let mut c = SourceCursor::valid_at(dir_graph.edge_sources(edge_id as usize), Timestamp::zero());
-
-            while c.cur().0.fuzzy_lt(period()) {
-                let mut inner_target = buffers.unpacking_tmp.push_plf();
-                ShortcutSource::from(c.cur().1).reconstruct_lower_bound(
-                    max(Timestamp::zero(), c.cur().0),
-                    min(period(), c.next().0),
-                    &self.as_reconstructed(),
-                    &mut inner_target,
-                    target.storage_mut(),
-                );
-                PartialPiecewiseLinearFunction::new(&inner_target[..]).append_bound(max(Timestamp::zero(), c.cur().0), &mut target, min);
-
-                c.advance();
+            let old = match shortcut_id {
+                ShortcutId::Incoming(id) => &mut self.incoming_cache[id as usize],
+                ShortcutId::Outgoing(id) => &mut self.outgoing_cache[id as usize],
+            };
+            if let Some(old) = old.as_mut() {
+                *old = old.combine_pub(cache.ttf(start, end).unwrap(), start, end);
+            } else {
+                *old = Some(cache);
             }
-
-            let mut lower = Box::<[TTFPoint]>::from(&target[..]);
-            PeriodicPiecewiseLinearFunction::fifoize_down(&mut lower[..]);
-            drop(target);
-
-            let mut target = buffers.unpacking_target.push_plf();
-
-            let mut c = SourceCursor::valid_at(dir_graph.edge_sources(edge_id as usize), Timestamp::zero());
-
-            while c.cur().0.fuzzy_lt(period()) {
-                let mut inner_target = buffers.unpacking_tmp.push_plf();
-                ShortcutSource::from(c.cur().1).reconstruct_upper_bound(
-                    max(Timestamp::zero(), c.cur().0),
-                    min(period(), c.next().0),
-                    &self.as_reconstructed(),
-                    &mut inner_target,
-                    target.storage_mut(),
-                );
-                PartialPiecewiseLinearFunction::new(&inner_target[..]).append_bound(max(Timestamp::zero(), c.cur().0), &mut target, max);
-
-                c.advance();
-            }
-
-            let mut upper = Box::<[TTFPoint]>::from(&target[..]);
-            PeriodicPiecewiseLinearFunction::fifoize_up(&mut upper[..]);
-
-            ApproxTTFContainer::Approx(lower, upper)
-        };
-
-        match shortcut_id {
-            ShortcutId::Incoming(id) => self.incoming_cache[id as usize] = Some(cache),
-            ShortcutId::Outgoing(id) => self.outgoing_cache[id as usize] = Some(cache),
-        };
+        }
 
         self.approximate(shortcut_id, buffers);
     }
 
-    pub fn cache_recursive(&mut self, shortcut_id: ShortcutId, buffers: &mut MergeBuffers) {
-        if self.as_reconstructed().periodic_ttf(shortcut_id).is_some() {
+    pub fn cache_recursive(&mut self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, buffers: &mut MergeBuffers) {
+        if self.as_reconstructed().partial_ttf(shortcut_id, start, end).is_some() || self.as_reconstructed().periodic_ttf(shortcut_id).is_some() {
             return;
         }
+        // TODO only missing pieces
 
         let (dir_graph, edge_id) = match shortcut_id {
             ShortcutId::Incoming(id) => (&self.customized_graph.incoming, id),
             ShortcutId::Outgoing(id) => (&self.customized_graph.outgoing, id),
         };
-        for (_, source) in dir_graph.edge_sources(edge_id as usize) {
-            match ShortcutSource::from(*source) {
+
+        let mut c = SourceCursor::valid_at(dir_graph.edge_sources(edge_id as usize), start);
+
+        while c.cur().0.fuzzy_lt(end) {
+            match ShortcutSource::from(c.cur().1) {
                 ShortcutSource::Shortcut(down, up) => {
-                    self.cache_recursive(ShortcutId::Incoming(down), buffers);
-                    self.cache_recursive(ShortcutId::Outgoing(up), buffers);
+                    self.cache_recursive(ShortcutId::Incoming(down), max(start, c.cur().0), min(end, c.next().0), buffers);
+                    // TODO more efficient eval?
+                    let second_start = start + self.as_reconstructed().evaluate(ShortcutId::Incoming(down), start);
+                    let second_end = end + self.as_reconstructed().evaluate(ShortcutId::Incoming(down), end);
+                    self.cache_recursive(ShortcutId::Outgoing(up), second_start, second_end, buffers);
                 }
                 _ => (),
             }
+            c.advance();
         }
-        self.cache(shortcut_id, buffers);
+        self.cache(shortcut_id, start, end, buffers);
     }
 
     pub fn approximate(&mut self, shortcut_id: ShortcutId, buffers: &mut MergeBuffers) {
@@ -902,22 +935,15 @@ impl<'a> ReconstructionGraph<'a> {
             ShortcutId::Outgoing(id) => self.outgoing_cache[id as usize].as_mut(),
         };
         if let Some(cache) = cache {
-            if cache.num_points() > APPROX_THRESHOLD {
-                *cache = ApproxTTF::from(&*cache).approximate(buffers);
-            }
+            todo!()
+            // if cache.num_points() > APPROX_THRESHOLD {
+            //     *cache = ApproxTTF::from(&*cache).approximate(buffers);
+            // }
         }
     }
 
-    pub fn clear(&mut self, shortcut_id: ShortcutId) {
-        match shortcut_id {
-            ShortcutId::Incoming(id) => self.incoming_cache[id as usize] = None,
-            ShortcutId::Outgoing(id) => self.outgoing_cache[id as usize] = None,
-        };
-    }
-
     pub fn clear_recursive(&mut self, shortcut_id: ShortcutId) {
-        if self.as_reconstructed().periodic_ttf(shortcut_id).is_none() {
-            // TODO weird recursion stop condition
+        if self.take_cache(shortcut_id).is_none() {
             return;
         }
         let (dir_graph, edge_id) = match shortcut_id {
@@ -933,10 +959,9 @@ impl<'a> ReconstructionGraph<'a> {
                 _ => (),
             }
         }
-        self.clear(shortcut_id);
     }
 
-    pub fn take_cache(&mut self, shortcut_id: ShortcutId) -> Option<ApproxTTFContainer<Box<[TTFPoint]>>> {
+    pub fn take_cache(&mut self, shortcut_id: ShortcutId) -> Option<ApproxPartialsContainer<Box<[TTFPoint]>>> {
         match shortcut_id {
             ShortcutId::Incoming(id) => self.incoming_cache[id as usize].take(),
             ShortcutId::Outgoing(id) => self.outgoing_cache[id as usize].take(),
@@ -955,26 +980,56 @@ impl<'a> ReconstructionGraph<'a> {
 #[derive(Debug)]
 pub struct ReconstructedGraph<'a> {
     pub customized_graph: &'a CustomizedGraph<'a>,
-    pub outgoing_cache: &'a [Option<ApproxTTFContainer<Box<[TTFPoint]>>>],
-    pub incoming_cache: &'a [Option<ApproxTTFContainer<Box<[TTFPoint]>>>],
+    pub outgoing_cache: &'a [Option<ApproxPartialsContainer<Box<[TTFPoint]>>>],
+    pub incoming_cache: &'a [Option<ApproxPartialsContainer<Box<[TTFPoint]>>>],
 }
 
 impl<'a> ReconstructedGraph<'a> {
-    fn all_sources_exact(&self, shortcut_id: ShortcutId) -> bool {
+    fn all_sources_exact(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> bool {
         let (dir_graph, edge_id) = match shortcut_id {
             ShortcutId::Incoming(id) => (&self.customized_graph.incoming, id),
             ShortcutId::Outgoing(id) => (&self.customized_graph.outgoing, id),
         };
 
-        dir_graph
-            .edge_sources(edge_id as usize)
-            .iter()
-            .all(|(_, source)| match ShortcutSource::from(*source) {
+        let mut c = SourceCursor::valid_at(dir_graph.edge_sources(edge_id as usize), start);
+
+        while c.cur().0.fuzzy_lt(end) {
+            match ShortcutSource::from(c.cur().1) {
                 ShortcutSource::Shortcut(down, up) => {
-                    self.periodic_ttf(ShortcutId::Incoming(down)).unwrap().exact() && self.periodic_ttf(ShortcutId::Outgoing(up)).unwrap().exact()
+                    if !(self.exact_ttf_available(ShortcutId::Incoming(down)) && self.exact_ttf_available(ShortcutId::Outgoing(up))) {
+                        return false;
+                    }
                 }
-                _ => true,
-            })
+                _ => (),
+            }
+            c.advance();
+        }
+
+        return true;
+    }
+
+    fn exact_ttf_available(&self, shortcut_id: ShortcutId) -> bool {
+        let cache = match shortcut_id {
+            ShortcutId::Incoming(id) => &self.incoming_cache[id as usize],
+            ShortcutId::Outgoing(id) => &self.outgoing_cache[id as usize],
+        };
+
+        if let Some(cache) = cache {
+            return cache.exact();
+        }
+
+        let (dir_graph, edge_id) = match shortcut_id {
+            ShortcutId::Incoming(id) => (&self.customized_graph.incoming, id),
+            ShortcutId::Outgoing(id) => (&self.customized_graph.outgoing, id),
+        };
+
+        match dir_graph.edge_sources(edge_id as usize) {
+            &[(_, source)] => match source.into() {
+                ShortcutSource::OriginalEdge(_) => true,
+                _ => false,
+            },
+            _ => false,
+        }
     }
 }
 
@@ -988,7 +1043,7 @@ impl<'a> ShortcutGraphTrt for ReconstructedGraph<'a> {
         };
 
         if let Some(cache) = cache {
-            return Some(cache.into());
+            return cache.ttf(Timestamp::zero(), period())?.try_into().ok();
         }
 
         let (dir_graph, edge_id) = match shortcut_id {
@@ -1005,7 +1060,33 @@ impl<'a> ShortcutGraphTrt for ReconstructedGraph<'a> {
         }
     }
     fn partial_ttf(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> Option<ApproxPartialTTF> {
-        todo!()
+        let cache = match shortcut_id {
+            ShortcutId::Incoming(id) => &self.incoming_cache[id as usize],
+            ShortcutId::Outgoing(id) => &self.outgoing_cache[id as usize],
+        };
+
+        if let Some(cache) = cache {
+            return cache.ttf(start, end);
+        }
+
+        let (dir_graph, edge_id) = match shortcut_id {
+            ShortcutId::Incoming(id) => (&self.customized_graph.incoming, id),
+            ShortcutId::Outgoing(id) => (&self.customized_graph.outgoing, id),
+        };
+
+        match dir_graph.edge_sources(edge_id as usize) {
+            &[(_, source)] => match source.into() {
+                ShortcutSource::OriginalEdge(id) => self
+                    .customized_graph
+                    .original_graph
+                    .travel_time_function(id)
+                    .try_into()
+                    .ok()
+                    .map(|plf: PartialPiecewiseLinearFunction| ApproxPartialTTF::Exact(plf.sub_plf(start, end))),
+                _ => None,
+            },
+            _ => None,
+        }
     }
     fn is_valid_path(&self, _shortcut_id: ShortcutId) -> bool {
         true
@@ -1048,14 +1129,10 @@ impl<'a> ShortcutGraphTrt for ReconstructedGraph<'a> {
             });
             return;
         }
-        if let Some(ApproxTTF::Exact(ttf)) = self.periodic_ttf(shortcut_id) {
-            ttf.append_range(start, end, target);
-        } else {
-            match dir_graph.edge_sources(edge_id as usize) {
-                &[] => unreachable!("There are no TTFs for empty shortcuts"),
-                &[(_, source)] => ShortcutSource::from(source).reconstruct_exact_ttf(start, end, self, target, tmp),
-                sources => sources.reconstruct_exact_ttf(start, end, self, target, tmp),
-            }
+        match dir_graph.edge_sources(edge_id as usize) {
+            &[] => unreachable!("There are no TTFs for empty shortcuts"),
+            &[(_, source)] => ShortcutSource::from(source).reconstruct_exact_ttf(start, end, self, target, tmp),
+            sources => sources.reconstruct_exact_ttf(start, end, self, target, tmp),
         }
     }
     fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight) {

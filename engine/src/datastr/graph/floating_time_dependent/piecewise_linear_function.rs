@@ -443,6 +443,17 @@ impl<'a> TryFrom<PeriodicPiecewiseLinearFunction<'a>> for PartialPiecewiseLinear
     }
 }
 
+impl<'a> TryFrom<PartialPiecewiseLinearFunction<'a>> for PeriodicPiecewiseLinearFunction<'a> {
+    type Error = ();
+    fn try_from(pplf: PartialPiecewiseLinearFunction<'a>) -> Result<Self, Self::Error> {
+        if pplf.first().unwrap().at == Timestamp::zero() && pplf.last().unwrap().at == period() {
+            Ok(PeriodicPiecewiseLinearFunction { ipps: pplf.ipps })
+        } else {
+            Err(())
+        }
+    }
+}
+
 impl<'a> std::ops::Deref for PartialPiecewiseLinearFunction<'a> {
     type Target = [TTFPoint];
 
@@ -568,7 +579,7 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
         debug_assert!(switchover.fuzzy_lt(self[1].at), "{:?}", dbg_each!(&self[0..2], switchover));
 
         if target.is_empty() {
-            target.extend(self.iter().cloned());
+            target.extend_from_slice(&self[..]);
             return;
         }
 
@@ -598,7 +609,7 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
                 val: switchover_val,
             });
         }
-        target.extend(self[1..].iter().cloned());
+        target.extend_from_slice(&self[1..]);
 
         for points in target.windows(2) {
             debug_assert!(points[0].at.fuzzy_lt(points[1].at));

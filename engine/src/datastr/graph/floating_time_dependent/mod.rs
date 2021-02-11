@@ -82,6 +82,7 @@ mod time {
     impl FlWeight {
         /// Sentinel value for infinity weights, chosen to match the regular `Weight`s `INFINITY`.
         pub const INFINITY: Self = FlWeight(2_147_483_647.0);
+        pub const INVALID: Self = FlWeight(-1.0);
 
         /// New Weight from `f64`
         pub fn new(t: f64) -> Self {
@@ -109,6 +110,10 @@ mod time {
         /// Take absolute value of this Weight
         pub fn abs(self) -> FlWeight {
             FlWeight::new(self.0.abs())
+        }
+
+        pub fn invalid(&self) -> bool {
+            self == &Self::INVALID
         }
     }
 
@@ -436,6 +441,10 @@ impl<'a> PLFTarget for MutTopPLF<'a> {
             self.storage.data.pop()
         }
     }
+
+    fn extend_from_slice(&mut self, slc: &[TTFPoint]) {
+        self.storage.data.extend_from_slice(slc)
+    }
 }
 
 impl<'a> Extend<TTFPoint> for MutTopPLF<'a> {
@@ -467,6 +476,8 @@ pub trait PLFTarget: Extend<TTFPoint> + std::ops::Deref<Target = [TTFPoint]> {
     fn push(&mut self, val: TTFPoint);
     /// Pop single interpolation point from the PLF
     fn pop(&mut self) -> Option<TTFPoint>;
+
+    fn extend_from_slice(&mut self, slc: &[TTFPoint]);
 }
 
 impl PLFTarget for Vec<TTFPoint> {
@@ -476,6 +487,10 @@ impl PLFTarget for Vec<TTFPoint> {
 
     fn pop(&mut self) -> Option<TTFPoint> {
         self.pop()
+    }
+
+    fn extend_from_slice(&mut self, slc: &[TTFPoint]) {
+        self.extend_from_slice(slc);
     }
 }
 

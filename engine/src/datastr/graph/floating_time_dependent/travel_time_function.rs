@@ -26,6 +26,29 @@ where
     }
 }
 
+impl<D> TryFrom<ApproxPartialsContainer<D>> for ApproxTTFContainer<D>
+where
+    D: std::ops::Deref<Target = [TTFPoint]>,
+{
+    type Error = ();
+    fn try_from(partials: ApproxPartialsContainer<D>) -> Result<Self, Self::Error> {
+        if partials
+            .ttf(Timestamp::zero(), period())
+            .and_then(|ttf| ApproxTTF::try_from(ttf).ok())
+            .is_some()
+            && partials.begin_at() == Timestamp::zero()
+            && partials.end_at() == period()
+        {
+            Ok(match partials {
+                ApproxPartialsContainer::Exact(ipps) => ApproxTTFContainer::Exact(ipps),
+                ApproxPartialsContainer::Approx(lower, upper) => ApproxTTFContainer::Approx(lower, upper),
+            })
+        } else {
+            Err(())
+        }
+    }
+}
+
 impl From<ApproxTTFContainer<Vec<TTFPoint>>> for ApproxTTFContainer<Box<[TTFPoint]>> {
     fn from(cache: ApproxTTFContainer<Vec<TTFPoint>>) -> Self {
         match cache {
@@ -599,6 +622,16 @@ impl<'a> TryFrom<ApproxTTF<'a>> for ApproxPartialTTF<'a> {
         Ok(match ttf {
             ApproxTTF::Exact(plf) => ApproxPartialTTF::Exact(plf.try_into()?),
             ApproxTTF::Approx(lower_plf, upper_plf) => ApproxPartialTTF::Approx(lower_plf.try_into()?, upper_plf.try_into()?),
+        })
+    }
+}
+
+impl<'a> TryFrom<ApproxPartialTTF<'a>> for ApproxTTF<'a> {
+    type Error = ();
+    fn try_from(ttf: ApproxPartialTTF<'a>) -> Result<Self, Self::Error> {
+        Ok(match ttf {
+            ApproxPartialTTF::Exact(plf) => ApproxTTF::Exact(plf.try_into()?),
+            ApproxPartialTTF::Approx(lower_plf, upper_plf) => ApproxTTF::Approx(lower_plf.try_into()?, upper_plf.try_into()?),
         })
     }
 }
@@ -1222,5 +1255,279 @@ def plot_coords(coords, *args, **kwargs):
         writeln!(output, "plt.legend()")?;
         writeln!(output, "plt.show()")?;
         Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub enum ApproxPartialsContainer<D> {
+    Exact(D),
+    Approx(D, D),
+}
+
+impl<D> ApproxPartialsContainer<D>
+where
+    D: std::ops::Deref<Target = [TTFPoint]>,
+{
+    pub fn exact(&self) -> bool {
+        match &self {
+            Self::Exact(_) => true,
+            Self::Approx(_, _) => false,
+        }
+    }
+
+    pub fn ttf(&self, start: Timestamp, end: Timestamp) -> Option<ApproxPartialTTF<'_>> {
+        match &self {
+            Self::Exact(points) => Self::plf(points, start, end).map(|ipps| ApproxPartialTTF::Exact(PartialPiecewiseLinearFunction::new(ipps))),
+            Self::Approx(lower, upper) => Self::plf(lower, start, end).map(|lower_ipps| {
+                ApproxPartialTTF::Approx(
+                    PartialPiecewiseLinearFunction::new(lower_ipps),
+                    PartialPiecewiseLinearFunction::new(Self::plf(upper, start, end).unwrap()),
+                )
+            }),
+        }
+    }
+
+    pub fn missing(&self, start: Timestamp, end: Timestamp) -> impl std::ops::Generator<Yield = (Timestamp, Timestamp)> + '_ {
+        let data = match &self {
+            Self::Exact(points) => points,
+            Self::Approx(lower, _) => lower,
+        };
+
+        move || {
+            let pos = data.binary_search_by(|p| {
+                if p.at.fuzzy_eq(start) {
+                    Ordering::Equal
+                } else if p.at < start {
+                    Ordering::Less
+                } else {
+                    Ordering::Greater
+                }
+            });
+            let p_start = match pos {
+                Ok(i) => i,
+                Err(i) => {
+                    if i == 0 {
+                        debug_assert!(!data.first().unwrap().val.invalid());
+                        yield (start, data.first().unwrap().at);
+                    }
+                    i - 1
+                }
+            };
+
+            let pos = data.binary_search_by(|p| {
+                if p.at.fuzzy_eq(end) {
+                    Ordering::Equal
+                } else if p.at < end {
+                    Ordering::Less
+                } else {
+                    Ordering::Greater
+                }
+            });
+            let (p_end, missing_end) = match pos {
+                Ok(i) => (i, false),
+                Err(i) => {
+                    if i == data.len() {
+                        debug_assert!(!data.last().unwrap().val.invalid());
+                        (i - 1, true)
+                    } else {
+                        (i, false)
+                    }
+                }
+            };
+
+            for i in p_start..=p_end {
+                if data[i].val.invalid() {
+                    debug_assert!(i > 0);
+                    debug_assert!(i < data.len() - 1);
+                    yield (max(start, data[i - 1].at), min(end, data[i + 1].at))
+                }
+            }
+
+            if missing_end {
+                yield (data.last().unwrap().at, end);
+            }
+        }
+    }
+
+    fn plf(data: &[TTFPoint], start: Timestamp, end: Timestamp) -> Option<&[TTFPoint]> {
+        debug_assert!(data.len() > 1);
+
+        let pos = data.binary_search_by(|p| {
+            if p.at.fuzzy_eq(start) {
+                Ordering::Equal
+            } else if p.at < start {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            }
+        });
+        let p_start = match pos {
+            Ok(i) => i,
+            Err(i) => {
+                if i == 0 {
+                    return None;
+                }
+                i - 1
+            }
+        };
+
+        let pos = data.binary_search_by(|p| {
+            if p.at.fuzzy_eq(end) {
+                Ordering::Equal
+            } else if p.at < end {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            }
+        });
+        let p_end = match pos {
+            Ok(i) => i,
+            Err(i) => {
+                if i == data.len() {
+                    return None;
+                }
+                i
+            }
+        };
+
+        let sub = &data[p_start..=p_end];
+
+        if sub.iter().any(|p| p.val.invalid()) {
+            return None;
+        }
+
+        Some(sub)
+    }
+
+    fn begin_at(&self) -> Timestamp {
+        match &self {
+            Self::Exact(points) => points,
+            Self::Approx(lower, _) => lower,
+        }
+        .first()
+        .unwrap()
+        .at
+    }
+
+    fn end_at(&self) -> Timestamp {
+        match &self {
+            Self::Exact(points) => points,
+            Self::Approx(lower, _) => lower,
+        }
+        .last()
+        .unwrap()
+        .at
+    }
+
+    pub fn combine_pub(self, other: ApproxPartialTTF, start: Timestamp, end: Timestamp) -> ApproxPartialsContainer<Box<[TTFPoint]>> {
+        if let (ApproxPartialsContainer::Exact(current), &ApproxPartialTTF::Exact(insert)) = (&self, &other) {
+            let mut target = Vec::with_capacity(current.len() + insert.len());
+            Self::combine(current, insert, start, end, &mut target, |plf, switchover, target| {
+                plf.append(switchover, target)
+            });
+            ApproxPartialsContainer::Exact(target.into())
+        } else {
+            let (lower_current, upper_current) = match &self {
+                ApproxPartialsContainer::Exact(current) => (current, current),
+                ApproxPartialsContainer::Approx(lower, upper) => (lower, upper),
+            };
+            let (lower_insert, upper_insert) = other.bound_plfs();
+            let mut lower_target = Vec::with_capacity(lower_current.len() + lower_insert.len());
+            let mut upper_target = Vec::with_capacity(upper_current.len() + upper_insert.len());
+
+            Self::combine(lower_current, lower_insert, start, end, &mut lower_target, |plf, switchover, target| {
+                plf.append_bound(switchover, target, min);
+            });
+            Self::combine(upper_current, upper_insert, start, end, &mut upper_target, |plf, switchover, target| {
+                plf.append_bound(switchover, target, max);
+            });
+            // TODO FiFO?
+
+            ApproxPartialsContainer::Approx(lower_target.into(), upper_target.into())
+        }
+    }
+
+    fn combine(
+        current: &[TTFPoint],
+        insert: PartialPiecewiseLinearFunction,
+        start: Timestamp,
+        end: Timestamp,
+        target: &mut Vec<TTFPoint>,
+        mut append: impl FnMut(PartialPiecewiseLinearFunction, Timestamp, &mut Vec<TTFPoint>),
+    ) {
+        let pos = current.binary_search_by(|p| {
+            if p.at.fuzzy_eq(start) {
+                Ordering::Equal
+            } else if p.at < start {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            }
+        });
+        let (before, after) = match pos {
+            Ok(i) => {
+                if current[i].val.invalid() {
+                    debug_assert!(i > 0);
+                    debug_assert!(!current[i - 1].val.invalid());
+                    debug_assert!(i + 1 < current.len());
+                    debug_assert!(!current[i + 1].val.invalid());
+
+                    (&current[..i], &current[i + 1..])
+                } else {
+                    debug_assert!(current.get(i + 1).map(|p| p.val.invalid()).unwrap_or(true));
+                    if i == current.len() - 1 {
+                        (&current[..=i], &[][..])
+                    } else {
+                        (&current[..=i], &current[i + 2..])
+                    }
+                }
+            }
+            Err(i) => {
+                if i == 0 {
+                    (&[][..], current)
+                } else if i == current.len() {
+                    (current, &[][..])
+                } else {
+                    if current[i - 1].val.invalid() {
+                        (&current[..i - 1], &current[i..])
+                    } else if current[i].val.invalid() {
+                        (&current[..i], &current[i + 1..])
+                    } else {
+                        debug_assert!(current[i + 1].val.invalid());
+                        (&current[..=i], &current[i + 2..])
+                    }
+                }
+            }
+        };
+
+        if let Some(last_before) = before.last() {
+            target.extend_from_slice(before);
+
+            if insert[0].at.fuzzy_leq(last_before.at) {
+                append(insert, start, target);
+            } else {
+                let last_at = last_before.at;
+                target.push(TTFPoint {
+                    at: last_at + 0.5 * (insert[0].at - last_at),
+                    val: FlWeight::INVALID,
+                });
+                target.extend_from_slice(&insert)
+            }
+        } else {
+            target.extend_from_slice(&insert);
+        }
+
+        if let Some(first_after) = after.first() {
+            if first_after.at.fuzzy_leq(insert.last().unwrap().at) {
+                append(PartialPiecewiseLinearFunction::new(after), end, target);
+            } else {
+                let last_at = target.last().unwrap().at;
+                target.push(TTFPoint {
+                    at: last_at + 0.5 * (first_after.at - last_at),
+                    val: FlWeight::INVALID,
+                });
+                target.extend_from_slice(after);
+            }
+        }
     }
 }

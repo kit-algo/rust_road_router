@@ -13,6 +13,8 @@ use crate::datastr::rank_select_map::{BitVec, FastClearBitVec};
 use crate::report::benchmark::Timer;
 // use time::Duration;
 
+use std::convert::TryInto;
+
 /// Query server struct for CATCHUp.
 /// Implements the common query trait.
 pub struct Server<'a> {
@@ -43,8 +45,8 @@ pub struct Server<'a> {
     from: NodeId,
     to: NodeId,
 
-    outgoing_profiles: Vec<Option<ApproxTTFContainer<Box<[TTFPoint]>>>>,
-    incoming_profiles: Vec<Option<ApproxTTFContainer<Box<[TTFPoint]>>>>,
+    outgoing_profiles: Vec<Option<ApproxPartialsContainer<Box<[TTFPoint]>>>>,
+    incoming_profiles: Vec<Option<ApproxPartialsContainer<Box<[TTFPoint]>>>>,
     buffers: MergeBuffers,
     buffers2: MergeBuffers,
 
@@ -253,7 +255,7 @@ impl<'a> Server<'a> {
                     // mark parent as in corridor
                     self.backward_tree_mask.set(label.parent as usize);
 
-                    reconstruction_graph.cache_recursive(ShortcutId::Incoming(label.shortcut_id), &mut self.buffers);
+                    reconstruction_graph.cache_recursive(ShortcutId::Incoming(label.shortcut_id), Timestamp::zero(), period(), &mut self.buffers);
 
                     if label.parent == to {
                         shortcuts_to_t_in_corridor.push((node, label.shortcut_id));
@@ -288,7 +290,7 @@ impl<'a> Server<'a> {
                     self.forward_tree_mask.set(label.parent as usize);
                     // mark edge as in search space
                     self.relevant_upward.set(label.shortcut_id as usize);
-                    reconstruction_graph.cache_recursive(ShortcutId::Outgoing(label.shortcut_id), &mut self.buffers);
+                    reconstruction_graph.cache_recursive(ShortcutId::Outgoing(label.shortcut_id), Timestamp::zero(), period(), &mut self.buffers);
 
                     if label.parent == from {
                         shortcuts_from_s_in_corridor.push((node, label.shortcut_id));
@@ -349,7 +351,11 @@ impl<'a> Server<'a> {
                 &mut down_shortcuts[self.downward_shortcut_offsets[head as usize]]
             };
             shortcut.set_sources(self.customized_graph.outgoing.edge_sources(edge_id as usize));
-            shortcut.set_cache(reconstruction_graph.take_cache(ShortcutId::Outgoing(edge_id)));
+            shortcut.set_cache(
+                reconstruction_graph
+                    .take_cache(ShortcutId::Outgoing(edge_id))
+                    .map(|ttf| ttf.try_into().unwrap()),
+            );
             shortcut.upper_bound = min(
                 shortcut.upper_bound,
                 shortcut.periodic_ttf(&reconstruction_graph.as_reconstructed()).unwrap().static_upper_bound(),
@@ -363,7 +369,11 @@ impl<'a> Server<'a> {
                 &mut up_shortcuts[self.upward_shortcut_offsets[head as usize]]
             };
             shortcut.set_sources(self.customized_graph.incoming.edge_sources(edge_id as usize));
-            shortcut.set_cache(reconstruction_graph.take_cache(ShortcutId::Incoming(edge_id)));
+            shortcut.set_cache(
+                reconstruction_graph
+                    .take_cache(ShortcutId::Incoming(edge_id))
+                    .map(|ttf| ttf.try_into().unwrap()),
+            );
             shortcut.upper_bound = min(
                 shortcut.upper_bound,
                 shortcut.periodic_ttf(&reconstruction_graph.as_reconstructed()).unwrap().static_upper_bound(),
