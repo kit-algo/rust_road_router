@@ -1,4 +1,3 @@
-#![feature(generators, generator_trait)]
 #![allow(clippy::redundant_closure_call)]
 #![allow(clippy::debug_assert_with_mut_call)]
 #[macro_use]

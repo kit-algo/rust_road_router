@@ -813,27 +813,20 @@ pub struct ReconstructionGraph<'a> {
 
 impl<'a> ReconstructionGraph<'a> {
     fn cache(&mut self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, buffers: &mut MergeBuffers) {
-        let times = if let Some(cache) = match shortcut_id {
+        let times = match shortcut_id {
             ShortcutId::Incoming(id) => &self.incoming_cache[id as usize],
             ShortcutId::Outgoing(id) => &self.outgoing_cache[id as usize],
-        } {
-            let mut times = Vec::new();
-            let mut generator = cache.missing(start, end);
-            use std::ops::Generator as _;
-            while let std::ops::GeneratorState::Yielded(time) = std::pin::Pin::new(&mut generator).resume(()) {
-                times.push(time);
-            }
-            times
-        } else {
-            vec![(start, end)]
-        };
+        }
+        .as_ref()
+        .map(|cache| cache.missing(start, end))
+        .unwrap_or(vec![(start, end)]);
 
         for (start, end) in times {
             let cache = if self.as_reconstructed().all_sources_exact(shortcut_id, start, end) {
                 let mut target = buffers.unpacking_target.push_plf();
                 self.as_reconstructed()
                     .reconstruct_exact_ttf(shortcut_id, start, end, &mut target, &mut buffers.unpacking_tmp);
-                ApproxPartialsContainer::Exact(Box::<[TTFPoint]>::from(&target[..]))
+                ApproxTTFContainer::Exact(Box::<[TTFPoint]>::from(&target[..]))
             } else {
                 let mut target = buffers.unpacking_target.push_plf();
 
@@ -883,7 +876,7 @@ impl<'a> ReconstructionGraph<'a> {
                 let mut upper = Box::<[TTFPoint]>::from(&target[..]);
                 PeriodicPiecewiseLinearFunction::fifoize_up(&mut upper[..]);
 
-                ApproxPartialsContainer::Approx(lower, upper)
+                ApproxTTFContainer::Approx(lower, upper)
             };
 
             let old = match shortcut_id {
@@ -891,9 +884,9 @@ impl<'a> ReconstructionGraph<'a> {
                 ShortcutId::Outgoing(id) => &mut self.outgoing_cache[id as usize],
             };
             if let Some(old) = old.as_mut() {
-                *old = old.combine_pub(cache.ttf(start, end).unwrap(), start, end);
+                old.insert(cache, start, end);
             } else {
-                *old = Some(cache);
+                *old = Some(ApproxPartialsContainer::new(cache));
             }
         }
 
@@ -935,10 +928,9 @@ impl<'a> ReconstructionGraph<'a> {
             ShortcutId::Outgoing(id) => self.outgoing_cache[id as usize].as_mut(),
         };
         if let Some(cache) = cache {
-            todo!()
-            // if cache.num_points() > APPROX_THRESHOLD {
-            //     *cache = ApproxTTF::from(&*cache).approximate(buffers);
-            // }
+            if cache.num_points() > APPROX_THRESHOLD {
+                cache.approximate(buffers);
+            }
         }
     }
 
