@@ -852,7 +852,7 @@ impl<'a> ReconstructionGraph<'a> {
                 }
 
                 let mut lower = Box::<[TTFPoint]>::from(&target[..]);
-                PeriodicPiecewiseLinearFunction::fifoize_down(&mut lower[..]);
+                PartialPiecewiseLinearFunction::fifoize_down(&mut lower[..]);
                 drop(target);
 
                 let mut target = buffers.unpacking_target.push_plf();
@@ -874,7 +874,7 @@ impl<'a> ReconstructionGraph<'a> {
                 }
 
                 let mut upper = Box::<[TTFPoint]>::from(&target[..]);
-                PeriodicPiecewiseLinearFunction::fifoize_up(&mut upper[..]);
+                PartialPiecewiseLinearFunction::fifoize_up(&mut upper[..]);
 
                 ApproxTTFContainer::Approx(lower, upper)
             };
