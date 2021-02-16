@@ -603,7 +603,22 @@ where
         match cache {
             ApproxTTFContainer::Exact(ipps) => ApproxPartialTTF::Exact(PartialPiecewiseLinearFunction::new(ipps)),
             ApproxTTFContainer::Approx(lower_ipps, upper_ipps) => {
-                ApproxPartialTTF::Approx(PartialPiecewiseLinearFunction::new(lower_ipps), PartialPiecewiseLinearFunction::new(upper_ipps))
+                let lower_plf = PartialPiecewiseLinearFunction::new(lower_ipps);
+                let upper_plf = PartialPiecewiseLinearFunction::new(upper_ipps);
+                let ttf = ApproxPartialTTF::Approx(lower_plf, upper_plf);
+                for p in &lower_plf[..] {
+                    if ttf.begin_at().fuzzy_leq(p.at) && p.at.fuzzy_leq(ttf.end_at()) {
+                        debug_assert!(p.val.fuzzy_leq(upper_plf.eval(p.at)));
+                    }
+                }
+                for p in &upper_plf[..] {
+                    if ttf.begin_at().fuzzy_leq(p.at) && p.at.fuzzy_leq(ttf.end_at()) {
+                        debug_assert!(lower_plf.eval(p.at).fuzzy_leq(p.val));
+                    }
+                }
+                debug_assert!(lower_plf.eval(ttf.begin_at()).fuzzy_leq(upper_plf.eval(ttf.begin_at())));
+                debug_assert!(lower_plf.eval(ttf.end_at()).fuzzy_leq(upper_plf.eval(ttf.end_at())));
+                ttf
             }
         }
     }
@@ -1218,7 +1233,7 @@ mod debug {
     use std::process::{Command, Stdio};
 
     #[allow(dead_code)]
-    pub(super) fn debug(f: &ApproxTTF, g: &ApproxTTF, state: &[(Timestamp, BoundMergingState)]) {
+    pub(super) fn debug(f: &ApproxPartialTTF, g: &ApproxPartialTTF, state: &[(Timestamp, BoundMergingState)]) {
         if let Ok(mut file) = File::create("debug.py") {
             write_python(&mut file, f, g, state).unwrap_or_else(|_| eprintln!("failed to write debug script to file"));
         }
@@ -1232,7 +1247,7 @@ mod debug {
         }
     }
 
-    fn write_python(output: &mut dyn Write, f: &ApproxTTF, g: &ApproxTTF, state: &[(Timestamp, BoundMergingState)]) -> Result<(), Error> {
+    fn write_python(output: &mut dyn Write, f: &ApproxPartialTTF, g: &ApproxPartialTTF, state: &[(Timestamp, BoundMergingState)]) -> Result<(), Error> {
         writeln!(
             output,
             "
@@ -1406,6 +1421,18 @@ where
                     self.partials.insert(i, other);
                 }
             }
+        }
+
+        for partials in self.partials.windows(2) {
+            debug_assert!(
+                ApproxPartialTTF::from(&partials[0])
+                    .end_at()
+                    .fuzzy_lt(ApproxPartialTTF::from(&partials[1]).begin_at()),
+                "{:?} - {:?} ({})",
+                ApproxPartialTTF::from(&partials[0]).end_at(),
+                ApproxPartialTTF::from(&partials[1]).begin_at(),
+                self.partials.len()
+            )
         }
     }
 }

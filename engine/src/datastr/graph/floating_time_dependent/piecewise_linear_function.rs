@@ -671,6 +671,7 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
     /// Link to partial PLFs and append the result to target, taking care of overlap
     #[allow(clippy::cognitive_complexity)]
     pub(super) fn link(&self, other: &Self, start: Timestamp, end: Timestamp, target: &mut impl PLFTarget) {
+        debug_assert!(target.is_empty());
         let mut f = PartialPlfLinkCursor::new(self.ipps);
         let mut g = PartialPlfLinkCursor::new(other.ipps);
 
