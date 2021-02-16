@@ -891,13 +891,13 @@ impl<'a> ReconstructionGraph<'a> {
         }
 
         self.approximate(shortcut_id, buffers);
+        debug_assert!(self.as_reconstructed().partial_ttf(shortcut_id, start, end).is_some());
     }
 
     pub fn cache_recursive(&mut self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, buffers: &mut MergeBuffers) {
         if self.as_reconstructed().partial_ttf(shortcut_id, start, end).is_some() || self.as_reconstructed().periodic_ttf(shortcut_id).is_some() {
             return;
         }
-        // TODO only missing pieces
 
         let (dir_graph, edge_id) = match shortcut_id {
             ShortcutId::Incoming(id) => (&self.customized_graph.incoming, id),
@@ -909,10 +909,20 @@ impl<'a> ReconstructionGraph<'a> {
         while c.cur().0.fuzzy_lt(end) {
             match ShortcutSource::from(c.cur().1) {
                 ShortcutSource::Shortcut(down, up) => {
-                    self.cache_recursive(ShortcutId::Incoming(down), max(start, c.cur().0), min(end, c.next().0), buffers);
-                    // TODO more efficient eval?
-                    let second_start = start + self.as_reconstructed().evaluate(ShortcutId::Incoming(down), start);
-                    let second_end = end + self.as_reconstructed().evaluate(ShortcutId::Incoming(down), end);
+                    let first_start = max(start, c.cur().0);
+                    let first_end = min(end, c.next().0);
+                    self.cache_recursive(ShortcutId::Incoming(down), first_start, first_end, buffers);
+
+                    let reconstructed = self.as_reconstructed();
+                    let (start_val, end_val) = if let Some(ttf) = reconstructed.partial_ttf(ShortcutId::Incoming(down), first_start, first_end) {
+                        (ttf.bound_plfs().0.eval(first_start), ttf.bound_plfs().1.eval(first_end))
+                    } else {
+                        let ttf = reconstructed.periodic_ttf(ShortcutId::Incoming(down)).unwrap();
+                        (ttf.bound_plfs().0.evaluate(first_start), ttf.bound_plfs().1.evaluate(first_end))
+                    };
+                    let second_start = first_start + start_val;
+                    let second_end = first_end + end_val;
+
                     self.cache_recursive(ShortcutId::Outgoing(up), second_start, second_end, buffers);
                 }
                 _ => (),
@@ -1074,7 +1084,8 @@ impl<'a> ShortcutGraphTrt for ReconstructedGraph<'a> {
                     .travel_time_function(id)
                     .try_into()
                     .ok()
-                    .map(|plf: PartialPiecewiseLinearFunction| ApproxPartialTTF::Exact(plf.sub_plf(start, end))),
+                    .and_then(|plf: PartialPiecewiseLinearFunction| plf.get_sub_plf(start, end))
+                    .map(ApproxPartialTTF::Exact),
                 _ => None,
             },
             _ => None,

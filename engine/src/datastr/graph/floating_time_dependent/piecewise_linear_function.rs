@@ -517,20 +517,17 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
         }
     }
 
-    pub fn sub_plf(&self, start: Timestamp, end: Timestamp) -> Self {
+    pub fn get_sub_plf(&self, start: Timestamp, end: Timestamp) -> Option<Self> {
         debug_assert!(!start.fuzzy_eq(end));
         if self.len() == 1 {
-            return *self;
+            return None;
         }
-        debug_assert!(!start.fuzzy_lt(self.first().unwrap().at));
-        debug_assert!(
-            !self.last().unwrap().at.fuzzy_lt(end),
-            "{:?} - {:?}, start {:?} end {:?}",
-            self.first(),
-            self.last(),
-            start,
-            end
-        );
+        if start.fuzzy_lt(self.first().unwrap().at) {
+            return None;
+        }
+        if self.last().unwrap().at.fuzzy_lt(end) {
+            return None;
+        }
 
         let pos = self.ipps.binary_search_by(|p| {
             if p.at.fuzzy_eq(start) {
@@ -545,6 +542,7 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
             Ok(i) => i,
             Err(i) => i - 1,
         };
+        debug_assert!(self.ipps[p_start].at.fuzzy_leq(start));
 
         let pos = self.ipps.binary_search_by(|p| {
             if p.at.fuzzy_eq(end) {
@@ -559,8 +557,16 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
             Ok(i) => i,
             Err(i) => i,
         };
+        debug_assert!(end.fuzzy_leq(self.ipps[p_end].at));
 
-        PartialPiecewiseLinearFunction::new(&self.ipps[p_start..=p_end])
+        Some(PartialPiecewiseLinearFunction::new(&self.ipps[p_start..=p_end]))
+    }
+
+    pub fn sub_plf(&self, start: Timestamp, end: Timestamp) -> Self {
+        if self.len() == 1 {
+            return *self;
+        }
+        return self.get_sub_plf(start, end).unwrap();
     }
 
     /// Copy full slice of points to target/first.
