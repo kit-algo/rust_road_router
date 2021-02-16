@@ -1178,22 +1178,16 @@ impl<'a> ApproxPartialTTF<'a> {
 
     fn begin_at(&self) -> Timestamp {
         match &self {
-            Self::Exact(points) => points,
-            Self::Approx(lower, _) => lower,
+            Self::Exact(points) => points.first().unwrap().at,
+            Self::Approx(lower, upper) => max(lower.first().unwrap().at, upper.first().unwrap().at),
         }
-        .first()
-        .unwrap()
-        .at
     }
 
     fn end_at(&self) -> Timestamp {
         match &self {
-            Self::Exact(points) => points,
-            Self::Approx(lower, _) => lower,
+            Self::Exact(points) => points.last().unwrap().at,
+            Self::Approx(lower, upper) => min(lower.last().unwrap().at, upper.last().unwrap().at),
         }
-        .last()
-        .unwrap()
-        .at
     }
 
     fn append<D>(&self, other: Self, switchover: Timestamp) -> ApproxTTFContainer<D>
@@ -1391,7 +1385,11 @@ where
     D: std::ops::Deref<Target = [TTFPoint]>,
     Vec<TTFPoint>: Into<D>,
 {
-    pub fn insert(&mut self, other: ApproxTTFContainer<D>, start: Timestamp, end: Timestamp) {
+    pub fn insert(&mut self, other: ApproxTTFContainer<D>) {
+        let other_ttf = ApproxPartialTTF::from(&other);
+        let start = other_ttf.begin_at();
+        let end = other_ttf.end_at();
+
         let pos = self.partials.binary_search_by(|partial| {
             let partial = ApproxPartialTTF::from(partial);
 

@@ -884,7 +884,7 @@ impl<'a> ReconstructionGraph<'a> {
                 ShortcutId::Outgoing(id) => &mut self.outgoing_cache[id as usize],
             };
             if let Some(old) = old.as_mut() {
-                old.insert(cache, start, end);
+                old.insert(cache);
             } else {
                 *old = Some(ApproxPartialsContainer::new(cache));
             }
