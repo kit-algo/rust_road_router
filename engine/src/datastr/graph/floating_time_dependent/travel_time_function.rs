@@ -1198,7 +1198,9 @@ impl<'a> ApproxPartialTTF<'a> {
             (Self::Exact(self_plf), Self::Exact(other_plf)) => {
                 let mut target_plf = Vec::with_capacity(self_plf.len() + other_plf.len());
                 target_plf.extend_from_slice(&self_plf);
-                other_plf.append(switchover, &mut target_plf);
+                other_plf
+                    .sub_plf(target_plf.last().unwrap().at, other_plf.last().unwrap().at)
+                    .append(target_plf.last().unwrap().at, &mut target_plf);
                 ApproxTTFContainer::Exact(target_plf.into())
             }
             _ => {
@@ -1208,10 +1210,18 @@ impl<'a> ApproxPartialTTF<'a> {
                 let mut target_upper = Vec::with_capacity(self_upper.len() + other_upper.len());
                 target_lower.extend_from_slice(&self_lower);
                 target_upper.extend_from_slice(&self_upper);
-                other_lower.append_bound(switchover, &mut target_lower, min);
-                PartialPiecewiseLinearFunction::fifoize_down(&mut target_lower);
-                other_upper.append_bound(switchover, &mut target_upper, max);
-                PartialPiecewiseLinearFunction::fifoize_up(&mut target_upper);
+                if target_lower.last().unwrap().at.fuzzy_lt(other_lower.last().unwrap().at) {
+                    other_lower
+                        .sub_plf(target_lower.last().unwrap().at, other_lower.last().unwrap().at)
+                        .append_bound(target_lower.last().unwrap().at, &mut target_lower, min);
+                    PartialPiecewiseLinearFunction::fifoize_down(&mut target_lower);
+                }
+                if target_upper.last().unwrap().at.fuzzy_lt(other_upper.last().unwrap().at) {
+                    other_upper
+                        .sub_plf(target_upper.last().unwrap().at, other_upper.last().unwrap().at)
+                        .append_bound(target_upper.last().unwrap().at, &mut target_upper, max);
+                    PartialPiecewiseLinearFunction::fifoize_up(&mut target_upper);
+                }
                 ApproxTTFContainer::Approx(target_lower.into(), target_upper.into())
             }
         }
