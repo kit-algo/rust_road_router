@@ -518,7 +518,7 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
     }
 
     pub fn get_sub_plf(&self, start: Timestamp, end: Timestamp) -> Option<Self> {
-        debug_assert!(!start.fuzzy_eq(end));
+        debug_assert!(start.fuzzy_lt(end));
         if self.len() == 1 {
             return None;
         }
@@ -558,6 +558,7 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
             Err(i) => i,
         };
         debug_assert!(end.fuzzy_leq(self.ipps[p_end].at));
+        debug_assert_ne!(p_start, p_end, "{:?} {:?}", start, end);
 
         Some(PartialPiecewiseLinearFunction::new(&self.ipps[p_start..=p_end]))
     }
@@ -576,7 +577,7 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
     pub(super) fn append(&self, switchover: Timestamp, target: &mut impl PLFTarget) {
         debug_assert!(self.len() > 1);
         if let Some(&TTFPoint { at, .. }) = target.split_last().map(|(_, rest)| rest.last()).unwrap_or(None) {
-            debug_assert!(at.fuzzy_lt(switchover));
+            debug_assert!(at.fuzzy_lt(switchover), "{:?} {:?}", at, switchover);
         }
         if let Some(&TTFPoint { at, .. }) = target.last() {
             debug_assert!(!at.fuzzy_lt(switchover));
@@ -626,13 +627,13 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
     pub(super) fn append_bound(&self, switchover: Timestamp, target: &mut impl PLFTarget, select: impl FnOnce(FlWeight, FlWeight) -> FlWeight) {
         debug_assert!(self.len() > 1);
         if let Some(&TTFPoint { at, .. }) = target.split_last().map(|(_, rest)| rest.last()).unwrap_or(None) {
-            debug_assert!(at.fuzzy_lt(switchover));
+            debug_assert!(at.fuzzy_lt(switchover), "{:?} {:?}", at, switchover);
         }
         if let Some(&TTFPoint { at, .. }) = target.last() {
             debug_assert!(!at.fuzzy_lt(switchover));
         }
         debug_assert!(!switchover.fuzzy_lt(self[0].at));
-        debug_assert!(switchover.fuzzy_lt(self[1].at));
+        debug_assert!(switchover.fuzzy_lt(self[1].at), "{:?} {:?}", self[1].at, switchover);
 
         if target.is_empty() {
             target.extend(self.iter().cloned());
