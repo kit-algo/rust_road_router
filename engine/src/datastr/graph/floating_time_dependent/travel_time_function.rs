@@ -1190,7 +1190,7 @@ impl<'a> ApproxPartialTTF<'a> {
         }
     }
 
-    fn append<D>(&self, other: Self, switchover: Timestamp) -> ApproxTTFContainer<D>
+    fn append_from_same_fn<D>(&self, other: Self) -> ApproxTTFContainer<D>
     where
         Vec<TTFPoint>: Into<D>,
     {
@@ -1404,17 +1404,30 @@ where
 
         match pos {
             Ok(i) => {
-                self.partials[i] = ApproxPartialTTF::from(&self.partials[i]).append(ApproxPartialTTF::from(&other), start).into();
-                if i + 1 < self.partials.len() && ApproxPartialTTF::from(&self.partials[i + 1]).begin_at().fuzzy_eq(end) {
+                self.partials[i] = ApproxPartialTTF::from(&self.partials[i]).append_from_same_fn(other_ttf).into();
+                if i + 1 < self.partials.len() && ApproxPartialTTF::from(&self.partials[i + 1]).begin_at().fuzzy_leq(end) {
                     self.partials[i] = ApproxPartialTTF::from(&self.partials[i])
-                        .append(ApproxPartialTTF::from(&self.partials[i + 1]), end)
+                        .append_from_same_fn(ApproxPartialTTF::from(&self.partials[i + 1]))
                         .into();
                     self.partials.remove(i + 1);
                 }
             }
             Err(i) => {
-                if i < self.partials.len() && ApproxPartialTTF::from(&self.partials[i]).begin_at().fuzzy_eq(end) {
-                    self.partials[i] = ApproxPartialTTF::from(&other).append(ApproxPartialTTF::from(&self.partials[i]), end).into();
+                if i < self.partials.len() {
+                    let cur = ApproxPartialTTF::from(&self.partials[i]);
+                    if start.fuzzy_lt(cur.begin_at()) && cur.begin_at().fuzzy_leq(end) {
+                        self.partials[i] = other_ttf.append_from_same_fn(cur).into();
+                    } else if start.fuzzy_leq(cur.end_at()) && cur.end_at().fuzzy_lt(end) {
+                        self.partials[i] = cur.append_from_same_fn(other_ttf).into();
+                        if i + 1 < self.partials.len() && ApproxPartialTTF::from(&self.partials[i + 1]).begin_at().fuzzy_leq(end) {
+                            self.partials[i] = ApproxPartialTTF::from(&self.partials[i])
+                                .append_from_same_fn(ApproxPartialTTF::from(&self.partials[i + 1]))
+                                .into();
+                            self.partials.remove(i + 1);
+                        }
+                    } else {
+                        self.partials.insert(i, other);
+                    }
                 } else {
                     self.partials.insert(i, other);
                 }
