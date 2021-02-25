@@ -913,7 +913,7 @@ impl<'a> ReconstructionGraph<'a> {
 
         while c.cur().0.fuzzy_lt(end) {
             match ShortcutSource::from(c.cur().1) {
-                ShortcutSource::Shortcut(down, up) => {
+                ShortcutSource::Shortcut(down, _up) => {
                     let first_start = max(start, c.cur().0);
                     let first_end = min(end, c.next().0);
                     self.cache_recursive(ShortcutId::Incoming(down), first_start, first_end, buffers);
