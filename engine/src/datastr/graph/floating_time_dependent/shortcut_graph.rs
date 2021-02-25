@@ -813,6 +813,7 @@ pub struct ReconstructionGraph<'a> {
 
 impl<'a> ReconstructionGraph<'a> {
     fn cache(&mut self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, buffers: &mut MergeBuffers) {
+        debug_assert!(start.fuzzy_lt(end));
         let times = match shortcut_id {
             ShortcutId::Incoming(id) => &self.incoming_cache[id as usize],
             ShortcutId::Outgoing(id) => &self.outgoing_cache[id as usize],

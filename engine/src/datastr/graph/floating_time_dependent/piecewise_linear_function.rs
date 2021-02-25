@@ -518,7 +518,7 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
     }
 
     pub fn get_sub_plf(&self, start: Timestamp, end: Timestamp) -> Option<Self> {
-        debug_assert!(start.fuzzy_lt(end));
+        debug_assert!(start.fuzzy_lt(end), "{:?} {:?}", start, end);
         if self.len() == 1 {
             return None;
         }

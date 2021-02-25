@@ -142,9 +142,9 @@ impl ShortcutSource {
                 let second_end = end + interpolate_linear(&first[first.len() - 2], &first[first.len() - 1], end);
 
                 if second_start.fuzzy_eq(second_end) {
-                    debug_assert_eq!(first_target.len(), 2);
+                    debug_assert_eq!(first.len(), 2);
                     let second_val = shortcut_graph.evaluate(ShortcutId::Outgoing(up), second_start);
-                    for p in &first_target[..] {
+                    for p in &first[..] {
                         target.push(TTFPoint {
                             at: p.at,
                             val: p.val + second_val,
@@ -229,22 +229,32 @@ impl ShortcutSource {
                 let second_start = start + interpolate_linear(&first[0], &first[1], start);
                 let second_end = end + interpolate_linear(&first[first.len() - 2], &first[first.len() - 1], end);
 
-                let mut second_target = first_target.storage_mut().push_plf();
-                let second = if let Some(partial_ttf) = shortcut_graph.partial_ttf(ShortcutId::Outgoing(up), second_start, second_end) {
-                    partial_ttf.bound_plfs().0
+                if second_start.fuzzy_eq(second_end) {
+                    debug_assert_eq!(first.len(), 2);
+                    let second_val = shortcut_graph.evaluate(ShortcutId::Outgoing(up), second_start);
+                    for p in &first[..] {
+                        target.push(TTFPoint {
+                            at: p.at,
+                            val: p.val + second_val,
+                        });
+                    }
                 } else {
-                    shortcut_graph
-                        .periodic_ttf(ShortcutId::Outgoing(up))
-                        .unwrap()
-                        .bound_plfs()
-                        .0
-                        .append_range(second_start, second_end, &mut second_target);
-                    PartialPiecewiseLinearFunction::new(&second_target[..])
-                };
+                    let mut second_target = first_target.storage_mut().push_plf();
+                    let second = if let Some(partial_ttf) = shortcut_graph.partial_ttf(ShortcutId::Outgoing(up), second_start, second_end) {
+                        partial_ttf.bound_plfs().0
+                    } else {
+                        shortcut_graph.periodic_ttf(ShortcutId::Outgoing(up)).unwrap().bound_plfs().0.append_range(
+                            second_start,
+                            second_end,
+                            &mut second_target,
+                        );
+                        PartialPiecewiseLinearFunction::new(&second_target[..])
+                    };
 
-                let first = partial_first.unwrap_or_else(|| PartialPiecewiseLinearFunction::new(second_target.storage().top_plfs().0));
+                    let first = partial_first.unwrap_or_else(|| PartialPiecewiseLinearFunction::new(second_target.storage().top_plfs().0));
 
-                first.link(&second, start, end, target);
+                    first.link(&second, start, end, target);
+                }
             }
             ShortcutSource::OriginalEdge(edge) => {
                 let ttf = shortcut_graph.original_graph().travel_time_function(edge);
@@ -290,22 +300,32 @@ impl ShortcutSource {
                 let second_start = start + interpolate_linear(&first[0], &first[1], start);
                 let second_end = end + interpolate_linear(&first[first.len() - 2], &first[first.len() - 1], end);
 
-                let mut second_target = first_target.storage_mut().push_plf();
-                let second = if let Some(partial_ttf) = shortcut_graph.partial_ttf(ShortcutId::Outgoing(up), second_start, second_end) {
-                    partial_ttf.bound_plfs().1
+                if second_start.fuzzy_eq(second_end) {
+                    debug_assert_eq!(first.len(), 2);
+                    let second_val = shortcut_graph.evaluate(ShortcutId::Outgoing(up), second_start);
+                    for p in &first[..] {
+                        target.push(TTFPoint {
+                            at: p.at,
+                            val: p.val + second_val,
+                        });
+                    }
                 } else {
-                    shortcut_graph
-                        .periodic_ttf(ShortcutId::Outgoing(up))
-                        .unwrap()
-                        .bound_plfs()
-                        .1
-                        .append_range(second_start, second_end, &mut second_target);
-                    PartialPiecewiseLinearFunction::new(&second_target[..])
-                };
+                    let mut second_target = first_target.storage_mut().push_plf();
+                    let second = if let Some(partial_ttf) = shortcut_graph.partial_ttf(ShortcutId::Outgoing(up), second_start, second_end) {
+                        partial_ttf.bound_plfs().1
+                    } else {
+                        shortcut_graph.periodic_ttf(ShortcutId::Outgoing(up)).unwrap().bound_plfs().1.append_range(
+                            second_start,
+                            second_end,
+                            &mut second_target,
+                        );
+                        PartialPiecewiseLinearFunction::new(&second_target[..])
+                    };
 
-                let first = partial_first.unwrap_or_else(|| PartialPiecewiseLinearFunction::new(second_target.storage().top_plfs().0));
+                    let first = partial_first.unwrap_or_else(|| PartialPiecewiseLinearFunction::new(second_target.storage().top_plfs().0));
 
-                first.link(&second, start, end, target);
+                    first.link(&second, start, end, target);
+                }
             }
             ShortcutSource::OriginalEdge(edge) => {
                 let ttf = shortcut_graph.original_graph().travel_time_function(edge);
