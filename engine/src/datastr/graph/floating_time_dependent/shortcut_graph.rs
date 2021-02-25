@@ -827,6 +827,8 @@ impl<'a> ReconstructionGraph<'a> {
                 let mut target = buffers.unpacking_target.push_plf();
                 self.as_reconstructed()
                     .reconstruct_exact_ttf(shortcut_id, start, end, &mut target, &mut buffers.unpacking_tmp);
+
+                PartialPiecewiseLinearFunction::crop(&mut target, start, end);
                 ApproxTTFContainer::Exact(Box::<[TTFPoint]>::from(&target[..]))
             } else {
                 let mut target = buffers.unpacking_target.push_plf();
@@ -853,7 +855,8 @@ impl<'a> ReconstructionGraph<'a> {
                 }
 
                 let mut lower = Box::<[TTFPoint]>::from(&target[..]);
-                PartialPiecewiseLinearFunction::fifoize_down(&mut lower[..]);
+                PartialPiecewiseLinearFunction::crop(&mut lower, start, end);
+                PartialPiecewiseLinearFunction::fifoize_down(&mut lower);
                 drop(target);
 
                 let mut target = buffers.unpacking_target.push_plf();
@@ -875,7 +878,8 @@ impl<'a> ReconstructionGraph<'a> {
                 }
 
                 let mut upper = Box::<[TTFPoint]>::from(&target[..]);
-                PartialPiecewiseLinearFunction::fifoize_up(&mut upper[..]);
+                PartialPiecewiseLinearFunction::crop(&mut upper, start, end);
+                PartialPiecewiseLinearFunction::fifoize_up(&mut upper);
 
                 ApproxTTFContainer::Approx(lower, upper)
             };

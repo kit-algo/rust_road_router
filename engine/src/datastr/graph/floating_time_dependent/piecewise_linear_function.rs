@@ -1345,6 +1345,24 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
             plf[i].val = max(plf[i].val, plf[i - 1].val + plf[i - 1].at - plf[i].at);
         }
     }
+
+    pub fn crop(plf: &mut [TTFPoint], start: Timestamp, end: Timestamp) {
+        debug_assert!(plf[0].at.fuzzy_leq(start));
+        debug_assert!(start.fuzzy_lt(plf[1].at));
+        if plf[0].at.fuzzy_lt(start) {
+            let start_val = interpolate_linear(&plf[0], &plf[1], start);
+            plf[0].val = start_val;
+            plf[0].at = start;
+        }
+        let len = plf.len();
+        debug_assert!(plf[len - 2].at.fuzzy_lt(end));
+        debug_assert!(end.fuzzy_leq(plf[len - 1].at));
+        if end.fuzzy_lt(plf[len - 1].at) {
+            let end_val = interpolate_linear(&plf[len - 2], &plf[len - 1], end);
+            plf[len - 1].val = end_val;
+            plf[len - 1].at = end;
+        }
+    }
 }
 
 #[cfg(test)]

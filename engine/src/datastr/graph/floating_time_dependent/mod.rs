@@ -402,6 +402,10 @@ impl ReusablePLFStorage {
     fn top_plf(&self) -> &[TTFPoint] {
         &self.data[self.first_points[self.first_points.len() - 1] as usize..]
     }
+
+    fn top_plf_mut(&mut self) -> &mut [TTFPoint] {
+        &mut self.data[self.first_points[self.first_points.len() - 1] as usize..]
+    }
 }
 
 /// A wrapper with mutable access to a PLF in a `ReusablePLFStorage`.
@@ -461,6 +465,12 @@ impl<'a> std::ops::Deref for MutTopPLF<'a> {
 
     fn deref(&self) -> &Self::Target {
         self.storage.top_plf()
+    }
+}
+
+impl<'a> std::ops::DerefMut for MutTopPLF<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.storage.top_plf_mut()
     }
 }
 
