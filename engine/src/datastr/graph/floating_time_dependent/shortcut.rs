@@ -25,7 +25,7 @@ pub const APPROX_THRESHOLD: usize = include!(concat!(env!("OUT_DIR"), "/TDCCH_AP
 #[derive(Debug)]
 pub struct Shortcut {
     sources: Sources,
-    cache: Option<ApproxTTFContainer<Box<[TTFPoint]>>>,
+    cache: Option<ATTFContainer<Box<[TTFPoint]>>>,
     pub lower_bound: FlWeight,
     pub upper_bound: FlWeight,
     constant: bool,
@@ -86,7 +86,7 @@ impl Shortcut {
         }
 
         if cfg!(feature = "detailed-stats") {
-            IPP_COUNT.fetch_sub(self.cache.as_ref().map(ApproxTTFContainer::<Box<[TTFPoint]>>::num_points).unwrap_or(0), Relaxed);
+            IPP_COUNT.fetch_sub(self.cache.as_ref().map(ATTFContainer::<Box<[TTFPoint]>>::num_points).unwrap_or(0), Relaxed);
             PATH_SOURCES_COUNT.fetch_sub(self.sources.len(), Relaxed);
             if self.cache.is_some() {
                 ACTIVE_SHORTCUTS.fetch_sub(1, Relaxed);
@@ -122,7 +122,7 @@ impl Shortcut {
                 // link functions
                 let linked = first_plf.link(&second_plf);
 
-                self.upper_bound = min(self.upper_bound, ApproxTTF::from(&linked).static_upper_bound());
+                self.upper_bound = min(self.upper_bound, PeriodicATTF::from(&linked).static_upper_bound());
                 debug_assert!(
                     !cfg!(feature = "tdcch-precustomization") || !self.upper_bound.fuzzy_lt(self.lower_bound),
                     "lower {:?} upper {:?}",
@@ -143,7 +143,7 @@ impl Shortcut {
                 ACTUALLY_LINKED.fetch_add(1, Relaxed);
             }
 
-            let linked = ApproxTTF::from(&linked_ipps);
+            let linked = PeriodicATTF::from(&linked_ipps);
             // these bounds are more tight than the previous ones
             let other_lower_bound = linked.static_lower_bound();
             let other_upper_bound = linked.static_upper_bound();
@@ -205,7 +205,7 @@ impl Shortcut {
                 if cfg!(feature = "detailed-stats") {
                     CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed);
                 }
-                merged = ApproxTTF::from(&merged).approximate(buffers);
+                merged = PeriodicATTF::from(&merged).approximate(buffers);
                 if cfg!(feature = "detailed-stats") {
                     SAVED_BY_APPROX.fetch_add(old as isize - merged.num_points() as isize, Relaxed);
                 }
@@ -216,7 +216,7 @@ impl Shortcut {
             // We would like to increase the lower bound to make it tighter, but we can't take the max right now,
             // We might find a lower function during a later merge operation.
             // We can only set the lower bound as tight as possible, once we have the final travel time function.
-            self.upper_bound = min(self.upper_bound, ApproxTTF::from(&merged).static_upper_bound());
+            self.upper_bound = min(self.upper_bound, PeriodicATTF::from(&merged).static_upper_bound());
             debug_assert!(
                 !cfg!(feature = "tdcch-precustomization") || !self.upper_bound.fuzzy_lt(self.lower_bound),
                 "lower {:?} upper {:?}",
@@ -231,7 +231,7 @@ impl Shortcut {
         })();
 
         if cfg!(feature = "detailed-stats") {
-            IPP_COUNT.fetch_add(self.cache.as_ref().map(ApproxTTFContainer::<Box<[TTFPoint]>>::num_points).unwrap_or(0), Relaxed);
+            IPP_COUNT.fetch_add(self.cache.as_ref().map(ATTFContainer::<Box<[TTFPoint]>>::num_points).unwrap_or(0), Relaxed);
             PATH_SOURCES_COUNT.fetch_add(self.sources.len(), Relaxed);
             if self.cache.is_some() {
                 ACTIVE_SHORTCUTS.fetch_add(1, Relaxed);
@@ -239,14 +239,14 @@ impl Shortcut {
         }
     }
 
-    pub fn periodic_ttf<'s, 'g: 's>(&'s self, shortcut_graph: &'g impl ShortcutGraphTrt<OriginalGraph = TDGraph>) -> Option<ApproxTTF<'s>> {
+    pub fn periodic_ttf<'s, 'g: 's>(&'s self, shortcut_graph: &'g impl ShortcutGraphTrt<OriginalGraph = TDGraph>) -> Option<PeriodicATTF<'s>> {
         if let Some(cache) = &self.cache {
             return Some(cache.into());
         }
 
         match self.sources {
             Sources::One(source) => match source.into() {
-                ShortcutSource::OriginalEdge(id) => return Some(ApproxTTF::Exact(shortcut_graph.original_graph().travel_time_function(id))),
+                ShortcutSource::OriginalEdge(id) => return Some(PeriodicATTF::Exact(shortcut_graph.original_graph().travel_time_function(id))),
                 _ => (),
             },
             _ => (),
@@ -260,12 +260,12 @@ impl Shortcut {
         shortcut_graph: &'g impl ShortcutGraphTrt<OriginalGraph = TDGraph>,
         start: Timestamp,
         end: Timestamp,
-    ) -> Option<ApproxPartialTTF<'s>> {
+    ) -> Option<PartialATTF<'s>> {
         if start < Timestamp::zero() || end > period() {
             return None;
         }
         self.periodic_ttf(shortcut_graph)
-            .map(|ttf| ApproxPartialTTF::try_from(ttf).ok())
+            .map(|ttf| PartialATTF::try_from(ttf).ok())
             .flatten()
             .map(|ttf| ttf.sub_ttf(start, end))
     }
@@ -372,7 +372,7 @@ impl Shortcut {
     /// Should only be called once it is really not needed anymore.
     pub fn clear_plf(&mut self) {
         if cfg!(feature = "detailed-stats") {
-            IPP_COUNT.fetch_sub(self.cache.as_ref().map(ApproxTTFContainer::<Box<[TTFPoint]>>::num_points).unwrap_or(0), Relaxed);
+            IPP_COUNT.fetch_sub(self.cache.as_ref().map(ATTFContainer::<Box<[TTFPoint]>>::num_points).unwrap_or(0), Relaxed);
             if self.cache.is_some() {
                 ACTIVE_SHORTCUTS.fetch_sub(1, Relaxed);
             }
@@ -380,7 +380,7 @@ impl Shortcut {
         self.cache = None;
     }
 
-    pub fn set_cache(&mut self, ttf: Option<ApproxTTFContainer<Box<[TTFPoint]>>>) {
+    pub fn set_cache(&mut self, ttf: Option<ATTFContainer<Box<[TTFPoint]>>>) {
         self.cache = ttf;
     }
 

@@ -7,17 +7,17 @@ use std::{
 // During customization we need to store PLFs.
 // For each shortcut we either have the exact function (`Exact`) or an approximation through less complex upper and lower bounds (`Approx`).
 #[derive(Debug)]
-pub enum ApproxTTFContainer<D> {
+pub enum ATTFContainer<D> {
     Exact(D),
     Approx(D, D),
 }
 
-impl<D> ApproxTTFContainer<D>
+impl<D> ATTFContainer<D>
 where
     D: std::ops::Deref<Target = [TTFPoint]>,
 {
     pub fn num_points(&self) -> usize {
-        use ApproxTTFContainer::*;
+        use ATTFContainer::*;
 
         match &self {
             Exact(points) => points.len(),
@@ -26,14 +26,14 @@ where
     }
 }
 
-impl<D> TryFrom<ApproxPartialsContainer<D>> for ApproxTTFContainer<D>
+impl<D> TryFrom<ApproxPartialsContainer<D>> for ATTFContainer<D>
 where
     D: std::ops::Deref<Target = [TTFPoint]>,
 {
     type Error = ();
     fn try_from(partials: ApproxPartialsContainer<D>) -> Result<Self, Self::Error> {
         if let [partial] = &partials.partials[..] {
-            let partial = ApproxPartialTTF::from(partial);
+            let partial = PartialATTF::from(partial);
             if partial.begin_at() == Timestamp::zero() && partial.end_at() == period() {
                 return Ok(partials.partials.into_iter().next().unwrap());
             }
@@ -42,11 +42,11 @@ where
     }
 }
 
-impl From<ApproxTTFContainer<Vec<TTFPoint>>> for ApproxTTFContainer<Box<[TTFPoint]>> {
-    fn from(cache: ApproxTTFContainer<Vec<TTFPoint>>) -> Self {
+impl From<ATTFContainer<Vec<TTFPoint>>> for ATTFContainer<Box<[TTFPoint]>> {
+    fn from(cache: ATTFContainer<Vec<TTFPoint>>) -> Self {
         match cache {
-            ApproxTTFContainer::Exact(ipps) => ApproxTTFContainer::Exact(ipps.into_boxed_slice()),
-            ApproxTTFContainer::Approx(lower_ipps, upper_ipps) => ApproxTTFContainer::Approx(lower_ipps.into_boxed_slice(), upper_ipps.into_boxed_slice()),
+            ATTFContainer::Exact(ipps) => ATTFContainer::Exact(ipps.into_boxed_slice()),
+            ATTFContainer::Approx(lower_ipps, upper_ipps) => ATTFContainer::Approx(lower_ipps.into_boxed_slice(), upper_ipps.into_boxed_slice()),
         }
     }
 }
@@ -61,19 +61,19 @@ enum BoundMergingState {
 
 // Similar to `ApproxTTFContainer`, though this one is for actually working with the functions, `ApproxTTFContainer` is for storing them.
 #[derive(Debug)]
-pub enum ApproxTTF<'a> {
+pub enum PeriodicATTF<'a> {
     Exact(PeriodicPiecewiseLinearFunction<'a>),
     Approx(PeriodicPiecewiseLinearFunction<'a>, PeriodicPiecewiseLinearFunction<'a>),
 }
 
-impl<'a, D> From<&'a ApproxTTFContainer<D>> for ApproxTTF<'a>
+impl<'a, D> From<&'a ATTFContainer<D>> for PeriodicATTF<'a>
 where
     D: std::ops::Deref<Target = [TTFPoint]>,
 {
-    fn from(cache: &'a ApproxTTFContainer<D>) -> Self {
+    fn from(cache: &'a ATTFContainer<D>) -> Self {
         match cache {
-            ApproxTTFContainer::Exact(ipps) => ApproxTTF::Exact(PeriodicPiecewiseLinearFunction::new(ipps)),
-            ApproxTTFContainer::Approx(lower_ipps, upper_ipps) => ApproxTTF::Approx(
+            ATTFContainer::Exact(ipps) => PeriodicATTF::Exact(PeriodicPiecewiseLinearFunction::new(ipps)),
+            ATTFContainer::Approx(lower_ipps, upper_ipps) => PeriodicATTF::Approx(
                 PeriodicPiecewiseLinearFunction::new(lower_ipps),
                 PeriodicPiecewiseLinearFunction::new(upper_ipps),
             ),
@@ -81,9 +81,9 @@ where
     }
 }
 
-impl<'a> ApproxTTF<'a> {
+impl<'a> PeriodicATTF<'a> {
     pub fn exact(&self) -> bool {
-        use ApproxTTF::*;
+        use PeriodicATTF::*;
 
         match &self {
             Exact(_) => true,
@@ -92,7 +92,7 @@ impl<'a> ApproxTTF<'a> {
     }
 
     pub fn static_lower_bound(&self) -> FlWeight {
-        use ApproxTTF::*;
+        use PeriodicATTF::*;
 
         match self {
             Exact(plf) => plf.lower_bound(),
@@ -101,7 +101,7 @@ impl<'a> ApproxTTF<'a> {
     }
 
     pub fn static_upper_bound(&self) -> FlWeight {
-        use ApproxTTF::*;
+        use PeriodicATTF::*;
 
         match self {
             Exact(plf) => plf.upper_bound(),
@@ -110,12 +110,12 @@ impl<'a> ApproxTTF<'a> {
     }
 
     // Link to TTFs, creating a new function
-    pub fn link(&self, second: &Self) -> ApproxTTFContainer<Vec<TTFPoint>> {
-        use ApproxTTF::*;
+    pub fn link(&self, second: &Self) -> ATTFContainer<Vec<TTFPoint>> {
+        use PeriodicATTF::*;
 
         // if both TTFs are exact, we can link exact
         if let (Exact(first), Exact(second)) = (self, second) {
-            return ApproxTTFContainer::Exact(first.link(second));
+            return ATTFContainer::Exact(first.link(second));
         }
         // else the result will be approximated anyway
 
@@ -123,7 +123,7 @@ impl<'a> ApproxTTF<'a> {
         let (second_lower, second_upper) = second.bound_plfs();
 
         // linking two upper bounds is a valid upper bound, same for lower bounds
-        ApproxTTFContainer::Approx(first_lower.link(&second_lower), first_upper.link(&second_upper))
+        ATTFContainer::Approx(first_lower.link(&second_lower), first_upper.link(&second_upper))
     }
 
     // this ones a bit ugly...
@@ -138,13 +138,13 @@ impl<'a> ApproxTTF<'a> {
         other: &Self,
         buffers: &mut MergeBuffers,
         merge_exact: impl Fn(Timestamp, Timestamp, &mut MergeBuffers) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>),
-    ) -> (ApproxTTFContainer<Box<[TTFPoint]>>, Vec<(Timestamp, bool)>) {
-        use ApproxTTF::*;
+    ) -> (ATTFContainer<Box<[TTFPoint]>>, Vec<(Timestamp, bool)>) {
+        use PeriodicATTF::*;
 
         // easy case, both functions are exact, we can just do actual function mering and are done
         if let (Exact(self_plf), Exact(other)) = (self, other) {
             let (plf, intersections) = self_plf.merge(other, &mut buffers.buffer);
-            return (ApproxTTFContainer::Exact(plf), intersections);
+            return (ATTFContainer::Exact(plf), intersections);
         }
 
         // get bound functions
@@ -549,7 +549,7 @@ impl<'a> ApproxTTF<'a> {
         }
 
         let ret = (
-            ApproxTTFContainer::Approx(Box::from(&buffers.exact_result_lower[..]), Box::from(&buffers.exact_result_upper[..])),
+            ATTFContainer::Approx(Box::from(&buffers.exact_result_lower[..]), Box::from(&buffers.exact_result_upper[..])),
             result,
         );
 
@@ -565,22 +565,22 @@ impl<'a> ApproxTTF<'a> {
         // (ApproxTTFContainer::Approx(result_lower, result_upper), result)
     }
 
-    pub fn approximate(&self, buffers: &mut MergeBuffers) -> ApproxTTFContainer<Box<[TTFPoint]>> {
-        use ApproxTTF::*;
+    pub fn approximate(&self, buffers: &mut MergeBuffers) -> ATTFContainer<Box<[TTFPoint]>> {
+        use PeriodicATTF::*;
 
         match self {
             Exact(plf) => {
                 let (lower, upper) = plf.bound_ttfs();
-                ApproxTTFContainer::Approx(lower, upper)
+                ATTFContainer::Approx(lower, upper)
             }
             Approx(lower_plf, upper_plf) => {
-                ApproxTTFContainer::Approx(lower_plf.lower_bound_ttf(&mut buffers.buffer), upper_plf.upper_bound_ttf(&mut buffers.buffer))
+                ATTFContainer::Approx(lower_plf.lower_bound_ttf(&mut buffers.buffer), upper_plf.upper_bound_ttf(&mut buffers.buffer))
             }
         }
     }
 
     pub fn bound_plfs(&self) -> (PeriodicPiecewiseLinearFunction<'a>, PeriodicPiecewiseLinearFunction<'a>) {
-        use ApproxTTF::*;
+        use PeriodicATTF::*;
 
         match self {
             Exact(plf) => (*plf, *plf),
@@ -590,22 +590,22 @@ impl<'a> ApproxTTF<'a> {
 }
 
 #[derive(Debug)]
-pub enum ApproxPartialTTF<'a> {
+pub enum PartialATTF<'a> {
     Exact(PartialPiecewiseLinearFunction<'a>),
     Approx(PartialPiecewiseLinearFunction<'a>, PartialPiecewiseLinearFunction<'a>),
 }
 
-impl<'a, D> From<&'a ApproxTTFContainer<D>> for ApproxPartialTTF<'a>
+impl<'a, D> From<&'a ATTFContainer<D>> for PartialATTF<'a>
 where
     D: std::ops::Deref<Target = [TTFPoint]>,
 {
-    fn from(cache: &'a ApproxTTFContainer<D>) -> Self {
+    fn from(cache: &'a ATTFContainer<D>) -> Self {
         match cache {
-            ApproxTTFContainer::Exact(ipps) => ApproxPartialTTF::Exact(PartialPiecewiseLinearFunction::new(ipps)),
-            ApproxTTFContainer::Approx(lower_ipps, upper_ipps) => {
+            ATTFContainer::Exact(ipps) => PartialATTF::Exact(PartialPiecewiseLinearFunction::new(ipps)),
+            ATTFContainer::Approx(lower_ipps, upper_ipps) => {
                 let lower_plf = PartialPiecewiseLinearFunction::new(lower_ipps);
                 let upper_plf = PartialPiecewiseLinearFunction::new(upper_ipps);
-                let ttf = ApproxPartialTTF::Approx(lower_plf, upper_plf);
+                let ttf = PartialATTF::Approx(lower_plf, upper_plf);
                 for p in &lower_plf[..] {
                     if ttf.begin_at().fuzzy_leq(p.at) && p.at.fuzzy_leq(ttf.end_at()) {
                         debug_assert!(p.val.fuzzy_leq(upper_plf.eval(p.at)));
@@ -624,29 +624,29 @@ where
     }
 }
 
-impl<'a> TryFrom<ApproxTTF<'a>> for ApproxPartialTTF<'a> {
+impl<'a> TryFrom<PeriodicATTF<'a>> for PartialATTF<'a> {
     type Error = ();
-    fn try_from(ttf: ApproxTTF<'a>) -> Result<Self, Self::Error> {
+    fn try_from(ttf: PeriodicATTF<'a>) -> Result<Self, Self::Error> {
         Ok(match ttf {
-            ApproxTTF::Exact(plf) => ApproxPartialTTF::Exact(plf.try_into()?),
-            ApproxTTF::Approx(lower_plf, upper_plf) => ApproxPartialTTF::Approx(lower_plf.try_into()?, upper_plf.try_into()?),
+            PeriodicATTF::Exact(plf) => PartialATTF::Exact(plf.try_into()?),
+            PeriodicATTF::Approx(lower_plf, upper_plf) => PartialATTF::Approx(lower_plf.try_into()?, upper_plf.try_into()?),
         })
     }
 }
 
-impl<'a> TryFrom<ApproxPartialTTF<'a>> for ApproxTTF<'a> {
+impl<'a> TryFrom<PartialATTF<'a>> for PeriodicATTF<'a> {
     type Error = ();
-    fn try_from(ttf: ApproxPartialTTF<'a>) -> Result<Self, Self::Error> {
+    fn try_from(ttf: PartialATTF<'a>) -> Result<Self, Self::Error> {
         Ok(match ttf {
-            ApproxPartialTTF::Exact(plf) => ApproxTTF::Exact(plf.try_into()?),
-            ApproxPartialTTF::Approx(lower_plf, upper_plf) => ApproxTTF::Approx(lower_plf.try_into()?, upper_plf.try_into()?),
+            PartialATTF::Exact(plf) => PeriodicATTF::Exact(plf.try_into()?),
+            PartialATTF::Approx(lower_plf, upper_plf) => PeriodicATTF::Approx(lower_plf.try_into()?, upper_plf.try_into()?),
         })
     }
 }
 
-impl<'a> ApproxPartialTTF<'a> {
+impl<'a> PartialATTF<'a> {
     pub fn exact(&self) -> bool {
-        use ApproxPartialTTF::*;
+        use PartialATTF::*;
 
         match &self {
             Exact(_) => true,
@@ -655,7 +655,7 @@ impl<'a> ApproxPartialTTF<'a> {
     }
 
     pub fn static_lower_bound(&self) -> FlWeight {
-        use ApproxPartialTTF::*;
+        use PartialATTF::*;
 
         match self {
             Exact(plf) => plf.lower_bound(),
@@ -664,7 +664,7 @@ impl<'a> ApproxPartialTTF<'a> {
     }
 
     pub fn static_upper_bound(&self) -> FlWeight {
-        use ApproxPartialTTF::*;
+        use PartialATTF::*;
 
         match self {
             Exact(plf) => plf.upper_bound(),
@@ -673,8 +673,8 @@ impl<'a> ApproxPartialTTF<'a> {
     }
 
     // Link to TTFs, creating a new function
-    pub fn link(&self, second: &Self, start: Timestamp, end: Timestamp) -> ApproxTTFContainer<Vec<TTFPoint>> {
-        use ApproxPartialTTF::*;
+    pub fn link(&self, second: &Self, start: Timestamp, end: Timestamp) -> ATTFContainer<Vec<TTFPoint>> {
+        use PartialATTF::*;
 
         // if both TTFs are exact, we can link exact
         if let (Exact(first), Exact(second)) = (self, second) {
@@ -684,7 +684,7 @@ impl<'a> ApproxPartialTTF<'a> {
             let second = second.sub_plf(second_start, second_end);
             let mut result = Vec::new();
             first.link(&second, start, end, &mut result);
-            return ApproxTTFContainer::Exact(result.into());
+            return ATTFContainer::Exact(result.into());
         }
         // else the result will be approximated anyway
 
@@ -705,7 +705,7 @@ impl<'a> ApproxPartialTTF<'a> {
         // TODO reusable buffers or something
 
         // linking two upper bounds is a valid upper bound, same for lower bounds
-        ApproxTTFContainer::Approx(result_lower, result_upper)
+        ATTFContainer::Approx(result_lower, result_upper)
     }
 
     // this ones a bit ugly...
@@ -722,13 +722,13 @@ impl<'a> ApproxPartialTTF<'a> {
         end: Timestamp,
         buffers: &mut MergeBuffers,
         merge_exact: impl Fn(Timestamp, Timestamp, &mut MergeBuffers) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>),
-    ) -> (ApproxTTFContainer<Box<[TTFPoint]>>, Vec<(Timestamp, bool)>) {
-        use ApproxPartialTTF::*;
+    ) -> (ATTFContainer<Box<[TTFPoint]>>, Vec<(Timestamp, bool)>) {
+        use PartialATTF::*;
 
         // easy case, both functions are exact, we can just do actual function mering and are done
         if let (Exact(self_plf), Exact(other)) = (self, other) {
             let (plf, intersections) = self_plf.merge(other, start, end, &mut buffers.buffer);
-            return (ApproxTTFContainer::Exact(plf), intersections);
+            return (ATTFContainer::Exact(plf), intersections);
         }
 
         // get bound functions
@@ -1132,7 +1132,7 @@ impl<'a> ApproxPartialTTF<'a> {
         }
 
         let ret = (
-            ApproxTTFContainer::Approx(Box::from(&buffers.exact_result_lower[..]), Box::from(&buffers.exact_result_upper[..])),
+            ATTFContainer::Approx(Box::from(&buffers.exact_result_lower[..]), Box::from(&buffers.exact_result_upper[..])),
             result,
         );
 
@@ -1146,22 +1146,22 @@ impl<'a> ApproxPartialTTF<'a> {
         // (ApproxTTFContainer::Approx(result_lower, result_upper), result)
     }
 
-    pub fn approximate(&self, buffers: &mut MergeBuffers) -> ApproxTTFContainer<Box<[TTFPoint]>> {
-        use ApproxPartialTTF::*;
+    pub fn approximate(&self, buffers: &mut MergeBuffers) -> ATTFContainer<Box<[TTFPoint]>> {
+        use PartialATTF::*;
 
         match self {
             Exact(plf) => {
                 let (lower, upper) = plf.bound_ttfs();
-                ApproxTTFContainer::Approx(lower, upper)
+                ATTFContainer::Approx(lower, upper)
             }
             Approx(lower_plf, upper_plf) => {
-                ApproxTTFContainer::Approx(lower_plf.lower_bound_ttf(&mut buffers.buffer), upper_plf.upper_bound_ttf(&mut buffers.buffer))
+                ATTFContainer::Approx(lower_plf.lower_bound_ttf(&mut buffers.buffer), upper_plf.upper_bound_ttf(&mut buffers.buffer))
             }
         }
     }
 
     pub fn bound_plfs(&self) -> (PartialPiecewiseLinearFunction<'a>, PartialPiecewiseLinearFunction<'a>) {
-        use ApproxPartialTTF::*;
+        use PartialATTF::*;
 
         match self {
             Exact(plf) => (*plf, *plf),
@@ -1190,7 +1190,7 @@ impl<'a> ApproxPartialTTF<'a> {
         }
     }
 
-    fn append_from_same_fn<D>(&self, other: Self) -> ApproxTTFContainer<D>
+    fn append_from_same_fn<D>(&self, other: Self) -> ATTFContainer<D>
     where
         Vec<TTFPoint>: Into<D>,
     {
@@ -1201,7 +1201,7 @@ impl<'a> ApproxPartialTTF<'a> {
                 other_plf
                     .sub_plf(target_plf.last().unwrap().at, other_plf.last().unwrap().at)
                     .append(target_plf.last().unwrap().at, &mut target_plf);
-                ApproxTTFContainer::Exact(target_plf.into())
+                ATTFContainer::Exact(target_plf.into())
             }
             _ => {
                 let (self_lower, self_upper) = self.bound_plfs();
@@ -1222,7 +1222,7 @@ impl<'a> ApproxPartialTTF<'a> {
                         .append_bound(target_upper.last().unwrap().at, &mut target_upper, max);
                     PartialPiecewiseLinearFunction::fifoize_up(&mut target_upper);
                 }
-                ApproxTTFContainer::Approx(target_lower.into(), target_upper.into())
+                ATTFContainer::Approx(target_lower.into(), target_upper.into())
             }
         }
     }
@@ -1237,7 +1237,7 @@ mod debug {
     use std::process::{Command, Stdio};
 
     #[allow(dead_code)]
-    pub(super) fn debug(f: &ApproxPartialTTF, g: &ApproxPartialTTF, state: &[(Timestamp, BoundMergingState)]) {
+    pub(super) fn debug(f: &PartialATTF, g: &PartialATTF, state: &[(Timestamp, BoundMergingState)]) {
         if let Ok(mut file) = File::create("debug.py") {
             write_python(&mut file, f, g, state).unwrap_or_else(|_| eprintln!("failed to write debug script to file"));
         }
@@ -1251,7 +1251,7 @@ mod debug {
         }
     }
 
-    fn write_python(output: &mut dyn Write, f: &ApproxPartialTTF, g: &ApproxPartialTTF, state: &[(Timestamp, BoundMergingState)]) -> Result<(), Error> {
+    fn write_python(output: &mut dyn Write, f: &PartialATTF, g: &PartialATTF, state: &[(Timestamp, BoundMergingState)]) -> Result<(), Error> {
         writeln!(
             output,
             "
@@ -1319,29 +1319,30 @@ def plot_coords(coords, *args, **kwargs):
 
 #[derive(Debug)]
 pub struct ApproxPartialsContainer<D> {
-    partials: Vec<ApproxTTFContainer<D>>,
+    partials: Vec<ATTFContainer<D>>,
 }
 
 impl<D> ApproxPartialsContainer<D>
 where
     D: std::ops::Deref<Target = [TTFPoint]>,
 {
-    pub fn new(ttf: ApproxTTFContainer<D>) -> Self {
+    pub fn new(ttf: ATTFContainer<D>) -> Self {
+        PartialATTF::from(&ttf);
         Self { partials: vec![ttf] }
     }
 
     pub fn exact(&self) -> bool {
         // TODO
-        self.partials.iter().all(|p| ApproxPartialTTF::from(p).exact())
+        self.partials.iter().all(|p| PartialATTF::from(p).exact())
     }
 
     pub fn num_points(&self) -> usize {
         self.partials.iter().map(|p| p.num_points()).sum()
     }
 
-    pub fn ttf(&self, start: Timestamp, end: Timestamp) -> Option<ApproxPartialTTF<'_>> {
+    pub fn ttf(&self, start: Timestamp, end: Timestamp) -> Option<PartialATTF<'_>> {
         let pos = self.partials.binary_search_by(|partial| {
-            let partial = ApproxPartialTTF::from(partial);
+            let partial = PartialATTF::from(partial);
             if end.fuzzy_lt(partial.begin_at()) {
                 Ordering::Greater
             } else if partial.end_at().fuzzy_lt(start) {
@@ -1352,7 +1353,7 @@ where
         });
 
         if let Ok(i) = pos {
-            let partial = ApproxPartialTTF::from(&self.partials[i]);
+            let partial = PartialATTF::from(&self.partials[i]);
             if partial.begin_at().fuzzy_leq(start) && end.fuzzy_leq(partial.end_at()) {
                 return Some(partial.sub_ttf(start, end));
             }
@@ -1363,19 +1364,19 @@ where
     pub fn missing(&self, start: Timestamp, end: Timestamp) -> Vec<(Timestamp, Timestamp)> {
         let mut times = Vec::new();
 
-        if start.fuzzy_lt(ApproxPartialTTF::from(&self.partials[0]).begin_at()) {
-            times.push((start, min(end, ApproxPartialTTF::from(&self.partials[0]).begin_at())));
+        if start.fuzzy_lt(PartialATTF::from(&self.partials[0]).begin_at()) {
+            times.push((start, min(end, PartialATTF::from(&self.partials[0]).begin_at())));
         }
         for parts in self.partials.windows(2) {
-            if !(end.fuzzy_leq(ApproxPartialTTF::from(&parts[0]).end_at()) || ApproxPartialTTF::from(&parts[1]).begin_at().fuzzy_leq(start)) {
+            if !(end.fuzzy_leq(PartialATTF::from(&parts[0]).end_at()) || PartialATTF::from(&parts[1]).begin_at().fuzzy_leq(start)) {
                 times.push((
-                    max(start, ApproxPartialTTF::from(&parts[0]).end_at()),
-                    min(end, ApproxPartialTTF::from(&parts[1]).begin_at()),
+                    max(start, PartialATTF::from(&parts[0]).end_at()),
+                    min(end, PartialATTF::from(&parts[1]).begin_at()),
                 ))
             }
         }
-        if ApproxPartialTTF::from(self.partials.last().unwrap()).end_at().fuzzy_lt(end) {
-            times.push((max(start, ApproxPartialTTF::from(self.partials.last().unwrap()).end_at()), end));
+        if PartialATTF::from(self.partials.last().unwrap()).end_at().fuzzy_lt(end) {
+            times.push((max(start, PartialATTF::from(self.partials.last().unwrap()).end_at()), end));
         }
 
         times
@@ -1385,7 +1386,7 @@ where
 impl ApproxPartialsContainer<Box<[TTFPoint]>> {
     pub fn approximate(&mut self, buffers: &mut MergeBuffers) {
         for partial in &mut self.partials {
-            *partial = ApproxPartialTTF::from(&*partial).approximate(buffers)
+            *partial = PartialATTF::from(&*partial).approximate(buffers)
         }
     }
 }
@@ -1395,13 +1396,13 @@ where
     D: std::ops::Deref<Target = [TTFPoint]>,
     Vec<TTFPoint>: Into<D>,
 {
-    pub fn insert(&mut self, other: ApproxTTFContainer<D>) {
-        let other_ttf = ApproxPartialTTF::from(&other);
+    pub fn insert(&mut self, other: ATTFContainer<D>) {
+        let other_ttf = PartialATTF::from(&other);
         let start = other_ttf.begin_at();
         let end = other_ttf.end_at();
 
         let pos = self.partials.binary_search_by(|partial| {
-            let partial = ApproxPartialTTF::from(partial);
+            let partial = PartialATTF::from(partial);
 
             if start.fuzzy_eq(partial.end_at()) {
                 Ordering::Equal
@@ -1414,24 +1415,24 @@ where
 
         match pos {
             Ok(i) => {
-                self.partials[i] = ApproxPartialTTF::from(&self.partials[i]).append_from_same_fn(other_ttf).into();
-                if i + 1 < self.partials.len() && ApproxPartialTTF::from(&self.partials[i + 1]).begin_at().fuzzy_leq(end) {
-                    self.partials[i] = ApproxPartialTTF::from(&self.partials[i])
-                        .append_from_same_fn(ApproxPartialTTF::from(&self.partials[i + 1]))
+                self.partials[i] = PartialATTF::from(&self.partials[i]).append_from_same_fn(other_ttf).into();
+                if i + 1 < self.partials.len() && PartialATTF::from(&self.partials[i + 1]).begin_at().fuzzy_leq(end) {
+                    self.partials[i] = PartialATTF::from(&self.partials[i])
+                        .append_from_same_fn(PartialATTF::from(&self.partials[i + 1]))
                         .into();
                     self.partials.remove(i + 1);
                 }
             }
             Err(i) => {
                 if i < self.partials.len() {
-                    let cur = ApproxPartialTTF::from(&self.partials[i]);
+                    let cur = PartialATTF::from(&self.partials[i]);
                     if start.fuzzy_lt(cur.begin_at()) && cur.begin_at().fuzzy_leq(end) {
                         self.partials[i] = other_ttf.append_from_same_fn(cur).into();
                     } else if start.fuzzy_leq(cur.end_at()) && cur.end_at().fuzzy_lt(end) {
                         self.partials[i] = cur.append_from_same_fn(other_ttf).into();
-                        if i + 1 < self.partials.len() && ApproxPartialTTF::from(&self.partials[i + 1]).begin_at().fuzzy_leq(end) {
-                            self.partials[i] = ApproxPartialTTF::from(&self.partials[i])
-                                .append_from_same_fn(ApproxPartialTTF::from(&self.partials[i + 1]))
+                        if i + 1 < self.partials.len() && PartialATTF::from(&self.partials[i + 1]).begin_at().fuzzy_leq(end) {
+                            self.partials[i] = PartialATTF::from(&self.partials[i])
+                                .append_from_same_fn(PartialATTF::from(&self.partials[i + 1]))
                                 .into();
                             self.partials.remove(i + 1);
                         }
@@ -1446,12 +1447,10 @@ where
 
         for partials in self.partials.windows(2) {
             debug_assert!(
-                ApproxPartialTTF::from(&partials[0])
-                    .end_at()
-                    .fuzzy_lt(ApproxPartialTTF::from(&partials[1]).begin_at()),
+                PartialATTF::from(&partials[0]).end_at().fuzzy_lt(PartialATTF::from(&partials[1]).begin_at()),
                 "{:?} - {:?} ({})",
-                ApproxPartialTTF::from(&partials[0]).end_at(),
-                ApproxPartialTTF::from(&partials[1]).begin_at(),
+                PartialATTF::from(&partials[0]).end_at(),
+                PartialATTF::from(&partials[1]).begin_at(),
                 self.partials.len()
             )
         }

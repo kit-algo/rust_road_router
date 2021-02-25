@@ -119,7 +119,7 @@ impl ShortcutSource {
             ShortcutSource::Shortcut(down, up) => {
                 let mut first_target = tmp.push_plf();
 
-                let partial_first = if let Some(ApproxPartialTTF::Exact(plf)) = shortcut_graph.partial_ttf(ShortcutId::Incoming(down), start, end) {
+                let partial_first = if let Some(PartialATTF::Exact(plf)) = shortcut_graph.partial_ttf(ShortcutId::Incoming(down), start, end) {
                     Some(plf)
                 } else {
                     None
@@ -128,7 +128,7 @@ impl ShortcutSource {
                 let first = if let Some(partial_plf) = &partial_first {
                     &partial_plf[..]
                 } else {
-                    if let Some(ApproxTTF::Exact(plf)) = shortcut_graph.periodic_ttf(ShortcutId::Incoming(down)) {
+                    if let Some(PeriodicATTF::Exact(plf)) = shortcut_graph.periodic_ttf(ShortcutId::Incoming(down)) {
                         plf.append_range(start, end, &mut first_target)
                     } else {
                         shortcut_graph.reconstruct_exact_ttf(ShortcutId::Incoming(down), start, end, &mut first_target, target.storage_mut());
@@ -152,10 +152,10 @@ impl ShortcutSource {
                     }
                 } else {
                     let mut second_target = first_target.storage_mut().push_plf();
-                    let second = if let Some(ApproxPartialTTF::Exact(plf)) = shortcut_graph.partial_ttf(ShortcutId::Outgoing(up), second_start, second_end) {
+                    let second = if let Some(PartialATTF::Exact(plf)) = shortcut_graph.partial_ttf(ShortcutId::Outgoing(up), second_start, second_end) {
                         plf
                     } else {
-                        if let Some(ApproxTTF::Exact(plf)) = shortcut_graph.periodic_ttf(ShortcutId::Outgoing(up)) {
+                        if let Some(PeriodicATTF::Exact(plf)) = shortcut_graph.periodic_ttf(ShortcutId::Outgoing(up)) {
                             plf.append_range(second_start, second_end, &mut second_target)
                         } else {
                             shortcut_graph.reconstruct_exact_ttf(ShortcutId::Outgoing(up), second_start, second_end, &mut second_target, target.storage_mut());
