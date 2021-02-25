@@ -912,6 +912,19 @@ impl<'a> ReconstructionGraph<'a> {
                     let first_start = max(start, c.cur().0);
                     let first_end = min(end, c.next().0);
                     self.cache_recursive(ShortcutId::Incoming(down), first_start, first_end, buffers);
+                }
+                _ => (),
+            }
+            c.advance();
+        }
+
+        let mut c = SourceCursor::valid_at(dir_graph.edge_sources(edge_id as usize), start);
+
+        while c.cur().0.fuzzy_lt(end) {
+            match ShortcutSource::from(c.cur().1) {
+                ShortcutSource::Shortcut(down, up) => {
+                    let first_start = max(start, c.cur().0);
+                    let first_end = min(end, c.next().0);
 
                     let reconstructed = self.as_reconstructed();
                     let (start_val, end_val) = if let Some(ttf) = reconstructed.partial_ttf(ShortcutId::Incoming(down), first_start, first_end) {
