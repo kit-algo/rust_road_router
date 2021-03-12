@@ -33,9 +33,8 @@ where
     type Error = ();
     fn try_from(partials: ApproxPartialsContainer<D>) -> Result<Self, Self::Error> {
         if let [partial] = &partials.partials[..] {
-            let partial = PartialATTF::from(partial);
-            if partial.begin_at() == Timestamp::zero() && partial.end_at() == period() {
-                return Ok(partials.partials.into_iter().next().unwrap());
+            if partial.start == Timestamp::zero() && partial.end == period() {
+                return Ok(partials.partials.into_iter().next().unwrap().ttf);
             }
         }
         Err(())
@@ -1190,7 +1189,17 @@ impl<'a> PartialATTF<'a> {
         }
     }
 
-    fn append_from_same_fn<D>(&self, other: Self) -> ATTFContainer<D>
+    fn can_crop_to_period(&self) -> bool {
+        match &self {
+            Self::Exact(points) => PartialPiecewiseLinearFunction::crop_in_place_possible(points, Timestamp::zero(), period()),
+            Self::Approx(lower, upper) => {
+                PartialPiecewiseLinearFunction::crop_in_place_possible(lower, Timestamp::zero(), period())
+                    && PartialPiecewiseLinearFunction::crop_in_place_possible(upper, Timestamp::zero(), period())
+            }
+        }
+    }
+
+    fn append_from_same_fn<D>(&self, other: Self, switchover: Timestamp) -> ATTFContainer<D>
     where
         Vec<TTFPoint>: Into<D>,
     {
@@ -1198,9 +1207,7 @@ impl<'a> PartialATTF<'a> {
             (Self::Exact(self_plf), Self::Exact(other_plf)) => {
                 let mut target_plf = Vec::with_capacity(self_plf.len() + other_plf.len());
                 target_plf.extend_from_slice(&self_plf);
-                other_plf
-                    .sub_plf(target_plf.last().unwrap().at, other_plf.last().unwrap().at)
-                    .append(target_plf.last().unwrap().at, &mut target_plf);
+                other_plf.append(switchover, &mut target_plf);
                 ATTFContainer::Exact(target_plf.into())
             }
             _ => {
@@ -1210,18 +1217,10 @@ impl<'a> PartialATTF<'a> {
                 let mut target_upper = Vec::with_capacity(self_upper.len() + other_upper.len());
                 target_lower.extend_from_slice(&self_lower);
                 target_upper.extend_from_slice(&self_upper);
-                if target_lower.last().unwrap().at.fuzzy_lt(other_lower.last().unwrap().at) {
-                    other_lower
-                        .sub_plf(target_lower.last().unwrap().at, other_lower.last().unwrap().at)
-                        .append_bound(target_lower.last().unwrap().at, &mut target_lower, min);
-                    PartialPiecewiseLinearFunction::fifoize_down(&mut target_lower);
-                }
-                if target_upper.last().unwrap().at.fuzzy_lt(other_upper.last().unwrap().at) {
-                    other_upper
-                        .sub_plf(target_upper.last().unwrap().at, other_upper.last().unwrap().at)
-                        .append_bound(target_upper.last().unwrap().at, &mut target_upper, max);
-                    PartialPiecewiseLinearFunction::fifoize_up(&mut target_upper);
-                }
+                other_lower.append_bound(switchover, &mut target_lower, min);
+                PartialPiecewiseLinearFunction::fifoize_down(&mut target_lower);
+                other_upper.append_bound(switchover, &mut target_upper, max);
+                PartialPiecewiseLinearFunction::fifoize_up(&mut target_upper);
                 ATTFContainer::Approx(target_lower.into(), target_upper.into())
             }
         }
@@ -1318,34 +1317,55 @@ def plot_coords(coords, *args, **kwargs):
 }
 
 #[derive(Debug)]
+pub struct Partial<D> {
+    pub start: Timestamp,
+    pub end: Timestamp,
+    pub ttf: ATTFContainer<D>,
+}
+
+impl<D> Partial<D>
+where
+    D: std::ops::Deref<Target = [TTFPoint]>,
+    Vec<TTFPoint>: Into<D>,
+{
+    fn append(&self, other: &Self) -> Self {
+        assert!(self.end.fuzzy_eq(other.start));
+        Partial {
+            start: self.start,
+            end: other.end,
+            ttf: PartialATTF::from(&self.ttf).append_from_same_fn(PartialATTF::from(&other.ttf), self.end),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct ApproxPartialsContainer<D> {
-    partials: Vec<ATTFContainer<D>>,
+    partials: Vec<Partial<D>>,
 }
 
 impl<D> ApproxPartialsContainer<D>
 where
     D: std::ops::Deref<Target = [TTFPoint]>,
 {
-    pub fn new(ttf: ATTFContainer<D>) -> Self {
-        PartialATTF::from(&ttf);
-        Self { partials: vec![ttf] }
+    pub fn new(partial: Partial<D>) -> Self {
+        PartialATTF::from(&partial.ttf);
+        Self { partials: vec![partial] }
     }
 
     pub fn exact(&self) -> bool {
         // TODO
-        self.partials.iter().all(|p| PartialATTF::from(p).exact())
+        self.partials.iter().all(|p| PartialATTF::from(&p.ttf).exact())
     }
 
     pub fn num_points(&self) -> usize {
-        self.partials.iter().map(|p| p.num_points()).sum()
+        self.partials.iter().map(|p| p.ttf.num_points()).sum()
     }
 
     pub fn ttf(&self, start: Timestamp, end: Timestamp) -> Option<PartialATTF<'_>> {
-        let pos = self.partials.binary_search_by(|partial| {
-            let partial = PartialATTF::from(partial);
-            if end.fuzzy_lt(partial.begin_at()) {
+        let pos = self.partials.binary_search_by(|p| {
+            if end.fuzzy_lt(p.start) {
                 Ordering::Greater
-            } else if partial.end_at().fuzzy_lt(start) {
+            } else if p.end.fuzzy_lt(start) {
                 Ordering::Less
             } else {
                 Ordering::Equal
@@ -1353,9 +1373,8 @@ where
         });
 
         if let Ok(i) = pos {
-            let partial = PartialATTF::from(&self.partials[i]);
-            if partial.begin_at().fuzzy_leq(start) && end.fuzzy_leq(partial.end_at()) {
-                return Some(partial.sub_ttf(start, end));
+            if self.partials[i].start.fuzzy_leq(start) && end.fuzzy_leq(self.partials[i].end) {
+                return Some(PartialATTF::from(&self.partials[i].ttf).sub_ttf(start, end));
             }
         }
         None
@@ -1364,19 +1383,16 @@ where
     pub fn missing(&self, start: Timestamp, end: Timestamp) -> Vec<(Timestamp, Timestamp)> {
         let mut times = Vec::new();
 
-        if start.fuzzy_lt(PartialATTF::from(&self.partials[0]).begin_at()) {
-            times.push((start, min(end, PartialATTF::from(&self.partials[0]).begin_at())));
+        if start.fuzzy_lt(self.partials[0].start) {
+            times.push((start, min(end, self.partials[0].start)));
         }
         for parts in self.partials.windows(2) {
-            if !(end.fuzzy_leq(PartialATTF::from(&parts[0]).end_at()) || PartialATTF::from(&parts[1]).begin_at().fuzzy_leq(start)) {
-                times.push((
-                    max(start, PartialATTF::from(&parts[0]).end_at()),
-                    min(end, PartialATTF::from(&parts[1]).begin_at()),
-                ))
+            if !(end.fuzzy_leq(parts[0].end) || parts[1].start.fuzzy_leq(start)) {
+                times.push((max(start, parts[0].end), min(end, parts[1].start)))
             }
         }
-        if PartialATTF::from(self.partials.last().unwrap()).end_at().fuzzy_lt(end) {
-            times.push((max(start, PartialATTF::from(self.partials.last().unwrap()).end_at()), end));
+        if self.partials.last().unwrap().end.fuzzy_lt(end) {
+            times.push((max(start, self.partials.last().unwrap().end), end));
         }
 
         times
@@ -1385,8 +1401,12 @@ where
 
 impl ApproxPartialsContainer<Box<[TTFPoint]>> {
     pub fn approximate(&mut self, buffers: &mut MergeBuffers) {
+        // We do not account for the periodic case here.
+        // This function must only be called, before a function is turned into a periodic one.
+        // This should be fine, because once a function is periodic,
+        // it is also complete won't gain any additonal complexity.
         for partial in &mut self.partials {
-            *partial = PartialATTF::from(&*partial).approximate(buffers)
+            partial.ttf = PartialATTF::from(&partial.ttf).approximate(buffers)
         }
     }
 }
@@ -1396,17 +1416,11 @@ where
     D: std::ops::Deref<Target = [TTFPoint]>,
     Vec<TTFPoint>: Into<D>,
 {
-    pub fn insert(&mut self, other: ATTFContainer<D>) {
-        let other_ttf = PartialATTF::from(&other);
-        let start = other_ttf.begin_at();
-        let end = other_ttf.end_at();
-
+    pub fn insert(&mut self, insert: Partial<D>) {
         let pos = self.partials.binary_search_by(|partial| {
-            let partial = PartialATTF::from(partial);
-
-            if start.fuzzy_eq(partial.end_at()) {
+            if insert.start.fuzzy_eq(partial.end) {
                 Ordering::Equal
-            } else if partial.end_at() < start {
+            } else if partial.end < insert.start {
                 Ordering::Less
             } else {
                 Ordering::Greater
@@ -1415,44 +1429,152 @@ where
 
         match pos {
             Ok(i) => {
-                self.partials[i] = PartialATTF::from(&self.partials[i]).append_from_same_fn(other_ttf).into();
-                if i + 1 < self.partials.len() && PartialATTF::from(&self.partials[i + 1]).begin_at().fuzzy_leq(end) {
-                    self.partials[i] = PartialATTF::from(&self.partials[i])
-                        .append_from_same_fn(PartialATTF::from(&self.partials[i + 1]))
-                        .into();
+                self.partials[i] = self.partials[i].append(&insert);
+                if i + 1 < self.partials.len() && self.partials[i + 1].start.fuzzy_eq(insert.end) {
+                    self.partials[i] = self.partials[i].append(&self.partials[i + 1]);
                     self.partials.remove(i + 1);
                 }
             }
             Err(i) => {
-                if i < self.partials.len() {
-                    let cur = PartialATTF::from(&self.partials[i]);
-                    if start.fuzzy_lt(cur.begin_at()) && cur.begin_at().fuzzy_leq(end) {
-                        self.partials[i] = other_ttf.append_from_same_fn(cur).into();
-                    } else if start.fuzzy_leq(cur.end_at()) && cur.end_at().fuzzy_lt(end) {
-                        self.partials[i] = cur.append_from_same_fn(other_ttf).into();
-                        if i + 1 < self.partials.len() && PartialATTF::from(&self.partials[i + 1]).begin_at().fuzzy_leq(end) {
-                            self.partials[i] = PartialATTF::from(&self.partials[i])
-                                .append_from_same_fn(PartialATTF::from(&self.partials[i + 1]))
-                                .into();
-                            self.partials.remove(i + 1);
-                        }
-                    } else {
-                        self.partials.insert(i, other);
-                    }
+                if i < self.partials.len() && self.partials[i].start.fuzzy_eq(insert.end) {
+                    self.partials[i] = insert.append(&self.partials[i]);
                 } else {
-                    self.partials.insert(i, other);
+                    self.partials.insert(i, insert);
                 }
             }
         }
 
         for partials in self.partials.windows(2) {
             debug_assert!(
-                PartialATTF::from(&partials[0]).end_at().fuzzy_lt(PartialATTF::from(&partials[1]).begin_at()),
+                partials[0].end.fuzzy_lt(partials[1].start),
                 "{:?} - {:?} ({})",
-                PartialATTF::from(&partials[0]).end_at(),
-                PartialATTF::from(&partials[1]).begin_at(),
+                partials[0].end,
+                partials[1].start,
                 self.partials.len()
             )
+        }
+    }
+}
+
+impl<D> ApproxPartialsContainer<D>
+where
+    D: std::ops::DerefMut<Target = [TTFPoint]>,
+    Vec<TTFPoint>: Into<D>,
+{
+    pub fn maybe_to_periodic(&mut self) {
+        if let [partial] = &mut self.partials[..] {
+            let ttf = PartialATTF::from(&partial.ttf);
+            if ttf.can_crop_to_period() {
+                match &mut partial.ttf {
+                    ATTFContainer::Exact(plf) => {
+                        PartialPiecewiseLinearFunction::crop(plf, Timestamp::zero(), period());
+                    }
+                    ATTFContainer::Approx(lower_plf, upper_plf) => {
+                        PartialPiecewiseLinearFunction::crop(lower_plf, Timestamp::zero(), period());
+                        PartialPiecewiseLinearFunction::crop(upper_plf, Timestamp::zero(), period());
+                        PeriodicPiecewiseLinearFunction::make_lower_bound_periodic(lower_plf);
+                        PeriodicPiecewiseLinearFunction::make_upper_bound_periodic(upper_plf);
+                    }
+                }
+                partial.start = Timestamp::zero();
+                partial.end = period();
+                return;
+            }
+        }
+
+        if let Some(full_period_partial) = self.ttf(Timestamp::zero(), period()) {
+            let new_container = match full_period_partial {
+                PartialATTF::Exact(plf) => {
+                    let mut target = Vec::with_capacity(plf.len());
+                    target.extend_from_slice(&plf);
+                    PartialPiecewiseLinearFunction::crop(&mut target, Timestamp::zero(), period());
+                    ATTFContainer::Exact(target.into())
+                }
+                PartialATTF::Approx(lower_plf, upper_plf) => {
+                    let mut lower_target = Vec::with_capacity(lower_plf.len());
+                    lower_target.extend_from_slice(&lower_plf);
+                    PartialPiecewiseLinearFunction::crop(&mut lower_target, Timestamp::zero(), period());
+                    PeriodicPiecewiseLinearFunction::make_lower_bound_periodic(&mut lower_target);
+
+                    let mut upper_target = Vec::with_capacity(upper_plf.len());
+                    upper_target.extend_from_slice(&upper_plf);
+                    PartialPiecewiseLinearFunction::crop(&mut upper_target, Timestamp::zero(), period());
+                    PeriodicPiecewiseLinearFunction::make_upper_bound_periodic(&mut upper_target);
+
+                    ATTFContainer::Approx(lower_target.into(), upper_target.into())
+                }
+            };
+            self.partials.truncate(1);
+            self.partials[0] = Partial {
+                ttf: new_container,
+                start: Timestamp::zero(),
+                end: period(),
+            };
+            return;
+        }
+
+        for partial in &self.partials {
+            let ttf = PartialATTF::from(&partial.ttf);
+            if FlWeight::from(period()).fuzzy_leq(partial.end - partial.start) {
+                let (times_period, _) = partial.start.split_of_period();
+                let low_offset = times_period * FlWeight::from(period());
+                let mid_offset = low_offset + period();
+
+                let new_container = match ttf {
+                    PartialATTF::Exact(plf) => {
+                        let mut target = Vec::with_capacity(plf.len() + 2);
+                        plf.sub_plf(mid_offset, partial.start + FlWeight::from(period()))
+                            .append(mid_offset, &mut target);
+                        for p in &mut target {
+                            p.at = p.at - FlWeight::from(period());
+                        }
+                        plf.sub_plf(partial.start, mid_offset).append(partial.start, &mut target);
+                        for p in &mut target {
+                            p.at = p.at - low_offset;
+                        }
+                        PartialPiecewiseLinearFunction::crop(&mut target, Timestamp::zero(), period());
+                        ATTFContainer::Exact(target.into())
+                    }
+                    PartialATTF::Approx(lower_plf, upper_plf) => {
+                        let mut lower_target = Vec::with_capacity(lower_plf.len() + 2);
+                        lower_plf
+                            .sub_plf(mid_offset, partial.start + FlWeight::from(period()))
+                            .append(mid_offset, &mut lower_target);
+                        for p in &mut lower_target {
+                            p.at = p.at - FlWeight::from(period());
+                        }
+                        lower_plf.sub_plf(partial.start, mid_offset).append_bound(partial.start, &mut lower_target, min);
+                        for p in &mut lower_target {
+                            p.at = p.at - low_offset;
+                        }
+                        PartialPiecewiseLinearFunction::crop(&mut lower_target, Timestamp::zero(), period());
+                        PeriodicPiecewiseLinearFunction::make_lower_bound_periodic(&mut lower_target);
+
+                        let mut upper_target = Vec::with_capacity(upper_plf.len() + 2);
+                        upper_plf
+                            .sub_plf(mid_offset, partial.start + FlWeight::from(period()))
+                            .append(mid_offset, &mut upper_target);
+                        for p in &mut upper_target {
+                            p.at = p.at - FlWeight::from(period());
+                        }
+                        upper_plf.sub_plf(partial.start, mid_offset).append_bound(partial.start, &mut upper_target, max);
+                        for p in &mut upper_target {
+                            p.at = p.at - low_offset;
+                        }
+                        PartialPiecewiseLinearFunction::crop(&mut upper_target, Timestamp::zero(), period());
+                        PeriodicPiecewiseLinearFunction::make_upper_bound_periodic(&mut upper_target);
+
+                        ATTFContainer::Approx(lower_target.into(), upper_target.into())
+                    }
+                };
+                self.partials.truncate(1);
+                self.partials[0] = Partial {
+                    ttf: new_container,
+                    start: Timestamp::zero(),
+                    end: period(),
+                };
+                break;
+            }
         }
     }
 }
