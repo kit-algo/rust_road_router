@@ -353,16 +353,8 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
             .unwrap()
             .douglas_peuker_combined(&mut result_lower, &mut result_upper);
 
-        let wrap_min = min(result_lower.first().unwrap().val, result_lower.last().unwrap().val);
-        let wrap_max = max(result_upper.first().unwrap().val, result_upper.last().unwrap().val);
-
-        result_lower.first_mut().unwrap().val = wrap_min;
-        result_lower.last_mut().unwrap().val = wrap_min;
-        result_upper.first_mut().unwrap().val = wrap_max;
-        result_upper.last_mut().unwrap().val = wrap_max;
-
-        Self::fifoize_down(&mut result_lower);
-        Self::fifoize_up(&mut result_upper);
+        Self::make_lower_bound_periodic(&mut result_lower);
+        Self::make_upper_bound_periodic(&mut result_upper);
 
         (result_lower.into(), result_upper.into())
     }
@@ -375,27 +367,29 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
     #[cfg(feature = "tdcch-approx-imai-iri")]
     pub fn lower_bound_ttf(&self) -> Box<[TTFPoint]> {
         let mut lower = Imai::new(self.ipps, 0.0, APPROX.into(), true, true).compute();
-
-        let wrap = min(lower.first().unwrap().val, lower.last().unwrap().val);
-        lower.first_mut().unwrap().val = wrap;
-        lower.last_mut().unwrap().val = wrap;
-
-        Self::fifoize_down(&mut lower);
-
+        Self::make_lower_bound_periodic(&mut lower);
         lower.into_boxed_slice()
     }
 
     #[cfg(feature = "tdcch-approx-imai-iri")]
     pub fn upper_bound_ttf(&self) -> Box<[TTFPoint]> {
         let mut upper = Imai::new(self.ipps, APPROX.into(), 0.0, true, true).compute();
-
-        let wrap = max(upper.first().unwrap().val, upper.last().unwrap().val);
-        upper.first_mut().unwrap().val = wrap;
-        upper.last_mut().unwrap().val = wrap;
-
-        Self::fifoize_up(&mut upper);
-
+        Self::make_upper_bound_periodic(&mut upper);
         upper.into_boxed_slice()
+    }
+
+    pub fn make_lower_bound_periodic(plf: &mut [TTFPoint]) {
+        let wrap = min(plf.first().unwrap().val, plf.last().unwrap().val);
+        plf.first_mut().unwrap().val = wrap;
+        plf.last_mut().unwrap().val = wrap;
+        Self::fifoize_down(plf);
+    }
+
+    pub fn make_upper_bound_periodic(plf: &mut [TTFPoint]) {
+        let wrap = max(plf.first().unwrap().val, plf.last().unwrap().val);
+        plf.first_mut().unwrap().val = wrap;
+        plf.last_mut().unwrap().val = wrap;
+        Self::fifoize_up(plf);
     }
 
     pub fn fifoize_down(plf: &mut [TTFPoint]) {
@@ -446,6 +440,7 @@ impl<'a> TryFrom<PeriodicPiecewiseLinearFunction<'a>> for PartialPiecewiseLinear
 impl<'a> TryFrom<PartialPiecewiseLinearFunction<'a>> for PeriodicPiecewiseLinearFunction<'a> {
     type Error = ();
     fn try_from(pplf: PartialPiecewiseLinearFunction<'a>) -> Result<Self, Self::Error> {
+        let pplf = pplf.sub_plf(Timestamp::zero(), period());
         if pplf.first().unwrap().at == Timestamp::zero() && pplf.last().unwrap().at == period() {
             Ok(PeriodicPiecewiseLinearFunction { ipps: pplf.ipps })
         } else {
@@ -1347,6 +1342,11 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
         for i in 1..plf.len() {
             plf[i].val = max(plf[i].val, plf[i - 1].val + plf[i - 1].at - plf[i].at);
         }
+    }
+
+    pub fn crop_in_place_possible(plf: &[TTFPoint], start: Timestamp, end: Timestamp) -> bool {
+        let len = plf.len();
+        plf[0].at.fuzzy_leq(start) && start.fuzzy_lt(plf[1].at) && plf[len - 2].at.fuzzy_lt(end) && end.fuzzy_leq(plf[len - 1].at)
     }
 
     pub fn crop(plf: &mut [TTFPoint], start: Timestamp, end: Timestamp) {
