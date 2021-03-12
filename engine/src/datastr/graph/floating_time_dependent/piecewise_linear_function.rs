@@ -168,7 +168,7 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
                     dbg_each!(switchover_val, second_switchover_val, start)
                 );
 
-                if target.last() != Some(&f.prev()) {
+                if !(target.last() == Some(&f.prev()) || interpolate_linear(target.last().unwrap(), &f.next(), start).fuzzy_eq(switchover_val)) {
                     target.push(TTFPoint {
                         at: start,
                         val: switchover_val,
@@ -610,12 +610,13 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
         }
 
         // ignore point when segments colinear
-        if target.last() != Some(&self[0]) {
+        if !(target.last() == Some(&self[0]) || interpolate_linear(target.last().unwrap(), &self[1], switchover).fuzzy_eq(switchover_val)) {
             target.push(TTFPoint {
                 at: switchover,
                 val: switchover_val,
             });
         }
+
         target.extend_from_slice(&self[1..]);
 
         for points in target.windows(2) {
@@ -654,11 +655,13 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
             interpolate_linear(&self[0], &self[1], switchover)
         };
 
+        let switchover_val = select(target_switchover_val, self_switchover_val);
+
         // ignore point when segments colinear
-        if target.last() != Some(&self[0]) {
+        if !(target.last() == Some(&self[0]) || interpolate_linear(target.last().unwrap(), &self[1], switchover).fuzzy_eq(switchover_val)) {
             target.push(TTFPoint {
                 at: switchover,
-                val: select(target_switchover_val, self_switchover_val),
+                val: switchover_val,
             });
         }
         let debug_start = target.len().saturating_sub(2);
