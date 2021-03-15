@@ -33,15 +33,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         let n = g.num_nodes();
 
         for _ in 0..50 {
+            let _tdcch_query_ctxt = algo_runs_ctxt.push_collection_item();
             eprintln!();
             let from: NodeId = rng.gen_range(0, n as NodeId);
             let to: NodeId = rng.gen_range(0, n as NodeId);
-
-            let _tdcch_query_ctxt = algo_runs_ctxt.push_collection_item();
-            let ((shortcut, tt, paths), time) = measure(|| server.distance(from, to));
-
             report!("from", from);
             report!("to", to);
+
+            let ((shortcut, tt, paths), time) = measure(|| server.distance(from, to));
+
             report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
             tdcch_time = tdcch_time + time;
             report!("num_sources", shortcut.num_sources());
