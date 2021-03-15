@@ -142,14 +142,18 @@ impl ShortcutSource {
                 let second_end = end + interpolate_linear(&first[first.len() - 2], &first[first.len() - 1], end);
 
                 if second_start.fuzzy_eq(second_end) {
-                    debug_assert_eq!(first.len(), 2);
                     let second_val = shortcut_graph.evaluate(ShortcutId::Outgoing(up), second_start);
                     for p in &first[..] {
-                        target.push(TTFPoint {
-                            at: p.at,
-                            val: p.val + second_val,
-                        });
+                        debug_assert!((p.at + p.val).fuzzy_eq(second_start));
                     }
+                    target.push(TTFPoint {
+                        at: first.first().unwrap().at,
+                        val: first.first().unwrap().val + second_val,
+                    });
+                    target.push(TTFPoint {
+                        at: first.last().unwrap().at,
+                        val: first.last().unwrap().val + second_val,
+                    });
                 } else {
                     let mut second_target = first_target.storage_mut().push_plf();
                     let second = if let Some(PartialATTF::Exact(plf)) = shortcut_graph.partial_ttf(ShortcutId::Outgoing(up), second_start, second_end) {
@@ -230,14 +234,18 @@ impl ShortcutSource {
                 let second_end = end + interpolate_linear(&first[first.len() - 2], &first[first.len() - 1], end);
 
                 if second_start.fuzzy_eq(second_end) {
-                    debug_assert_eq!(first.len(), 2);
                     let second_val = shortcut_graph.evaluate(ShortcutId::Outgoing(up), second_start);
                     for p in &first[..] {
-                        target.push(TTFPoint {
-                            at: p.at,
-                            val: p.val + second_val,
-                        });
+                        debug_assert!((p.at + p.val).fuzzy_eq(second_start));
                     }
+                    target.push(TTFPoint {
+                        at: first.first().unwrap().at,
+                        val: first.first().unwrap().val + second_val,
+                    });
+                    target.push(TTFPoint {
+                        at: first.last().unwrap().at,
+                        val: first.last().unwrap().val + second_val,
+                    });
                 } else {
                     let mut second_target = first_target.storage_mut().push_plf();
                     let second = if let Some(partial_ttf) = shortcut_graph.partial_ttf(ShortcutId::Outgoing(up), second_start, second_end) {
@@ -301,14 +309,18 @@ impl ShortcutSource {
                 let second_end = end + interpolate_linear(&first[first.len() - 2], &first[first.len() - 1], end);
 
                 if second_start.fuzzy_eq(second_end) {
-                    debug_assert_eq!(first.len(), 2);
                     let second_val = shortcut_graph.evaluate(ShortcutId::Outgoing(up), second_start);
                     for p in &first[..] {
-                        target.push(TTFPoint {
-                            at: p.at,
-                            val: p.val + second_val,
-                        });
+                        debug_assert!((p.at + p.val).fuzzy_eq(second_start));
                     }
+                    target.push(TTFPoint {
+                        at: first.first().unwrap().at,
+                        val: first.first().unwrap().val + second_val,
+                    });
+                    target.push(TTFPoint {
+                        at: first.last().unwrap().at,
+                        val: first.last().unwrap().val + second_val,
+                    });
                 } else {
                     let mut second_target = first_target.storage_mut().push_plf();
                     let second = if let Some(partial_ttf) = shortcut_graph.partial_ttf(ShortcutId::Outgoing(up), second_start, second_end) {
