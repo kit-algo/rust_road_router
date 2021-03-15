@@ -604,20 +604,7 @@ where
             ATTFContainer::Approx(lower_ipps, upper_ipps) => {
                 let lower_plf = PartialPiecewiseLinearFunction::new(lower_ipps);
                 let upper_plf = PartialPiecewiseLinearFunction::new(upper_ipps);
-                let ttf = PartialATTF::Approx(lower_plf, upper_plf);
-                for p in &lower_plf[..] {
-                    if ttf.begin_at().fuzzy_leq(p.at) && p.at.fuzzy_leq(ttf.end_at()) {
-                        debug_assert!(p.val.fuzzy_leq(upper_plf.eval(p.at)));
-                    }
-                }
-                for p in &upper_plf[..] {
-                    if ttf.begin_at().fuzzy_leq(p.at) && p.at.fuzzy_leq(ttf.end_at()) {
-                        debug_assert!(lower_plf.eval(p.at).fuzzy_leq(p.val));
-                    }
-                }
-                debug_assert!(lower_plf.eval(ttf.begin_at()).fuzzy_leq(upper_plf.eval(ttf.begin_at())));
-                debug_assert!(lower_plf.eval(ttf.end_at()).fuzzy_leq(upper_plf.eval(ttf.end_at())));
-                ttf
+                PartialATTF::Approx(lower_plf, upper_plf)
             }
         }
     }
