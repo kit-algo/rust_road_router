@@ -313,7 +313,7 @@ impl<'a> Server<'a> {
         //     dbg_each!(tentative_distance, self.lower_bounds_to_target[self.from as usize])
         // );
         debug_assert!(
-            FlWeight::zero().fuzzy_eq(self.lower_bounds_to_target[self.to as usize]),
+            FlWeight::zero().fuzzy_eq(self.lower_bounds_to_target[self.to as usize]) || tentative_distance.0.fuzzy_eq(FlWeight::INFINITY),
             "{:?}",
             dbg_each!(self.lower_bounds_to_target[self.to as usize])
         );
