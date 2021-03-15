@@ -383,6 +383,7 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
         plf.first_mut().unwrap().val = wrap;
         plf.last_mut().unwrap().val = wrap;
         Self::fifoize_down(plf);
+        debug_assert!(plf.first().unwrap().val.fuzzy_eq(plf.last().unwrap().val));
     }
 
     pub fn make_upper_bound_periodic(plf: &mut [TTFPoint]) {
@@ -390,6 +391,7 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
         plf.first_mut().unwrap().val = wrap;
         plf.last_mut().unwrap().val = wrap;
         Self::fifoize_up(plf);
+        debug_assert!(plf.first().unwrap().val.fuzzy_eq(plf.last().unwrap().val));
     }
 
     pub fn fifoize_down(plf: &mut [TTFPoint]) {
@@ -398,6 +400,7 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
             plf.last_mut().unwrap().val = plf[0].val;
             PartialPiecewiseLinearFunction::fifoize_down(plf);
         }
+        debug_assert!(plf.first().unwrap().val.fuzzy_eq(plf.last().unwrap().val));
     }
 
     pub fn fifoize_up(plf: &mut [TTFPoint]) {
@@ -406,6 +409,7 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
             plf[0].val = plf.last().unwrap().val;
             PartialPiecewiseLinearFunction::fifoize_up(plf);
         }
+        debug_assert!(plf.first().unwrap().val.fuzzy_eq(plf.last().unwrap().val));
     }
 }
 
@@ -441,7 +445,7 @@ impl<'a> TryFrom<PartialPiecewiseLinearFunction<'a>> for PeriodicPiecewiseLinear
     type Error = ();
     fn try_from(pplf: PartialPiecewiseLinearFunction<'a>) -> Result<Self, Self::Error> {
         let pplf = pplf.sub_plf(Timestamp::zero(), period());
-        if pplf.first().unwrap().at == Timestamp::zero() && pplf.last().unwrap().at == period() {
+        if pplf.first().unwrap().at.fuzzy_eq(Timestamp::zero()) && pplf.last().unwrap().at.fuzzy_eq(period()) {
             Ok(PeriodicPiecewiseLinearFunction { ipps: pplf.ipps })
         } else {
             Err(())
@@ -1365,6 +1369,9 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
             plf[len - 1].val = end_val;
             plf[len - 1].at = end;
         }
+
+        debug_assert!(plf[0].at.fuzzy_eq(start));
+        debug_assert!(plf.last().unwrap().at.fuzzy_eq(end));
     }
 }
 
