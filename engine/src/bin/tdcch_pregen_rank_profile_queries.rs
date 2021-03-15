@@ -43,7 +43,18 @@ fn main() -> Result<(), Box<dyn Error>> {
                 report!("to", to);
                 report!("rank", rank[q_idx]);
 
-                let (_result, time) = measure(|| server.distance(from, to));
+                let ((_, _, paths), time) = measure(|| server.distance(from, to));
+
+                if paths.is_empty() {
+                    report!("path_switches", 0);
+                    report!("num_distinct_paths", 0);
+                } else {
+                    report!("path_switches", paths.len() - 1);
+                    let mut paths: Vec<_> = paths.into_iter().map(|(_, path)| path).collect();
+                    paths.sort();
+                    paths.dedup();
+                    report!("num_distinct_paths", paths.len());
+                }
 
                 report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
             }

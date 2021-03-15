@@ -86,7 +86,7 @@ impl<'a> Server<'a> {
 
     #[allow(clippy::collapsible_if)]
     #[allow(clippy::cognitive_complexity)]
-    pub fn distance(&mut self, from_node: NodeId, to_node: NodeId) -> Shortcut {
+    pub fn distance(&mut self, from_node: NodeId, to_node: NodeId) -> (Shortcut, Vec<TTFPoint>, Vec<(Timestamp, Vec<EdgeId>)>) {
         assert_ne!(from_node, to_node);
         report!("algo", "Floating TDCCH Profile Query");
 
@@ -538,17 +538,12 @@ impl<'a> Server<'a> {
         report!("exact_profile_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         timer.restart();
 
-        if st_shortcut.is_valid_path() {
+        let paths = if st_shortcut.is_valid_path() {
             let switchpoints = st_shortcut.get_switchpoints(Timestamp::zero(), period(), &profile_graph).0;
-            report!("path_switches", switchpoints.len() - 1);
-            let mut paths: Vec<_> = switchpoints.into_iter().map(|(_, path, _)| path).collect();
-            paths.sort();
-            paths.dedup();
-            report!("num_distinct_paths", paths.len());
+            switchpoints.into_iter().map(|(valid_from, path, _)| (valid_from, path)).collect()
         } else {
-            report!("path_switches", 0);
-            report!("num_distinct_paths", 0);
-        }
+            Vec::new()
+        };
         report!("switchpoints_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         timer.restart();
 
@@ -568,6 +563,6 @@ impl<'a> Server<'a> {
             }
         }
 
-        st_shortcut
+        (st_shortcut, target[..].into(), paths)
     }
 }

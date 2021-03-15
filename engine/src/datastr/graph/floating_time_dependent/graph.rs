@@ -98,10 +98,10 @@ impl Graph {
     }
 
     /// Assert that a time annotated path is valid and that the times of the path match the edge weights at the time.
-    pub fn check_path(&self, path: Vec<(NodeId, Timestamp)>) {
-        let mut iter = path.into_iter();
-        let mut prev = iter.next().unwrap();
-        for (node, t) in iter {
+    pub fn check_path(&self, path: &[(NodeId, Timestamp)]) {
+        let mut iter = path.iter();
+        let mut prev = *iter.next().unwrap();
+        for &(node, t) in iter {
             let (prev_node, prev_t) = prev;
             let edge = self.edge_index(prev_node, node).expect("path contained nonexisting edge");
             let evaled = prev_t + self.travel_time_function(edge).evaluate(prev_t);
@@ -117,6 +117,16 @@ impl Graph {
             );
             prev = (node, t);
         }
+    }
+
+    pub fn get_path_with_times(&self, mut dt: Timestamp, path: &[EdgeId]) -> Vec<(NodeId, Timestamp)> {
+        let mut new_path = Vec::with_capacity(path.len() + 1);
+        new_path.push((link_id_to_tail_mapper::link_id_to_tail(&self.first_out, path[0]), dt));
+        for &edge in path {
+            dt = dt + self.travel_time_function(edge).evaluate(dt);
+            new_path.push((self.head[edge as usize], dt));
+        }
+        new_path
     }
 
     /// Total number of interpolation points

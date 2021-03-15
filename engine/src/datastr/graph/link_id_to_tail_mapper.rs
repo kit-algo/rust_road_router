@@ -68,3 +68,16 @@ impl LinkIdToTailMapper {
         self.link_id_to_tail.at_or_next_lower(link_id as usize) as NodeId + num_deg_zeros_below as NodeId
     }
 }
+
+pub fn link_id_to_tail(first_out: &[EdgeId], link_id: EdgeId) -> NodeId {
+    debug_assert!(first_out.last().unwrap() > &link_id);
+    (match first_out.binary_search(&link_id) {
+        Ok(mut i) => {
+            while first_out[i + 1] == link_id {
+                i += 1
+            }
+            i
+        }
+        Err(i) => i - 1,
+    }) as NodeId
+}
