@@ -27,6 +27,7 @@ enum ContextStackItem {
 enum CurrentReportingContext {
     Collection(Vec<Value>),
     Object(Map<String, Value>),
+    Throwaway,
 }
 
 #[derive(Debug)]
@@ -56,6 +57,7 @@ impl Reporter {
             CurrentReportingContext::Collection(_) => {
                 panic!("Cannot create object at key in collection");
             }
+            CurrentReportingContext::Throwaway => (),
         }
     }
 
@@ -71,6 +73,7 @@ impl Reporter {
             CurrentReportingContext::Collection(_) => {
                 panic!("Cannot create collection at key in collection");
             }
+            CurrentReportingContext::Throwaway => (),
         }
     }
 
@@ -85,6 +88,25 @@ impl Reporter {
                 self.context_stack.push(ContextStackItem::Collection(tmp));
                 self.current = CurrentReportingContext::Object(Map::new());
             }
+            CurrentReportingContext::Throwaway => (),
+        }
+    }
+
+    fn block_reporting(&mut self) {
+        match &mut self.current {
+            CurrentReportingContext::Object(object) => {
+                let mut tmp = Map::new();
+                swap(&mut tmp, object);
+                self.context_stack.push(ContextStackItem::Object(tmp));
+                self.current = CurrentReportingContext::Throwaway;
+            }
+            CurrentReportingContext::Collection(collection) => {
+                let mut tmp = Vec::new();
+                swap(&mut tmp, collection);
+                self.context_stack.push(ContextStackItem::Collection(tmp));
+                self.current = CurrentReportingContext::Throwaway;
+            }
+            CurrentReportingContext::Throwaway => (),
         }
     }
 
@@ -99,6 +121,7 @@ impl Reporter {
             CurrentReportingContext::Collection(_) => {
                 panic!("Cannot report value on collection");
             }
+            CurrentReportingContext::Throwaway => (),
         }
     }
 
@@ -116,6 +139,7 @@ impl Reporter {
                     let prev = match prev_current {
                         CurrentReportingContext::Object(cur_object) => object.insert(key, Value::Object(cur_object)),
                         CurrentReportingContext::Collection(collection) => object.insert(key, Value::Array(collection)),
+                        CurrentReportingContext::Throwaway => None,
                     };
                     assert_eq!(prev, None);
 
@@ -135,12 +159,16 @@ impl Reporter {
                     CurrentReportingContext::Collection(_) => {
                         panic!("Cannot insert collection into collection");
                     }
+                    CurrentReportingContext::Throwaway => (),
                 };
 
                 self.current = CurrentReportingContext::Collection(collection);
             }
-            ContextStackItem::Object(_) => {
-                panic!("Inconsistent context stack");
+            ContextStackItem::Object(object) => {
+                if !matches!(self.current, CurrentReportingContext::Throwaway) {
+                    panic!("Inconsistent context stack");
+                }
+                self.current = CurrentReportingContext::Object(object);
             }
         }
     }
@@ -192,6 +220,20 @@ impl<'a> Drop for CollectionItemContextGuard<'a> {
     fn drop(&mut self) {
         REPORTER.with(|reporter| reporter.borrow_mut().as_mut().map(Reporter::pop_context));
     }
+}
+
+#[must_use]
+pub struct BlockedReportingContextGuard();
+
+impl Drop for BlockedReportingContextGuard {
+    fn drop(&mut self) {
+        REPORTER.with(|reporter| reporter.borrow_mut().as_mut().map(Reporter::pop_context));
+    }
+}
+
+pub fn block_reporting() -> BlockedReportingContextGuard {
+    REPORTER.with(|reporter| reporter.borrow_mut().as_mut().map(|r| r.block_reporting()));
+    BlockedReportingContextGuard()
 }
 
 pub fn report(key: String, val: Value) {
