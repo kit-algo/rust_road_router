@@ -918,7 +918,7 @@ impl<'a> ReconstructionGraph<'a> {
             return;
         }
 
-        if FlWeight::from(period()).fuzzy_leq(end - start) {
+        if !cfg!(feature = "tdcch-profiles-with-holes") || FlWeight::from(period()).fuzzy_leq(end - start) {
             start = Timestamp::zero();
             end = period();
         }
