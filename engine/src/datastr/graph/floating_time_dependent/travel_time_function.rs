@@ -1162,20 +1162,6 @@ impl<'a> PartialATTF<'a> {
         }
     }
 
-    fn begin_at(&self) -> Timestamp {
-        match &self {
-            Self::Exact(points) => points.first().unwrap().at,
-            Self::Approx(lower, upper) => max(lower.first().unwrap().at, upper.first().unwrap().at),
-        }
-    }
-
-    fn end_at(&self) -> Timestamp {
-        match &self {
-            Self::Exact(points) => points.last().unwrap().at,
-            Self::Approx(lower, upper) => min(lower.last().unwrap().at, upper.last().unwrap().at),
-        }
-    }
-
     fn can_crop_to_period(&self) -> bool {
         match &self {
             Self::Exact(points) => PartialPiecewiseLinearFunction::crop_in_place_possible(points, Timestamp::zero(), period()),
