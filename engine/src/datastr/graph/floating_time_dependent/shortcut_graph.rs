@@ -1014,6 +1014,15 @@ impl<'a> ReconstructionGraph<'a> {
             incoming_cache: self.incoming_cache,
         }
     }
+
+    pub fn num_points_cached(&self) -> usize {
+        self.incoming_cache
+            .iter()
+            .chain(self.outgoing_cache.iter())
+            .flatten()
+            .map(|c| c.num_points())
+            .sum()
+    }
 }
 
 #[derive(Debug)]

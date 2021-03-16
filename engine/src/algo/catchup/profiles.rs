@@ -299,6 +299,7 @@ impl<'a> Server<'a> {
             }
         }
 
+        report!("num_points_cached", reconstruction_graph.num_points_cached());
         report!("reconstruct_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         timer.restart();
 
