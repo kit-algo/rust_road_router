@@ -119,6 +119,13 @@ impl<T: Ord + Indexing> IndexdMinHeap<T> {
         })
     }
 
+    /// Pushes an item onto the binary heap if its not yet in the queue.
+    pub fn push_unless_contained(&mut self, element: T) {
+        if !self.contains_index(element.as_index()) {
+            self.push(element)
+        }
+    }
+
     /// Pushes an item onto the binary heap.
     /// Panics if an element with the same index already exists.
     pub fn push(&mut self, element: T) {

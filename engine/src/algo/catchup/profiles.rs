@@ -8,12 +8,12 @@ use floating_td_stepped_elimination_tree::{QueryProgress, *};
 
 use crate::algo::customizable_contraction_hierarchy::*;
 use crate::datastr::graph::floating_time_dependent::*;
+use crate::datastr::index_heap::*;
 use crate::datastr::rank_select_map::{BitVec, FastClearBitVec};
 #[cfg(feature = "tdcch-query-detailed-timing")]
 use crate::report::benchmark::Timer;
 // use time::Duration;
 
-use std::collections::BinaryHeap;
 use std::convert::TryInto;
 
 /// Query server struct for CATCHUp.
@@ -56,8 +56,7 @@ pub struct Server<'a> {
 
     incoming_foo: Vec<Foo>,
     outgoing_foo: Vec<Foo>,
-    reconstruction_queue: BinaryHeap<(NodeId, NodeId, ShortcutId)>,
-    // reconstruction_queue: BinaryHeap<ShortcutId>,
+    reconstruction_queue: IndexdMinHeap<Reverse<ReconstructionQueueElement>>,
 }
 
 impl<'a> Server<'a> {
@@ -65,6 +64,8 @@ impl<'a> Server<'a> {
         let n = customized_graph.original_graph.num_nodes();
         let m_orig = customized_graph.original_graph.num_arcs();
         let m = cch_graph.num_arcs();
+        let m_up = customized_graph.outgoing.head().len();
+        let m_down = customized_graph.incoming.head().len();
 
         Self {
             forward: FloatingTDSteppedEliminationTree::new(customized_graph.upward_bounds_graph(), cch_graph.elimination_tree()),
@@ -80,17 +81,17 @@ impl<'a> Server<'a> {
             relevant_original: FastClearBitVec::new(m_orig),
             from: 0,
             to: 0,
-            outgoing_profiles: (0..customized_graph.outgoing.head().len()).map(|_| None).collect(),
-            incoming_profiles: (0..customized_graph.incoming.head().len()).map(|_| None).collect(),
+            outgoing_profiles: (0..m_up).map(|_| None).collect(),
+            incoming_profiles: (0..m_down).map(|_| None).collect(),
             buffers: MergeBuffers::new(),
             buffers2: MergeBuffers::new(),
 
             downward_shortcut_offsets: vec![n; n],
             upward_shortcut_offsets: vec![n; n],
 
-            incoming_foo: (0..customized_graph.incoming.head().len()).map(|_| Default::default()).collect(),
-            outgoing_foo: (0..customized_graph.outgoing.head().len()).map(|_| Default::default()).collect(),
-            reconstruction_queue: BinaryHeap::new(),
+            incoming_foo: (0..m_down).map(|_| Default::default()).collect(),
+            outgoing_foo: (0..m_up).map(|_| Default::default()).collect(),
+            reconstruction_queue: IndexdMinHeap::new(max(m_down, m_up) * 2),
         }
     }
 
@@ -266,12 +267,14 @@ impl<'a> Server<'a> {
                     self.backward_tree_mask.set(label.parent as usize);
 
                     // reconstruction_graph.cache_recursive(ShortcutId::Incoming(label.shortcut_id), Timestamp::zero(), period(), &mut self.buffers);
-                    self.incoming_foo[label.shortcut_id as usize].state = ReconstructionState::Requested;
                     self.incoming_foo[label.shortcut_id as usize]
                         .requested_times
                         .push((Timestamp::zero(), period()));
-                    self.reconstruction_queue.push((node, label.parent, ShortcutId::Incoming(label.shortcut_id)));
-                    // self.reconstruction_queue.push(ShortcutId::Incoming(label.shortcut_id));
+                    self.reconstruction_queue.push(Reverse(ReconstructionQueueElement {
+                        upper_node: node,
+                        lower_node: label.parent,
+                        shortcut_id: ShortcutId::Incoming(label.shortcut_id),
+                    }));
 
                     if label.parent == to {
                         shortcuts_to_t_in_corridor.push((node, label.shortcut_id));
@@ -307,12 +310,14 @@ impl<'a> Server<'a> {
                     // mark edge as in search space
                     self.relevant_upward.set(label.shortcut_id as usize);
                     // reconstruction_graph.cache_recursive(ShortcutId::Outgoing(label.shortcut_id), Timestamp::zero(), period(), &mut self.buffers);
-                    self.outgoing_foo[label.shortcut_id as usize].state = ReconstructionState::Requested;
                     self.outgoing_foo[label.shortcut_id as usize]
                         .requested_times
                         .push((Timestamp::zero(), period()));
-                    self.reconstruction_queue.push((node, label.parent, ShortcutId::Outgoing(label.shortcut_id)));
-                    // self.reconstruction_queue.push(ShortcutId::Outgoing(label.shortcut_id));
+                    self.reconstruction_queue.push(Reverse(ReconstructionQueueElement {
+                        upper_node: node,
+                        lower_node: label.parent,
+                        shortcut_id: ShortcutId::Outgoing(label.shortcut_id),
+                    }));
 
                     if label.parent == from {
                         shortcuts_from_s_in_corridor.push((node, label.shortcut_id));
