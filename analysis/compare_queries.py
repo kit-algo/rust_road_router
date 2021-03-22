@@ -6,6 +6,8 @@ import pandas as pd
 import json
 import sys
 
+pd.set_option('display.float_format', lambda x: '%.3f' % x)
+
 baseline = json.load(open(sys.argv[1]))
 baseline_queries = pd.DataFrame.from_records(baseline['algo_runs'])
 
