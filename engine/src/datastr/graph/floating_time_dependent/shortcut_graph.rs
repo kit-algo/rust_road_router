@@ -8,13 +8,63 @@ use crate::io::*;
 use crate::util::*;
 use std::{
     cmp::{max, min},
+    collections::BinaryHeap,
     convert::TryInto,
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShortcutId {
     Outgoing(EdgeId),
     Incoming(EdgeId),
+}
+
+impl PartialOrd for ShortcutId {
+    fn partial_cmp(&self, other: &ShortcutId) -> Option<std::cmp::Ordering> {
+        // Some(match self.discriminant().cmp(&other.discriminant()) {
+        //     std::cmp::Ordering::Equal => self.edge_id().cmp(&other.edge_id()),
+        //     res => res,
+        // })
+        Some(match self.edge_id().cmp(&other.edge_id()) {
+            std::cmp::Ordering::Equal => self.discriminant().cmp(&other.discriminant()),
+            res => res,
+        })
+    }
+}
+
+impl Ord for ShortcutId {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
+impl ShortcutId {
+    fn discriminant(&self) -> u32 {
+        match self {
+            Self::Incoming(_) => 1,
+            Self::Outgoing(_) => 0,
+        }
+    }
+
+    fn edge_id(&self) -> EdgeId {
+        match *self {
+            Self::Incoming(id) => id,
+            Self::Outgoing(id) => id,
+        }
+    }
+
+    fn get_from<'a, T>(self, incoming: &'a [T], outgoing: &'a [T]) -> &'a T {
+        match self {
+            Self::Incoming(id) => &incoming[id as usize],
+            Self::Outgoing(id) => &outgoing[id as usize],
+        }
+    }
+
+    fn get_mut_from<'a, T>(self, incoming: &'a mut [T], outgoing: &'a mut [T]) -> &'a mut T {
+        match self {
+            Self::Incoming(id) => &mut incoming[id as usize],
+            Self::Outgoing(id) => &mut outgoing[id as usize],
+        }
+    }
 }
 
 pub trait ShortcutGraphTrt {
@@ -725,6 +775,18 @@ impl CustomizedSingleDirGraph {
     pub fn to_shortcut(&self, edge_idx: usize) -> Shortcut {
         Shortcut::new_finished(self.edge_sources(edge_idx), self.bounds[edge_idx], self.constant.get(edge_idx))
     }
+
+    // fn validate(self) -> Self {
+    //     for edge in 0..self.head.len() {
+    //         for &(_, source) in self.edge_sources(edge) {
+    //             if let ShortcutSource::Shortcut(down, up) = source.into() {
+    //                 assert!(down < edge as EdgeId);
+    //                 assert!(up < edge as EdgeId);
+    //             }
+    //         }
+    //     }
+    //     self
+    // }
 }
 
 impl<'a> ShortcutGraphTrt for CustomizedGraph<'a> {
@@ -802,6 +864,96 @@ impl<'a> SingleDirBoundsGraph<'a> {
         let edge_ids = range.start as EdgeId..range.end as EdgeId;
         self.head[range.clone()].iter().cloned().zip(edge_ids).zip(self.bounds[range].iter())
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct Foo {
+    missing_deps: usize,
+    pub state: ReconstructionState,
+    awaited_by: Vec<ShortcutId>,
+    pub requested_times: Vec<(Timestamp, Timestamp)>,
+}
+
+impl Default for Foo {
+    fn default() -> Self {
+        Foo {
+            missing_deps: 0,
+            state: ReconstructionState::Done,
+            awaited_by: Vec::new(),
+            requested_times: Vec::new(),
+        }
+    }
+}
+
+impl Foo {
+    fn request_time(times: &mut Vec<(Timestamp, Timestamp)>, start: Timestamp, end: Timestamp) {
+        use std::cmp::Ordering;
+        if times.len() == 1 && times[0].0.fuzzy_eq(Timestamp::zero()) && times[0].1.fuzzy_eq(period()) {
+            return;
+        }
+        let start_pos = times.binary_search_by(|&(seg_start, seg_end)| {
+            if start.fuzzy_lt(seg_start) {
+                Ordering::Greater
+            } else if seg_end.fuzzy_lt(start) {
+                Ordering::Less
+            } else {
+                Ordering::Equal
+            }
+        });
+        let end_pos = times.binary_search_by(|&(seg_start, seg_end)| {
+            if end.fuzzy_lt(seg_start) {
+                Ordering::Greater
+            } else if seg_end.fuzzy_lt(end) {
+                Ordering::Less
+            } else {
+                Ordering::Equal
+            }
+        });
+
+        match (start_pos, end_pos) {
+            (Ok(start_idx), Ok(end_idx)) => {
+                if start_idx < end_idx {
+                    times[start_idx].1 = times[end_idx].1;
+                    times.drain(start_idx + 1..=end_idx);
+                }
+            }
+            (Ok(start_idx), Err(end_idx)) => {
+                times[start_idx].1 = end;
+                if start_idx < end_idx {
+                    times.drain(start_idx + 1..end_idx);
+                }
+            }
+            (Err(start_idx), Ok(end_idx)) => {
+                times[end_idx].0 = start;
+                if start_idx < end_idx {
+                    times.drain(start_idx..end_idx);
+                }
+            }
+            (Err(start_idx), Err(end_idx)) => {
+                if start_idx < end_idx {
+                    times[start_idx].0 = start;
+                    times[start_idx].1 = end;
+                    times.drain(start_idx + 1..end_idx);
+                } else {
+                    times.insert(start_idx, (start, end));
+                }
+            }
+        }
+
+        // maybe periodic
+        if times.iter().any(|&(start, end)| FlWeight::from(period()).fuzzy_leq(end - start)) {
+            times.truncate(1);
+            times[0] = (Timestamp::zero(), period());
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ReconstructionState {
+    Done,
+    Requested,
+    WaitingOnLowerDown,
+    WaitingOnLowerUp,
 }
 
 #[derive(Debug)]
@@ -911,6 +1063,222 @@ impl<'a> ReconstructionGraph<'a> {
         .as_mut()
         .unwrap()
         .maybe_to_periodic();
+    }
+
+    pub fn cache_iterative(
+        &mut self,
+        // queue: &mut BinaryHeap<ShortcutId>,
+        queue: &mut BinaryHeap<(NodeId, NodeId, ShortcutId)>,
+        incoming_foo: &mut [Foo],
+        outgoing_foo: &mut [Foo],
+        buffers: &mut MergeBuffers,
+    ) {
+        // let mut incoming_foo: Vec<Foo> = vec![Default::default(); self.incoming_cache.len()];
+        // let mut outgoing_foo: Vec<Foo> = vec![Default::default(); self.outgoing_cache.len()];
+        // let mut queue: BinaryHeap<ShortcutId> = BinaryHeap::new();
+
+        while let Some((upper_node, lower_node, shortcut_id)) = queue.pop() {
+            // while let Some(shortcut_id) = queue.pop() {
+            debug_assert!(lower_node < upper_node);
+
+            let mut foo = Default::default();
+            std::mem::swap(&mut foo, shortcut_id.get_mut_from(incoming_foo, outgoing_foo));
+            // debug_assert_eq!(foo.missing_deps, 0);
+            // if foo.missing_deps > 0 {
+            //     std::mem::swap(&mut foo, shortcut_id.get_mut_from(incoming_foo, outgoing_foo));
+            //     continue;
+            // }
+
+            eprintln!("");
+            eprintln!("{:?} {:?} {} {}", shortcut_id, foo.state, lower_node, upper_node);
+            dbg!(shortcut_id, foo.state);
+            // if shortcut_id == ShortcutId::Outgoing(106666) {}
+
+            let (dir_graph, edge_id) = match shortcut_id {
+                ShortcutId::Incoming(id) => (&self.customized_graph.incoming, id),
+                ShortcutId::Outgoing(id) => (&self.customized_graph.outgoing, id),
+            };
+            match foo.state {
+                ReconstructionState::Done => (), //panic!("foooooooooo"),
+                ReconstructionState::Requested => {
+                    // todo!("intersect requested times with available cache?");
+                    for &(start, end) in &foo.requested_times {
+                        let mut c = SourceCursor::valid_at(dir_graph.edge_sources(edge_id as usize), start);
+
+                        while c.cur().0.fuzzy_lt(end) {
+                            match ShortcutSource::from(c.cur().1) {
+                                ShortcutSource::Shortcut(down, up) => {
+                                    let first_start = max(start, c.cur().0);
+                                    let first_end = min(end, c.next().0);
+
+                                    if !self.ttf_available(ShortcutId::Incoming(down), first_start, first_end) {
+                                        match incoming_foo[down as usize].state {
+                                            ReconstructionState::Done => {
+                                                incoming_foo[down as usize].state = ReconstructionState::Requested;
+                                                debug_assert!(incoming_foo[down as usize].requested_times.is_empty());
+                                                incoming_foo[down as usize].requested_times.push((first_start, first_end));
+                                                debug_assert!(incoming_foo[down as usize].awaited_by.is_empty());
+                                                incoming_foo[down as usize].awaited_by.push(shortcut_id);
+                                                foo.missing_deps += 1;
+                                                queue.push((
+                                                    self.customized_graph.incoming.head[down as usize],
+                                                    self.customized_graph.incoming.tail[down as usize],
+                                                    ShortcutId::Incoming(down),
+                                                ));
+                                            }
+                                            ReconstructionState::Requested => {
+                                                if !incoming_foo[down as usize].awaited_by.contains(&shortcut_id) {
+                                                    incoming_foo[down as usize].awaited_by.push(shortcut_id);
+                                                    foo.missing_deps += 1;
+                                                }
+                                                Foo::request_time(&mut incoming_foo[down as usize].requested_times, first_start, first_end);
+                                            }
+                                            _ => {
+                                                incoming_foo[down as usize].state = ReconstructionState::Requested;
+                                                Foo::request_time(&mut incoming_foo[down as usize].requested_times, first_start, first_end);
+                                                if !incoming_foo[down as usize].awaited_by.contains(&shortcut_id) {
+                                                    incoming_foo[down as usize].awaited_by.push(shortcut_id);
+                                                    foo.missing_deps += 1;
+                                                }
+
+                                                queue.push((
+                                                    self.customized_graph.incoming.head[down as usize],
+                                                    self.customized_graph.incoming.tail[down as usize],
+                                                    ShortcutId::Incoming(down),
+                                                ));
+                                                // panic!("Requesting Down {} with wrong state {:#?}", down, &incoming_foo[down as usize])
+                                            }
+                                        }
+                                        if !incoming_foo[down as usize].awaited_by.contains(&ShortcutId::Outgoing(up)) {
+                                            incoming_foo[down as usize].awaited_by.push(ShortcutId::Outgoing(up));
+                                            outgoing_foo[up as usize].missing_deps += 1;
+                                        }
+                                    }
+                                }
+                                _ => (),
+                            }
+                            c.advance();
+                        }
+                    }
+                    if foo.missing_deps == 0 {
+                        queue.push((upper_node, lower_node, shortcut_id));
+                        // queue.push(shortcut_id);
+                    }
+                    foo.state = ReconstructionState::WaitingOnLowerDown;
+                }
+                ReconstructionState::WaitingOnLowerDown => {
+                    for &(start, end) in &foo.requested_times {
+                        let mut c = SourceCursor::valid_at(dir_graph.edge_sources(edge_id as usize), start);
+
+                        while c.cur().0.fuzzy_lt(end) {
+                            match ShortcutSource::from(c.cur().1) {
+                                ShortcutSource::Shortcut(down, up) => {
+                                    let first_start = max(start, c.cur().0);
+                                    let first_end = min(end, c.next().0);
+
+                                    let reconstructed = self.as_reconstructed();
+                                    let (start_val, end_val) = if let Some(ttf) = reconstructed.partial_ttf(ShortcutId::Incoming(down), first_start, first_end)
+                                    {
+                                        (ttf.bound_plfs().0.eval(first_start), ttf.bound_plfs().1.eval(first_end))
+                                    } else {
+                                        let ttf = reconstructed.periodic_ttf(ShortcutId::Incoming(down)).unwrap();
+                                        (ttf.bound_plfs().0.evaluate(first_start), ttf.bound_plfs().1.evaluate(first_end))
+                                    };
+                                    let second_start = first_start + start_val;
+                                    let second_end = first_end + end_val;
+
+                                    if !self.ttf_available(ShortcutId::Outgoing(up), second_start, second_end) {
+                                        match outgoing_foo[up as usize].state {
+                                            ReconstructionState::Done => {
+                                                outgoing_foo[up as usize].state = ReconstructionState::Requested;
+                                                debug_assert!(outgoing_foo[up as usize].requested_times.is_empty());
+                                                outgoing_foo[up as usize].requested_times.push((second_start, second_end));
+                                                debug_assert!(outgoing_foo[up as usize].awaited_by.is_empty());
+                                                outgoing_foo[up as usize].awaited_by.push(shortcut_id);
+                                                foo.missing_deps += 1;
+
+                                                if outgoing_foo[up as usize].missing_deps == 0 {
+                                                    queue.push((
+                                                        self.customized_graph.outgoing.head[up as usize],
+                                                        self.customized_graph.outgoing.tail[up as usize],
+                                                        ShortcutId::Outgoing(up),
+                                                    ));
+                                                }
+                                            }
+                                            ReconstructionState::Requested => {
+                                                if !outgoing_foo[up as usize].awaited_by.contains(&shortcut_id) {
+                                                    outgoing_foo[up as usize].awaited_by.push(shortcut_id);
+                                                    foo.missing_deps += 1;
+                                                }
+                                                Foo::request_time(&mut outgoing_foo[up as usize].requested_times, second_start, second_end);
+                                            }
+                                            _ => {
+                                                outgoing_foo[up as usize].state = ReconstructionState::Requested;
+                                                Foo::request_time(&mut outgoing_foo[up as usize].requested_times, second_start, second_end);
+                                                if !outgoing_foo[up as usize].awaited_by.contains(&shortcut_id) {
+                                                    outgoing_foo[up as usize].awaited_by.push(shortcut_id);
+                                                    foo.missing_deps += 1;
+                                                }
+
+                                                queue.push((
+                                                    self.customized_graph.outgoing.head[up as usize],
+                                                    self.customized_graph.outgoing.tail[up as usize],
+                                                    ShortcutId::Outgoing(up),
+                                                ));
+                                                // panic!(
+                                                // "Requesting Up({} -> {}) with wrong state {:#?}",
+                                                // up, self.customized_graph.outgoing.head[up as usize], outgoing_foo[up as usize]
+                                                // )
+                                            }
+                                        }
+                                    }
+                                }
+                                _ => (),
+                            }
+                            c.advance();
+                        }
+                    }
+
+                    if foo.missing_deps == 0 {
+                        queue.push((upper_node, lower_node, shortcut_id));
+                        // queue.push(shortcut_id);
+                    }
+                    foo.state = ReconstructionState::WaitingOnLowerUp;
+                }
+                ReconstructionState::WaitingOnLowerUp => {
+                    // debug_assert!(foo.missing_deps > 0);
+                    if foo.missing_deps > 0 {
+                        std::mem::swap(&mut foo, shortcut_id.get_mut_from(incoming_foo, outgoing_foo));
+                        continue;
+                    }
+
+                    for (start, end) in foo.requested_times.drain(..) {
+                        // dbg!(shortcut_id, start, end, dir_graph.edge_sources(edge_id as usize));
+                        self.cache(shortcut_id, start, end, buffers);
+                        debug_assert!(self.ttf_available(shortcut_id, start, end));
+                    }
+                    for waiting in foo.awaited_by.drain(..) {
+                        waiting.get_mut_from(incoming_foo, outgoing_foo).missing_deps -= 1;
+                        if waiting.get_from(&incoming_foo, &outgoing_foo).missing_deps == 0
+                            && waiting.get_from(&incoming_foo, &outgoing_foo).state != ReconstructionState::Done
+                        {
+                            queue.push((
+                                *waiting.get_from(&self.customized_graph.incoming.head, &self.customized_graph.outgoing.head),
+                                *waiting.get_from(&self.customized_graph.incoming.tail, &self.customized_graph.outgoing.tail),
+                                waiting,
+                            ));
+                        }
+                    }
+                    foo.state = ReconstructionState::Done;
+                }
+            }
+
+            std::mem::swap(&mut foo, shortcut_id.get_mut_from(incoming_foo, outgoing_foo));
+        }
+    }
+
+    fn ttf_available(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> bool {
+        self.as_reconstructed().partial_ttf(shortcut_id, start, end).is_some() || self.as_reconstructed().periodic_ttf(shortcut_id).is_some()
     }
 
     pub fn cache_recursive(&mut self, shortcut_id: ShortcutId, mut start: Timestamp, mut end: Timestamp, buffers: &mut MergeBuffers) {
