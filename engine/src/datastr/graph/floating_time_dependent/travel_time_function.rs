@@ -1437,7 +1437,7 @@ where
     pub fn maybe_to_periodic(&mut self) {
         if let [partial] = &mut self.partials[..] {
             let ttf = PartialATTF::from(&partial.ttf);
-            if ttf.can_crop_to_period() {
+            if ttf.can_crop_to_period() && partial.start.fuzzy_leq(Timestamp::zero()) && period().fuzzy_leq(partial.end) {
                 match &mut partial.ttf {
                     ATTFContainer::Exact(plf) => {
                         PartialPiecewiseLinearFunction::crop(plf, Timestamp::zero(), period());
