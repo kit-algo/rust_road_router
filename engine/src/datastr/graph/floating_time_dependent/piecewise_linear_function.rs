@@ -45,6 +45,7 @@ fn append_point(points: &mut Vec<TTFPoint>, point: TTFPoint) {
     points.push(point);
 }
 
+#[inline(never)]
 fn append_too_close(points: &mut Vec<TTFPoint>, mut point: TTFPoint) {
     let points_len = points.len();
     debug_assert!(points[points_len - 1].at <= point.at);
