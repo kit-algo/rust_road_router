@@ -511,13 +511,10 @@ impl<'a> PeriodicATTF<'a> {
                     other_upper.append_range(start_of_segment, end_of_segment, &mut buffers.exact_result_upper);
                 }
                 BoundMergingState::Merge => {
-                    let (partial_lower, _) = PartialPiecewiseLinearFunction::try_from(&self_lower)
-                        .unwrap()
+                    let (partial_lower, _) = PartialPiecewiseLinearFunction::new(&self_lower)
                         .sub_plf(start_of_segment, end_of_segment)
                         .merge(
-                            &PartialPiecewiseLinearFunction::try_from(&other_lower)
-                                .unwrap()
-                                .sub_plf(start_of_segment, end_of_segment),
+                            &PartialPiecewiseLinearFunction::new(&other_lower).sub_plf(start_of_segment, end_of_segment),
                             start_of_segment,
                             end_of_segment,
                             &mut buffers.buffer,
