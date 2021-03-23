@@ -28,7 +28,10 @@ pub trait PLF {
 fn append_point(points: &mut Vec<TTFPoint>, point: TTFPoint) {
     debug_assert!(point.val >= FlWeight::new(0.0), "{:?}", point);
     if let Some(p) = points.last() {
-        if p.at.fuzzy_eq(point.at) && p.val.fuzzy_eq(point.val) {
+        if p.at.fuzzy_eq(point.at) {
+            if !p.val.fuzzy_eq(point.val) {
+                append_too_close(points, point);
+            }
             return;
         }
     }
@@ -39,7 +42,21 @@ fn append_point(points: &mut Vec<TTFPoint>, point: TTFPoint) {
         point
     );
 
-    points.push(point)
+    points.push(point);
+}
+
+fn append_too_close(points: &mut Vec<TTFPoint>, mut point: TTFPoint) {
+    let points_len = points.len();
+    debug_assert!(points[points_len - 1].at <= point.at);
+    let shifted_at = point.at - FlWeight::new(EPSILON);
+    if points_len > 1 && points[points_len - 2].at.fuzzy_lt(shifted_at) {
+        let shifted_val = interpolate_linear(&points[points_len - 2], &points[points_len - 1], point.at - FlWeight::new(EPSILON));
+        points[points_len - 1].at = shifted_at;
+        points[points_len - 1].val = shifted_val;
+    } else {
+        point.at = points[points_len - 1].at + FlWeight::new(EPSILON);
+    }
+    points.push(point);
 }
 
 /// A struct borrowing a slice of points which implements all sorts of operations and algorithms for PPLFs.
