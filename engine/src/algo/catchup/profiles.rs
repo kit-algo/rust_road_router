@@ -394,7 +394,7 @@ impl<'a> Server<'a> {
             } else {
                 &mut down_shortcuts[self.downward_shortcut_offsets[head as usize]]
             };
-            shortcut.set_sources(self.customized_graph.outgoing.edge_sources(edge_id as usize));
+            shortcut.set_sources(self.customized_graph.outgoing.edge_sources(edge_id));
             shortcut.set_cache(
                 reconstruction_graph
                     .take_cache(ShortcutId::Outgoing(edge_id))
@@ -412,7 +412,7 @@ impl<'a> Server<'a> {
             } else {
                 &mut up_shortcuts[self.upward_shortcut_offsets[head as usize]]
             };
-            shortcut.set_sources(self.customized_graph.incoming.edge_sources(edge_id as usize));
+            shortcut.set_sources(self.customized_graph.incoming.edge_sources(edge_id));
             shortcut.set_cache(
                 reconstruction_graph
                     .take_cache(ShortcutId::Incoming(edge_id))
