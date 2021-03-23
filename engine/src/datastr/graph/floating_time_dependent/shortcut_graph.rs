@@ -884,7 +884,11 @@ impl Default for Foo {
 }
 
 impl Foo {
-    fn request_time(times: &mut Vec<(Timestamp, Timestamp)>, start: Timestamp, end: Timestamp) {
+    fn request_time(times: &mut Vec<(Timestamp, Timestamp)>, mut start: Timestamp, mut end: Timestamp) {
+        if !cfg!(feature = "tdcch-profiles-with-holes") {
+            start = Timestamp::zero();
+            end = period();
+        }
         use std::cmp::Ordering;
         if times.len() == 1 && times[0].0.fuzzy_eq(Timestamp::zero()) && times[0].1.fuzzy_eq(period()) {
             return;
@@ -1082,10 +1086,6 @@ impl<'a> ReconstructionGraph<'a> {
         outgoing_foo: &mut [Foo],
         buffers: &mut MergeBuffers,
     ) {
-        // let mut incoming_foo: Vec<Foo> = vec![Default::default(); self.incoming_cache.len()];
-        // let mut outgoing_foo: Vec<Foo> = vec![Default::default(); self.outgoing_cache.len()];
-        // let mut queue: BinaryHeap<ShortcutId> = BinaryHeap::new();
-
         while let Some(Reverse(ReconstructionQueueElement {
             upper_node,
             lower_node,

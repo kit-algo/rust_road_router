@@ -266,15 +266,18 @@ impl<'a> Server<'a> {
                     // mark parent as in corridor
                     self.backward_tree_mask.set(label.parent as usize);
 
-                    // reconstruction_graph.cache_recursive(ShortcutId::Incoming(label.shortcut_id), Timestamp::zero(), period(), &mut self.buffers);
-                    self.incoming_foo[label.shortcut_id as usize]
-                        .requested_times
-                        .push((Timestamp::zero(), period()));
-                    self.reconstruction_queue.push(Reverse(ReconstructionQueueElement {
-                        upper_node: node,
-                        lower_node: label.parent,
-                        shortcut_id: ShortcutId::Incoming(label.shortcut_id),
-                    }));
+                    if cfg!(feature = "tdcch-profiles-iterative-reconstruction") {
+                        self.incoming_foo[label.shortcut_id as usize]
+                            .requested_times
+                            .push((Timestamp::zero(), period()));
+                        self.reconstruction_queue.push(Reverse(ReconstructionQueueElement {
+                            upper_node: node,
+                            lower_node: label.parent,
+                            shortcut_id: ShortcutId::Incoming(label.shortcut_id),
+                        }));
+                    } else {
+                        reconstruction_graph.cache_recursive(ShortcutId::Incoming(label.shortcut_id), Timestamp::zero(), period(), &mut self.buffers);
+                    }
 
                     if label.parent == to {
                         shortcuts_to_t_in_corridor.push((node, label.shortcut_id));
@@ -309,15 +312,19 @@ impl<'a> Server<'a> {
                     self.forward_tree_mask.set(label.parent as usize);
                     // mark edge as in search space
                     self.relevant_upward.set(label.shortcut_id as usize);
-                    // reconstruction_graph.cache_recursive(ShortcutId::Outgoing(label.shortcut_id), Timestamp::zero(), period(), &mut self.buffers);
-                    self.outgoing_foo[label.shortcut_id as usize]
-                        .requested_times
-                        .push((Timestamp::zero(), period()));
-                    self.reconstruction_queue.push(Reverse(ReconstructionQueueElement {
-                        upper_node: node,
-                        lower_node: label.parent,
-                        shortcut_id: ShortcutId::Outgoing(label.shortcut_id),
-                    }));
+
+                    if cfg!(feature = "tdcch-profiles-iterative-reconstruction") {
+                        self.outgoing_foo[label.shortcut_id as usize]
+                            .requested_times
+                            .push((Timestamp::zero(), period()));
+                        self.reconstruction_queue.push(Reverse(ReconstructionQueueElement {
+                            upper_node: node,
+                            lower_node: label.parent,
+                            shortcut_id: ShortcutId::Outgoing(label.shortcut_id),
+                        }));
+                    } else {
+                        reconstruction_graph.cache_recursive(ShortcutId::Outgoing(label.shortcut_id), Timestamp::zero(), period(), &mut self.buffers);
+                    }
 
                     if label.parent == from {
                         shortcuts_from_s_in_corridor.push((node, label.shortcut_id));
@@ -326,12 +333,14 @@ impl<'a> Server<'a> {
             }
         }
 
-        reconstruction_graph.cache_iterative(
-            &mut self.reconstruction_queue,
-            &mut self.incoming_foo,
-            &mut self.outgoing_foo,
-            &mut self.buffers,
-        );
+        if cfg!(feature = "tdcch-profiles-iterative-reconstruction") {
+            reconstruction_graph.cache_iterative(
+                &mut self.reconstruction_queue,
+                &mut self.incoming_foo,
+                &mut self.outgoing_foo,
+                &mut self.buffers,
+            );
+        }
 
         report!("num_points_cached", reconstruction_graph.num_points_cached());
         report!("reconstruct_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
