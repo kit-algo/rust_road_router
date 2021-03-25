@@ -330,9 +330,13 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
 
     /// Generate an approximated function which is always less or equal to the original function
     #[cfg(not(feature = "tdcch-approx-imai-iri"))]
-    pub fn lower_bound_ttf(&self, buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
+    pub fn lower_bound_ttf(&self, buffer: &mut Vec<TTFPoint>, other_buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
         buffer.reserve(self.ipps.len());
-        PartialPiecewiseLinearFunction::try_from(self).unwrap().douglas_peuker_lower(buffer);
+        other_buffer.reserve(self.ipps.len());
+        PartialPiecewiseLinearFunction::try_from(self)
+            .unwrap()
+            .douglas_peuker_combined(buffer, other_buffer);
+        other_buffer.clear();
 
         let wrap_min = min(buffer.first().unwrap().val, buffer.last().unwrap().val);
 
@@ -347,9 +351,13 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
 
     /// Generate an approximated function which is always greater or equal to the original function
     #[cfg(not(feature = "tdcch-approx-imai-iri"))]
-    pub fn upper_bound_ttf(&self, buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
+    pub fn upper_bound_ttf(&self, buffer: &mut Vec<TTFPoint>, other_buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
         buffer.reserve(self.ipps.len());
-        PartialPiecewiseLinearFunction::try_from(self).unwrap().douglas_peuker_upper(buffer);
+        other_buffer.reserve(self.ipps.len());
+        PartialPiecewiseLinearFunction::try_from(self)
+            .unwrap()
+            .douglas_peuker_combined(other_buffer, buffer);
+        other_buffer.clear();
 
         let wrap_max = max(buffer.first().unwrap().val, buffer.last().unwrap().val);
 
@@ -1228,103 +1236,13 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
         }
     }
 
-    // calculate approximated lower bound function and make it as tight as possible
-    #[cfg(not(feature = "tdcch-approx-imai-iri"))]
-    fn douglas_peuker_lower(&self, result_lower: &mut Vec<TTFPoint>) {
-        if self.ipps.len() <= 2 {
-            result_lower.extend_from_slice(self.ipps);
-            return;
-        }
-
-        let first = self.ipps.first().unwrap();
-        let last = self.ipps.last().unwrap();
-
-        let deltas = self.ipps[1..self.ipps.len() - 1]
-            .iter()
-            .enumerate()
-            .map(|(i, p)| (i + 1, (p.val - interpolate_linear(first, last, p.at))));
-
-        let (i_min, min_delta) = deltas.clone().min_by_key(|&(_, delta)| delta).unwrap();
-        let (i_max, max_delta) = deltas.max_by_key(|&(_, delta)| delta).unwrap();
-
-        let (i, delta) = if min_delta.abs() > max_delta.abs() {
-            (i_min, min_delta.abs())
-        } else {
-            (i_max, max_delta.abs())
-        };
-
-        if delta > APPROX {
-            Self { ipps: &self.ipps[0..=i] }.douglas_peuker_lower(result_lower);
-            let prev_min = result_lower.pop().map(|p| p.val).unwrap_or_else(FlWeight::zero);
-            let prev_len = result_lower.len();
-            Self {
-                ipps: &self.ipps[i..self.ipps.len()],
-            }
-            .douglas_peuker_lower(result_lower);
-            result_lower[prev_len].val = min(result_lower[prev_len].val, prev_min);
-        } else {
-            result_lower.push(TTFPoint {
-                at: first.at,
-                val: first.val + min(FlWeight::zero(), min_delta),
-            });
-            result_lower.push(TTFPoint {
-                at: last.at,
-                val: last.val + min(FlWeight::zero(), min_delta),
-            });
-        }
-    }
-
-    // calculate approximated upper bound function and make it as tight as possible
-    #[cfg(not(feature = "tdcch-approx-imai-iri"))]
-    fn douglas_peuker_upper(&self, result_upper: &mut Vec<TTFPoint>) {
-        if self.ipps.len() <= 2 {
-            result_upper.extend_from_slice(self.ipps);
-            return;
-        }
-
-        let first = self.ipps.first().unwrap();
-        let last = self.ipps.last().unwrap();
-
-        let deltas = self.ipps[1..self.ipps.len() - 1]
-            .iter()
-            .enumerate()
-            .map(|(i, p)| (i + 1, (p.val - interpolate_linear(first, last, p.at))));
-
-        let (i_min, min_delta) = deltas.clone().min_by_key(|&(_, delta)| delta).unwrap();
-        let (i_max, max_delta) = deltas.max_by_key(|&(_, delta)| delta).unwrap();
-
-        let (i, delta) = if min_delta.abs() > max_delta.abs() {
-            (i_min, min_delta.abs())
-        } else {
-            (i_max, max_delta.abs())
-        };
-
-        if delta > APPROX {
-            Self { ipps: &self.ipps[0..=i] }.douglas_peuker_upper(result_upper);
-            let prev_max = result_upper.pop().map(|p| p.val).unwrap_or_else(FlWeight::zero);
-            let prev_len = result_upper.len();
-            Self {
-                ipps: &self.ipps[i..self.ipps.len()],
-            }
-            .douglas_peuker_upper(result_upper);
-            result_upper[prev_len].val = max(result_upper[prev_len].val, prev_max);
-        } else {
-            result_upper.push(TTFPoint {
-                at: first.at,
-                val: first.val + max(FlWeight::zero(), max_delta),
-            });
-            result_upper.push(TTFPoint {
-                at: last.at,
-                val: last.val + max(FlWeight::zero(), max_delta),
-            });
-        }
-    }
-
     /// Generate an approximated function which is always less or equal to the original function
     #[cfg(not(feature = "tdcch-approx-imai-iri"))]
-    pub fn lower_bound_ttf(&self, buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
+    pub fn lower_bound_ttf(&self, buffer: &mut Vec<TTFPoint>, other_buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
         buffer.reserve(self.ipps.len());
-        self.douglas_peuker_lower(buffer);
+        other_buffer.reserve(self.ipps.len());
+        self.douglas_peuker_combined(buffer, other_buffer);
+        other_buffer.clear();
 
         let mut result = Box::<[TTFPoint]>::from(&buffer[..]);
         Self::fifoize_down(&mut result);
@@ -1334,9 +1252,11 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
 
     /// Generate an approximated function which is always greater or equal to the original function
     #[cfg(not(feature = "tdcch-approx-imai-iri"))]
-    pub fn upper_bound_ttf(&self, buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
+    pub fn upper_bound_ttf(&self, buffer: &mut Vec<TTFPoint>, other_buffer: &mut Vec<TTFPoint>) -> Box<[TTFPoint]> {
         buffer.reserve(self.ipps.len());
-        self.douglas_peuker_upper(buffer);
+        other_buffer.reserve(self.ipps.len());
+        self.douglas_peuker_combined(other_buffer, buffer);
+        other_buffer.clear();
 
         let mut result = Box::<[TTFPoint]>::from(&buffer[..]);
         Self::fifoize_up(&mut result);

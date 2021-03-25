@@ -569,9 +569,10 @@ impl<'a> PeriodicATTF<'a> {
                 let (lower, upper) = plf.bound_ttfs(&mut buffers.buffer, &mut buffers.exact_result_upper);
                 ATTFContainer::Approx(lower, upper)
             }
-            Approx(lower_plf, upper_plf) => {
-                ATTFContainer::Approx(lower_plf.lower_bound_ttf(&mut buffers.buffer), upper_plf.upper_bound_ttf(&mut buffers.buffer))
-            }
+            Approx(lower_plf, upper_plf) => ATTFContainer::Approx(
+                lower_plf.lower_bound_ttf(&mut buffers.buffer, &mut buffers.exact_result_upper),
+                upper_plf.upper_bound_ttf(&mut buffers.buffer, &mut buffers.exact_result_upper),
+            ),
         }
     }
 
@@ -1137,9 +1138,10 @@ impl<'a> PartialATTF<'a> {
                 let (lower, upper) = plf.bound_ttfs(&mut buffers.buffer, &mut buffers.exact_result_upper);
                 ATTFContainer::Approx(lower, upper)
             }
-            Approx(lower_plf, upper_plf) => {
-                ATTFContainer::Approx(lower_plf.lower_bound_ttf(&mut buffers.buffer), upper_plf.upper_bound_ttf(&mut buffers.buffer))
-            }
+            Approx(lower_plf, upper_plf) => ATTFContainer::Approx(
+                lower_plf.lower_bound_ttf(&mut buffers.buffer, &mut buffers.exact_result_upper),
+                upper_plf.upper_bound_ttf(&mut buffers.buffer, &mut buffers.exact_result_upper),
+            ),
         }
     }
 
