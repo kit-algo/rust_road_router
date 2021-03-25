@@ -364,17 +364,20 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
 
     /// Same result as `(lower_bound_ttf(), upper_bound_ttf())` but with just one call to DP
     #[cfg(not(feature = "tdcch-approx-imai-iri"))]
-    pub fn bound_ttfs(&self) -> (Box<[TTFPoint]>, Box<[TTFPoint]>) {
-        let mut result_lower = Vec::with_capacity(self.ipps.len());
-        let mut result_upper = Vec::with_capacity(self.ipps.len());
+    pub fn bound_ttfs(&self, buffer_lower: &mut Vec<TTFPoint>, buffer_upper: &mut Vec<TTFPoint>) -> (Box<[TTFPoint]>, Box<[TTFPoint]>) {
+        buffer_lower.reserve(self.ipps.len());
+        buffer_upper.reserve(self.ipps.len());
         PartialPiecewiseLinearFunction::try_from(self)
             .unwrap()
-            .douglas_peuker_combined(&mut result_lower, &mut result_upper);
+            .douglas_peuker_combined(buffer_lower, buffer_upper);
 
-        Self::make_lower_bound_periodic(&mut result_lower);
-        Self::make_upper_bound_periodic(&mut result_upper);
+        Self::make_lower_bound_periodic(&mut buffer_lower[..]);
+        Self::make_upper_bound_periodic(&mut buffer_upper[..]);
 
-        (result_lower.into(), result_upper.into())
+        let res = (Box::<[TTFPoint]>::from(&buffer_lower[..]), Box::<[TTFPoint]>::from(&buffer_upper[..]));
+        buffer_lower.clear();
+        buffer_upper.clear();
+        res
     }
 
     #[cfg(feature = "tdcch-approx-imai-iri")]
@@ -1343,15 +1346,18 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
 
     /// Same result as `(lower_bound_ttf(), upper_bound_ttf())` but with just one call to DP
     #[cfg(not(feature = "tdcch-approx-imai-iri"))]
-    pub fn bound_ttfs(&self) -> (Box<[TTFPoint]>, Box<[TTFPoint]>) {
-        let mut result_lower = Vec::with_capacity(self.ipps.len());
-        let mut result_upper = Vec::with_capacity(self.ipps.len());
-        self.douglas_peuker_combined(&mut result_lower, &mut result_upper);
+    pub fn bound_ttfs(&self, buffer_lower: &mut Vec<TTFPoint>, buffer_upper: &mut Vec<TTFPoint>) -> (Box<[TTFPoint]>, Box<[TTFPoint]>) {
+        buffer_lower.reserve(self.ipps.len());
+        buffer_upper.reserve(self.ipps.len());
+        self.douglas_peuker_combined(buffer_lower, buffer_upper);
 
-        Self::fifoize_down(&mut result_lower);
-        Self::fifoize_up(&mut result_upper);
+        Self::fifoize_down(&mut buffer_lower[..]);
+        Self::fifoize_up(&mut buffer_upper[..]);
 
-        (result_lower.into(), result_upper.into())
+        let res = (Box::<[TTFPoint]>::from(&buffer_lower[..]), Box::<[TTFPoint]>::from(&buffer_upper[..]));
+        buffer_lower.clear();
+        buffer_upper.clear();
+        res
     }
 
     pub fn fifoize_down(plf: &mut [TTFPoint]) {

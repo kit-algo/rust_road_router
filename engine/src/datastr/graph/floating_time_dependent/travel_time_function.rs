@@ -566,7 +566,7 @@ impl<'a> PeriodicATTF<'a> {
 
         match self {
             Exact(plf) => {
-                let (lower, upper) = plf.bound_ttfs();
+                let (lower, upper) = plf.bound_ttfs(&mut buffers.buffer, &mut buffers.exact_result_upper);
                 ATTFContainer::Approx(lower, upper)
             }
             Approx(lower_plf, upper_plf) => {
@@ -1134,7 +1134,7 @@ impl<'a> PartialATTF<'a> {
 
         match self {
             Exact(plf) => {
-                let (lower, upper) = plf.bound_ttfs();
+                let (lower, upper) = plf.bound_ttfs(&mut buffers.buffer, &mut buffers.exact_result_upper);
                 ATTFContainer::Approx(lower, upper)
             }
             Approx(lower_plf, upper_plf) => {
