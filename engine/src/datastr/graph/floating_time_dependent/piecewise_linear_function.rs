@@ -665,7 +665,7 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
         debug_assert!(switchover.fuzzy_lt(self[1].at), "{:?} {:?}", self[1].at, switchover);
 
         if target.is_empty() {
-            target.extend(self.iter().cloned());
+            target.extend_from_slice(self);
             return;
         }
 
@@ -693,7 +693,7 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
             });
         }
         let debug_start = target.len().saturating_sub(2);
-        target.extend(self[1..].iter().cloned());
+        target.extend_from_slice(&self[1..]);
 
         for points in target[debug_start..].windows(2).take(2) {
             debug_assert!(points[0].at.fuzzy_lt(points[1].at));
