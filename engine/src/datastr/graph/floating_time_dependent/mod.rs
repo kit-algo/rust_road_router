@@ -28,6 +28,9 @@ pub use self::graph::{Graph as TDGraph, LiveGraph, TDGraphTrait};
 mod shortcut;
 pub use self::shortcut::*;
 
+mod partial_shortcut;
+pub use self::partial_shortcut::*;
+
 #[allow(unused_variables)]
 #[allow(unreachable_code)]
 mod live_shortcut;

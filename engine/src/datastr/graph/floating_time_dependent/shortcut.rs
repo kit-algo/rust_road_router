@@ -227,7 +227,7 @@ impl Shortcut {
             let mut sources = Sources::None;
             std::mem::swap(&mut sources, &mut self.sources);
             // calculate new `ShortcutSource`s.
-            self.sources = Shortcut::combine(sources, intersection_data, other_data);
+            self.sources = sources.combine(intersection_data, other_data);
         })();
 
         if cfg!(feature = "detailed-stats") {
@@ -392,113 +392,6 @@ impl Shortcut {
         };
     }
 
-    // Combine current `Sources` and the result of a merge into new `Sources`
-    fn combine(sources: Sources, intersection_data: Vec<(Timestamp, bool)>, other_data: ShortcutSourceData) -> Sources {
-        // when just one is better all the time
-        if let [(_, is_self_better)] = &intersection_data[..] {
-            if *is_self_better {
-                // stick with current sources
-                return sources;
-            } else {
-                // just the new data
-                return Sources::One(other_data);
-            }
-        }
-
-        debug_assert!(intersection_data.len() >= 2);
-        let &(zero, mut self_currently_better) = intersection_data.first().unwrap();
-        debug_assert!(zero == Timestamp::zero());
-        let debug_intersections = intersection_data.clone();
-        let mut intersection_iter = intersection_data.into_iter().peekable();
-
-        let dummy: ShortcutSourceData = ShortcutSource::None.into();
-        let mut prev_source = dummy;
-        let mut new_sources: Vec<(Timestamp, ShortcutSourceData)> = Vec::new();
-
-        // iterate over all old sources.
-        // while self is better we need to copy these over
-        // when other becomes better at an intersection we need to insert other_data at the intersection time
-        // when self becomes better at an intersection we need to insert the source that was active at that time in the old sources at the new intersection time.
-        for (at, source) in sources.iter() {
-            if intersection_iter.peek().is_none() || at < intersection_iter.peek().unwrap().0 {
-                if self_currently_better {
-                    if new_sources.last().map(|&(last_at, _)| last_at.fuzzy_eq(at)).unwrap_or(false) {
-                        new_sources.pop();
-                    }
-                    new_sources.push((at, source));
-                }
-            } else {
-                while let Some(&(next_change, better)) = intersection_iter.peek() {
-                    if next_change > at {
-                        break;
-                    }
-
-                    self_currently_better = better;
-
-                    if self_currently_better {
-                        if next_change < at {
-                            if new_sources.last().map(|&(last_at, _)| last_at.fuzzy_eq(next_change)).unwrap_or(false) {
-                                new_sources.pop();
-                            }
-                            new_sources.push((next_change, prev_source));
-                        }
-                    } else {
-                        if new_sources.last().map(|&(last_at, _)| last_at.fuzzy_eq(next_change)).unwrap_or(false) {
-                            new_sources.pop();
-                        }
-                        new_sources.push((next_change, other_data));
-                    }
-
-                    intersection_iter.next();
-                }
-
-                if self_currently_better {
-                    if new_sources.last().map(|&(last_at, _)| last_at.fuzzy_eq(at)).unwrap_or(false) {
-                        new_sources.pop();
-                    }
-                    new_sources.push((at, source));
-                }
-            }
-
-            prev_source = source;
-        }
-
-        // intersections after the last old source
-        for (at, is_self_better) in intersection_iter {
-            if is_self_better {
-                new_sources.push((at, prev_source));
-            } else {
-                new_sources.push((at, other_data));
-            }
-        }
-
-        debug_assert!(
-            new_sources.len() >= 2,
-            "old: {:?}\nintersections: {:?}\nnew: {:?}",
-            sources,
-            debug_intersections,
-            new_sources
-        );
-        debug_assert!(new_sources.first().unwrap().0 == Timestamp::zero());
-        for sources in new_sources.windows(2) {
-            debug_assert!(
-                sources[0].0.fuzzy_lt(sources[1].0),
-                "old: {:?}\nintersections: {:?}\nnew: {:?}",
-                sources,
-                debug_intersections,
-                new_sources
-            );
-            debug_assert!(
-                sources[0].0.fuzzy_lt(period()),
-                "old: {:?}\nintersections: {:?}\nnew: {:?}",
-                sources,
-                debug_intersections,
-                new_sources
-            );
-        }
-        Sources::Multi(new_sources.into_boxed_slice())
-    }
-
     /// Recursively unpack the exact travel time function for a given time range.
     // Use two `ReusablePLFStorage`s to reduce allocations.
     // One storage will contain the functions for each source - the other the complete resulting function.
@@ -599,7 +492,7 @@ impl Sources {
     pub fn wrapping_iter_for(&self, start: Timestamp, end: Timestamp) -> SourcesIter {
         match self {
             Sources::None => SourcesIter::None,
-            Sources::One(source) => SourcesIter::One(std::iter::once(*source)),
+            Sources::One(source) => SourcesIter::One(start, std::iter::once(*source)),
             Sources::Multi(sources) => SourcesIter::Multi(sources.wrapping_iter(start, end)),
         }
     }
@@ -615,12 +508,109 @@ impl Sources {
             Sources::Multi(sources) => sources.len(),
         }
     }
+
+    // Combine current `Sources` and the result of a merge into new `Sources`
+    pub fn combine(self, intersection_data: Vec<(Timestamp, bool)>, other_data: ShortcutSourceData) -> Self {
+        // when just one is better all the time
+        if let [(_, is_self_better)] = &intersection_data[..] {
+            if *is_self_better {
+                // stick with current sources
+                return self;
+            } else {
+                // just the new data
+                return Sources::One(other_data);
+            }
+        }
+
+        debug_assert!(intersection_data.len() >= 2);
+        let &(_, mut self_currently_better) = intersection_data.first().unwrap();
+        let mut intersection_iter = intersection_data.iter().peekable();
+
+        let dummy: ShortcutSourceData = ShortcutSource::None.into();
+        let mut prev_source = dummy;
+        let mut new_sources: Vec<(Timestamp, ShortcutSourceData)> = Vec::new();
+
+        // iterate over all old sources.
+        // while self is better we need to copy these over
+        // when other becomes better at an intersection we need to insert other_data at the intersection time
+        // when self becomes better at an intersection we need to insert the source that was active at that time in the old sources at the new intersection time.
+        for (at, source) in self.iter() {
+            if intersection_iter.peek().is_none() || at < intersection_iter.peek().unwrap().0 {
+                if self_currently_better {
+                    if new_sources.last().map(|&(last_at, _)| last_at.fuzzy_eq(at)).unwrap_or(false) {
+                        new_sources.pop();
+                    }
+                    new_sources.push((at, source));
+                }
+            } else {
+                while let Some(&&(next_change, better)) = intersection_iter.peek() {
+                    if next_change > at {
+                        break;
+                    }
+
+                    self_currently_better = better;
+
+                    if self_currently_better {
+                        if next_change < at {
+                            if new_sources.last().map(|&(last_at, _)| last_at.fuzzy_eq(next_change)).unwrap_or(false) {
+                                new_sources.pop();
+                            }
+                            new_sources.push((next_change, prev_source));
+                        }
+                    } else {
+                        if new_sources.last().map(|&(last_at, _)| last_at.fuzzy_eq(next_change)).unwrap_or(false) {
+                            new_sources.pop();
+                        }
+                        new_sources.push((next_change, other_data));
+                    }
+
+                    intersection_iter.next();
+                }
+
+                if self_currently_better {
+                    if new_sources.last().map(|&(last_at, _)| last_at.fuzzy_eq(at)).unwrap_or(false) {
+                        new_sources.pop();
+                    }
+                    new_sources.push((at, source));
+                }
+            }
+
+            prev_source = source;
+        }
+
+        // intersections after the last old source
+        for &(at, is_self_better) in intersection_iter {
+            if is_self_better {
+                new_sources.push((at, prev_source));
+            } else {
+                new_sources.push((at, other_data));
+            }
+        }
+
+        debug_assert!(
+            new_sources.len() >= 2,
+            "old: {:?}\nintersections: {:?}\nnew: {:?}",
+            self,
+            intersection_data,
+            new_sources
+        );
+        for sources in new_sources.windows(2) {
+            debug_assert!(
+                sources[0].0.fuzzy_lt(sources[1].0),
+                "old: {:?}\nintersections: {:?}\nnew: {:?}",
+                sources,
+                intersection_data,
+                new_sources
+            );
+        }
+        Sources::Multi(new_sources.into_boxed_slice())
+    }
 }
 
 #[derive(Debug)]
 pub enum SourcesIter<'a> {
     None,
-    One(std::iter::Once<ShortcutSourceData>),
+    One(Timestamp, std::iter::Once<ShortcutSourceData>),
     Multi(WrappingSourceIter<'a>),
 }
 
@@ -630,7 +620,7 @@ impl<'a> Iterator for SourcesIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             SourcesIter::None => None,
-            SourcesIter::One(iter) => iter.next().map(|source| (Timestamp::zero(), source)),
+            SourcesIter::One(t, iter) => iter.next().map(|source| (*t, source)),
             SourcesIter::Multi(iter) => iter.next(),
         }
     }
