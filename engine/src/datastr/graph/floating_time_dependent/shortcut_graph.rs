@@ -873,15 +873,15 @@ impl<'a> SingleDirBoundsGraph<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Foo {
+pub struct ReconstructionState {
     missing_deps: usize,
     awaited_by: Vec<ShortcutId>,
     pub requested_times: Vec<(Timestamp, Timestamp)>,
 }
 
-impl Default for Foo {
+impl Default for ReconstructionState {
     fn default() -> Self {
-        Foo {
+        ReconstructionState {
             missing_deps: 0,
             awaited_by: Vec::new(),
             requested_times: Vec::new(),
@@ -889,7 +889,7 @@ impl Default for Foo {
     }
 }
 
-impl Foo {
+impl ReconstructionState {
     fn request_time(times: &mut Vec<(Timestamp, Timestamp)>, mut start: Timestamp, mut end: Timestamp) {
         if !cfg!(feature = "tdcch-profiles-with-holes") {
             start = Timestamp::zero();
@@ -1084,10 +1084,9 @@ impl<'a> ReconstructionGraph<'a> {
 
     pub fn cache_iterative(
         &mut self,
-        // queue: &mut BinaryHeap<ShortcutId>,
         queue: &mut IndexdMinHeap<Reverse<ReconstructionQueueElement>>,
-        incoming_foo: &mut [Foo],
-        outgoing_foo: &mut [Foo],
+        incoming_reconstruction_states: &mut [ReconstructionState],
+        outgoing_reconstruction_states: &mut [ReconstructionState],
         buffers: &mut MergeBuffers,
     ) {
         while let Some(Reverse(ReconstructionQueueElement {
@@ -1096,21 +1095,13 @@ impl<'a> ReconstructionGraph<'a> {
             shortcut_id,
         })) = queue.pop()
         {
-            // while let Some(shortcut_id) = queue.pop() {
             debug_assert!(lower_node < upper_node);
 
-            let mut foo = Default::default();
-            std::mem::swap(&mut foo, shortcut_id.get_mut_from(incoming_foo, outgoing_foo));
-            // debug_assert_eq!(foo.missing_deps, 0);
-            // if foo.missing_deps > 0 {
-            //     std::mem::swap(&mut foo, shortcut_id.get_mut_from(incoming_foo, outgoing_foo));
-            //     continue;
-            // }
-
-            // eprintln!("");
-            // eprintln!("{:?} {} {}", shortcut_id, lower_node, upper_node);
-            // dbg!(shortcut_id);
-            // if shortcut_id == ShortcutId::Outgoing(106666) {}
+            let mut state = Default::default();
+            std::mem::swap(
+                &mut state,
+                shortcut_id.get_mut_from(incoming_reconstruction_states, outgoing_reconstruction_states),
+            );
 
             let edge_sources = shortcut_id.get_with(
                 &self.customized_graph.incoming,
@@ -1118,9 +1109,8 @@ impl<'a> ReconstructionGraph<'a> {
                 CustomizedSingleDirGraph::edge_sources,
             );
 
-            // todo!("intersect requested times with available cache?");
             let mut any_down_missing = false;
-            for &(start, end) in &foo.requested_times {
+            for &(start, end) in &state.requested_times {
                 let mut c = SourceCursor::valid_at(edge_sources, start);
 
                 while c.cur().0.fuzzy_lt(end) {
@@ -1131,10 +1121,10 @@ impl<'a> ReconstructionGraph<'a> {
 
                             if !self.ttf_available(ShortcutId::Incoming(down), first_start, first_end) {
                                 any_down_missing = true;
-                                Foo::request_time(&mut incoming_foo[down as usize].requested_times, first_start, first_end);
-                                if !incoming_foo[down as usize].awaited_by.contains(&shortcut_id) {
-                                    incoming_foo[down as usize].awaited_by.push(shortcut_id);
-                                    foo.missing_deps += 1;
+                                ReconstructionState::request_time(&mut incoming_reconstruction_states[down as usize].requested_times, first_start, first_end);
+                                if !incoming_reconstruction_states[down as usize].awaited_by.contains(&shortcut_id) {
+                                    incoming_reconstruction_states[down as usize].awaited_by.push(shortcut_id);
+                                    state.missing_deps += 1;
                                 }
 
                                 queue.push_unless_contained(Reverse(ReconstructionQueueElement {
@@ -1143,9 +1133,9 @@ impl<'a> ReconstructionGraph<'a> {
                                     shortcut_id: ShortcutId::Incoming(down),
                                 }));
 
-                                if !incoming_foo[down as usize].awaited_by.contains(&ShortcutId::Outgoing(up)) {
-                                    incoming_foo[down as usize].awaited_by.push(ShortcutId::Outgoing(up));
-                                    outgoing_foo[up as usize].missing_deps += 1;
+                                if !incoming_reconstruction_states[down as usize].awaited_by.contains(&ShortcutId::Outgoing(up)) {
+                                    incoming_reconstruction_states[down as usize].awaited_by.push(ShortcutId::Outgoing(up));
+                                    outgoing_reconstruction_states[up as usize].missing_deps += 1;
                                 }
                             }
                         }
@@ -1155,12 +1145,15 @@ impl<'a> ReconstructionGraph<'a> {
                 }
             }
             if any_down_missing {
-                std::mem::swap(&mut foo, shortcut_id.get_mut_from(incoming_foo, outgoing_foo));
+                std::mem::swap(
+                    &mut state,
+                    shortcut_id.get_mut_from(incoming_reconstruction_states, outgoing_reconstruction_states),
+                );
                 continue;
             }
 
             let mut any_up_missing = false;
-            for &(start, end) in &foo.requested_times {
+            for &(start, end) in &state.requested_times {
                 let mut c = SourceCursor::valid_at(edge_sources, start);
 
                 while c.cur().0.fuzzy_lt(end) {
@@ -1182,10 +1175,10 @@ impl<'a> ReconstructionGraph<'a> {
                             if !self.ttf_available(ShortcutId::Outgoing(up), second_start, second_end) {
                                 any_up_missing = true;
 
-                                Foo::request_time(&mut outgoing_foo[up as usize].requested_times, second_start, second_end);
-                                if !outgoing_foo[up as usize].awaited_by.contains(&shortcut_id) {
-                                    outgoing_foo[up as usize].awaited_by.push(shortcut_id);
-                                    foo.missing_deps += 1;
+                                ReconstructionState::request_time(&mut outgoing_reconstruction_states[up as usize].requested_times, second_start, second_end);
+                                if !outgoing_reconstruction_states[up as usize].awaited_by.contains(&shortcut_id) {
+                                    outgoing_reconstruction_states[up as usize].awaited_by.push(shortcut_id);
+                                    state.missing_deps += 1;
                                 }
 
                                 queue.push_unless_contained(Reverse(ReconstructionQueueElement {
@@ -1202,23 +1195,31 @@ impl<'a> ReconstructionGraph<'a> {
             }
 
             if any_up_missing {
-                std::mem::swap(&mut foo, shortcut_id.get_mut_from(incoming_foo, outgoing_foo));
+                std::mem::swap(
+                    &mut state,
+                    shortcut_id.get_mut_from(incoming_reconstruction_states, outgoing_reconstruction_states),
+                );
                 continue;
             }
 
-            if foo.missing_deps > 0 {
-                std::mem::swap(&mut foo, shortcut_id.get_mut_from(incoming_foo, outgoing_foo));
+            if state.missing_deps > 0 {
+                std::mem::swap(
+                    &mut state,
+                    shortcut_id.get_mut_from(incoming_reconstruction_states, outgoing_reconstruction_states),
+                );
                 continue;
             }
 
-            for (start, end) in foo.requested_times.drain(..) {
+            for (start, end) in state.requested_times.drain(..) {
                 // dbg!(shortcut_id, start, end, dir_graph.edge_sources(edge_id as usize));
                 self.cache(shortcut_id, start, end, buffers);
                 debug_assert!(self.ttf_available(shortcut_id, start, end));
             }
-            for waiting in foo.awaited_by.drain(..) {
-                waiting.get_mut_from(incoming_foo, outgoing_foo).missing_deps -= 1;
-                if waiting.get_from(&incoming_foo, &outgoing_foo).missing_deps == 0 {
+            for waiting in state.awaited_by.drain(..) {
+                waiting
+                    .get_mut_from(incoming_reconstruction_states, outgoing_reconstruction_states)
+                    .missing_deps -= 1;
+                if waiting.get_from(&incoming_reconstruction_states, &outgoing_reconstruction_states).missing_deps == 0 {
                     queue.push_unless_contained(Reverse(ReconstructionQueueElement {
                         upper_node: *waiting.get_from(&self.customized_graph.incoming.head, &self.customized_graph.outgoing.head),
                         lower_node: *waiting.get_from(&self.customized_graph.incoming.tail, &self.customized_graph.outgoing.tail),
@@ -1227,7 +1228,10 @@ impl<'a> ReconstructionGraph<'a> {
                 }
             }
 
-            std::mem::swap(&mut foo, shortcut_id.get_mut_from(incoming_foo, outgoing_foo));
+            std::mem::swap(
+                &mut state,
+                shortcut_id.get_mut_from(incoming_reconstruction_states, outgoing_reconstruction_states),
+            );
         }
     }
 

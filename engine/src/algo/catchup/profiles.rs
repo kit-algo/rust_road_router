@@ -54,8 +54,8 @@ pub struct Server<'a> {
     downward_shortcut_offsets: Vec<usize>,
     upward_shortcut_offsets: Vec<usize>,
 
-    incoming_foo: Vec<Foo>,
-    outgoing_foo: Vec<Foo>,
+    incoming_reconstruction_states: Vec<ReconstructionState>,
+    outgoing_reconstruction_states: Vec<ReconstructionState>,
     reconstruction_queue: IndexdMinHeap<Reverse<ReconstructionQueueElement>>,
 }
 
@@ -89,8 +89,8 @@ impl<'a> Server<'a> {
             downward_shortcut_offsets: vec![n; n],
             upward_shortcut_offsets: vec![n; n],
 
-            incoming_foo: (0..m_down).map(|_| Default::default()).collect(),
-            outgoing_foo: (0..m_up).map(|_| Default::default()).collect(),
+            incoming_reconstruction_states: (0..m_down).map(|_| Default::default()).collect(),
+            outgoing_reconstruction_states: (0..m_up).map(|_| Default::default()).collect(),
             reconstruction_queue: IndexdMinHeap::new(max(m_down, m_up) * 2),
         }
     }
@@ -267,7 +267,7 @@ impl<'a> Server<'a> {
                     self.backward_tree_mask.set(label.parent as usize);
 
                     if cfg!(feature = "tdcch-profiles-iterative-reconstruction") {
-                        self.incoming_foo[label.shortcut_id as usize]
+                        self.incoming_reconstruction_states[label.shortcut_id as usize]
                             .requested_times
                             .push((Timestamp::zero(), period()));
                         self.reconstruction_queue.push(Reverse(ReconstructionQueueElement {
@@ -314,7 +314,7 @@ impl<'a> Server<'a> {
                     self.relevant_upward.set(label.shortcut_id as usize);
 
                     if cfg!(feature = "tdcch-profiles-iterative-reconstruction") {
-                        self.outgoing_foo[label.shortcut_id as usize]
+                        self.outgoing_reconstruction_states[label.shortcut_id as usize]
                             .requested_times
                             .push((Timestamp::zero(), period()));
                         self.reconstruction_queue.push(Reverse(ReconstructionQueueElement {
@@ -336,8 +336,8 @@ impl<'a> Server<'a> {
         if cfg!(feature = "tdcch-profiles-iterative-reconstruction") {
             reconstruction_graph.cache_iterative(
                 &mut self.reconstruction_queue,
-                &mut self.incoming_foo,
-                &mut self.outgoing_foo,
+                &mut self.incoming_reconstruction_states,
+                &mut self.outgoing_reconstruction_states,
                 &mut self.buffers,
             );
         }
