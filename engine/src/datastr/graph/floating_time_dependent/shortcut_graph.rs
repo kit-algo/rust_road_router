@@ -985,87 +985,92 @@ pub struct ReconstructionGraph<'a> {
 impl<'a> ReconstructionGraph<'a> {
     fn cache(&mut self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, buffers: &mut MergeBuffers) {
         debug_assert!(start.fuzzy_lt(end));
-        let times = shortcut_id
+        let inserts = shortcut_id
             .get_from(&self.incoming_cache, &self.outgoing_cache)
             .as_ref()
             .map(|cache| cache.missing(start, end))
-            .unwrap_or(vec![(start, end)]);
+            .unwrap_or(vec![(start, end)])
+            .into_iter()
+            .map(|(start, end)| {
+                Partial {
+                    start,
+                    end,
+                    ttf: if self.as_reconstructed().all_sources_exact(shortcut_id, start, end) {
+                        let mut target = buffers.unpacking_target.push_plf();
+                        self.as_reconstructed()
+                            .reconstruct_exact_ttf(shortcut_id, start, end, &mut target, &mut buffers.unpacking_tmp);
 
-        for (start, end) in times {
-            let cache = if self.as_reconstructed().all_sources_exact(shortcut_id, start, end) {
-                let mut target = buffers.unpacking_target.push_plf();
-                self.as_reconstructed()
-                    .reconstruct_exact_ttf(shortcut_id, start, end, &mut target, &mut buffers.unpacking_tmp);
+                        ATTFContainer::Exact(Box::<[TTFPoint]>::from(&target[..]))
+                    } else {
+                        let mut target = buffers.unpacking_target.push_plf();
 
-                ATTFContainer::Exact(Box::<[TTFPoint]>::from(&target[..]))
-            } else {
-                let mut target = buffers.unpacking_target.push_plf();
+                        let edge_sources = shortcut_id.get_with(
+                            &self.customized_graph.incoming,
+                            &self.customized_graph.outgoing,
+                            CustomizedSingleDirGraph::edge_sources,
+                        );
+                        let mut c = SourceCursor::valid_at(edge_sources, start);
 
-                let edge_sources = shortcut_id.get_with(
-                    &self.customized_graph.incoming,
-                    &self.customized_graph.outgoing,
-                    CustomizedSingleDirGraph::edge_sources,
-                );
-                let mut c = SourceCursor::valid_at(edge_sources, start);
+                        while c.cur().0.fuzzy_lt(end) {
+                            let mut inner_target = buffers.unpacking_tmp.push_plf();
+                            ShortcutSource::from(c.cur().1).reconstruct_lower_bound(
+                                max(start, c.cur().0),
+                                min(end, c.next().0),
+                                &self.as_reconstructed(),
+                                &mut inner_target,
+                                target.storage_mut(),
+                            );
+                            PartialPiecewiseLinearFunction::new(&inner_target[..]).append_bound(max(start, c.cur().0), &mut target, min);
 
-                while c.cur().0.fuzzy_lt(end) {
-                    let mut inner_target = buffers.unpacking_tmp.push_plf();
-                    ShortcutSource::from(c.cur().1).reconstruct_lower_bound(
-                        max(start, c.cur().0),
-                        min(end, c.next().0),
-                        &self.as_reconstructed(),
-                        &mut inner_target,
-                        target.storage_mut(),
-                    );
-                    PartialPiecewiseLinearFunction::new(&inner_target[..]).append_bound(max(start, c.cur().0), &mut target, min);
+                            c.advance();
+                        }
 
-                    c.advance();
+                        let mut lower = Box::<[TTFPoint]>::from(&target[..]);
+                        PartialPiecewiseLinearFunction::fifoize_down(&mut lower);
+                        drop(target);
+
+                        let mut target = buffers.unpacking_target.push_plf();
+
+                        let mut c = SourceCursor::valid_at(edge_sources, start);
+
+                        while c.cur().0.fuzzy_lt(end) {
+                            let mut inner_target = buffers.unpacking_tmp.push_plf();
+                            ShortcutSource::from(c.cur().1).reconstruct_upper_bound(
+                                max(start, c.cur().0),
+                                min(end, c.next().0),
+                                &self.as_reconstructed(),
+                                &mut inner_target,
+                                target.storage_mut(),
+                            );
+                            PartialPiecewiseLinearFunction::new(&inner_target[..]).append_bound(max(start, c.cur().0), &mut target, max);
+
+                            c.advance();
+                        }
+
+                        let mut upper = Box::<[TTFPoint]>::from(&target[..]);
+                        PartialPiecewiseLinearFunction::fifoize_up(&mut upper);
+
+                        ATTFContainer::Approx(lower, upper)
+                        // for p in &lower[..] {
+                        //     debug_assert!(p.val.fuzzy_leq(self.as_reconstructed().evaluate(shortcut_id, p.at)));
+                        // }
+                        // for p in &upper[..] {
+                        //     debug_assert!(self.as_reconstructed().evaluate(shortcut_id, p.at).fuzzy_leq(p.val), "{:#?}", p);
+                        // }
+
+                        // let c = ApproxTTFContainer::Approx(lower, upper);
+                        // ApproxPartialTTF::from(&c);
+                        // c
+                    },
                 }
+            })
+            .collect();
 
-                let mut lower = Box::<[TTFPoint]>::from(&target[..]);
-                PartialPiecewiseLinearFunction::fifoize_down(&mut lower);
-                drop(target);
-
-                let mut target = buffers.unpacking_target.push_plf();
-
-                let mut c = SourceCursor::valid_at(edge_sources, start);
-
-                while c.cur().0.fuzzy_lt(end) {
-                    let mut inner_target = buffers.unpacking_tmp.push_plf();
-                    ShortcutSource::from(c.cur().1).reconstruct_upper_bound(
-                        max(start, c.cur().0),
-                        min(end, c.next().0),
-                        &self.as_reconstructed(),
-                        &mut inner_target,
-                        target.storage_mut(),
-                    );
-                    PartialPiecewiseLinearFunction::new(&inner_target[..]).append_bound(max(start, c.cur().0), &mut target, max);
-
-                    c.advance();
-                }
-
-                let mut upper = Box::<[TTFPoint]>::from(&target[..]);
-                PartialPiecewiseLinearFunction::fifoize_up(&mut upper);
-
-                ATTFContainer::Approx(lower, upper)
-                // for p in &lower[..] {
-                //     debug_assert!(p.val.fuzzy_leq(self.as_reconstructed().evaluate(shortcut_id, p.at)));
-                // }
-                // for p in &upper[..] {
-                //     debug_assert!(self.as_reconstructed().evaluate(shortcut_id, p.at).fuzzy_leq(p.val), "{:#?}", p);
-                // }
-
-                // let c = ApproxTTFContainer::Approx(lower, upper);
-                // ApproxPartialTTF::from(&c);
-                // c
-            };
-
-            let old = shortcut_id.get_mut_from(&mut self.incoming_cache, &mut self.outgoing_cache);
-            if let Some(old) = old.as_mut() {
-                old.insert(Partial { ttf: cache, start, end });
-            } else {
-                *old = Some(ApproxPartialsContainer::new(Partial { ttf: cache, start, end }));
-            }
+        let old = shortcut_id.get_mut_from(&mut self.incoming_cache, &mut self.outgoing_cache);
+        if let Some(old) = old.as_mut() {
+            old.insert_all(inserts);
+        } else {
+            *old = Some(ApproxPartialsContainer::new(inserts));
         }
 
         self.approximate(shortcut_id, buffers);

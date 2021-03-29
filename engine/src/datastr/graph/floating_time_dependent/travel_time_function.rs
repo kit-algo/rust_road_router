@@ -1,4 +1,5 @@
 use super::*;
+use crate::util::{MyFrom, MyInto};
 use std::{
     cmp::{max, min, Ordering},
     convert::{TryFrom, TryInto},
@@ -24,6 +25,31 @@ where
             Approx(lower, upper) => lower.len() + upper.len(),
         }
     }
+
+    pub fn exact(&self) -> bool {
+        match &self {
+            Self::Exact(_) => true,
+            Self::Approx(_, _) => false,
+        }
+    }
+}
+
+impl ATTFContainer<Vec<TTFPoint>> {
+    fn append(&mut self, other: PartialATTF, switchover: Timestamp) {
+        match (self, &other) {
+            (Self::Exact(target_plf), PartialATTF::Exact(other_plf)) => {
+                other_plf.append(switchover, target_plf);
+            }
+            (Self::Approx(target_lower, target_upper), _) => {
+                let (other_lower, other_upper) = other.bound_plfs();
+                other_lower.append_bound(switchover, target_lower, min);
+                PartialPiecewiseLinearFunction::fifoize_down(target_lower);
+                other_upper.append_bound(switchover, target_upper, max);
+                PartialPiecewiseLinearFunction::fifoize_up(target_upper);
+            }
+            _ => unreachable!(),
+        }
+    }
 }
 
 impl<D> TryFrom<ApproxPartialsContainer<D>> for ATTFContainer<D>
@@ -38,6 +64,18 @@ where
             }
         }
         Err(())
+    }
+}
+
+impl<C, D> MyFrom<ATTFContainer<C>> for ATTFContainer<D>
+where
+    C: Into<D>,
+{
+    fn mfrom(cache: ATTFContainer<C>) -> Self {
+        match cache {
+            ATTFContainer::Exact(ipps) => ATTFContainer::Exact(ipps.into()),
+            ATTFContainer::Approx(lower_ipps, upper_ipps) => ATTFContainer::Approx(lower_ipps.into(), upper_ipps.into()),
+        }
     }
 }
 
@@ -1170,33 +1208,6 @@ impl<'a> PartialATTF<'a> {
             }
         }
     }
-
-    fn append_from_same_fn<D>(&self, other: Self, switchover: Timestamp) -> ATTFContainer<D>
-    where
-        Vec<TTFPoint>: Into<D>,
-    {
-        match (&self, &other) {
-            (Self::Exact(self_plf), Self::Exact(other_plf)) => {
-                let mut target_plf = Vec::with_capacity(self_plf.len() + other_plf.len());
-                target_plf.extend_from_slice(&self_plf);
-                other_plf.append(switchover, &mut target_plf);
-                ATTFContainer::Exact(target_plf.into())
-            }
-            _ => {
-                let (self_lower, self_upper) = self.bound_plfs();
-                let (other_lower, other_upper) = other.bound_plfs();
-                let mut target_lower = Vec::with_capacity(self_lower.len() + other_lower.len());
-                let mut target_upper = Vec::with_capacity(self_upper.len() + other_upper.len());
-                target_lower.extend_from_slice(&self_lower);
-                target_upper.extend_from_slice(&self_upper);
-                other_lower.append_bound(switchover, &mut target_lower, min);
-                PartialPiecewiseLinearFunction::fifoize_down(&mut target_lower);
-                other_upper.append_bound(switchover, &mut target_upper, max);
-                PartialPiecewiseLinearFunction::fifoize_up(&mut target_upper);
-                ATTFContainer::Approx(target_lower.into(), target_upper.into())
-            }
-        }
-    }
 }
 
 mod debug {
@@ -1300,12 +1311,39 @@ where
     D: std::ops::Deref<Target = [TTFPoint]>,
     Vec<TTFPoint>: Into<D>,
 {
-    fn append(&self, other: &Self) -> Self {
-        assert!(self.end.fuzzy_eq(other.start));
+    fn combine(a: &[Self], b: &[Partial<D>]) -> Self {
+        if b[0].start < a[0].start {
+            return Self::combine(b, a);
+        }
+
+        let mut target = if a.iter().all(|p| p.ttf.exact()) && b.iter().all(|p| p.ttf.exact()) {
+            ATTFContainer::Exact(Vec::with_capacity(
+                a.iter().map(|p| p.ttf.num_points()).sum::<usize>() + b.iter().map(|p| p.ttf.num_points()).sum::<usize>(),
+            ))
+        } else {
+            ATTFContainer::Approx(
+                Vec::with_capacity(
+                    a.iter().map(|p| PartialATTF::from(&p.ttf).bound_plfs().0.len()).sum::<usize>()
+                        + b.iter().map(|p| PartialATTF::from(&p.ttf).bound_plfs().0.len()).sum::<usize>(),
+                ),
+                Vec::with_capacity(
+                    a.iter().map(|p| PartialATTF::from(&p.ttf).bound_plfs().1.len()).sum::<usize>()
+                        + b.iter().map(|p| PartialATTF::from(&p.ttf).bound_plfs().1.len()).sum::<usize>(),
+                ),
+            )
+        };
+
+        for (start, pattf) in crate::util::interleave(
+            a.iter().map(|p| (p.start, PartialATTF::from(&p.ttf))),
+            b.iter().map(|p| (p.start, PartialATTF::from(&p.ttf))),
+        ) {
+            target.append(pattf, start);
+        }
+
         Partial {
-            start: self.start,
-            end: other.end,
-            ttf: PartialATTF::from(&self.ttf).append_from_same_fn(PartialATTF::from(&other.ttf), self.end),
+            start: a[0].start,
+            end: max(a.last().unwrap().end, b.last().unwrap().end),
+            ttf: target.minto(),
         }
     }
 }
@@ -1319,9 +1357,8 @@ impl<D> ApproxPartialsContainer<D>
 where
     D: std::ops::Deref<Target = [TTFPoint]>,
 {
-    pub fn new(partial: Partial<D>) -> Self {
-        PartialATTF::from(&partial.ttf);
-        Self { partials: vec![partial] }
+    pub fn new(partials: Vec<Partial<D>>) -> Self {
+        Self { partials }
     }
 
     pub fn exact(&self) -> bool {
@@ -1388,42 +1425,52 @@ where
     D: std::ops::Deref<Target = [TTFPoint]>,
     Vec<TTFPoint>: Into<D>,
 {
-    pub fn insert(&mut self, insert: Partial<D>) {
-        let pos = self.partials.binary_search_by(|partial| {
-            if insert.start.fuzzy_eq(partial.end) {
-                Ordering::Equal
-            } else if partial.end < insert.start {
+    pub fn insert_all(&mut self, inserts: Vec<Partial<D>>) {
+        let insert_start = inserts[0].start;
+        let insert_end = inserts.last().unwrap().end;
+        let start_pos = self.partials.binary_search_by(|&Partial { start, end, .. }| {
+            if insert_start.fuzzy_lt(start) {
+                Ordering::Greater
+            } else if end.fuzzy_lt(insert_start) {
                 Ordering::Less
             } else {
+                Ordering::Equal
+            }
+        });
+        let end_pos = self.partials.binary_search_by(|&Partial { start, end, .. }| {
+            if insert_end.fuzzy_lt(start) {
                 Ordering::Greater
+            } else if end.fuzzy_lt(insert_end) {
+                Ordering::Less
+            } else {
+                Ordering::Equal
             }
         });
 
-        match pos {
-            Ok(i) => {
-                self.partials[i] = self.partials[i].append(&insert);
-                if i + 1 < self.partials.len() && self.partials[i + 1].start.fuzzy_eq(insert.end) {
-                    self.partials[i] = self.partials[i].append(&self.partials[i + 1]);
-                    self.partials.remove(i + 1);
-                }
+        match (start_pos, end_pos) {
+            (Ok(start_idx), Ok(end_idx)) => {
+                debug_assert!(start_idx < end_idx);
+                self.partials[start_idx] = Partial::combine(&self.partials[start_idx..=end_idx], &inserts[..]);
+                self.partials.drain(start_idx + 1..=end_idx);
             }
-            Err(i) => {
-                if i < self.partials.len() && self.partials[i].start.fuzzy_eq(insert.end) {
-                    self.partials[i] = insert.append(&self.partials[i]);
+            (Ok(start_idx), Err(end_idx)) => {
+                debug_assert!(start_idx < end_idx);
+                self.partials[start_idx] = Partial::combine(&self.partials[start_idx..end_idx], &inserts[..]);
+                self.partials.drain(start_idx + 1..end_idx);
+            }
+            (Err(start_idx), Ok(end_idx)) => {
+                self.partials[end_idx] = Partial::combine(&self.partials[start_idx..=end_idx], &inserts[..]);
+                self.partials.drain(start_idx..end_idx);
+            }
+            (Err(start_idx), Err(end_idx)) => {
+                if start_idx < end_idx {
+                    self.partials[start_idx] = Partial::combine(&self.partials[start_idx..end_idx], &inserts[..]);
+                    self.partials.drain(start_idx + 1..end_idx);
                 } else {
-                    self.partials.insert(i, insert);
+                    debug_assert_eq!(inserts.len(), 1);
+                    self.partials.insert(start_idx, inserts.into_iter().next().unwrap());
                 }
             }
-        }
-
-        for partials in self.partials.windows(2) {
-            debug_assert!(
-                partials[0].end.fuzzy_lt(partials[1].start),
-                "{:?} - {:?} ({})",
-                partials[0].end,
-                partials[1].start,
-                self.partials.len()
-            )
         }
     }
 }

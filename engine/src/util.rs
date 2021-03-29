@@ -135,3 +135,93 @@ where
         &mut self.elements[usize::try_from(self.first_elem[idx]).unwrap()..usize::try_from(self.first_elem[idx + 1]).unwrap()]
     }
 }
+
+use std::iter::Fuse;
+
+/// An iterator adaptor that alternates elements from two iterators until both
+/// run out.
+///
+/// This iterator is *fused*.
+///
+/// See [`.interleave()`](../trait.Itertools.html#method.interleave) for more information.
+#[derive(Clone, Debug)]
+#[must_use = "iterator adaptors are lazy and do nothing unless consumed"]
+pub struct Interleave<I, J> {
+    a: Fuse<I>,
+    b: Fuse<J>,
+    flag: bool,
+}
+
+/// Create an iterator that interleaves elements in `i` and `j`.
+///
+/// `IntoIterator` enabled version of `i.interleave(j)`.
+///
+/// See [`.interleave()`](trait.Itertools.html#method.interleave) for more information.
+pub fn interleave<I, J>(i: I, j: J) -> Interleave<<I as IntoIterator>::IntoIter, <J as IntoIterator>::IntoIter>
+where
+    I: IntoIterator,
+    J: IntoIterator<Item = I::Item>,
+{
+    Interleave {
+        a: i.into_iter().fuse(),
+        b: j.into_iter().fuse(),
+        flag: false,
+    }
+}
+
+impl<I, J> Iterator for Interleave<I, J>
+where
+    I: Iterator,
+    J: Iterator<Item = I::Item>,
+{
+    type Item = I::Item;
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.flag = !self.flag;
+        if self.flag {
+            match self.a.next() {
+                None => self.b.next(),
+                r => r,
+            }
+        } else {
+            match self.b.next() {
+                None => self.a.next(),
+                r => r,
+            }
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        size_hint_add(self.a.size_hint(), self.b.size_hint())
+    }
+}
+
+#[inline]
+fn size_hint_add(a: (usize, Option<usize>), b: (usize, Option<usize>)) -> (usize, Option<usize>) {
+    let min = a.0.saturating_add(b.0);
+    let max = match (a.1, b.1) {
+        (Some(x), Some(y)) => x.checked_add(y),
+        _ => None,
+    };
+
+    (min, max)
+}
+
+pub trait MyFrom<T>: Sized {
+    /// Performs the conversion.
+    fn mfrom(_: T) -> Self;
+}
+
+pub trait MyInto<T>: Sized {
+    /// Performs the conversion.
+    fn minto(self) -> T;
+}
+
+impl<T, U> MyInto<U> for T
+where
+    U: MyFrom<T>,
+{
+    fn minto(self) -> U {
+        U::mfrom(self)
+    }
+}
