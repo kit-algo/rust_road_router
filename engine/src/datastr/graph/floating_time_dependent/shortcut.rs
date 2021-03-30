@@ -61,7 +61,7 @@ impl Shortcut {
         }
     }
 
-    pub fn new_finished(sources: &[(Timestamp, ShortcutSourceData)], bounds: (FlWeight, FlWeight), constant: bool) -> Self {
+    pub fn new_finished(sources: &[(Timestamp, ShortcutSourceData)], bounds: (FlWeight, FlWeight)) -> Self {
         let sources = match sources {
             &[] => Sources::None,
             &[(_, data)] => Sources::One(data),
@@ -71,7 +71,7 @@ impl Shortcut {
             cache: None,
             lower_bound: bounds.0,
             upper_bound: bounds.1,
-            constant,
+            constant: bounds.0.fuzzy_eq(bounds.1),
             required: true,
             sources,
         }

@@ -374,7 +374,7 @@ impl<'a> Server<'a> {
             .iter()
             .map(|&node| {
                 let label = &forward.node_data(node);
-                Shortcut::new_finished(&[], (label.lower_bound, label.upper_bound), label.lower_bound.fuzzy_eq(label.upper_bound))
+                Shortcut::new_finished(&[], (label.lower_bound, label.upper_bound))
             })
             .collect();
         let mut up_shortcuts: Vec<_> = self
@@ -384,11 +384,11 @@ impl<'a> Server<'a> {
             .iter()
             .map(|&node| {
                 let label = &backward.node_data(node);
-                Shortcut::new_finished(&[], (label.lower_bound, label.upper_bound), label.lower_bound.fuzzy_eq(label.upper_bound))
+                Shortcut::new_finished(&[], (label.lower_bound, label.upper_bound))
             })
             .collect();
 
-        let mut st_shortcut = Shortcut::new_finished(&[], tentative_distance, false);
+        let mut st_shortcut = Shortcut::new_finished(&[], tentative_distance);
 
         for (head, edge_id) in shortcuts_from_s_in_corridor {
             let shortcut = if head == to {

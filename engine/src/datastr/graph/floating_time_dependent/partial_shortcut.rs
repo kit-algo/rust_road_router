@@ -52,7 +52,7 @@ impl PartialShortcut {
         }
     }
 
-    pub fn new_finished(start: Timestamp, end: Timestamp, sources: &[(Timestamp, ShortcutSourceData)], bounds: (FlWeight, FlWeight), constant: bool) -> Self {
+    pub fn new_finished(start: Timestamp, end: Timestamp, sources: &[(Timestamp, ShortcutSourceData)], bounds: (FlWeight, FlWeight)) -> Self {
         let sources = match sources {
             &[] => Sources::None,
             &[(_, data)] => Sources::One(data),
@@ -64,7 +64,7 @@ impl PartialShortcut {
             end,
             lower_bound: bounds.0,
             upper_bound: bounds.1,
-            constant,
+            constant: bounds.0.fuzzy_eq(bounds.1),
             required: true,
             sources,
         }
@@ -491,5 +491,48 @@ impl PartialShortcut {
             Sources::Multi(sources) => sources.edge_source_at(t).unwrap(),
         })
         .evaluate(t, shortcut_graph)
+    }
+}
+
+impl PartialTrt for PartialShortcut {
+    fn start(&self) -> Timestamp {
+        self.start
+    }
+    fn end(&self) -> Timestamp {
+        self.end
+    }
+    fn combine(a: &[Self], b: &[Self]) -> Self {
+        if b[0].start < a[0].start {
+            return Self::combine(b, a);
+        }
+        let mut new_sources: Vec<_> = crate::util::interleave(a.iter().map(|s| s.sources_iter()), b.iter().map(|s| s.sources_iter()))
+            .flatten()
+            .collect();
+        new_sources.dedup_by_key(|(_, source)| *source);
+        let lower = a.iter().chain(b.iter()).map(|s| s.lower_bound).min().unwrap();
+        let upper = a.iter().chain(b.iter()).map(|s| s.upper_bound).max().unwrap();
+
+        let a: Vec<_> = a
+            .iter()
+            .map(|s: &PartialShortcut| Partial {
+                start: s.start,
+                end: s.end,
+                ttf: s.cache.as_ref().unwrap().borrow(),
+            })
+            .collect();
+        let b: Vec<_> = b
+            .iter()
+            .map(|s: &PartialShortcut| Partial {
+                start: s.start,
+                end: s.end,
+                ttf: s.cache.as_ref().unwrap().borrow(),
+            })
+            .collect();
+
+        let Partial { start, end, ttf } = Partial::combine(&a, &b);
+
+        let mut s = PartialShortcut::new_finished(start, end, &new_sources, (lower, upper));
+        s.set_cache(Some(ttf.into()));
+        s
     }
 }

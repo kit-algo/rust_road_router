@@ -17,6 +17,13 @@ impl<D> ATTFContainer<D>
 where
     D: std::ops::Deref<Target = [TTFPoint]>,
 {
+    pub fn borrow(&self) -> ATTFContainer<&[TTFPoint]> {
+        match &self {
+            Self::Exact(plf) => ATTFContainer::Exact(plf),
+            Self::Approx(lower_plf, upper_plf) => ATTFContainer::Approx(lower_plf, upper_plf),
+        }
+    }
+
     pub fn num_points(&self) -> usize {
         use ATTFContainer::*;
 
@@ -1309,9 +1316,8 @@ pub struct Partial<D> {
 impl<D> Partial<D>
 where
     D: std::ops::Deref<Target = [TTFPoint]>,
-    Vec<TTFPoint>: Into<D>,
 {
-    fn combine(a: &[Self], b: &[Partial<D>]) -> Self {
+    pub fn combine(a: &[Self], b: &[Self]) -> Partial<Vec<TTFPoint>> {
         if b[0].start < a[0].start {
             return Self::combine(b, a);
         }
@@ -1343,8 +1349,37 @@ where
         Partial {
             start: a[0].start,
             end: max(a.last().unwrap().end, b.last().unwrap().end),
-            ttf: target.minto(),
+            ttf: target,
         }
+    }
+}
+
+impl<C, D> MyFrom<Partial<C>> for Partial<D>
+where
+    C: Into<D>,
+{
+    fn mfrom(p: Partial<C>) -> Self {
+        Partial {
+            start: p.start,
+            end: p.end,
+            ttf: p.ttf.minto(),
+        }
+    }
+}
+
+impl<D> PartialTrt for Partial<D>
+where
+    D: std::ops::Deref<Target = [TTFPoint]> + 'static,
+    Vec<TTFPoint>: Into<D>,
+{
+    fn start(&self) -> Timestamp {
+        self.start
+    }
+    fn end(&self) -> Timestamp {
+        self.end
+    }
+    fn combine(a: &[Self], b: &[Self]) -> Self {
+        Partial::combine(a, b).minto()
     }
 }
 
@@ -1388,24 +1423,6 @@ where
         }
         None
     }
-
-    pub fn missing(&self, start: Timestamp, end: Timestamp) -> Vec<(Timestamp, Timestamp)> {
-        let mut times = Vec::new();
-
-        if start.fuzzy_lt(self.partials[0].start) {
-            times.push((start, min(end, self.partials[0].start)));
-        }
-        for parts in self.partials.windows(2) {
-            if !(end.fuzzy_leq(parts[0].end) || parts[1].start.fuzzy_leq(start)) {
-                times.push((max(start, parts[0].end), min(end, parts[1].start)))
-            }
-        }
-        if self.partials.last().unwrap().end.fuzzy_lt(end) {
-            times.push((max(start, self.partials.last().unwrap().end), end));
-        }
-
-        times
-    }
 }
 
 impl ApproxPartialsContainer<Box<[TTFPoint]>> {
@@ -1422,56 +1439,15 @@ impl ApproxPartialsContainer<Box<[TTFPoint]>> {
 
 impl<D> ApproxPartialsContainer<D>
 where
-    D: std::ops::Deref<Target = [TTFPoint]>,
+    D: std::ops::Deref<Target = [TTFPoint]> + 'static,
     Vec<TTFPoint>: Into<D>,
 {
-    pub fn insert_all(&mut self, inserts: Vec<Partial<D>>) {
-        let insert_start = inserts[0].start;
-        let insert_end = inserts.last().unwrap().end;
-        let start_pos = self.partials.binary_search_by(|&Partial { start, end, .. }| {
-            if insert_start.fuzzy_lt(start) {
-                Ordering::Greater
-            } else if end.fuzzy_lt(insert_start) {
-                Ordering::Less
-            } else {
-                Ordering::Equal
-            }
-        });
-        let end_pos = self.partials.binary_search_by(|&Partial { start, end, .. }| {
-            if insert_end.fuzzy_lt(start) {
-                Ordering::Greater
-            } else if end.fuzzy_lt(insert_end) {
-                Ordering::Less
-            } else {
-                Ordering::Equal
-            }
-        });
+    pub fn missing(&self, start: Timestamp, end: Timestamp) -> Vec<(Timestamp, Timestamp)> {
+        Partial::missing(&self.partials, start, end)
+    }
 
-        match (start_pos, end_pos) {
-            (Ok(start_idx), Ok(end_idx)) => {
-                debug_assert!(start_idx < end_idx);
-                self.partials[start_idx] = Partial::combine(&self.partials[start_idx..=end_idx], &inserts[..]);
-                self.partials.drain(start_idx + 1..=end_idx);
-            }
-            (Ok(start_idx), Err(end_idx)) => {
-                debug_assert!(start_idx < end_idx);
-                self.partials[start_idx] = Partial::combine(&self.partials[start_idx..end_idx], &inserts[..]);
-                self.partials.drain(start_idx + 1..end_idx);
-            }
-            (Err(start_idx), Ok(end_idx)) => {
-                self.partials[end_idx] = Partial::combine(&self.partials[start_idx..=end_idx], &inserts[..]);
-                self.partials.drain(start_idx..end_idx);
-            }
-            (Err(start_idx), Err(end_idx)) => {
-                if start_idx < end_idx {
-                    self.partials[start_idx] = Partial::combine(&self.partials[start_idx..end_idx], &inserts[..]);
-                    self.partials.drain(start_idx + 1..end_idx);
-                } else {
-                    debug_assert_eq!(inserts.len(), 1);
-                    self.partials.insert(start_idx, inserts.into_iter().next().unwrap());
-                }
-            }
-        }
+    pub fn insert_all(&mut self, inserts: Vec<Partial<D>>) {
+        Partial::insert_all(&mut self.partials, inserts)
     }
 }
 
@@ -1593,6 +1569,83 @@ where
                     end: period(),
                 };
                 break;
+            }
+        }
+    }
+}
+
+pub trait PartialTrt: Sized {
+    fn start(&self) -> Timestamp;
+    fn end(&self) -> Timestamp;
+    fn combine(a: &[Self], b: &[Self]) -> Self;
+
+    fn missing(partials: &[Self], start: Timestamp, end: Timestamp) -> Vec<(Timestamp, Timestamp)> {
+        if partials.is_empty() {
+            return vec![(start, end)];
+        }
+
+        let mut times = Vec::new();
+
+        if start.fuzzy_lt(partials[0].start()) {
+            times.push((start, min(end, partials[0].start())));
+        }
+        for parts in partials.windows(2) {
+            if !(end.fuzzy_leq(parts[0].end()) || parts[1].start().fuzzy_leq(start)) {
+                times.push((max(start, parts[0].end()), min(end, parts[1].start())))
+            }
+        }
+        if partials.last().unwrap().end().fuzzy_lt(end) {
+            times.push((max(start, partials.last().unwrap().end()), end));
+        }
+
+        times
+    }
+
+    fn insert_all(partials: &mut Vec<Self>, inserts: Vec<Self>) {
+        let insert_start = inserts[0].start();
+        let insert_end = inserts.last().unwrap().end();
+        let start_pos = partials.binary_search_by(|p| {
+            if insert_start.fuzzy_lt(p.start()) {
+                Ordering::Greater
+            } else if p.end().fuzzy_lt(insert_start) {
+                Ordering::Less
+            } else {
+                Ordering::Equal
+            }
+        });
+        let end_pos = partials.binary_search_by(|p| {
+            if insert_end.fuzzy_lt(p.start()) {
+                Ordering::Greater
+            } else if p.end().fuzzy_lt(insert_end) {
+                Ordering::Less
+            } else {
+                Ordering::Equal
+            }
+        });
+
+        match (start_pos, end_pos) {
+            (Ok(start_idx), Ok(end_idx)) => {
+                debug_assert!(start_idx < end_idx);
+                partials[start_idx] = Self::combine(&partials[start_idx..=end_idx], &inserts[..]);
+                partials.drain(start_idx + 1..=end_idx);
+            }
+            (Ok(start_idx), Err(end_idx)) => {
+                debug_assert!(start_idx < end_idx);
+                partials[start_idx] = Self::combine(&partials[start_idx..end_idx], &inserts[..]);
+                partials.drain(start_idx + 1..end_idx);
+            }
+            (Err(start_idx), Ok(end_idx)) => {
+                partials[end_idx] = Self::combine(&partials[start_idx..=end_idx], &inserts[..]);
+                partials.drain(start_idx..end_idx);
+            }
+            (Err(start_idx), Err(end_idx)) => {
+                if start_idx < end_idx {
+                    partials[start_idx] = Self::combine(&partials[start_idx..end_idx], &inserts[..]);
+                    partials.drain(start_idx + 1..end_idx);
+                } else {
+                    debug_assert_eq!(inserts.len(), 1);
+                    partials.insert(start_idx, inserts.into_iter().next().unwrap());
+                }
             }
         }
     }

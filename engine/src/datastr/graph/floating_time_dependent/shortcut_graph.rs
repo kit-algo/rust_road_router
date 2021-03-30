@@ -778,12 +778,12 @@ impl CustomizedSingleDirGraph {
 
     pub fn to_shortcut_vec(&self) -> Vec<Shortcut> {
         (0..self.head.len())
-            .map(|edge_idx| Shortcut::new_finished(self.edge_sources(edge_idx as EdgeId), self.bounds[edge_idx], self.constant.get(edge_idx)))
+            .map(|edge_idx| Shortcut::new_finished(self.edge_sources(edge_idx as EdgeId), self.bounds[edge_idx]))
             .collect()
     }
 
     pub fn to_shortcut(&self, edge_idx: usize) -> Shortcut {
-        Shortcut::new_finished(self.edge_sources(edge_idx as EdgeId), self.bounds[edge_idx], self.constant.get(edge_idx))
+        Shortcut::new_finished(self.edge_sources(edge_idx as EdgeId), self.bounds[edge_idx])
     }
 
     // fn validate(self) -> Self {
@@ -958,10 +958,10 @@ impl ReconstructionState {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ReconstructionQueueElement {
-    pub t: Timestamp,
     pub upper_node: NodeId,
     pub lower_node: NodeId,
     pub shortcut_id: ShortcutId,
+    pub t: Timestamp,
 }
 
 impl Indexing for ReconstructionQueueElement {
@@ -1768,17 +1768,18 @@ impl<'a> PartialProfileGraphWrapper<'a> {
         incoming_reconstruction_states: &mut [ReconstructionState],
         outgoing_reconstruction_states: &mut [ReconstructionState],
         buffers: &mut MergeBuffers,
-        for_each_lower_triangle_of: impl FnMut(ShortcutId, &mut dyn FnMut(EdgeId, EdgeId)),
+        mut for_each_lower_triangle_of: impl FnMut(ShortcutId, &mut dyn FnMut(EdgeId, EdgeId)),
     ) {
         let mut any_down_missing = false;
         for &(start, end) in &state.requested_times {
+            let mut deps_to_add = 0;
             for_each_lower_triangle_of(shortcut_id, &mut |down, up| {
                 if self.get_for_time_range(ShortcutId::Incoming(down), start, end).is_none() {
                     any_down_missing = true;
                     ReconstructionState::request_time(&mut incoming_reconstruction_states[down as usize].requested_times, start, end);
                     if !incoming_reconstruction_states[down as usize].awaited_by.contains(&shortcut_id) {
                         incoming_reconstruction_states[down as usize].awaited_by.push(shortcut_id);
-                        state.missing_deps += 1;
+                        deps_to_add += 1;
                     }
 
                     let new_el = ReconstructionQueueElement {
@@ -1801,6 +1802,7 @@ impl<'a> PartialProfileGraphWrapper<'a> {
                     }
                 }
             });
+            state.missing_deps += deps_to_add;
         }
         if any_down_missing {
             return;
@@ -1808,6 +1810,7 @@ impl<'a> PartialProfileGraphWrapper<'a> {
 
         let mut any_up_missing = false;
         for &(start, end) in &state.requested_times {
+            let mut deps_to_add = 0;
             for_each_lower_triangle_of(shortcut_id, &mut |down, up| {
                 let first_ttf = self
                     .get_for_time_range(ShortcutId::Incoming(down), start, end)
@@ -1823,7 +1826,7 @@ impl<'a> PartialProfileGraphWrapper<'a> {
                     ReconstructionState::request_time(&mut outgoing_reconstruction_states[up as usize].requested_times, second_start, second_end);
                     if !outgoing_reconstruction_states[up as usize].awaited_by.contains(&shortcut_id) {
                         outgoing_reconstruction_states[up as usize].awaited_by.push(shortcut_id);
-                        state.missing_deps += 1;
+                        deps_to_add += 1;
                     }
 
                     let new_el = ReconstructionQueueElement {
@@ -1841,6 +1844,7 @@ impl<'a> PartialProfileGraphWrapper<'a> {
                     }
                 }
             });
+            state.missing_deps += deps_to_add;
         }
 
         if any_up_missing {
@@ -1852,14 +1856,18 @@ impl<'a> PartialProfileGraphWrapper<'a> {
         }
 
         for (start, end) in state.requested_times.drain(..) {
-            let mut shortcut = PartialShortcut::new_finished(start, end, &[], todo!(), todo!());
-            for_each_lower_triangle_of(shortcut_id, &mut |down, up| {
-                shortcut.merge((down, up), self, buffers);
-                // TODO triangle sorting
-            });
-            shortcut.finalize_bounds(self);
-            self.get_mut(shortcut_id).push(shortcut);
-            // TODO proper insert/append
+            let inserts = PartialTrt::missing(self.get(shortcut_id), start, end)
+                .into_iter()
+                .map(|(start, end)| {
+                    let mut shortcut = PartialShortcut::new_finished(start, end, &[], todo!());
+                    for_each_lower_triangle_of(shortcut_id, &mut |down, up| {
+                        shortcut.merge((down, up), self, buffers);
+                        // TODO triangle sorting
+                    });
+                    shortcut.finalize_bounds(self);
+                })
+                .collect();
+            PartialTrt::insert_all(self.get_mut(shortcut_id), inserts);
             debug_assert!(self.get_for_time_range(shortcut_id, start, end).is_some());
         }
         for waiting in state.awaited_by.drain(..) {
