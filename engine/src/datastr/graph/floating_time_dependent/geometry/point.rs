@@ -24,8 +24,8 @@ impl TTFPoint {
 impl Default for TTFPoint {
     fn default() -> Self {
         TTFPoint {
-            at: Timestamp::zero(),
-            val: FlWeight::new(0.0),
+            at: Timestamp::ZERO,
+            val: FlWeight::ZERO,
         }
     }
 }

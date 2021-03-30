@@ -89,7 +89,7 @@ where
     type Error = ();
     fn try_from(partials: ApproxPartialsContainer<D>) -> Result<Self, Self::Error> {
         if let [partial] = &partials.partials[..] {
-            if partial.start == Timestamp::zero() && partial.end == period() {
+            if partial.start == Timestamp::ZERO && partial.end == period() {
                 return Ok(partials.partials.into_iter().next().unwrap().ttf);
             }
         }
@@ -224,7 +224,7 @@ impl<'a> PeriodicATTF<'a> {
         let (_, other_dominating_intersections) = other_upper.merge(&self_lower, &mut buffers.buffer);
 
         let mut dominating = false; // does currently one function completely dominate the other
-        let mut start_of_segment = Timestamp::zero(); // where does the current dominance segment start
+        let mut start_of_segment = Timestamp::ZERO; // where does the current dominance segment start
         let mut self_dominating_iter = self_dominating_intersections.iter().peekable();
         let mut other_dominating_iter = other_dominating_intersections.iter().peekable();
         let mut result = Vec::new(); // Will contain final (Timestamp, bool) pairs which indicate which function is better when
@@ -234,14 +234,14 @@ impl<'a> PeriodicATTF<'a> {
             (true, false) => {
                 // first function is currently better
                 dominating = true;
-                result.push((Timestamp::zero(), true));
-                bound_merge_state.push((Timestamp::zero(), BoundMergingState::First));
+                result.push((Timestamp::ZERO, true));
+                bound_merge_state.push((Timestamp::ZERO, BoundMergingState::First));
             }
             (false, true) => {
                 // second function is currently better
                 dominating = true;
-                result.push((Timestamp::zero(), false));
-                bound_merge_state.push((Timestamp::zero(), BoundMergingState::Second));
+                result.push((Timestamp::ZERO, false));
+                bound_merge_state.push((Timestamp::ZERO, BoundMergingState::Second));
             }
             _ => {
                 // false false -> bounds overlap
@@ -539,7 +539,7 @@ impl<'a> PeriodicATTF<'a> {
         }
         // `result` now is finalized
 
-        debug_assert!(result.first().unwrap().0 == Timestamp::zero());
+        debug_assert!(result.first().unwrap().0 == Timestamp::ZERO);
         for better in result.windows(2) {
             debug_assert!(
                 better[0].0 < better[1].0,
@@ -561,7 +561,7 @@ impl<'a> PeriodicATTF<'a> {
         buffers.exact_result_lower.reserve(2 * self_lower.len() + 2 * other_lower.len() + 2);
         buffers.exact_result_upper.reserve(2 * self_upper.len() + 2 * other_upper.len() + 2);
 
-        debug_assert_eq!(bound_merge_state[0].0, Timestamp::zero());
+        debug_assert_eq!(bound_merge_state[0].0, Timestamp::ZERO);
 
         let mut end_of_segment_iter = bound_merge_state.iter().map(|(t, _)| *t).chain(std::iter::once(period()));
         end_of_segment_iter.next();
@@ -793,7 +793,7 @@ impl<'a> PartialATTF<'a> {
         let (_, other_dominating_intersections) = other_upper.merge(&self_lower, start, end, &mut buffers.buffer);
 
         let mut dominating = false; // does currently one function completely dominate the other
-        let mut start_of_segment = Timestamp::zero(); // where does the current dominance segment start
+        let mut start_of_segment = Timestamp::ZERO; // where does the current dominance segment start
         let mut self_dominating_iter = self_dominating_intersections.iter().peekable();
         let mut other_dominating_iter = other_dominating_intersections.iter().peekable();
         let mut result = Vec::new(); // Will contain final (Timestamp, bool) pairs which indicate which function is better when
@@ -803,14 +803,14 @@ impl<'a> PartialATTF<'a> {
             (true, false) => {
                 // first function is currently better
                 dominating = true;
-                result.push((Timestamp::zero(), true));
-                bound_merge_state.push((Timestamp::zero(), BoundMergingState::First));
+                result.push((Timestamp::ZERO, true));
+                bound_merge_state.push((Timestamp::ZERO, BoundMergingState::First));
             }
             (false, true) => {
                 // second function is currently better
                 dominating = true;
-                result.push((Timestamp::zero(), false));
-                bound_merge_state.push((Timestamp::zero(), BoundMergingState::Second));
+                result.push((Timestamp::ZERO, false));
+                bound_merge_state.push((Timestamp::ZERO, BoundMergingState::Second));
             }
             _ => {
                 // false false -> bounds overlap
@@ -1108,7 +1108,7 @@ impl<'a> PartialATTF<'a> {
         }
         // `result` now is finalized
 
-        debug_assert!(result.first().unwrap().0 == Timestamp::zero());
+        debug_assert!(result.first().unwrap().0 == Timestamp::ZERO);
         for better in result.windows(2) {
             debug_assert!(
                 better[0].0 < better[1].0,
@@ -1128,7 +1128,7 @@ impl<'a> PartialATTF<'a> {
         buffers.exact_result_lower.reserve(2 * self_lower.len() + 2 * other_lower.len() + 2);
         buffers.exact_result_upper.reserve(2 * self_upper.len() + 2 * other_upper.len() + 2);
 
-        debug_assert_eq!(bound_merge_state[0].0, Timestamp::zero());
+        debug_assert_eq!(bound_merge_state[0].0, Timestamp::ZERO);
 
         let mut end_of_segment_iter = bound_merge_state.iter().map(|(t, _)| *t).chain(std::iter::once(end));
         end_of_segment_iter.next();
@@ -1231,10 +1231,10 @@ impl<'a> PartialATTF<'a> {
 
     fn can_crop_to_period(&self) -> bool {
         match &self {
-            Self::Exact(points) => PartialPiecewiseLinearFunction::crop_in_place_possible(points, Timestamp::zero(), period()),
+            Self::Exact(points) => PartialPiecewiseLinearFunction::crop_in_place_possible(points, Timestamp::ZERO, period()),
             Self::Approx(lower, upper) => {
-                PartialPiecewiseLinearFunction::crop_in_place_possible(lower, Timestamp::zero(), period())
-                    && PartialPiecewiseLinearFunction::crop_in_place_possible(upper, Timestamp::zero(), period())
+                PartialPiecewiseLinearFunction::crop_in_place_possible(lower, Timestamp::ZERO, period())
+                    && PartialPiecewiseLinearFunction::crop_in_place_possible(upper, Timestamp::ZERO, period())
             }
         }
     }
@@ -1491,41 +1491,41 @@ where
     pub fn maybe_to_periodic(&mut self) {
         if let [partial] = &mut self.partials[..] {
             let ttf = PartialATTF::from(&partial.ttf);
-            if ttf.can_crop_to_period() && partial.start.fuzzy_leq(Timestamp::zero()) && period().fuzzy_leq(partial.end) {
+            if ttf.can_crop_to_period() && partial.start.fuzzy_leq(Timestamp::ZERO) && period().fuzzy_leq(partial.end) {
                 match &mut partial.ttf {
                     ATTFContainer::Exact(plf) => {
-                        PartialPiecewiseLinearFunction::crop(plf, Timestamp::zero(), period());
+                        PartialPiecewiseLinearFunction::crop(plf, Timestamp::ZERO, period());
                     }
                     ATTFContainer::Approx(lower_plf, upper_plf) => {
-                        PartialPiecewiseLinearFunction::crop(lower_plf, Timestamp::zero(), period());
-                        PartialPiecewiseLinearFunction::crop(upper_plf, Timestamp::zero(), period());
+                        PartialPiecewiseLinearFunction::crop(lower_plf, Timestamp::ZERO, period());
+                        PartialPiecewiseLinearFunction::crop(upper_plf, Timestamp::ZERO, period());
                         PeriodicPiecewiseLinearFunction::make_lower_bound_periodic(lower_plf);
                         PeriodicPiecewiseLinearFunction::make_upper_bound_periodic(upper_plf);
                     }
                 }
-                partial.start = Timestamp::zero();
+                partial.start = Timestamp::ZERO;
                 partial.end = period();
                 return;
             }
         }
 
-        if let Some(full_period_partial) = self.ttf(Timestamp::zero(), period()) {
+        if let Some(full_period_partial) = self.ttf(Timestamp::ZERO, period()) {
             let new_container = match full_period_partial {
                 PartialATTF::Exact(plf) => {
                     let mut target = Vec::with_capacity(plf.len());
                     target.extend_from_slice(&plf);
-                    PartialPiecewiseLinearFunction::crop(&mut target, Timestamp::zero(), period());
+                    PartialPiecewiseLinearFunction::crop(&mut target, Timestamp::ZERO, period());
                     ATTFContainer::Exact(target.into())
                 }
                 PartialATTF::Approx(lower_plf, upper_plf) => {
                     let mut lower_target = Vec::with_capacity(lower_plf.len());
                     lower_target.extend_from_slice(&lower_plf);
-                    PartialPiecewiseLinearFunction::crop(&mut lower_target, Timestamp::zero(), period());
+                    PartialPiecewiseLinearFunction::crop(&mut lower_target, Timestamp::ZERO, period());
                     PeriodicPiecewiseLinearFunction::make_lower_bound_periodic(&mut lower_target);
 
                     let mut upper_target = Vec::with_capacity(upper_plf.len());
                     upper_target.extend_from_slice(&upper_plf);
-                    PartialPiecewiseLinearFunction::crop(&mut upper_target, Timestamp::zero(), period());
+                    PartialPiecewiseLinearFunction::crop(&mut upper_target, Timestamp::ZERO, period());
                     PeriodicPiecewiseLinearFunction::make_upper_bound_periodic(&mut upper_target);
 
                     ATTFContainer::Approx(lower_target.into(), upper_target.into())
@@ -1534,7 +1534,7 @@ where
             self.partials.truncate(1);
             self.partials[0] = Partial {
                 ttf: new_container,
-                start: Timestamp::zero(),
+                start: Timestamp::ZERO,
                 end: period(),
             };
             return;
@@ -1559,7 +1559,7 @@ where
                         for p in &mut target {
                             p.at = p.at - low_offset;
                         }
-                        PartialPiecewiseLinearFunction::crop(&mut target, Timestamp::zero(), period());
+                        PartialPiecewiseLinearFunction::crop(&mut target, Timestamp::ZERO, period());
                         ATTFContainer::Exact(target.into())
                     }
                     PartialATTF::Approx(lower_plf, upper_plf) => {
@@ -1574,7 +1574,7 @@ where
                         for p in &mut lower_target {
                             p.at = p.at - low_offset;
                         }
-                        PartialPiecewiseLinearFunction::crop(&mut lower_target, Timestamp::zero(), period());
+                        PartialPiecewiseLinearFunction::crop(&mut lower_target, Timestamp::ZERO, period());
                         PeriodicPiecewiseLinearFunction::make_lower_bound_periodic(&mut lower_target);
 
                         let mut upper_target = Vec::with_capacity(upper_plf.len() + 2);
@@ -1588,7 +1588,7 @@ where
                         for p in &mut upper_target {
                             p.at = p.at - low_offset;
                         }
-                        PartialPiecewiseLinearFunction::crop(&mut upper_target, Timestamp::zero(), period());
+                        PartialPiecewiseLinearFunction::crop(&mut upper_target, Timestamp::ZERO, period());
                         PeriodicPiecewiseLinearFunction::make_upper_bound_periodic(&mut upper_target);
 
                         ATTFContainer::Approx(lower_target.into(), upper_target.into())
@@ -1597,7 +1597,7 @@ where
                 self.partials.truncate(1);
                 self.partials[0] = Partial {
                     ttf: new_container,
-                    start: Timestamp::zero(),
+                    start: Timestamp::ZERO,
                     end: period(),
                 };
                 break;

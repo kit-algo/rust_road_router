@@ -896,11 +896,11 @@ impl Default for ReconstructionState {
 impl ReconstructionState {
     fn request_time(times: &mut Vec<(Timestamp, Timestamp)>, mut start: Timestamp, mut end: Timestamp) {
         if !cfg!(feature = "tdcch-profiles-with-holes") {
-            start = Timestamp::zero();
+            start = Timestamp::ZERO;
             end = period();
         }
         use std::cmp::Ordering;
-        if times.len() == 1 && times[0].0.fuzzy_eq(Timestamp::zero()) && times[0].1.fuzzy_eq(period()) {
+        if times.len() == 1 && times[0].0.fuzzy_eq(Timestamp::ZERO) && times[0].1.fuzzy_eq(period()) {
             return;
         }
         let start_pos = times.binary_search_by(|&(seg_start, seg_end)| {
@@ -955,7 +955,7 @@ impl ReconstructionState {
         // maybe periodic
         if times.iter().any(|&(start, end)| FlWeight::from(period()).fuzzy_leq(end - start)) {
             times.truncate(1);
-            times[0] = (Timestamp::zero(), period());
+            times[0] = (Timestamp::ZERO, period());
         }
     }
 }
@@ -1281,7 +1281,7 @@ impl<'a> ReconstructionGraph<'a> {
         }
 
         if !cfg!(feature = "tdcch-profiles-with-holes") || FlWeight::from(period()).fuzzy_leq(end - start) {
-            start = Timestamp::zero();
+            start = Timestamp::ZERO;
             end = period();
         }
 
@@ -1384,7 +1384,7 @@ impl<'a> ReconstructionGraph<'a> {
     fn periodic_ttf(&self, shortcut_id: ShortcutId) -> Option<PeriodicATTF> {
         // TODO remove in favor of ReconstructedGraph::periodic_ttf
         if let Some(cache) = shortcut_id.get_from(&self.incoming_cache, &self.outgoing_cache) {
-            return cache.ttf(Timestamp::zero(), period())?.try_into().ok();
+            return cache.ttf(Timestamp::ZERO, period())?.try_into().ok();
         }
 
         match shortcut_id.get_with(
@@ -1483,7 +1483,7 @@ impl<'a> ShortcutGraphTrt for ReconstructedGraph<'a> {
 
     fn periodic_ttf(&self, shortcut_id: ShortcutId) -> Option<PeriodicATTF> {
         if let Some(cache) = shortcut_id.get_from(&self.incoming_cache, &self.outgoing_cache) {
-            return cache.ttf(Timestamp::zero(), period())?.try_into().ok();
+            return cache.ttf(Timestamp::ZERO, period())?.try_into().ok();
         }
 
         match shortcut_id.get_with(
@@ -1909,7 +1909,7 @@ impl<'a> ShortcutGraphTrt for PartialProfileGraphWrapper<'a> {
         if self.is_dummy(shortcut_id) {
             Some(PeriodicATTF::Exact(PeriodicPiecewiseLinearFunction::ZERO))
         } else {
-            self.get_for_time_range(shortcut_id, Timestamp::zero(), period())
+            self.get_for_time_range(shortcut_id, Timestamp::ZERO, period())
                 .and_then(|shortcut| shortcut.periodic_ttf(self))
         }
     }

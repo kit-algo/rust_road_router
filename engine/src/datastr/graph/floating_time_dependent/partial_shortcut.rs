@@ -238,7 +238,7 @@ impl PartialShortcut {
 
     pub fn periodic_ttf<'s, 'g: 's>(&'s self, shortcut_graph: &'g impl ShortcutGraphTrt<OriginalGraph = TDGraph>) -> Option<PeriodicATTF<'s>> {
         if let Some(cache) = &self.cache {
-            if self.start.fuzzy_eq(Timestamp::zero()) && self.end.fuzzy_eq(period()) {
+            if self.start.fuzzy_eq(Timestamp::ZERO) && self.end.fuzzy_eq(period()) {
                 return Some(cache.into());
             }
         }

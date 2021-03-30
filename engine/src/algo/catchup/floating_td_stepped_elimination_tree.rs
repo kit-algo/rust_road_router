@@ -75,8 +75,8 @@ impl<'a, 'b> FloatingTDSteppedEliminationTree<'a, 'b> {
         self.origin = Some(from);
         self.next = Some(from);
 
-        self.distances[from as usize].upper_bound = FlWeight::zero();
-        self.distances[from as usize].lower_bound = FlWeight::zero();
+        self.distances[from as usize].upper_bound = FlWeight::ZERO;
+        self.distances[from as usize].lower_bound = FlWeight::ZERO;
     }
 
     pub fn next_step(&mut self) -> QueryProgress {
@@ -102,7 +102,7 @@ impl<'a, 'b> FloatingTDSteppedEliminationTree<'a, 'b> {
                 } else {
                     next = Label {
                         parent: node,
-                        lower_bound: FlWeight::zero(),
+                        lower_bound: FlWeight::ZERO,
                         shortcut_id,
                     };
                     next_upper_bound = FlWeight::INFINITY;

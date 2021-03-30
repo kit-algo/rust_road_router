@@ -29,7 +29,7 @@ impl<'a> Cursor<'a> {
         let offset = times_period * FlWeight::from(period());
 
         if ipps.len() == 1 {
-            return if t > Timestamp::zero() {
+            return if t > Timestamp::ZERO {
                 Cursor {
                     ipps,
                     current_index: 0,

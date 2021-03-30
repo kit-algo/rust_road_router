@@ -145,10 +145,10 @@ impl Graph {
 
     pub fn report_relative_delays(&self) {
         let mut num_constant = 0;
-        let mut sum_lower = FlWeight::zero();
-        let mut sum_upper = FlWeight::zero();
-        let mut sum_nonconst_lower = FlWeight::zero();
-        let mut sum_nonconst_upper = FlWeight::zero();
+        let mut sum_lower = FlWeight::ZERO;
+        let mut sum_upper = FlWeight::ZERO;
+        let mut sum_nonconst_lower = FlWeight::ZERO;
+        let mut sum_nonconst_upper = FlWeight::ZERO;
         let mut sum_rel_delays = 0.0;
         let mut sum_nonconst_rel_delays = 0.0;
 
@@ -160,14 +160,14 @@ impl Graph {
 
             sum_lower += lower;
             sum_upper += upper;
-            if FlWeight::zero().fuzzy_lt(lower) {
+            if FlWeight::ZERO.fuzzy_lt(lower) {
                 sum_rel_delays += f64::from((upper - lower) / lower);
             }
 
             if !ttf.constant() {
                 sum_nonconst_lower += lower;
                 sum_nonconst_upper += upper;
-                if FlWeight::zero().fuzzy_lt(lower) {
+                if FlWeight::ZERO.fuzzy_lt(lower) {
                     sum_nonconst_rel_delays += f64::from((upper - lower) / lower);
                 }
             } else {
@@ -322,7 +322,7 @@ pub trait TDGraphTrait<'a> {
     fn travel_time_function(&'a self, edge_id: EdgeId) -> Self::TTF;
 
     fn evaluate_path(&'a self, path: &[EdgeId], t: Timestamp) -> FlWeight {
-        let mut tt = FlWeight::zero();
+        let mut tt = FlWeight::ZERO;
         for &edge in path {
             tt = tt + self.travel_time_function(edge).evaluate(t + tt);
         }

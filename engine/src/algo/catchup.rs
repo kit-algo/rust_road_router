@@ -291,7 +291,7 @@ impl<'a> Server<'a> {
                             reverse_lower + label.lower_bound - self.forward.node_data(label.parent).lower_bound,
                         );
                     } else {
-                        self.lower_bounds_to_target[label.parent as usize] = FlWeight::zero();
+                        self.lower_bounds_to_target[label.parent as usize] = FlWeight::ZERO;
                     }
                     // mark parent as in corridor
                     self.forward_tree_mask.set(label.parent as usize);
@@ -313,7 +313,7 @@ impl<'a> Server<'a> {
         //     dbg_each!(tentative_distance, self.lower_bounds_to_target[self.from as usize])
         // );
         debug_assert!(
-            FlWeight::zero().fuzzy_eq(self.lower_bounds_to_target[self.to as usize]) || tentative_distance.0.fuzzy_eq(FlWeight::INFINITY),
+            FlWeight::ZERO.fuzzy_eq(self.lower_bounds_to_target[self.to as usize]) || tentative_distance.0.fuzzy_eq(FlWeight::INFINITY),
             "{:?}",
             dbg_each!(self.lower_bounds_to_target[self.to as usize])
         );
@@ -380,7 +380,7 @@ impl<'a> Server<'a> {
                     let lower = if cfg!(feature = "tdcch-query-astar") {
                         lower_bounds_to_target[next_on_path as usize]
                     } else {
-                        FlWeight::zero()
+                        FlWeight::ZERO
                     };
 
                     let next_ea = distance + time;
@@ -457,7 +457,7 @@ impl<'a> Server<'a> {
                         let lower = if cfg!(feature = "tdcch-query-astar") {
                             lower_bounds_to_target[next_on_path as usize]
                         } else {
-                            FlWeight::zero()
+                            FlWeight::ZERO
                         };
 
                         let next_ea = distance + time;

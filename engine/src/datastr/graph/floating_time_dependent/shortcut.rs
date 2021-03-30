@@ -261,7 +261,7 @@ impl Shortcut {
         start: Timestamp,
         end: Timestamp,
     ) -> Option<PartialATTF<'s>> {
-        if start < Timestamp::zero() || end > period() {
+        if start < Timestamp::ZERO || end > period() {
             return None;
         }
         self.periodic_ttf(shortcut_graph)
@@ -498,7 +498,7 @@ impl Sources {
     }
 
     pub fn iter(&self) -> SourcesIter {
-        self.wrapping_iter_for(Timestamp::zero(), period())
+        self.wrapping_iter_for(Timestamp::ZERO, period())
     }
 
     pub fn len(&self) -> usize {

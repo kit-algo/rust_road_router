@@ -96,11 +96,6 @@ mod time {
             FlWeight(t)
         }
 
-        /// Convenience function for zero weights
-        pub const fn zero() -> Self {
-            FlWeight(0.0)
-        }
-
         /// Fuzzy comparison (based on `EPSILON`) of two weights
         pub fn fuzzy_eq(self, other: Self) -> bool {
             fuzzy_eq(self.0, other.0)
@@ -209,7 +204,7 @@ mod time {
 
     impl Default for FlWeight {
         fn default() -> Self {
-            Self::zero()
+            Self::ZERO
         }
     }
 
@@ -226,11 +221,6 @@ mod time {
         pub fn new(t: f64) -> Self {
             debug_assert_ne!(t, NAN);
             Timestamp(t)
-        }
-
-        /// Convenience function for zero `Timestamp`s
-        pub const fn zero() -> Self {
-            Timestamp(0.0)
         }
 
         /// Fuzzy equality comparison (based on `EPSILON`) of two timestamps
@@ -304,7 +294,7 @@ mod time {
 
     impl Default for Timestamp {
         fn default() -> Self {
-            Self::zero()
+            Self::ZERO
         }
     }
 }

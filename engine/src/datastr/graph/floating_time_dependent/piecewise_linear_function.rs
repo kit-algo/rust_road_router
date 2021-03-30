@@ -127,7 +127,7 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
     /// New PLF from slice of points.
     /// In debug will validate the invariants we need from the function.
     pub fn new(ipps: &'a [TTFPoint]) -> Self {
-        debug_assert!(ipps.first().unwrap().at == Timestamp::zero(), "{:?}", ipps);
+        debug_assert!(ipps.first().unwrap().at == Timestamp::ZERO, "{:?}", ipps);
         debug_assert!(ipps.first().unwrap().val.fuzzy_eq(ipps.last().unwrap().val), "{:?}", ipps);
         debug_assert!(ipps.len() == 1 || ipps.last().unwrap().at == period(), "{:?}", ipps);
 
@@ -224,14 +224,14 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
         if let [TTFPoint { val, .. }] = &self.ipps {
             if let [TTFPoint { val: other, .. }] = &other.ipps {
                 return vec![TTFPoint {
-                    at: Timestamp::zero(),
+                    at: Timestamp::ZERO,
                     val: val + other,
                 }];
             } else {
                 let zero_val = other.evaluate(val.into());
                 let (_, val_offset) = Timestamp::from(val).split_of_period();
                 let mut result = std::iter::once(TTFPoint {
-                    at: Timestamp::zero(),
+                    at: Timestamp::ZERO,
                     val: zero_val + val,
                 })
                 .chain(other.ipps.iter().filter(|p| p.at > val_offset).map(|p| TTFPoint {
@@ -263,7 +263,7 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
         let mut result = Vec::with_capacity(self.ipps.len() + other.ipps.len() + 1);
 
         let mut f = PartialPlfLinkCursor::new(&self.ipps);
-        let mut g = Cursor::starting_at_or_after(&other.ipps, Timestamp::zero() + self.ipps[0].val);
+        let mut g = Cursor::starting_at_or_after(&other.ipps, Timestamp::ZERO + self.ipps[0].val);
 
         loop {
             let mut x;
@@ -296,10 +296,10 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
             if !x.fuzzy_lt(period()) {
                 break;
             }
-            debug_assert!(!x.fuzzy_lt(Timestamp::zero()), "{:?} {:?}", x, y);
+            debug_assert!(!x.fuzzy_lt(Timestamp::ZERO), "{:?} {:?}", x, y);
 
             x = min(x, period());
-            x = max(x, Timestamp::zero());
+            x = max(x, Timestamp::ZERO);
 
             append_point(&mut result, TTFPoint { at: x, val: y });
         }
@@ -317,7 +317,7 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
     pub fn merge(&self, other: &Self, buffer: &mut Vec<TTFPoint>) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
         PartialPiecewiseLinearFunction { ipps: self.ipps }.merge_in_bounds::<Cursor, True>(
             &PartialPiecewiseLinearFunction { ipps: other.ipps },
-            Timestamp::zero(),
+            Timestamp::ZERO,
             period(),
             buffer,
         )
@@ -480,8 +480,8 @@ impl<'a> TryFrom<PeriodicPiecewiseLinearFunction<'a>> for PartialPiecewiseLinear
 impl<'a> TryFrom<PartialPiecewiseLinearFunction<'a>> for PeriodicPiecewiseLinearFunction<'a> {
     type Error = ();
     fn try_from(pplf: PartialPiecewiseLinearFunction<'a>) -> Result<Self, Self::Error> {
-        let pplf = pplf.sub_plf(Timestamp::zero(), period());
-        if pplf.first().unwrap().at.fuzzy_eq(Timestamp::zero()) && pplf.last().unwrap().at.fuzzy_eq(period()) {
+        let pplf = pplf.sub_plf(Timestamp::ZERO, period());
+        if pplf.first().unwrap().at.fuzzy_eq(Timestamp::ZERO) && pplf.last().unwrap().at.fuzzy_eq(period()) {
             Ok(PeriodicPiecewiseLinearFunction { ipps: pplf.ipps })
         } else {
             Err(())
@@ -819,7 +819,7 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
 
     // Merge two partial plfs in the range between start and end and store the result in buffer.
     pub fn merge(self, other: &Self, start: Timestamp, end: Timestamp, buffer: &mut Vec<TTFPoint>) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
-        debug_assert!(start >= Timestamp::zero());
+        debug_assert!(start >= Timestamp::ZERO);
         debug_assert!(end <= period());
 
         self.merge_in_bounds::<PartialPlfMergeCursor, False>(other, start, end, buffer)
@@ -896,7 +896,7 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
             } else if f.cur().at < g.cur().at {
                 let delta = f.cur().val - interpolate_linear(&g.prev(), &g.cur(), f.cur().at);
 
-                if !delta.fuzzy_eq(FlWeight::zero()) && (delta < FlWeight::zero()) != better.last().unwrap().1 {
+                if !delta.fuzzy_eq(FlWeight::ZERO) && (delta < FlWeight::ZERO) != better.last().unwrap().1 {
                     needs_merging = true;
                 }
 
@@ -904,7 +904,7 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
             } else {
                 let delta = g.cur().val - interpolate_linear(&f.prev(), &f.cur(), g.cur().at);
 
-                if !delta.fuzzy_eq(FlWeight::zero()) && (delta > FlWeight::zero()) != better.last().unwrap().1 {
+                if !delta.fuzzy_eq(FlWeight::ZERO) && (delta > FlWeight::ZERO) != better.last().unwrap().1 {
                     needs_merging = true;
                 }
 
@@ -1150,7 +1150,7 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
             debug_assert!(!at.fuzzy_lt(start));
             debug_assert!(!end.fuzzy_lt(at));
         }
-        if !f.cur().val.fuzzy_eq(g.cur().val) && start == Timestamp::zero() && end == period() {
+        if !f.cur().val.fuzzy_eq(g.cur().val) && start == Timestamp::ZERO && end == period() {
             debug_assert_eq!(
                 better.first().map(|(_, better_fn)| better_fn),
                 better.last().map(|(_, better_fn)| better_fn),
@@ -1227,8 +1227,8 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
 
         if delta > APPROX {
             Self { ipps: &self.ipps[0..=i] }.douglas_peuker_combined(result_lower, result_upper);
-            let prev_min = result_lower.pop().map(|p| p.val).unwrap_or_else(FlWeight::zero);
-            let prev_max = result_upper.pop().map(|p| p.val).unwrap_or_else(FlWeight::zero);
+            let prev_min = result_lower.pop().map(|p| p.val).unwrap_or(FlWeight::ZERO);
+            let prev_max = result_upper.pop().map(|p| p.val).unwrap_or(FlWeight::ZERO);
             let prev_len = result_lower.len();
             Self {
                 ipps: &self.ipps[i..self.ipps.len()],
@@ -1239,19 +1239,19 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
         } else {
             result_lower.push(TTFPoint {
                 at: first.at,
-                val: first.val + min(FlWeight::zero(), min_delta),
+                val: first.val + min(FlWeight::ZERO, min_delta),
             });
             result_upper.push(TTFPoint {
                 at: first.at,
-                val: first.val + max(FlWeight::zero(), max_delta),
+                val: first.val + max(FlWeight::ZERO, max_delta),
             });
             result_lower.push(TTFPoint {
                 at: last.at,
-                val: last.val + min(FlWeight::zero(), min_delta),
+                val: last.val + min(FlWeight::ZERO, min_delta),
             });
             result_upper.push(TTFPoint {
                 at: last.at,
-                val: last.val + max(FlWeight::zero(), max_delta),
+                val: last.val + max(FlWeight::ZERO, max_delta),
             });
         }
     }
@@ -1347,14 +1347,14 @@ mod tests {
     fn test_static_fn_cursor() {
         run_test_with_periodicity(Timestamp::new(10.0), || {
             let ipps = [TTFPoint {
-                at: Timestamp::zero(),
+                at: Timestamp::ZERO,
                 val: FlWeight::new(5.0),
             }];
             let mut cursor = Cursor::new(&ipps);
             assert_eq!(
                 cursor.cur(),
                 TTFPoint {
-                    at: Timestamp::zero(),
+                    at: Timestamp::ZERO,
                     val: FlWeight::new(5.0)
                 }
             );
@@ -1368,7 +1368,7 @@ mod tests {
             assert_eq!(
                 cursor.prev(),
                 TTFPoint {
-                    at: Timestamp::zero() - FlWeight::from(period()),
+                    at: Timestamp::ZERO - FlWeight::from(period()),
                     val: FlWeight::new(5.0)
                 }
             );
@@ -1390,7 +1390,7 @@ mod tests {
             assert_eq!(
                 cursor.prev(),
                 TTFPoint {
-                    at: Timestamp::zero(),
+                    at: Timestamp::ZERO,
                     val: FlWeight::new(5.0)
                 }
             );
@@ -1402,7 +1402,7 @@ mod tests {
         run_test_with_periodicity(Timestamp::new(10.0), || {
             let ipps = [
                 TTFPoint {
-                    at: Timestamp::zero(),
+                    at: Timestamp::ZERO,
                     val: FlWeight::new(5.0),
                 },
                 TTFPoint {
@@ -1418,7 +1418,7 @@ mod tests {
             assert_eq!(
                 cursor.cur(),
                 TTFPoint {
-                    at: Timestamp::zero(),
+                    at: Timestamp::ZERO,
                     val: FlWeight::new(5.0)
                 }
             );
@@ -1454,7 +1454,7 @@ mod tests {
             assert_eq!(
                 cursor.prev(),
                 TTFPoint {
-                    at: Timestamp::zero(),
+                    at: Timestamp::ZERO,
                     val: FlWeight::new(5.0)
                 }
             );
@@ -1488,7 +1488,7 @@ mod tests {
         run_test_with_periodicity(Timestamp::new(100.0), || {
             let ipps1 = [
                 TTFPoint {
-                    at: Timestamp::zero(),
+                    at: Timestamp::ZERO,
                     val: FlWeight::new(105.0),
                 },
                 TTFPoint {
@@ -1503,7 +1503,7 @@ mod tests {
 
             let ipps2 = [
                 TTFPoint {
-                    at: Timestamp::zero(),
+                    at: Timestamp::ZERO,
                     val: FlWeight::new(10.0),
                 },
                 TTFPoint {
@@ -1525,13 +1525,13 @@ mod tests {
     fn test_linking_with_period_crossing_and_first_static() {
         run_test_with_periodicity(Timestamp::new(100.0), || {
             let ipps1 = [TTFPoint {
-                at: Timestamp::zero(),
+                at: Timestamp::ZERO,
                 val: FlWeight::new(110.0),
             }];
 
             let ipps2 = [
                 TTFPoint {
-                    at: Timestamp::zero(),
+                    at: Timestamp::ZERO,
                     val: FlWeight::new(10.0),
                 },
                 TTFPoint {
@@ -1553,7 +1553,7 @@ mod tests {
     fn test_copy_range_for_constant_plf() {
         run_test_with_periodicity(Timestamp::new(100.0), || {
             let ipps = [TTFPoint {
-                at: Timestamp::zero(),
+                at: Timestamp::ZERO,
                 val: FlWeight::new(10.0),
             }];
             let mut result = Vec::new();
@@ -1562,7 +1562,7 @@ mod tests {
                 result,
                 vec![
                     TTFPoint {
-                        at: Timestamp::zero(),
+                        at: Timestamp::ZERO,
                         val: FlWeight::new(10.0)
                     },
                     TTFPoint {
@@ -1747,10 +1747,7 @@ impl<'a> UpdatedPiecewiseLinearFunction<'a> {
     }
 
     pub fn upper_bound(&self) -> FlWeight {
-        max(
-            self.plf.upper_bound(),
-            self.update_plf().map(|plf| plf.upper_bound()).unwrap_or(FlWeight::zero()),
-        )
+        max(self.plf.upper_bound(), self.update_plf().map(|plf| plf.upper_bound()).unwrap_or(FlWeight::ZERO))
     }
 
     pub fn t_switch(&self) -> Option<Timestamp> {

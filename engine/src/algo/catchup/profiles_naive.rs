@@ -99,11 +99,11 @@ impl<'a> Server<'a> {
         let mut tentative_distance = (FlWeight::INFINITY, FlWeight::INFINITY);
         self.distances.reset();
         self.distances[self.from as usize] = Some(Box::new([TTFPoint {
-            at: Timestamp::zero(),
-            val: FlWeight::zero(),
+            at: Timestamp::ZERO,
+            val: FlWeight::ZERO,
         }]));
         self.bounds.reset();
-        self.bounds[self.from as usize] = (FlWeight::zero(), FlWeight::zero());
+        self.bounds[self.from as usize] = (FlWeight::ZERO, FlWeight::ZERO);
         self.lower_bounds_to_target.reset();
         self.meeting_nodes.clear();
         self.forward.initialize_query(self.from);
@@ -316,7 +316,7 @@ impl<'a> Server<'a> {
             dbg_each!(tentative_distance, self.lower_bounds_to_target[self.from as usize])
         );
         debug_assert!(
-            FlWeight::zero().fuzzy_eq(self.lower_bounds_to_target[self.to as usize]),
+            FlWeight::ZERO.fuzzy_eq(self.lower_bounds_to_target[self.to as usize]),
             "{:?}",
             dbg_each!(self.lower_bounds_to_target[self.to as usize])
         );
@@ -423,7 +423,7 @@ impl<'a> Server<'a> {
                 let lower = if cfg!(feature = "tdcch-query-astar") {
                     lower_bounds_to_target[head as usize]
                 } else {
-                    FlWeight::zero()
+                    FlWeight::ZERO
                 };
 
                 let current_better = |bounds: &mut ClearlistVector<(FlWeight, FlWeight)>, queue: &mut IndexdMinHeap<State<FlWeight>>| {

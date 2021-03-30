@@ -269,15 +269,15 @@ impl<'a> Server<'a> {
                     if cfg!(feature = "tdcch-profiles-iterative-reconstruction") {
                         self.incoming_reconstruction_states[label.shortcut_id as usize]
                             .requested_times
-                            .push((Timestamp::zero(), period()));
+                            .push((Timestamp::ZERO, period()));
                         self.reconstruction_queue.push(Reverse(ReconstructionQueueElement {
-                            t: Timestamp::zero(),
+                            t: Timestamp::ZERO,
                             upper_node: node,
                             lower_node: label.parent,
                             shortcut_id: ShortcutId::Incoming(label.shortcut_id),
                         }));
                     } else {
-                        reconstruction_graph.cache_recursive(ShortcutId::Incoming(label.shortcut_id), Timestamp::zero(), period(), &mut self.buffers);
+                        reconstruction_graph.cache_recursive(ShortcutId::Incoming(label.shortcut_id), Timestamp::ZERO, period(), &mut self.buffers);
                     }
 
                     if label.parent == to {
@@ -317,15 +317,15 @@ impl<'a> Server<'a> {
                     if cfg!(feature = "tdcch-profiles-iterative-reconstruction") {
                         self.outgoing_reconstruction_states[label.shortcut_id as usize]
                             .requested_times
-                            .push((Timestamp::zero(), period()));
+                            .push((Timestamp::ZERO, period()));
                         self.reconstruction_queue.push(Reverse(ReconstructionQueueElement {
-                            t: Timestamp::zero(),
+                            t: Timestamp::ZERO,
                             upper_node: node,
                             lower_node: label.parent,
                             shortcut_id: ShortcutId::Outgoing(label.shortcut_id),
                         }));
                     } else {
-                        reconstruction_graph.cache_recursive(ShortcutId::Outgoing(label.shortcut_id), Timestamp::zero(), period(), &mut self.buffers);
+                        reconstruction_graph.cache_recursive(ShortcutId::Outgoing(label.shortcut_id), Timestamp::ZERO, period(), &mut self.buffers);
                     }
 
                     if label.parent == from {
@@ -548,7 +548,7 @@ impl<'a> Server<'a> {
 
         self.meeting_nodes.sort_by_key(|&(node, _)| {
             if node == from || node == to {
-                FlWeight::zero()
+                FlWeight::ZERO
             } else {
                 profile_graph.lower_bound(ShortcutId::Incoming(
                     (downward_shortcut_offsets[node as usize] + customized_graph.incoming.head().len()) as EdgeId,
@@ -577,7 +577,7 @@ impl<'a> Server<'a> {
 
         let mut target = self.buffers.unpacking_target.push_plf();
         if st_shortcut.is_valid_path() {
-            st_shortcut.reconstruct_exact_ttf(Timestamp::zero(), period(), &profile_graph, &mut target, &mut self.buffers.unpacking_tmp);
+            st_shortcut.reconstruct_exact_ttf(Timestamp::ZERO, period(), &profile_graph, &mut target, &mut self.buffers.unpacking_tmp);
         }
         report!("profile_complexity", target.len());
 
@@ -585,7 +585,7 @@ impl<'a> Server<'a> {
         timer.restart();
 
         let paths = if st_shortcut.is_valid_path() {
-            let switchpoints = st_shortcut.get_switchpoints(Timestamp::zero(), period(), &profile_graph).0;
+            let switchpoints = st_shortcut.get_switchpoints(Timestamp::ZERO, period(), &profile_graph).0;
             switchpoints.into_iter().map(|(valid_from, path, _)| (valid_from, path)).collect()
         } else {
             Vec::new()

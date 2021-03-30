@@ -24,18 +24,18 @@ impl ShortcutSource {
                     return FlWeight::INFINITY;
                 }
                 let first_val = customized_graph.incoming.evaluate(down, t, customized_graph, f);
-                debug_assert!(first_val >= FlWeight::zero());
+                debug_assert!(first_val >= FlWeight::ZERO);
                 let t_mid = t + first_val;
                 if !f(true, up, t_mid) {
                     return FlWeight::INFINITY;
                 }
                 let second_val = customized_graph.outgoing.evaluate(up, t_mid, customized_graph, f);
-                debug_assert!(second_val >= FlWeight::zero());
+                debug_assert!(second_val >= FlWeight::ZERO);
                 first_val + second_val
             }
             ShortcutSource::OriginalEdge(edge) => {
                 let res = customized_graph.original_graph.travel_time_function(edge).evaluate(t);
-                debug_assert!(res >= FlWeight::zero());
+                debug_assert!(res >= FlWeight::ZERO);
                 res
             }
             ShortcutSource::None => FlWeight::INFINITY,
@@ -47,15 +47,15 @@ impl ShortcutSource {
             // recursively eval down edge, then up edge
             ShortcutSource::Shortcut(down, up) => {
                 let first_val = shortcut_graph.evaluate(ShortcutId::Incoming(down), t);
-                debug_assert!(first_val >= FlWeight::zero());
+                debug_assert!(first_val >= FlWeight::ZERO);
                 let t_mid = t + first_val;
                 let second_val = shortcut_graph.evaluate(ShortcutId::Outgoing(up), t_mid);
-                debug_assert!(second_val >= FlWeight::zero());
+                debug_assert!(second_val >= FlWeight::ZERO);
                 first_val + second_val
             }
             ShortcutSource::OriginalEdge(edge) => {
                 let res = shortcut_graph.original_graph().travel_time_function(edge).evaluate(t);
-                debug_assert!(res >= FlWeight::zero());
+                debug_assert!(res >= FlWeight::ZERO);
                 res
             }
             ShortcutSource::None => FlWeight::INFINITY,
@@ -67,15 +67,15 @@ impl ShortcutSource {
             // recursively eval down edge, then up edge
             ShortcutSource::Shortcut(down, up) => {
                 let (first_val, first_len) = shortcut_graph.evaluate_and_path_length(ShortcutId::Incoming(down), t);
-                debug_assert!(first_val >= FlWeight::zero());
+                debug_assert!(first_val >= FlWeight::ZERO);
                 let t_mid = t + first_val;
                 let (second_val, second_len) = shortcut_graph.evaluate_and_path_length(ShortcutId::Outgoing(up), t_mid);
-                debug_assert!(second_val >= FlWeight::zero());
+                debug_assert!(second_val >= FlWeight::ZERO);
                 (first_val + second_val, first_len + second_len)
             }
             ShortcutSource::OriginalEdge(edge) => {
                 let res = shortcut_graph.original_graph().travel_time_function(edge).evaluate(t);
-                debug_assert!(res >= FlWeight::zero());
+                debug_assert!(res >= FlWeight::ZERO);
                 (res, 1)
             }
             ShortcutSource::None => (FlWeight::INFINITY, 0),
@@ -578,7 +578,7 @@ impl Sources for [(Timestamp, ShortcutSourceData)] {
         }
 
         let (_, t_period) = t.split_of_period();
-        debug_assert!(self.first().map(|&(t, _)| t == Timestamp::zero()).unwrap_or(true), "{:?}", self);
+        debug_assert!(self.first().map(|&(t, _)| t == Timestamp::ZERO).unwrap_or(true), "{:?}", self);
         match self.binary_search_by_key(&t_period, |(t, _)| *t) {
             Ok(i) => self.get(i),
             Err(i) => {
