@@ -958,6 +958,7 @@ impl ReconstructionState {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ReconstructionQueueElement {
+    pub t: Timestamp,
     pub upper_node: NodeId,
     pub lower_node: NodeId,
     pub shortcut_id: ShortcutId,
@@ -1082,6 +1083,152 @@ impl<'a> ReconstructionGraph<'a> {
             .maybe_to_periodic();
     }
 
+    pub fn cache_iterative_iteration(
+        &mut self,
+        shortcut_id: ShortcutId,
+        state: &mut ReconstructionState,
+        queue: &mut IndexdMinHeap<Reverse<ReconstructionQueueElement>>,
+        incoming_reconstruction_states: &mut [ReconstructionState],
+        outgoing_reconstruction_states: &mut [ReconstructionState],
+        buffers: &mut MergeBuffers,
+    ) {
+        let edge_sources = shortcut_id.get_with(
+            &self.customized_graph.incoming,
+            &self.customized_graph.outgoing,
+            CustomizedSingleDirGraph::edge_sources,
+        );
+
+        let mut any_down_missing = false;
+        for &(start, end) in &state.requested_times {
+            let mut c = SourceCursor::valid_at(edge_sources, start);
+
+            while c.cur().0.fuzzy_lt(end) {
+                match ShortcutSource::from(c.cur().1) {
+                    ShortcutSource::Shortcut(down, up) => {
+                        let first_start = max(start, c.cur().0);
+                        let first_end = min(end, c.next().0);
+
+                        if !self.ttf_available(ShortcutId::Incoming(down), first_start, first_end) {
+                            any_down_missing = true;
+                            ReconstructionState::request_time(&mut incoming_reconstruction_states[down as usize].requested_times, first_start, first_end);
+                            if !incoming_reconstruction_states[down as usize].awaited_by.contains(&shortcut_id) {
+                                incoming_reconstruction_states[down as usize].awaited_by.push(shortcut_id);
+                                state.missing_deps += 1;
+                            }
+
+                            let new_el = ReconstructionQueueElement {
+                                t: start,
+                                upper_node: self.customized_graph.incoming.head[down as usize],
+                                lower_node: self.customized_graph.incoming.tail[down as usize],
+                                shortcut_id: ShortcutId::Incoming(down),
+                            };
+                            if let Some(Reverse(el)) = queue.get(new_el.as_index()) {
+                                if &new_el < el {
+                                    queue.decrease_key(Reverse(new_el));
+                                }
+                            } else {
+                                queue.push(Reverse(new_el));
+                            }
+
+                            if !incoming_reconstruction_states[down as usize].awaited_by.contains(&ShortcutId::Outgoing(up)) {
+                                incoming_reconstruction_states[down as usize].awaited_by.push(ShortcutId::Outgoing(up));
+                                outgoing_reconstruction_states[up as usize].missing_deps += 1;
+                            }
+                        }
+                    }
+                    _ => (),
+                }
+                c.advance();
+            }
+        }
+        if any_down_missing {
+            return;
+        }
+
+        let mut any_up_missing = false;
+        for &(start, end) in &state.requested_times {
+            let mut c = SourceCursor::valid_at(edge_sources, start);
+
+            while c.cur().0.fuzzy_lt(end) {
+                match ShortcutSource::from(c.cur().1) {
+                    ShortcutSource::Shortcut(down, up) => {
+                        let first_start = max(start, c.cur().0);
+                        let first_end = min(end, c.next().0);
+
+                        let reconstructed = self.as_reconstructed();
+                        let (start_val, end_val) = if let Some(ttf) = reconstructed.partial_ttf(ShortcutId::Incoming(down), first_start, first_end) {
+                            (ttf.bound_plfs().0.eval(first_start), ttf.bound_plfs().1.eval(first_end))
+                        } else {
+                            let ttf = reconstructed.periodic_ttf(ShortcutId::Incoming(down)).unwrap();
+                            (ttf.bound_plfs().0.evaluate(first_start), ttf.bound_plfs().1.evaluate(first_end))
+                        };
+                        let second_start = first_start + start_val;
+                        let second_end = first_end + end_val;
+
+                        if !self.ttf_available(ShortcutId::Outgoing(up), second_start, second_end) {
+                            any_up_missing = true;
+
+                            ReconstructionState::request_time(&mut outgoing_reconstruction_states[up as usize].requested_times, second_start, second_end);
+                            if !outgoing_reconstruction_states[up as usize].awaited_by.contains(&shortcut_id) {
+                                outgoing_reconstruction_states[up as usize].awaited_by.push(shortcut_id);
+                                state.missing_deps += 1;
+                            }
+
+                            let new_el = ReconstructionQueueElement {
+                                t: second_start,
+                                upper_node: self.customized_graph.outgoing.head[up as usize],
+                                lower_node: self.customized_graph.outgoing.tail[up as usize],
+                                shortcut_id: ShortcutId::Outgoing(up),
+                            };
+                            if let Some(Reverse(el)) = queue.get(new_el.as_index()) {
+                                if &new_el < el {
+                                    queue.decrease_key(Reverse(new_el));
+                                }
+                            } else {
+                                queue.push(Reverse(new_el));
+                            }
+                        }
+                    }
+                    _ => (),
+                }
+                c.advance();
+            }
+        }
+
+        if any_up_missing {
+            return;
+        }
+
+        if state.missing_deps > 0 {
+            return;
+        }
+
+        for (start, end) in state.requested_times.drain(..) {
+            // dbg!(shortcut_id, start, end, dir_graph.edge_sources(edge_id as usize));
+            self.cache(shortcut_id, start, end, buffers);
+            debug_assert!(self.ttf_available(shortcut_id, start, end));
+        }
+        for waiting in state.awaited_by.drain(..) {
+            let mut waiting_state = waiting.get_mut_from(incoming_reconstruction_states, outgoing_reconstruction_states);
+            waiting_state.missing_deps -= 1;
+            if waiting_state.missing_deps == 0 && !waiting_state.requested_times.is_empty() {
+                let new_el = ReconstructionQueueElement {
+                    t: waiting_state.requested_times[0].0,
+                    upper_node: *waiting.get_from(&self.customized_graph.incoming.head, &self.customized_graph.outgoing.head),
+                    lower_node: *waiting.get_from(&self.customized_graph.incoming.tail, &self.customized_graph.outgoing.tail),
+                    shortcut_id: waiting,
+                };
+                if let Some(Reverse(el)) = queue.get(new_el.as_index()) {
+                    if &new_el < el {
+                        queue.decrease_key(Reverse(new_el));
+                    }
+                } else {
+                    queue.push(Reverse(new_el));
+                }
+            }
+        }
+    }
+
     pub fn cache_iterative(
         &mut self,
         queue: &mut IndexdMinHeap<Reverse<ReconstructionQueueElement>>,
@@ -1093,6 +1240,7 @@ impl<'a> ReconstructionGraph<'a> {
             upper_node,
             lower_node,
             shortcut_id,
+            ..
         })) = queue.pop()
         {
             debug_assert!(lower_node < upper_node);
@@ -1103,130 +1251,14 @@ impl<'a> ReconstructionGraph<'a> {
                 shortcut_id.get_mut_from(incoming_reconstruction_states, outgoing_reconstruction_states),
             );
 
-            let edge_sources = shortcut_id.get_with(
-                &self.customized_graph.incoming,
-                &self.customized_graph.outgoing,
-                CustomizedSingleDirGraph::edge_sources,
+            self.cache_iterative_iteration(
+                shortcut_id,
+                &mut state,
+                queue,
+                incoming_reconstruction_states,
+                outgoing_reconstruction_states,
+                buffers,
             );
-
-            let mut any_down_missing = false;
-            for &(start, end) in &state.requested_times {
-                let mut c = SourceCursor::valid_at(edge_sources, start);
-
-                while c.cur().0.fuzzy_lt(end) {
-                    match ShortcutSource::from(c.cur().1) {
-                        ShortcutSource::Shortcut(down, up) => {
-                            let first_start = max(start, c.cur().0);
-                            let first_end = min(end, c.next().0);
-
-                            if !self.ttf_available(ShortcutId::Incoming(down), first_start, first_end) {
-                                any_down_missing = true;
-                                ReconstructionState::request_time(&mut incoming_reconstruction_states[down as usize].requested_times, first_start, first_end);
-                                if !incoming_reconstruction_states[down as usize].awaited_by.contains(&shortcut_id) {
-                                    incoming_reconstruction_states[down as usize].awaited_by.push(shortcut_id);
-                                    state.missing_deps += 1;
-                                }
-
-                                queue.push_unless_contained(Reverse(ReconstructionQueueElement {
-                                    upper_node: self.customized_graph.incoming.head[down as usize],
-                                    lower_node: self.customized_graph.incoming.tail[down as usize],
-                                    shortcut_id: ShortcutId::Incoming(down),
-                                }));
-
-                                if !incoming_reconstruction_states[down as usize].awaited_by.contains(&ShortcutId::Outgoing(up)) {
-                                    incoming_reconstruction_states[down as usize].awaited_by.push(ShortcutId::Outgoing(up));
-                                    outgoing_reconstruction_states[up as usize].missing_deps += 1;
-                                }
-                            }
-                        }
-                        _ => (),
-                    }
-                    c.advance();
-                }
-            }
-            if any_down_missing {
-                std::mem::swap(
-                    &mut state,
-                    shortcut_id.get_mut_from(incoming_reconstruction_states, outgoing_reconstruction_states),
-                );
-                continue;
-            }
-
-            let mut any_up_missing = false;
-            for &(start, end) in &state.requested_times {
-                let mut c = SourceCursor::valid_at(edge_sources, start);
-
-                while c.cur().0.fuzzy_lt(end) {
-                    match ShortcutSource::from(c.cur().1) {
-                        ShortcutSource::Shortcut(down, up) => {
-                            let first_start = max(start, c.cur().0);
-                            let first_end = min(end, c.next().0);
-
-                            let reconstructed = self.as_reconstructed();
-                            let (start_val, end_val) = if let Some(ttf) = reconstructed.partial_ttf(ShortcutId::Incoming(down), first_start, first_end) {
-                                (ttf.bound_plfs().0.eval(first_start), ttf.bound_plfs().1.eval(first_end))
-                            } else {
-                                let ttf = reconstructed.periodic_ttf(ShortcutId::Incoming(down)).unwrap();
-                                (ttf.bound_plfs().0.evaluate(first_start), ttf.bound_plfs().1.evaluate(first_end))
-                            };
-                            let second_start = first_start + start_val;
-                            let second_end = first_end + end_val;
-
-                            if !self.ttf_available(ShortcutId::Outgoing(up), second_start, second_end) {
-                                any_up_missing = true;
-
-                                ReconstructionState::request_time(&mut outgoing_reconstruction_states[up as usize].requested_times, second_start, second_end);
-                                if !outgoing_reconstruction_states[up as usize].awaited_by.contains(&shortcut_id) {
-                                    outgoing_reconstruction_states[up as usize].awaited_by.push(shortcut_id);
-                                    state.missing_deps += 1;
-                                }
-
-                                queue.push_unless_contained(Reverse(ReconstructionQueueElement {
-                                    upper_node: self.customized_graph.outgoing.head[up as usize],
-                                    lower_node: self.customized_graph.outgoing.tail[up as usize],
-                                    shortcut_id: ShortcutId::Outgoing(up),
-                                }));
-                            }
-                        }
-                        _ => (),
-                    }
-                    c.advance();
-                }
-            }
-
-            if any_up_missing {
-                std::mem::swap(
-                    &mut state,
-                    shortcut_id.get_mut_from(incoming_reconstruction_states, outgoing_reconstruction_states),
-                );
-                continue;
-            }
-
-            if state.missing_deps > 0 {
-                std::mem::swap(
-                    &mut state,
-                    shortcut_id.get_mut_from(incoming_reconstruction_states, outgoing_reconstruction_states),
-                );
-                continue;
-            }
-
-            for (start, end) in state.requested_times.drain(..) {
-                // dbg!(shortcut_id, start, end, dir_graph.edge_sources(edge_id as usize));
-                self.cache(shortcut_id, start, end, buffers);
-                debug_assert!(self.ttf_available(shortcut_id, start, end));
-            }
-            for waiting in state.awaited_by.drain(..) {
-                waiting
-                    .get_mut_from(incoming_reconstruction_states, outgoing_reconstruction_states)
-                    .missing_deps -= 1;
-                if waiting.get_from(&incoming_reconstruction_states, &outgoing_reconstruction_states).missing_deps == 0 {
-                    queue.push_unless_contained(Reverse(ReconstructionQueueElement {
-                        upper_node: *waiting.get_from(&self.customized_graph.incoming.head, &self.customized_graph.outgoing.head),
-                        lower_node: *waiting.get_from(&self.customized_graph.incoming.tail, &self.customized_graph.outgoing.tail),
-                        shortcut_id: waiting,
-                    }));
-                }
-            }
 
             std::mem::swap(
                 &mut state,
@@ -1343,6 +1375,50 @@ impl<'a> ReconstructionGraph<'a> {
             .flatten()
             .map(|c| c.num_points())
             .sum()
+    }
+
+    fn periodic_ttf(&self, shortcut_id: ShortcutId) -> Option<PeriodicATTF> {
+        // TODO remove in favor of ReconstructedGraph::periodic_ttf
+        if let Some(cache) = shortcut_id.get_from(&self.incoming_cache, &self.outgoing_cache) {
+            return cache.ttf(Timestamp::zero(), period())?.try_into().ok();
+        }
+
+        match shortcut_id.get_with(
+            &self.customized_graph.incoming,
+            &self.customized_graph.outgoing,
+            CustomizedSingleDirGraph::edge_sources,
+        ) {
+            &[(_, source)] => match source.into() {
+                ShortcutSource::OriginalEdge(id) => Some(PeriodicATTF::Exact(self.customized_graph.original_graph.travel_time_function(id))),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+    fn partial_ttf(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> Option<PartialATTF> {
+        // TODO remove in favor of ReconstructedGraph::partial_ttf
+        if let Some(cache) = shortcut_id.get_from(&self.incoming_cache, &self.outgoing_cache) {
+            return cache.ttf(start, end);
+        }
+
+        match shortcut_id.get_with(
+            &self.customized_graph.incoming,
+            &self.customized_graph.outgoing,
+            CustomizedSingleDirGraph::edge_sources,
+        ) {
+            &[(_, source)] => match source.into() {
+                ShortcutSource::OriginalEdge(id) => self
+                    .customized_graph
+                    .original_graph
+                    .travel_time_function(id)
+                    .try_into()
+                    .ok()
+                    .and_then(|plf: PartialPiecewiseLinearFunction| plf.get_sub_plf(start, end))
+                    .map(PartialATTF::Exact),
+                _ => None,
+            },
+            _ => None,
+        }
     }
 }
 
@@ -1597,5 +1673,279 @@ impl<'a> ShortcutGraphTrt for ProfileGraphWrapper<'a> {
             return self.profile_graph.evaluate(shortcut_id, t);
         }
         self.get(shortcut_id).evaluate(t, self)
+    }
+}
+
+pub struct PartialProfileGraphWrapper<'a> {
+    pub profile_graph: &'a mut ReconstructionGraph<'a>,
+    pub down_shortcuts: &'a mut [Vec<PartialShortcut>],
+    pub up_shortcuts: &'a mut [Vec<PartialShortcut>],
+}
+
+impl<'a> PartialProfileGraphWrapper<'a> {
+    fn delegate(&self, shortcut_id: ShortcutId) -> bool {
+        shortcut_id.get_with(
+            &self.profile_graph.customized_graph.incoming,
+            &self.profile_graph.customized_graph.outgoing,
+            |g_dir, id| (id as usize) < g_dir.head.len(),
+        )
+    }
+
+    fn get(&self, shortcut_id: ShortcutId) -> &Vec<PartialShortcut> {
+        match shortcut_id {
+            ShortcutId::Incoming(id) => &self.down_shortcuts[(id as usize) - self.profile_graph.customized_graph.incoming.head.len()],
+            ShortcutId::Outgoing(id) => &self.up_shortcuts[(id as usize) - self.profile_graph.customized_graph.outgoing.head.len()],
+        }
+    }
+
+    fn get_mut(&mut self, shortcut_id: ShortcutId) -> &mut Vec<PartialShortcut> {
+        match shortcut_id {
+            ShortcutId::Incoming(id) => &mut self.down_shortcuts[(id as usize) - self.profile_graph.customized_graph.incoming.head.len()],
+            ShortcutId::Outgoing(id) => &mut self.up_shortcuts[(id as usize) - self.profile_graph.customized_graph.outgoing.head.len()],
+        }
+    }
+
+    fn get_for_time(&self, shortcut_id: ShortcutId, t: Timestamp) -> Option<&PartialShortcut> {
+        let partials = self.get(shortcut_id);
+        let pos = partials.binary_search_by(|s| {
+            use std::cmp::Ordering;
+            if t.fuzzy_lt(s.start) {
+                Ordering::Greater
+            } else if s.end.fuzzy_lt(t) {
+                Ordering::Less
+            } else {
+                Ordering::Equal
+            }
+        });
+        pos.ok().map(|idx| &partials[idx])
+    }
+
+    fn get_for_time_range(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> Option<&PartialShortcut> {
+        self.get_for_time(shortcut_id, start).filter(|s| end.fuzzy_leq(s.end))
+    }
+
+    pub fn cache_iterative(
+        &mut self,
+        queue: &mut IndexdMinHeap<Reverse<ReconstructionQueueElement>>,
+        incoming_reconstruction_states: &mut [ReconstructionState],
+        outgoing_reconstruction_states: &mut [ReconstructionState],
+        buffers: &mut MergeBuffers,
+    ) {
+        while let Some(Reverse(ReconstructionQueueElement { shortcut_id, .. })) = queue.pop() {
+            // debug_assert!(lower_node < upper_node);
+
+            let mut state = Default::default();
+            std::mem::swap(
+                &mut state,
+                shortcut_id.get_mut_from(incoming_reconstruction_states, outgoing_reconstruction_states),
+            );
+
+            if self.delegate(shortcut_id) {
+                self.profile_graph.cache_iterative_iteration(
+                    shortcut_id,
+                    &mut state,
+                    queue,
+                    incoming_reconstruction_states,
+                    outgoing_reconstruction_states,
+                    buffers,
+                );
+            } else {
+                unimplemented!();
+            }
+
+            std::mem::swap(
+                &mut state,
+                shortcut_id.get_mut_from(incoming_reconstruction_states, outgoing_reconstruction_states),
+            );
+        }
+    }
+
+    pub fn cache_iterative_iteration(
+        &mut self,
+        shortcut_id: ShortcutId,
+        state: &mut ReconstructionState,
+        queue: &mut IndexdMinHeap<Reverse<ReconstructionQueueElement>>,
+        incoming_reconstruction_states: &mut [ReconstructionState],
+        outgoing_reconstruction_states: &mut [ReconstructionState],
+        buffers: &mut MergeBuffers,
+        for_each_lower_triangle_of: impl FnMut(ShortcutId, &mut dyn FnMut(EdgeId, EdgeId)),
+    ) {
+        let mut any_down_missing = false;
+        for &(start, end) in &state.requested_times {
+            for_each_lower_triangle_of(shortcut_id, &mut |down, up| {
+                if self.get_for_time_range(ShortcutId::Incoming(down), start, end).is_none() {
+                    any_down_missing = true;
+                    ReconstructionState::request_time(&mut incoming_reconstruction_states[down as usize].requested_times, start, end);
+                    if !incoming_reconstruction_states[down as usize].awaited_by.contains(&shortcut_id) {
+                        incoming_reconstruction_states[down as usize].awaited_by.push(shortcut_id);
+                        state.missing_deps += 1;
+                    }
+
+                    let new_el = ReconstructionQueueElement {
+                        t: start,
+                        upper_node: todo!(),
+                        lower_node: todo!(),
+                        shortcut_id: ShortcutId::Incoming(down),
+                    };
+                    if let Some(Reverse(el)) = queue.get(new_el.as_index()) {
+                        if &new_el < el {
+                            queue.decrease_key(Reverse(new_el));
+                        }
+                    } else {
+                        queue.push(Reverse(new_el));
+                    }
+
+                    if !incoming_reconstruction_states[down as usize].awaited_by.contains(&ShortcutId::Outgoing(up)) {
+                        incoming_reconstruction_states[down as usize].awaited_by.push(ShortcutId::Outgoing(up));
+                        outgoing_reconstruction_states[up as usize].missing_deps += 1;
+                    }
+                }
+            });
+        }
+        if any_down_missing {
+            return;
+        }
+
+        let mut any_up_missing = false;
+        for &(start, end) in &state.requested_times {
+            for_each_lower_triangle_of(shortcut_id, &mut |down, up| {
+                let first_ttf = self
+                    .get_for_time_range(ShortcutId::Incoming(down), start, end)
+                    .unwrap()
+                    .partial_ttf(self, start, end)
+                    .unwrap();
+                let second_start = start + first_ttf.bound_plfs().0.eval(start);
+                let second_end = end + first_ttf.bound_plfs().0.eval(end);
+
+                if !self.get_for_time_range(ShortcutId::Outgoing(up), second_start, second_end).is_none() {
+                    any_up_missing = true;
+
+                    ReconstructionState::request_time(&mut outgoing_reconstruction_states[up as usize].requested_times, second_start, second_end);
+                    if !outgoing_reconstruction_states[up as usize].awaited_by.contains(&shortcut_id) {
+                        outgoing_reconstruction_states[up as usize].awaited_by.push(shortcut_id);
+                        state.missing_deps += 1;
+                    }
+
+                    let new_el = ReconstructionQueueElement {
+                        t: second_start,
+                        upper_node: todo!(),
+                        lower_node: todo!(),
+                        shortcut_id: ShortcutId::Outgoing(up),
+                    };
+                    if let Some(Reverse(el)) = queue.get(new_el.as_index()) {
+                        if &new_el < el {
+                            queue.decrease_key(Reverse(new_el));
+                        }
+                    } else {
+                        queue.push(Reverse(new_el));
+                    }
+                }
+            });
+        }
+
+        if any_up_missing {
+            return;
+        }
+
+        if state.missing_deps > 0 {
+            return;
+        }
+
+        for (start, end) in state.requested_times.drain(..) {
+            let mut shortcut = PartialShortcut::new_finished(start, end, &[], todo!(), todo!());
+            for_each_lower_triangle_of(shortcut_id, &mut |down, up| {
+                shortcut.merge((down, up), self, buffers);
+                // TODO triangle sorting
+            });
+            shortcut.finalize_bounds(self);
+            self.get_mut(shortcut_id).push(shortcut);
+            // TODO proper insert/append
+            debug_assert!(self.get_for_time_range(shortcut_id, start, end).is_some());
+        }
+        for waiting in state.awaited_by.drain(..) {
+            let mut waiting_state = waiting.get_mut_from(incoming_reconstruction_states, outgoing_reconstruction_states);
+            waiting_state.missing_deps -= 1;
+            if waiting_state.missing_deps == 0 && !waiting_state.requested_times.is_empty() {
+                let new_el = ReconstructionQueueElement {
+                    t: waiting_state.requested_times[0].0,
+                    upper_node: todo!(),
+                    lower_node: todo!(),
+                    shortcut_id: waiting,
+                };
+                if let Some(Reverse(el)) = queue.get(new_el.as_index()) {
+                    if &new_el < el {
+                        queue.decrease_key(Reverse(new_el));
+                    }
+                } else {
+                    queue.push(Reverse(new_el));
+                }
+            }
+        }
+    }
+}
+
+impl<'a> ShortcutGraphTrt for PartialProfileGraphWrapper<'a> {
+    type OriginalGraph = TDGraph;
+
+    fn periodic_ttf(&self, shortcut_id: ShortcutId) -> Option<PeriodicATTF> {
+        if self.delegate(shortcut_id) {
+            return self.profile_graph.periodic_ttf(shortcut_id);
+        }
+        self.get_for_time_range(shortcut_id, Timestamp::zero(), period())
+            .and_then(|shortcut| shortcut.periodic_ttf(self))
+    }
+    fn partial_ttf(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> Option<PartialATTF> {
+        if self.delegate(shortcut_id) {
+            return self.profile_graph.partial_ttf(shortcut_id, start, end);
+        }
+        self.get_for_time_range(shortcut_id, start, end)
+            .and_then(|shortcut| shortcut.partial_ttf(self, start, end))
+    }
+    fn is_valid_path(&self, _shortcut_id: ShortcutId) -> bool {
+        true
+    }
+    fn lower_bound(&self, shortcut_id: ShortcutId) -> FlWeight {
+        if self.delegate(shortcut_id) {
+            return self.profile_graph.as_reconstructed().lower_bound(shortcut_id);
+        }
+        self.get(shortcut_id).iter().map(|s| s.lower_bound).min().unwrap()
+    }
+    fn upper_bound(&self, shortcut_id: ShortcutId) -> FlWeight {
+        if self.delegate(shortcut_id) {
+            return self.profile_graph.as_reconstructed().upper_bound(shortcut_id);
+        }
+        self.get(shortcut_id).iter().map(|s| s.upper_bound).max().unwrap()
+    }
+    fn original_graph(&self) -> &TDGraph {
+        &self.profile_graph.customized_graph.original_graph
+    }
+    fn reconstruct_exact_ttf(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
+        if self.delegate(shortcut_id) {
+            return self
+                .profile_graph
+                .as_reconstructed()
+                .reconstruct_exact_ttf(shortcut_id, start, end, target, tmp);
+        }
+        self.get_for_time_range(shortcut_id, start, end)
+            .unwrap()
+            .reconstruct_exact_ttf(start, end, self, target, tmp)
+    }
+    fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight) {
+        if self.delegate(shortcut_id) {
+            return self.profile_graph.as_reconstructed().get_switchpoints(shortcut_id, start, end);
+        }
+        self.get_for_time_range(shortcut_id, start, end).unwrap().get_switchpoints(start, end, self)
+    }
+    fn unpack_at(&self, shortcut_id: ShortcutId, t: Timestamp, result: &mut Vec<(EdgeId, Timestamp)>) {
+        if self.delegate(shortcut_id) {
+            return self.profile_graph.as_reconstructed().unpack_at(shortcut_id, t, result);
+        }
+        self.get_for_time(shortcut_id, t).unwrap().unpack_at(t, self, result);
+    }
+    fn evaluate(&self, shortcut_id: ShortcutId, t: Timestamp) -> FlWeight {
+        if self.delegate(shortcut_id) {
+            return self.profile_graph.as_reconstructed().evaluate(shortcut_id, t);
+        }
+        self.get_for_time(shortcut_id, t).unwrap().evaluate(t, self)
     }
 }

@@ -271,6 +271,7 @@ impl<'a> Server<'a> {
                             .requested_times
                             .push((Timestamp::zero(), period()));
                         self.reconstruction_queue.push(Reverse(ReconstructionQueueElement {
+                            t: Timestamp::zero(),
                             upper_node: node,
                             lower_node: label.parent,
                             shortcut_id: ShortcutId::Incoming(label.shortcut_id),
@@ -318,6 +319,7 @@ impl<'a> Server<'a> {
                             .requested_times
                             .push((Timestamp::zero(), period()));
                         self.reconstruction_queue.push(Reverse(ReconstructionQueueElement {
+                            t: Timestamp::zero(),
                             upper_node: node,
                             lower_node: label.parent,
                             shortcut_id: ShortcutId::Outgoing(label.shortcut_id),
