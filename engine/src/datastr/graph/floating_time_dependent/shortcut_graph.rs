@@ -90,6 +90,10 @@ pub trait ShortcutGraphTrt {
     fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight);
     fn unpack_at(&self, shortcut_id: ShortcutId, t: Timestamp, result: &mut Vec<(EdgeId, Timestamp)>);
     fn evaluate(&self, shortcut_id: ShortcutId, t: Timestamp) -> FlWeight;
+
+    fn ttf_available(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> bool {
+        self.partial_ttf(shortcut_id, start, end).is_some() || self.periodic_ttf(shortcut_id).is_some()
+    }
 }
 
 /// Container for partial CCH graphs during CATCHUp customization.
@@ -1268,7 +1272,7 @@ impl<'a> ReconstructionGraph<'a> {
     }
 
     fn ttf_available(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> bool {
-        self.as_reconstructed().partial_ttf(shortcut_id, start, end).is_some() || self.as_reconstructed().periodic_ttf(shortcut_id).is_some()
+        self.as_reconstructed().ttf_available(shortcut_id, start, end)
     }
 
     pub fn cache_recursive(&mut self, shortcut_id: ShortcutId, mut start: Timestamp, mut end: Timestamp, buffers: &mut MergeBuffers) {
@@ -1781,7 +1785,7 @@ impl<'a> PartialProfileGraphWrapper<'a> {
         for &(start, end) in &state.requested_times {
             let mut deps_to_add = 0;
             for_each_lower_triangle_of(shortcut_id, &mut |down, up| {
-                if self.get_for_time_range(ShortcutId::Incoming(down), start, end).is_none() {
+                if !self.ttf_available(ShortcutId::Incoming(down), start, end) {
                     any_down_missing = true;
                     ReconstructionState::request_time(&mut incoming_reconstruction_states[down as usize].requested_times, start, end);
                     if !incoming_reconstruction_states[down as usize].awaited_by.contains(&shortcut_id) {
@@ -1819,15 +1823,11 @@ impl<'a> PartialProfileGraphWrapper<'a> {
         for &(start, end) in &state.requested_times {
             let mut deps_to_add = 0;
             for_each_lower_triangle_of(shortcut_id, &mut |down, up| {
-                let first_ttf = self
-                    .get_for_time_range(ShortcutId::Incoming(down), start, end)
-                    .unwrap()
-                    .partial_ttf(self, start, end)
-                    .unwrap();
+                let first_ttf = self.partial_ttf(ShortcutId::Incoming(down), start, end).unwrap();
                 let second_start = start + first_ttf.bound_plfs().0.eval(start);
                 let second_end = end + first_ttf.bound_plfs().0.eval(end);
 
-                if !self.get_for_time_range(ShortcutId::Outgoing(up), second_start, second_end).is_none() {
+                if !self.ttf_available(ShortcutId::Outgoing(up), second_start, second_end) {
                     any_up_missing = true;
 
                     ReconstructionState::request_time(&mut outgoing_reconstruction_states[up as usize].requested_times, second_start, second_end);
@@ -1875,7 +1875,7 @@ impl<'a> PartialProfileGraphWrapper<'a> {
                 })
                 .collect();
             PartialTrt::insert_all(self.get_mut(shortcut_id), inserts);
-            debug_assert!(self.get_for_time_range(shortcut_id, start, end).is_some());
+            debug_assert!(self.ttf_available(shortcut_id, start, end));
         }
         for waiting in state.awaited_by.drain(..) {
             let mut waiting_state = waiting.get_mut_from(incoming_reconstruction_states, outgoing_reconstruction_states);
