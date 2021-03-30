@@ -1691,6 +1691,13 @@ impl<'a> PartialProfileGraphWrapper<'a> {
         )
     }
 
+    fn is_dummy(&self, shortcut_id: ShortcutId) -> bool {
+        match shortcut_id {
+            ShortcutId::Incoming(id) => self.down_shortcuts.len() + self.profile_graph.customized_graph.incoming.head.len() == id as usize,
+            ShortcutId::Outgoing(id) => self.up_shortcuts.len() + self.profile_graph.customized_graph.outgoing.head.len() == id as usize,
+        }
+    }
+
     fn get(&self, shortcut_id: ShortcutId) -> &Vec<PartialShortcut> {
         match shortcut_id {
             ShortcutId::Incoming(id) => &self.down_shortcuts[(id as usize) - self.profile_graph.customized_graph.incoming.head.len()],
@@ -1899,15 +1906,23 @@ impl<'a> ShortcutGraphTrt for PartialProfileGraphWrapper<'a> {
         if self.delegate(shortcut_id) {
             return self.profile_graph.periodic_ttf(shortcut_id);
         }
-        self.get_for_time_range(shortcut_id, Timestamp::zero(), period())
-            .and_then(|shortcut| shortcut.periodic_ttf(self))
+        if self.is_dummy(shortcut_id) {
+            Some(PeriodicATTF::Exact(PeriodicPiecewiseLinearFunction::ZERO))
+        } else {
+            self.get_for_time_range(shortcut_id, Timestamp::zero(), period())
+                .and_then(|shortcut| shortcut.periodic_ttf(self))
+        }
     }
     fn partial_ttf(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> Option<PartialATTF> {
         if self.delegate(shortcut_id) {
             return self.profile_graph.partial_ttf(shortcut_id, start, end);
         }
-        self.get_for_time_range(shortcut_id, start, end)
-            .and_then(|shortcut| shortcut.partial_ttf(self, start, end))
+        if self.is_dummy(shortcut_id) {
+            Some(PartialATTF::Exact(PartialPiecewiseLinearFunction::ZERO))
+        } else {
+            self.get_for_time_range(shortcut_id, start, end)
+                .and_then(|shortcut| shortcut.partial_ttf(self, start, end))
+        }
     }
     fn is_valid_path(&self, _shortcut_id: ShortcutId) -> bool {
         true
@@ -1916,13 +1931,21 @@ impl<'a> ShortcutGraphTrt for PartialProfileGraphWrapper<'a> {
         if self.delegate(shortcut_id) {
             return self.profile_graph.as_reconstructed().lower_bound(shortcut_id);
         }
-        self.get(shortcut_id).iter().map(|s| s.lower_bound).min().unwrap()
+        if self.is_dummy(shortcut_id) {
+            FlWeight::ZERO
+        } else {
+            self.get(shortcut_id).iter().map(|s| s.lower_bound).min().unwrap()
+        }
     }
     fn upper_bound(&self, shortcut_id: ShortcutId) -> FlWeight {
         if self.delegate(shortcut_id) {
             return self.profile_graph.as_reconstructed().upper_bound(shortcut_id);
         }
-        self.get(shortcut_id).iter().map(|s| s.upper_bound).max().unwrap()
+        if self.is_dummy(shortcut_id) {
+            FlWeight::ZERO
+        } else {
+            self.get(shortcut_id).iter().map(|s| s.upper_bound).max().unwrap()
+        }
     }
     fn original_graph(&self) -> &TDGraph {
         &self.profile_graph.customized_graph.original_graph
@@ -1934,26 +1957,44 @@ impl<'a> ShortcutGraphTrt for PartialProfileGraphWrapper<'a> {
                 .as_reconstructed()
                 .reconstruct_exact_ttf(shortcut_id, start, end, target, tmp);
         }
-        self.get_for_time_range(shortcut_id, start, end)
-            .unwrap()
-            .reconstruct_exact_ttf(start, end, self, target, tmp)
+        if self.is_dummy(shortcut_id) {
+            target.push(TTFPoint {
+                at: start,
+                val: FlWeight::ZERO,
+            });
+            target.push(TTFPoint { at: end, val: FlWeight::ZERO });
+        } else {
+            self.get_for_time_range(shortcut_id, start, end)
+                .unwrap()
+                .reconstruct_exact_ttf(start, end, self, target, tmp)
+        }
     }
     fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight) {
         if self.delegate(shortcut_id) {
             return self.profile_graph.as_reconstructed().get_switchpoints(shortcut_id, start, end);
         }
-        self.get_for_time_range(shortcut_id, start, end).unwrap().get_switchpoints(start, end, self)
+        if self.is_dummy(shortcut_id) {
+            (vec![(start, vec![], FlWeight::ZERO)], FlWeight::ZERO)
+        } else {
+            self.get_for_time_range(shortcut_id, start, end).unwrap().get_switchpoints(start, end, self)
+        }
     }
     fn unpack_at(&self, shortcut_id: ShortcutId, t: Timestamp, result: &mut Vec<(EdgeId, Timestamp)>) {
         if self.delegate(shortcut_id) {
             return self.profile_graph.as_reconstructed().unpack_at(shortcut_id, t, result);
         }
-        self.get_for_time(shortcut_id, t).unwrap().unpack_at(t, self, result);
+        if !self.is_dummy(shortcut_id) {
+            self.get_for_time(shortcut_id, t).unwrap().unpack_at(t, self, result);
+        }
     }
     fn evaluate(&self, shortcut_id: ShortcutId, t: Timestamp) -> FlWeight {
         if self.delegate(shortcut_id) {
             return self.profile_graph.as_reconstructed().evaluate(shortcut_id, t);
         }
-        self.get_for_time(shortcut_id, t).unwrap().evaluate(t, self)
+        if self.is_dummy(shortcut_id) {
+            FlWeight::ZERO
+        } else {
+            self.get_for_time(shortcut_id, t).unwrap().evaluate(t, self)
+        }
     }
 }

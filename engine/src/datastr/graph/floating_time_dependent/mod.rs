@@ -87,6 +87,7 @@ mod time {
     impl FlWeight {
         /// Sentinel value for infinity weights, chosen to match the regular `Weight`s `INFINITY`.
         pub const INFINITY: Self = FlWeight(2_147_483_647.0);
+        pub const ZERO: Self = FlWeight(0.0);
         pub const INVALID: Self = FlWeight(-1.0);
 
         /// New Weight from `f64`
@@ -219,6 +220,7 @@ mod time {
     impl Timestamp {
         /// Sentinel value for infinity/never timestamps, chosen to match the regular `Weight`s `INFINITY`.
         pub const NEVER: Self = Timestamp(2_147_483_647.0);
+        pub const ZERO: Self = Timestamp(0.0);
 
         /// New `Timestamp` from `f64`.
         pub fn new(t: f64) -> Self {

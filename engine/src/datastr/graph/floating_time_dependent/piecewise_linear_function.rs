@@ -143,6 +143,13 @@ impl<'a> PeriodicPiecewiseLinearFunction<'a> {
         Self { ipps }
     }
 
+    pub const ZERO: Self = PeriodicPiecewiseLinearFunction {
+        ipps: &[TTFPoint {
+            at: Timestamp::ZERO,
+            val: FlWeight::ZERO,
+        }],
+    };
+
     pub fn constant(&self) -> bool {
         PartialPiecewiseLinearFunction { ipps: self.ipps }.constant()
     }
@@ -503,6 +510,19 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
 
         Self { ipps }
     }
+
+    pub const ZERO: Self = PartialPiecewiseLinearFunction {
+        ipps: &[
+            TTFPoint {
+                at: Timestamp::ZERO,
+                val: FlWeight::ZERO,
+            },
+            TTFPoint {
+                at: Timestamp::NEVER,
+                val: FlWeight::ZERO,
+            },
+        ],
+    };
 
     pub fn lower_bound(&self) -> FlWeight {
         self.ipps.iter().map(|p| p.val).min().unwrap()
