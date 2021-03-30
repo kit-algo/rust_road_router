@@ -39,6 +39,29 @@ where
             Self::Approx(_, _) => false,
         }
     }
+
+    pub fn debug(&self) {
+        // debug::debug(&self.into(), &self.into(), &[]);
+        dbg!(self.num_points());
+
+        let debug_plf = |plf: &[TTFPoint]| {
+            let len = plf.len();
+            eprintln!("{:#?}, {:#?} ... {:#?}, {:#?}", &plf[0], &plf[1], &plf[len - 2], &plf[len - 1]);
+        };
+
+        match &self {
+            Self::Exact(points) => {
+                eprintln!("Exact");
+                debug_plf(points);
+            }
+            Self::Approx(lower, upper) => {
+                eprintln!("Approx Lower");
+                debug_plf(lower);
+                eprintln!("Approx Upper");
+                debug_plf(upper);
+            }
+        };
+    }
 }
 
 impl ATTFContainer<Vec<TTFPoint>> {
@@ -1422,6 +1445,15 @@ where
             }
         }
         None
+    }
+
+    pub fn debug(&self) {
+        eprintln!();
+        for partial in &self.partials {
+            eprintln!("{:?} - {:?}", partial.start, partial.end);
+            // partial.ttf.debug();
+        }
+        eprintln!();
     }
 }
 
