@@ -899,10 +899,11 @@ impl ReconstructionState {
             start = Timestamp::ZERO;
             end = period();
         }
-        use std::cmp::Ordering;
         if times.len() == 1 && times[0].0.fuzzy_eq(Timestamp::ZERO) && times[0].1.fuzzy_eq(period()) {
             return;
         }
+
+        use std::cmp::Ordering;
         let start_pos = times.binary_search_by(|&(seg_start, seg_end)| {
             if start.fuzzy_lt(seg_start) {
                 Ordering::Greater
