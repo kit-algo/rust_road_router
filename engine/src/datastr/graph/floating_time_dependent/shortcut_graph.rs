@@ -537,6 +537,13 @@ impl<'a> CustomizedGraph<'a> {
         )
         .evaluate_and_path_length(t, self)
     }
+
+    fn lower_node(&self, shortcut_id: ShortcutId) -> NodeId {
+        *shortcut_id.get_from(&self.incoming.tail, &self.outgoing.tail)
+    }
+    fn upper_node(&self, shortcut_id: ShortcutId) -> NodeId {
+        *shortcut_id.get_from(&self.incoming.head, &self.outgoing.head)
+    }
 }
 
 impl<'a> Deconstruct for CustomizedGraph<'a> {
@@ -1742,9 +1749,18 @@ impl<'a> PartialProfileGraphWrapper<'a> {
         incoming_reconstruction_states: &mut [ReconstructionState],
         outgoing_reconstruction_states: &mut [ReconstructionState],
         buffers: &mut MergeBuffers,
+        mut for_each_lower_triangle_of: impl FnMut(ShortcutId, &mut dyn FnMut(EdgeId, EdgeId, NodeId)),
+        mut bounds: impl FnMut(ShortcutId) -> (FlWeight, FlWeight),
+        mut lower_and_upper_node: impl FnMut(ShortcutId) -> (NodeId, NodeId),
     ) {
-        while let Some(Reverse(ReconstructionQueueElement { shortcut_id, .. })) = queue.pop() {
-            // debug_assert!(lower_node < upper_node);
+        while let Some(Reverse(ReconstructionQueueElement {
+            shortcut_id,
+            lower_node,
+            upper_node,
+            ..
+        })) = queue.pop()
+        {
+            debug_assert!(lower_node < upper_node);
 
             let mut state = Default::default();
             std::mem::swap(
@@ -1762,7 +1778,19 @@ impl<'a> PartialProfileGraphWrapper<'a> {
                     buffers,
                 );
             } else {
-                unimplemented!();
+                self.cache_iterative_iteration(
+                    shortcut_id,
+                    shortcut_id.get_with(upper_node, lower_node, |tail, _| tail),
+                    shortcut_id.get_with(lower_node, upper_node, |head, _| head),
+                    &mut state,
+                    queue,
+                    incoming_reconstruction_states,
+                    outgoing_reconstruction_states,
+                    buffers,
+                    &mut for_each_lower_triangle_of,
+                    &mut bounds,
+                    &mut lower_and_upper_node,
+                )
             }
 
             std::mem::swap(
@@ -1775,17 +1803,21 @@ impl<'a> PartialProfileGraphWrapper<'a> {
     pub fn cache_iterative_iteration(
         &mut self,
         shortcut_id: ShortcutId,
+        tail: NodeId,
+        head: NodeId,
         state: &mut ReconstructionState,
         queue: &mut IndexdMinHeap<Reverse<ReconstructionQueueElement>>,
         incoming_reconstruction_states: &mut [ReconstructionState],
         outgoing_reconstruction_states: &mut [ReconstructionState],
         buffers: &mut MergeBuffers,
-        mut for_each_lower_triangle_of: impl FnMut(ShortcutId, &mut dyn FnMut(EdgeId, EdgeId)),
+        for_each_lower_triangle_of: &mut impl FnMut(ShortcutId, &mut dyn FnMut(EdgeId, EdgeId, NodeId)),
+        bounds: &mut impl FnMut(ShortcutId) -> (FlWeight, FlWeight),
+        lower_and_upper_node: &mut impl FnMut(ShortcutId) -> (NodeId, NodeId),
     ) {
         let mut any_down_missing = false;
         for &(start, end) in &state.requested_times {
             let mut deps_to_add = 0;
-            for_each_lower_triangle_of(shortcut_id, &mut |down, up| {
+            for_each_lower_triangle_of(shortcut_id, &mut |down, up, middle_node| {
                 if !self.ttf_available(ShortcutId::Incoming(down), start, end) {
                     any_down_missing = true;
                     ReconstructionState::request_time(&mut incoming_reconstruction_states[down as usize].requested_times, start, end);
@@ -1794,10 +1826,11 @@ impl<'a> PartialProfileGraphWrapper<'a> {
                         deps_to_add += 1;
                     }
 
+                    debug_assert!(middle_node < tail);
                     let new_el = ReconstructionQueueElement {
                         t: start,
-                        upper_node: todo!(),
-                        lower_node: todo!(),
+                        upper_node: tail,
+                        lower_node: middle_node,
                         shortcut_id: ShortcutId::Incoming(down),
                     };
                     if let Some(Reverse(el)) = queue.get(new_el.as_index()) {
@@ -1823,7 +1856,7 @@ impl<'a> PartialProfileGraphWrapper<'a> {
         let mut any_up_missing = false;
         for &(start, end) in &state.requested_times {
             let mut deps_to_add = 0;
-            for_each_lower_triangle_of(shortcut_id, &mut |down, up| {
+            for_each_lower_triangle_of(shortcut_id, &mut |down, up, middle_node| {
                 let first_ttf = self.partial_ttf(ShortcutId::Incoming(down), start, end).unwrap();
                 let second_start = start + first_ttf.bound_plfs().0.eval(start);
                 let second_end = end + first_ttf.bound_plfs().0.eval(end);
@@ -1837,10 +1870,11 @@ impl<'a> PartialProfileGraphWrapper<'a> {
                         deps_to_add += 1;
                     }
 
+                    debug_assert!(middle_node < head);
                     let new_el = ReconstructionQueueElement {
                         t: second_start,
-                        upper_node: todo!(),
-                        lower_node: todo!(),
+                        upper_node: head,
+                        lower_node: middle_node,
                         shortcut_id: ShortcutId::Outgoing(up),
                     };
                     if let Some(Reverse(el)) = queue.get(new_el.as_index()) {
@@ -1864,15 +1898,31 @@ impl<'a> PartialProfileGraphWrapper<'a> {
         }
 
         for (start, end) in state.requested_times.drain(..) {
+            let bounds = bounds(shortcut_id);
             let inserts = PartialTrt::missing(self.get(shortcut_id), start, end)
                 .into_iter()
                 .map(|(start, end)| {
-                    let mut shortcut = PartialShortcut::new_finished(start, end, &[], todo!());
-                    for_each_lower_triangle_of(shortcut_id, &mut |down, up| {
-                        shortcut.merge((down, up), self, buffers);
-                        // TODO triangle sorting
+                    let mut shortcut = PartialShortcut::new_finished(start, end, &[], bounds);
+
+                    let mut triangles = Vec::new();
+                    for_each_lower_triangle_of(shortcut_id, &mut |down, up, _| {
+                        triangles.push((
+                            (down, up),
+                            self.lower_bound(ShortcutId::Incoming(down)) + self.lower_bound(ShortcutId::Outgoing(up)),
+                        ));
                     });
+                    triangles.sort_by_key(|&(_, bound)| bound);
+                    let num_triang = triangles.len();
+                    for (triangle, _) in triangles {
+                        shortcut.merge(triangle, self, buffers);
+                    }
+                    debug_assert!(
+                        shortcut.partial_ttf(self, start, end).is_some(),
+                        "{:#?}",
+                        (start, end, shortcut_id, num_triang, shortcut)
+                    );
                     shortcut.finalize_bounds(self);
+                    shortcut
                 })
                 .collect();
             PartialTrt::insert_all(self.get_mut(shortcut_id), inserts);
@@ -1882,10 +1932,19 @@ impl<'a> PartialProfileGraphWrapper<'a> {
             let mut waiting_state = waiting.get_mut_from(incoming_reconstruction_states, outgoing_reconstruction_states);
             waiting_state.missing_deps -= 1;
             if waiting_state.missing_deps == 0 && !waiting_state.requested_times.is_empty() {
+                let (lower_node, upper_node) = if self.delegate(waiting) {
+                    (
+                        self.profile_graph.customized_graph.lower_node(waiting),
+                        self.profile_graph.customized_graph.upper_node(waiting),
+                    )
+                } else {
+                    lower_and_upper_node(waiting)
+                };
+                debug_assert!(lower_node < upper_node);
                 let new_el = ReconstructionQueueElement {
                     t: waiting_state.requested_times[0].0,
-                    upper_node: todo!(),
-                    lower_node: todo!(),
+                    upper_node,
+                    lower_node,
                     shortcut_id: waiting,
                 };
                 if let Some(Reverse(el)) = queue.get(new_el.as_index()) {

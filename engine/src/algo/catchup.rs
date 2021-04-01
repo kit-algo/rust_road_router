@@ -8,6 +8,7 @@ use std::cmp::*;
 pub use crate::algo::customizable_contraction_hierarchy::ftd_cch::customize;
 
 mod floating_td_stepped_elimination_tree;
+pub mod partial_profiles;
 pub mod profiles;
 pub mod profiles_naive;
 use floating_td_stepped_elimination_tree::{QueryProgress, *};

@@ -119,7 +119,7 @@ impl PartialShortcut {
                 // link functions
                 let linked = first_plf.link(&second_plf, self.start, self.end);
 
-                self.upper_bound = min(self.upper_bound, PeriodicATTF::from(&linked).static_upper_bound());
+                self.upper_bound = min(self.upper_bound, PartialATTF::from(&linked).static_upper_bound());
                 debug_assert!(
                     !cfg!(feature = "tdcch-precustomization") || !self.upper_bound.fuzzy_lt(self.lower_bound),
                     "lower {:?} upper {:?}",
@@ -202,7 +202,7 @@ impl PartialShortcut {
                 if cfg!(feature = "detailed-stats") {
                     CONSIDERED_FOR_APPROX.fetch_add(old, Relaxed);
                 }
-                merged = PeriodicATTF::from(&merged).approximate(buffers);
+                merged = PartialATTF::from(&merged).approximate(buffers);
                 if cfg!(feature = "detailed-stats") {
                     SAVED_BY_APPROX.fetch_add(old as isize - merged.num_points() as isize, Relaxed);
                 }
@@ -213,7 +213,7 @@ impl PartialShortcut {
             // We would like to increase the lower bound to make it tighter, but we can't take the max right now,
             // We might find a lower function during a later merge operation.
             // We can only set the lower bound as tight as possible, once we have the final travel time function.
-            self.upper_bound = min(self.upper_bound, PeriodicATTF::from(&merged).static_upper_bound());
+            self.upper_bound = min(self.upper_bound, PartialATTF::from(&merged).static_upper_bound());
             debug_assert!(
                 !cfg!(feature = "tdcch-precustomization") || !self.upper_bound.fuzzy_lt(self.lower_bound),
                 "lower {:?} upper {:?}",
@@ -263,10 +263,24 @@ impl PartialShortcut {
         if start.fuzzy_lt(self.start) || self.end.fuzzy_lt(end) {
             return None;
         }
-        self.periodic_ttf(shortcut_graph)
-            .map(|ttf| PartialATTF::try_from(ttf).ok())
-            .flatten()
-            .map(|ttf| ttf.sub_ttf(start, end))
+        if let Some(cache) = &self.cache {
+            return Some(PartialATTF::from(cache).sub_ttf(start, end));
+        }
+
+        match self.sources {
+            Sources::One(source) => match source.into() {
+                ShortcutSource::OriginalEdge(id) => {
+                    return PartialPiecewiseLinearFunction::try_from(shortcut_graph.original_graph().travel_time_function(id))
+                        .ok()
+                        .and_then(|plf| plf.get_sub_plf(start, end))
+                        .map(PartialATTF::Exact)
+                }
+                _ => (),
+            },
+            _ => (),
+        }
+
+        None
     }
 
     pub fn is_valid_path(&self) -> bool {

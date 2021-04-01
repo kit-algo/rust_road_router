@@ -14,8 +14,6 @@ use crate::datastr::rank_select_map::{BitVec, FastClearBitVec};
 use crate::report::benchmark::Timer;
 // use time::Duration;
 
-use std::convert::TryInto;
-
 /// Query server struct for CATCHUp.
 /// Implements the common query trait.
 pub struct Server<'a> {
@@ -49,7 +47,6 @@ pub struct Server<'a> {
     outgoing_profiles: Vec<Option<ApproxPartialsContainer<Box<[TTFPoint]>>>>,
     incoming_profiles: Vec<Option<ApproxPartialsContainer<Box<[TTFPoint]>>>>,
     buffers: MergeBuffers,
-    buffers2: MergeBuffers,
 
     downward_shortcut_offsets: Vec<usize>,
     upward_shortcut_offsets: Vec<usize>,
@@ -84,20 +81,25 @@ impl<'a> Server<'a> {
             outgoing_profiles: (0..m_up).map(|_| None).collect(),
             incoming_profiles: (0..m_down).map(|_| None).collect(),
             buffers: MergeBuffers::new(),
-            buffers2: MergeBuffers::new(),
 
             downward_shortcut_offsets: vec![n; n],
             upward_shortcut_offsets: vec![n; n],
 
-            incoming_reconstruction_states: (0..m_down).map(|_| Default::default()).collect(),
-            outgoing_reconstruction_states: (0..m_up).map(|_| Default::default()).collect(),
-            reconstruction_queue: IndexdMinHeap::new(max(m_down, m_up) * 2),
+            incoming_reconstruction_states: (0..m_down + n).map(|_| Default::default()).collect(),
+            outgoing_reconstruction_states: (0..m_up + n).map(|_| Default::default()).collect(),
+            reconstruction_queue: IndexdMinHeap::new((max(m_down, m_up) + n) * 2),
         }
     }
 
     #[allow(clippy::collapsible_if)]
     #[allow(clippy::cognitive_complexity)]
-    pub fn distance(&mut self, from_node: NodeId, to_node: NodeId) -> (Shortcut, Vec<TTFPoint>, Vec<(Timestamp, Vec<EdgeId>)>) {
+    pub fn distance(
+        &mut self,
+        from_node: NodeId,
+        to_node: NodeId,
+        start: Timestamp,
+        end: Timestamp,
+    ) -> (PartialShortcut, Vec<TTFPoint>, Vec<(Timestamp, Vec<EdgeId>)>) {
         assert_ne!(from_node, to_node);
         report!("algo", "Floating TDCCH Profile Query");
 
@@ -245,9 +247,6 @@ impl<'a> Server<'a> {
             incoming_cache: &mut self.incoming_profiles,
         };
 
-        let mut shortcuts_from_s_in_corridor = Vec::new();
-        let mut shortcuts_to_t_in_corridor = Vec::new();
-
         // for all nodes on the path from root to target
         for &node in self.backward_tree_path.iter().rev() {
             // if the node is in the corridor
@@ -265,24 +264,6 @@ impl<'a> Server<'a> {
                 {
                     // mark parent as in corridor
                     self.backward_tree_mask.set(label.parent as usize);
-
-                    if cfg!(feature = "tdcch-profiles-iterative-reconstruction") {
-                        self.incoming_reconstruction_states[label.shortcut_id as usize]
-                            .requested_times
-                            .push((Timestamp::ZERO, period()));
-                        self.reconstruction_queue.push(Reverse(ReconstructionQueueElement {
-                            t: Timestamp::ZERO,
-                            upper_node: node,
-                            lower_node: label.parent,
-                            shortcut_id: ShortcutId::Incoming(label.shortcut_id),
-                        }));
-                    } else {
-                        reconstruction_graph.cache_recursive(ShortcutId::Incoming(label.shortcut_id), Timestamp::ZERO, period(), &mut self.buffers);
-                    }
-
-                    if label.parent == to {
-                        shortcuts_to_t_in_corridor.push((node, label.shortcut_id));
-                    }
                 }
             }
         }
@@ -313,269 +294,146 @@ impl<'a> Server<'a> {
                     self.forward_tree_mask.set(label.parent as usize);
                     // mark edge as in search space
                     self.relevant_upward.set(label.shortcut_id as usize);
-
-                    if cfg!(feature = "tdcch-profiles-iterative-reconstruction") {
-                        self.outgoing_reconstruction_states[label.shortcut_id as usize]
-                            .requested_times
-                            .push((Timestamp::ZERO, period()));
-                        self.reconstruction_queue.push(Reverse(ReconstructionQueueElement {
-                            t: Timestamp::ZERO,
-                            upper_node: node,
-                            lower_node: label.parent,
-                            shortcut_id: ShortcutId::Outgoing(label.shortcut_id),
-                        }));
-                    } else {
-                        reconstruction_graph.cache_recursive(ShortcutId::Outgoing(label.shortcut_id), Timestamp::ZERO, period(), &mut self.buffers);
-                    }
-
-                    if label.parent == from {
-                        shortcuts_from_s_in_corridor.push((node, label.shortcut_id));
-                    }
                 }
             }
         }
-
-        if cfg!(feature = "tdcch-profiles-iterative-reconstruction") {
-            reconstruction_graph.cache_iterative(
-                &mut self.reconstruction_queue,
-                &mut self.incoming_reconstruction_states,
-                &mut self.outgoing_reconstruction_states,
-                &mut self.buffers,
-            );
-        }
-
-        report!("num_points_cached", reconstruction_graph.num_points_cached());
-        report!("reconstruct_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-        timer.restart();
 
         let forward = &self.forward;
         let backward = &self.backward;
         let forward_tree_mask = &self.forward_tree_mask;
         let backward_tree_mask = &self.backward_tree_mask;
         let customized_graph = &self.customized_graph;
+        let meeting_nodes = &self.meeting_nodes;
 
-        self.forward_tree_path.retain(|&node| forward_tree_mask.get(node as usize) && node != to);
-        self.backward_tree_path.retain(|&node| backward_tree_mask.get(node as usize) && node != from);
+        self.forward_tree_path.retain(|&node| forward_tree_mask.get(node as usize));
+        self.backward_tree_path.retain(|&node| backward_tree_mask.get(node as usize));
 
-        for (offset, &node) in self.forward_tree_path.get(1..).unwrap_or(&[]).iter().enumerate() {
+        for (offset, &node) in self.forward_tree_path.get(1..).unwrap_or(&[]).iter().chain(std::iter::once(&from)).enumerate() {
             self.downward_shortcut_offsets[node as usize] = offset;
         }
-        for (offset, &node) in self.backward_tree_path.get(1..).unwrap_or(&[]).iter().enumerate() {
+        for (offset, &node) in self
+            .backward_tree_path
+            .get(1..)
+            .unwrap_or(&[])
+            .iter()
+            .chain(std::iter::once(&to))
+            .chain(std::iter::once(&to)) // yes, twice intentionally
+            .enumerate()
+        {
             self.upward_shortcut_offsets[node as usize] = offset;
         }
 
         let downward_shortcut_offsets = &self.downward_shortcut_offsets;
         let upward_shortcut_offsets = &self.upward_shortcut_offsets;
 
-        let mut down_shortcuts: Vec<_> = self
-            .forward_tree_path
-            .iter()
-            .skip(1)
-            .map(|&node| {
-                let label = &forward.node_data(node);
-                Shortcut::new_finished(&[], (label.lower_bound, label.upper_bound))
-            })
-            .collect();
-        let mut up_shortcuts: Vec<_> = self
-            .backward_tree_path
-            .iter()
-            .skip(1)
-            .map(|&node| {
-                let label = &backward.node_data(node);
-                Shortcut::new_finished(&[], (label.lower_bound, label.upper_bound))
-            })
-            .collect();
-
-        let mut st_shortcut = Shortcut::new_finished(&[], tentative_distance);
-
-        for (head, edge_id) in shortcuts_from_s_in_corridor {
-            let shortcut = if head == to {
-                &mut st_shortcut
-            } else {
-                &mut down_shortcuts[self.downward_shortcut_offsets[head as usize]]
-            };
-            shortcut.set_sources(self.customized_graph.outgoing.edge_sources(edge_id));
-            shortcut.set_cache(
-                reconstruction_graph
-                    .take_cache(ShortcutId::Outgoing(edge_id))
-                    .map(|ttf| ttf.try_into().unwrap()),
-            );
-            shortcut.upper_bound = min(
-                shortcut.upper_bound,
-                shortcut.periodic_ttf(&reconstruction_graph.as_reconstructed()).unwrap().static_upper_bound(),
-            );
-        }
-
-        for (head, edge_id) in shortcuts_to_t_in_corridor {
-            let shortcut = if head == from {
-                &mut st_shortcut
-            } else {
-                &mut up_shortcuts[self.upward_shortcut_offsets[head as usize]]
-            };
-            shortcut.set_sources(self.customized_graph.incoming.edge_sources(edge_id));
-            shortcut.set_cache(
-                reconstruction_graph
-                    .take_cache(ShortcutId::Incoming(edge_id))
-                    .map(|ttf| ttf.try_into().unwrap()),
-            );
-            shortcut.upper_bound = min(
-                shortcut.upper_bound,
-                shortcut.periodic_ttf(&reconstruction_graph.as_reconstructed()).unwrap().static_upper_bound(),
-            );
-        }
-
-        let profile_graph_down = ProfileGraphWrapper {
-            profile_graph: reconstruction_graph.as_reconstructed(),
-            down_shortcuts: &mut down_shortcuts[..],
-            up_shortcuts: &mut [],
-        };
-
-        let profile_graph_up = ProfileGraphWrapper {
-            profile_graph: reconstruction_graph.as_reconstructed(),
-            down_shortcuts: &mut [],
-            up_shortcuts: &mut up_shortcuts[..],
-        };
-
-        report!("transfer_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-        timer.restart();
+        let mut down_shortcuts: Vec<Vec<PartialShortcut>> = self.forward_tree_path.iter().skip(1).map(|_| Vec::new()).collect();
+        let mut up_shortcuts: Vec<Vec<PartialShortcut>> = self.backward_tree_path.iter().skip(1).chain(std::iter::once(&to)).map(|_| Vec::new()).collect();
 
         let forward_tree_path = &self.forward_tree_path;
         let backward_tree_path = &self.backward_tree_path;
         let buffers = &mut self.buffers;
-        let mut buffers2 = &mut self.buffers2;
 
-        let mut customize_s_down = |node: NodeId, shortcut: &mut Shortcut, profile_graph: &ProfileGraphWrapper| {
-            let upper_bound = forward.node_data(node).upper_bound;
-            let mut label_idx: Vec<_> = forward
-                .node_data(node)
-                .labels
-                .iter()
-                .enumerate()
-                .filter(|(_, label)| label.parent != from && label.parent != to && !upper_bound.fuzzy_lt(label.lower_bound))
-                .map(|(i, _)| i)
-                .collect();
-
-            label_idx.sort_by_key(|&idx| {
-                let label = &forward.node_data(node).labels[idx];
-                profile_graph.lower_bound(ShortcutId::Incoming(
-                    (downward_shortcut_offsets[label.parent as usize] + customized_graph.incoming.head().len()) as EdgeId,
-                )) + profile_graph.lower_bound(ShortcutId::Outgoing(label.shortcut_id))
-            });
-
-            for idx in label_idx {
-                let label = &forward.node_data(node).labels[idx];
-                shortcut.merge(
-                    (
+        let for_each_lower_triangle_of = |shortcut_id: ShortcutId, callback: &mut dyn FnMut(EdgeId, EdgeId, NodeId)| match shortcut_id {
+            ShortcutId::Incoming(id) => {
+                let node_data = forward.node_data(forward_tree_path[1 + id as usize - customized_graph.incoming.head().len()]);
+                let upper_bound = node_data.upper_bound;
+                for label in node_data.labels.iter().filter(|l| !upper_bound.fuzzy_lt(l.lower_bound)) {
+                    callback(
                         (downward_shortcut_offsets[label.parent as usize] + customized_graph.incoming.head().len()) as EdgeId,
                         label.shortcut_id,
-                    ),
-                    profile_graph,
-                    buffers,
-                );
+                        label.parent,
+                    );
+                }
+            }
+            ShortcutId::Outgoing(id) => {
+                if let Some(&backward_tree_path_node) = backward_tree_path.get(1 + id as usize - customized_graph.outgoing.head().len()) {
+                    let node_data = backward.node_data(backward_tree_path_node);
+                    let upper_bound = node_data.upper_bound;
+                    for label in node_data.labels.iter().filter(|l| !upper_bound.fuzzy_lt(l.lower_bound)) {
+                        callback(
+                            label.shortcut_id,
+                            (upward_shortcut_offsets[label.parent as usize] + customized_graph.outgoing.head().len()) as EdgeId,
+                            label.parent,
+                        );
+                    }
+                } else {
+                    for &(node, _) in meeting_nodes {
+                        callback(
+                            (downward_shortcut_offsets[node as usize] + customized_graph.incoming.head().len()) as EdgeId,
+                            (upward_shortcut_offsets[node as usize] + customized_graph.outgoing.head().len()) as EdgeId,
+                            node,
+                        )
+                    }
+                }
             }
         };
-
-        let mut customize_up_t = |node: NodeId, shortcut: &mut Shortcut, profile_graph: &ProfileGraphWrapper| {
-            let upper_bound = backward.node_data(node).upper_bound;
-            let mut label_idx: Vec<_> = backward
-                .node_data(node)
-                .labels
-                .iter()
-                .enumerate()
-                .filter(|(_, label)| label.parent != from && label.parent != to && !upper_bound.fuzzy_lt(label.lower_bound))
-                .map(|(i, _)| i)
-                .collect();
-
-            label_idx.sort_by_key(|&idx| {
-                let label = &backward.node_data(node).labels[idx];
-                profile_graph.lower_bound(ShortcutId::Incoming(label.shortcut_id))
-                    + profile_graph.lower_bound(ShortcutId::Outgoing(
-                        (upward_shortcut_offsets[label.parent as usize] + customized_graph.outgoing.head().len()) as EdgeId,
-                    ))
-            });
-
-            for idx in label_idx {
-                let label = &backward.node_data(node).labels[idx];
-                shortcut.merge(
-                    (
-                        label.shortcut_id,
-                        (upward_shortcut_offsets[label.parent as usize] + customized_graph.outgoing.head().len()) as EdgeId,
-                    ),
-                    profile_graph,
-                    &mut buffers2,
-                );
+        let bounds = |shortcut_id: ShortcutId| -> (FlWeight, FlWeight) {
+            match shortcut_id {
+                ShortcutId::Incoming(id) => {
+                    let node_data = forward.node_data(forward_tree_path[1 + id as usize - customized_graph.incoming.head().len()]);
+                    (node_data.lower_bound, node_data.upper_bound)
+                }
+                ShortcutId::Outgoing(id) => {
+                    if let Some(&backward_tree_path_node) = backward_tree_path.get(1 + id as usize - customized_graph.outgoing.head().len()) {
+                        let node_data = backward.node_data(backward_tree_path_node);
+                        (node_data.lower_bound, node_data.upper_bound)
+                    } else {
+                        tentative_distance
+                    }
+                }
             }
         };
+        let lower_and_upper_node = |shortcut_id: ShortcutId| -> (NodeId, NodeId) {
+            (
+                match shortcut_id {
+                    ShortcutId::Incoming(id) => forward_tree_path[1 + id as usize - customized_graph.incoming.head().len()],
+                    ShortcutId::Outgoing(id) => backward_tree_path
+                        .get(1 + id as usize - customized_graph.outgoing.head().len())
+                        .copied()
+                        .unwrap_or(n as NodeId),
+                },
+                match shortcut_id {
+                    ShortcutId::Incoming(_) => n as NodeId,
+                    ShortcutId::Outgoing(_) => n as NodeId + 1,
+                },
+            )
+        };
 
-        rayon::join(
-            || {
-                for (offset, &node) in forward_tree_path.get(1..).unwrap_or(&[]).iter().enumerate() {
-                    let mut shortcut = Shortcut::new(None, &customized_graph.original_graph);
-                    std::mem::swap(&mut shortcut, &mut profile_graph_down.down_shortcuts[offset]);
-                    customize_s_down(node, &mut shortcut, &profile_graph_down);
-                    shortcut.finalize_bounds(&profile_graph_down);
-                    std::mem::swap(&mut shortcut, &mut profile_graph_down.down_shortcuts[offset]);
-                }
-            },
-            || {
-                for (offset, &node) in backward_tree_path.get(1..).unwrap_or(&[]).iter().enumerate() {
-                    let mut shortcut = Shortcut::new(None, &customized_graph.original_graph);
-                    std::mem::swap(&mut shortcut, &mut profile_graph_up.up_shortcuts[offset]);
-                    customize_up_t(node, &mut shortcut, &profile_graph_up);
-                    shortcut.finalize_bounds(&profile_graph_up);
-                    std::mem::swap(&mut shortcut, &mut profile_graph_up.up_shortcuts[offset]);
-                }
-            },
+        let st_shortcut_id = customized_graph.outgoing.head().len() + up_shortcuts.len() - 1;
+        let mut profile_graph = PartialProfileGraphWrapper {
+            profile_graph: &mut reconstruction_graph,
+            down_shortcuts: &mut down_shortcuts[..],
+            up_shortcuts: &mut up_shortcuts[..],
+        };
+
+        self.outgoing_reconstruction_states[st_shortcut_id].requested_times.push((start, end));
+        self.reconstruction_queue.push(Reverse(ReconstructionQueueElement {
+            t: start,
+            upper_node: n as NodeId + 1,
+            lower_node: n as NodeId,
+            shortcut_id: ShortcutId::Outgoing(st_shortcut_id as EdgeId),
+        }));
+
+        profile_graph.cache_iterative(
+            &mut self.reconstruction_queue,
+            &mut self.incoming_reconstruction_states,
+            &mut self.outgoing_reconstruction_states,
+            buffers,
+            for_each_lower_triangle_of,
+            bounds,
+            lower_and_upper_node,
         );
 
         report!("contract_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         timer.restart();
 
-        let profile_graph = ProfileGraphWrapper {
-            profile_graph: reconstruction_graph.as_reconstructed(),
-            down_shortcuts: &mut down_shortcuts[..],
-            up_shortcuts: &mut up_shortcuts[..],
-        };
-
-        if self.forward_tree_mask.get(to as usize) {
-            customize_s_down(to, &mut st_shortcut, &profile_graph);
-        }
-        if self.backward_tree_mask.get(from as usize) {
-            customize_up_t(from, &mut st_shortcut, &profile_graph);
-        }
-
-        self.meeting_nodes.sort_by_key(|&(node, _)| {
-            if node == from || node == to {
-                FlWeight::ZERO
-            } else {
-                profile_graph.lower_bound(ShortcutId::Incoming(
-                    (downward_shortcut_offsets[node as usize] + customized_graph.incoming.head().len()) as EdgeId,
-                )) + profile_graph.lower_bound(ShortcutId::Outgoing(
-                    (upward_shortcut_offsets[node as usize] + customized_graph.outgoing.head().len()) as EdgeId,
-                ))
-            }
-        });
-
-        for &(node, _) in &self.meeting_nodes {
-            if node == self.from || node == self.to {
-                continue;
-            }
-            st_shortcut.merge(
-                (
-                    (self.downward_shortcut_offsets[node as usize] + self.customized_graph.incoming.head().len()) as EdgeId,
-                    (self.upward_shortcut_offsets[node as usize] + self.customized_graph.outgoing.head().len()) as EdgeId,
-                ),
-                &profile_graph,
-                &mut self.buffers,
-            )
-        }
-
-        report!("st_contract_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-        timer.restart();
-
+        let st_shortcut = profile_graph.up_shortcuts.last();
+        let st_shortcut = st_shortcut.as_ref().unwrap();
+        let st_shortcut = st_shortcut.first();
+        let st_shortcut = st_shortcut.as_ref().unwrap();
         let mut target = self.buffers.unpacking_target.push_plf();
         if st_shortcut.is_valid_path() {
-            st_shortcut.reconstruct_exact_ttf(Timestamp::ZERO, period(), &profile_graph, &mut target, &mut self.buffers.unpacking_tmp);
+            st_shortcut.reconstruct_exact_ttf(start, end, &profile_graph, &mut target, &mut self.buffers.unpacking_tmp);
         }
         report!("profile_complexity", target.len());
 
@@ -583,7 +441,7 @@ impl<'a> Server<'a> {
         timer.restart();
 
         let paths = if st_shortcut.is_valid_path() {
-            let switchpoints = st_shortcut.get_switchpoints(Timestamp::ZERO, period(), &profile_graph).0;
+            let switchpoints = st_shortcut.get_switchpoints(start, end, &profile_graph).0;
             switchpoints.into_iter().map(|(valid_from, path, _)| (valid_from, path)).collect()
         } else {
             Vec::new()
@@ -594,7 +452,7 @@ impl<'a> Server<'a> {
         while let Some(node) = self.backward_tree_path.pop() {
             if self.backward_tree_mask.get(node as usize) {
                 for label in self.backward.node_data(node).labels.iter() {
-                    reconstruction_graph.clear_recursive(ShortcutId::Incoming(label.shortcut_id));
+                    profile_graph.profile_graph.clear_recursive(ShortcutId::Incoming(label.shortcut_id));
                 }
             }
         }
@@ -602,10 +460,12 @@ impl<'a> Server<'a> {
         while let Some(node) = self.forward_tree_path.pop() {
             if self.forward_tree_mask.get(node as usize) {
                 for label in self.forward.node_data(node).labels.iter() {
-                    reconstruction_graph.clear_recursive(ShortcutId::Outgoing(label.shortcut_id));
+                    profile_graph.profile_graph.clear_recursive(ShortcutId::Outgoing(label.shortcut_id));
                 }
             }
         }
+
+        let st_shortcut = up_shortcuts.pop().unwrap().drain(..).next().unwrap();
 
         (st_shortcut, target[..].into(), paths)
     }
