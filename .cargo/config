@@ -1,0 +1,2 @@
+[target.'cfg(target_os = "linux")']
+rustflags = ["-C", "target-cpu=native", "-C", "force-frame-pointers", "-C", "target-feature=-avx512f"]
