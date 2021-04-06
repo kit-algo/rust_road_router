@@ -227,7 +227,7 @@ impl Shortcut {
             let mut sources = Sources::None;
             std::mem::swap(&mut sources, &mut self.sources);
             // calculate new `ShortcutSource`s.
-            self.sources = sources.combine(intersection_data, other_data);
+            self.sources = sources.combine(intersection_data, other_data, Timestamp::ZERO, period());
         })();
 
         if cfg!(feature = "detailed-stats") {
@@ -433,7 +433,7 @@ impl Shortcut {
 
     /// Returns an iterator over all the sources combined with a Timestamp for the time from which the corresponding source becomes valid.
     pub fn sources_iter<'s>(&'s self) -> impl Iterator<Item = (Timestamp, ShortcutSourceData)> + 's {
-        self.sources.iter()
+        self.sources_for(Timestamp::ZERO, period())
     }
 
     pub fn sources_for<'s>(&'s self, start: Timestamp, end: Timestamp) -> impl Iterator<Item = (Timestamp, ShortcutSourceData)> + 's {
@@ -497,8 +497,12 @@ impl Sources {
         }
     }
 
-    pub fn iter(&self) -> SourcesIter {
-        self.wrapping_iter_for(Timestamp::ZERO, period())
+    pub fn iter(&self, start: Timestamp, end: Timestamp) -> SourcesIter {
+        match self {
+            Sources::None => SourcesIter::None,
+            Sources::One(source) => SourcesIter::One(start, std::iter::once(*source)),
+            Sources::Multi(sources) => SourcesIter::Multi(sources.wrapping_iter(start, end)),
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -510,7 +514,7 @@ impl Sources {
     }
 
     // Combine current `Sources` and the result of a merge into new `Sources`
-    pub fn combine(self, intersection_data: Vec<(Timestamp, bool)>, other_data: ShortcutSourceData) -> Self {
+    pub fn combine(self, intersection_data: Vec<(Timestamp, bool)>, other_data: ShortcutSourceData, start: Timestamp, end: Timestamp) -> Self {
         // when just one is better all the time
         if let [(_, is_self_better)] = &intersection_data[..] {
             if *is_self_better {
@@ -534,7 +538,7 @@ impl Sources {
         // while self is better we need to copy these over
         // when other becomes better at an intersection we need to insert other_data at the intersection time
         // when self becomes better at an intersection we need to insert the source that was active at that time in the old sources at the new intersection time.
-        for (at, source) in self.iter() {
+        for (at, source) in self.iter(start, end) {
             if intersection_iter.peek().is_none() || at < intersection_iter.peek().unwrap().0 {
                 if self_currently_better {
                     if new_sources.last().map(|&(last_at, _)| last_at.fuzzy_eq(at)).unwrap_or(false) {

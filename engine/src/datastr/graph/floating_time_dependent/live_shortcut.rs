@@ -321,7 +321,7 @@ impl LiveShortcut {
             let mut sources = Sources::None;
             std::mem::swap(&mut sources, &mut self.sources);
             // calculate new `ShortcutSource`s.
-            self.sources = sources.combine(intersection_data, other_data);
+            self.sources = sources.combine(intersection_data, other_data, todo!(), todo!());
         })();
 
         if cfg!(feature = "detailed-stats") {
@@ -533,7 +533,7 @@ impl LiveShortcut {
 
     /// Returns an iterator over all the sources combined with a Timestamp for the time from which the corresponding source becomes valid.
     pub fn sources_iter<'s>(&'s self) -> impl Iterator<Item = (Timestamp, ShortcutSourceData)> + 's {
-        self.sources.iter()
+        self.sources.iter(todo!(), todo!())
     }
 
     pub fn sources_for<'s>(&'s self, start: Timestamp, end: Timestamp) -> impl Iterator<Item = (Timestamp, ShortcutSourceData)> + 's {

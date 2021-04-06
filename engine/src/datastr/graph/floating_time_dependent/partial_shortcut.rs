@@ -224,7 +224,7 @@ impl PartialShortcut {
             let mut sources = Sources::None;
             std::mem::swap(&mut sources, &mut self.sources);
             // calculate new `ShortcutSource`s.
-            self.sources = sources.combine(intersection_data, other_data);
+            self.sources = sources.combine(intersection_data, other_data, self.start, self.end);
         })();
 
         if cfg!(feature = "detailed-stats") {

@@ -793,7 +793,7 @@ impl<'a> PartialATTF<'a> {
         let (_, other_dominating_intersections) = other_upper.merge(&self_lower, start, end, &mut buffers.buffer);
 
         let mut dominating = false; // does currently one function completely dominate the other
-        let mut start_of_segment = Timestamp::ZERO; // where does the current dominance segment start
+        let mut start_of_segment = start; // where does the current dominance segment start
         let mut self_dominating_iter = self_dominating_intersections.iter().peekable();
         let mut other_dominating_iter = other_dominating_intersections.iter().peekable();
         let mut result = Vec::new(); // Will contain final (Timestamp, bool) pairs which indicate which function is better when
@@ -803,14 +803,14 @@ impl<'a> PartialATTF<'a> {
             (true, false) => {
                 // first function is currently better
                 dominating = true;
-                result.push((Timestamp::ZERO, true));
-                bound_merge_state.push((Timestamp::ZERO, BoundMergingState::First));
+                result.push((start, true));
+                bound_merge_state.push((start, BoundMergingState::First));
             }
             (false, true) => {
                 // second function is currently better
                 dominating = true;
-                result.push((Timestamp::ZERO, false));
-                bound_merge_state.push((Timestamp::ZERO, BoundMergingState::Second));
+                result.push((start, false));
+                bound_merge_state.push((start, BoundMergingState::Second));
             }
             _ => {
                 // false false -> bounds overlap
@@ -1108,7 +1108,7 @@ impl<'a> PartialATTF<'a> {
         }
         // `result` now is finalized
 
-        debug_assert!(result.first().unwrap().0 == Timestamp::ZERO);
+        debug_assert!(result.first().unwrap().0 == start);
         for better in result.windows(2) {
             debug_assert!(
                 better[0].0 < better[1].0,
@@ -1128,7 +1128,7 @@ impl<'a> PartialATTF<'a> {
         buffers.exact_result_lower.reserve(2 * self_lower.len() + 2 * other_lower.len() + 2);
         buffers.exact_result_upper.reserve(2 * self_upper.len() + 2 * other_upper.len() + 2);
 
-        debug_assert_eq!(bound_merge_state[0].0, Timestamp::ZERO);
+        debug_assert_eq!(bound_merge_state[0].0, start);
 
         let mut end_of_segment_iter = bound_merge_state.iter().map(|(t, _)| *t).chain(std::iter::once(end));
         end_of_segment_iter.next();
