@@ -1768,13 +1768,14 @@ impl<'a> PartialProfileGraphWrapper<'a> {
             );
 
             if self.delegate(shortcut_id) {
-                self.profile_graph.cache_iterative_iteration(
+                self.cache_orig_shortcut_iterative_iteration(
                     shortcut_id,
                     &mut state,
                     queue,
                     incoming_reconstruction_states,
                     outgoing_reconstruction_states,
                     buffers,
+                    &mut lower_and_upper_node,
                 );
             } else {
                 self.cache_iterative_iteration(
@@ -1930,6 +1931,161 @@ impl<'a> PartialProfileGraphWrapper<'a> {
                 })
                 .collect();
             PartialTrt::insert_all(self.get_mut(shortcut_id), inserts);
+            debug_assert!(self.ttf_available(shortcut_id, start, end));
+        }
+        for waiting in state.awaited_by.drain(..) {
+            let mut waiting_state = waiting.get_mut_from(incoming_reconstruction_states, outgoing_reconstruction_states);
+            waiting_state.missing_deps -= 1;
+            if waiting_state.missing_deps == 0 && !waiting_state.requested_times.is_empty() {
+                let (lower_node, upper_node) = if self.delegate(waiting) {
+                    (
+                        self.profile_graph.customized_graph.lower_node(waiting),
+                        self.profile_graph.customized_graph.upper_node(waiting),
+                    )
+                } else {
+                    lower_and_upper_node(waiting)
+                };
+                debug_assert!(lower_node < upper_node);
+                let new_el = ReconstructionQueueElement {
+                    t: waiting_state.requested_times[0].0,
+                    upper_node,
+                    lower_node,
+                    shortcut_id: waiting,
+                };
+                if let Some(Reverse(el)) = queue.get(new_el.as_index()) {
+                    if &new_el < el {
+                        queue.decrease_key(Reverse(new_el));
+                    }
+                } else {
+                    queue.push(Reverse(new_el));
+                }
+            }
+        }
+    }
+
+    pub fn cache_orig_shortcut_iterative_iteration(
+        &mut self,
+        shortcut_id: ShortcutId,
+        state: &mut ReconstructionState,
+        queue: &mut IndexdMinHeap<Reverse<ReconstructionQueueElement>>,
+        incoming_reconstruction_states: &mut [ReconstructionState],
+        outgoing_reconstruction_states: &mut [ReconstructionState],
+        buffers: &mut MergeBuffers,
+        lower_and_upper_node: &mut impl FnMut(ShortcutId) -> (NodeId, NodeId),
+    ) {
+        let edge_sources = shortcut_id.get_with(
+            &self.profile_graph.customized_graph.incoming,
+            &self.profile_graph.customized_graph.outgoing,
+            CustomizedSingleDirGraph::edge_sources,
+        );
+
+        let mut any_down_missing = false;
+        for &(start, end) in &state.requested_times {
+            let mut c = SourceCursor::valid_at(edge_sources, start);
+
+            while c.cur().0.fuzzy_lt(end) {
+                match ShortcutSource::from(c.cur().1) {
+                    ShortcutSource::Shortcut(down, up) => {
+                        let first_start = max(start, c.cur().0);
+                        let first_end = min(end, c.next().0);
+
+                        if !self.ttf_available(ShortcutId::Incoming(down), first_start, first_end) {
+                            any_down_missing = true;
+                            ReconstructionState::request_time(&mut incoming_reconstruction_states[down as usize].requested_times, first_start, first_end);
+                            if !incoming_reconstruction_states[down as usize].awaited_by.contains(&shortcut_id) {
+                                incoming_reconstruction_states[down as usize].awaited_by.push(shortcut_id);
+                                state.missing_deps += 1;
+                            }
+
+                            let new_el = ReconstructionQueueElement {
+                                t: start,
+                                upper_node: self.profile_graph.customized_graph.incoming.head[down as usize],
+                                lower_node: self.profile_graph.customized_graph.incoming.tail[down as usize],
+                                shortcut_id: ShortcutId::Incoming(down),
+                            };
+                            if let Some(Reverse(el)) = queue.get(new_el.as_index()) {
+                                if &new_el < el {
+                                    queue.decrease_key(Reverse(new_el));
+                                }
+                            } else {
+                                queue.push(Reverse(new_el));
+                            }
+
+                            if !incoming_reconstruction_states[down as usize].awaited_by.contains(&ShortcutId::Outgoing(up)) {
+                                incoming_reconstruction_states[down as usize].awaited_by.push(ShortcutId::Outgoing(up));
+                                outgoing_reconstruction_states[up as usize].missing_deps += 1;
+                            }
+                        }
+                    }
+                    _ => (),
+                }
+                c.advance();
+            }
+        }
+        if any_down_missing {
+            return;
+        }
+
+        let mut any_up_missing = false;
+        for &(start, end) in &state.requested_times {
+            let mut c = SourceCursor::valid_at(edge_sources, start);
+
+            while c.cur().0.fuzzy_lt(end) {
+                match ShortcutSource::from(c.cur().1) {
+                    ShortcutSource::Shortcut(down, up) => {
+                        let first_start = max(start, c.cur().0);
+                        let first_end = min(end, c.next().0);
+
+                        let reconstructed = self.profile_graph.as_reconstructed();
+                        let (start_val, end_val) = if let Some(ttf) = reconstructed.partial_ttf(ShortcutId::Incoming(down), first_start, first_end) {
+                            (ttf.bound_plfs().0.eval(first_start), ttf.bound_plfs().1.eval(first_end))
+                        } else {
+                            let ttf = reconstructed.periodic_ttf(ShortcutId::Incoming(down)).unwrap();
+                            (ttf.bound_plfs().0.evaluate(first_start), ttf.bound_plfs().1.evaluate(first_end))
+                        };
+                        let second_start = first_start + start_val;
+                        let second_end = first_end + end_val;
+
+                        if !self.ttf_available(ShortcutId::Outgoing(up), second_start, second_end) {
+                            any_up_missing = true;
+
+                            ReconstructionState::request_time(&mut outgoing_reconstruction_states[up as usize].requested_times, second_start, second_end);
+                            if !outgoing_reconstruction_states[up as usize].awaited_by.contains(&shortcut_id) {
+                                outgoing_reconstruction_states[up as usize].awaited_by.push(shortcut_id);
+                                state.missing_deps += 1;
+                            }
+
+                            let new_el = ReconstructionQueueElement {
+                                t: second_start,
+                                upper_node: self.profile_graph.customized_graph.outgoing.head[up as usize],
+                                lower_node: self.profile_graph.customized_graph.outgoing.tail[up as usize],
+                                shortcut_id: ShortcutId::Outgoing(up),
+                            };
+                            if let Some(Reverse(el)) = queue.get(new_el.as_index()) {
+                                if &new_el < el {
+                                    queue.decrease_key(Reverse(new_el));
+                                }
+                            } else {
+                                queue.push(Reverse(new_el));
+                            }
+                        }
+                    }
+                    _ => (),
+                }
+                c.advance();
+            }
+        }
+
+        if any_up_missing {
+            return;
+        }
+
+        if state.missing_deps > 0 {
+            return;
+        }
+
+        for (start, end) in state.requested_times.drain(..) {
+            self.profile_graph.cache(shortcut_id, start, end, buffers);
             debug_assert!(self.ttf_available(shortcut_id, start, end));
         }
         for waiting in state.awaited_by.drain(..) {
