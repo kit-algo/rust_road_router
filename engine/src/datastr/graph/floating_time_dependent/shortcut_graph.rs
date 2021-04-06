@@ -1856,9 +1856,14 @@ impl<'a> PartialProfileGraphWrapper<'a> {
         for &(start, end) in &state.requested_times {
             let mut deps_to_add = 0;
             for_each_lower_triangle_of(shortcut_id, &mut |down, up, middle_node| {
-                let first_ttf = self.partial_ttf(ShortcutId::Incoming(down), start, end).unwrap();
-                let second_start = start + first_ttf.bound_plfs().0.eval(start);
-                let second_end = end + first_ttf.bound_plfs().0.eval(end);
+                let (start_val, end_val) = if let Some(ttf) = self.partial_ttf(ShortcutId::Incoming(down), start, end) {
+                    (ttf.bound_plfs().0.eval(start), ttf.bound_plfs().1.eval(end))
+                } else {
+                    let ttf = self.periodic_ttf(ShortcutId::Incoming(down)).unwrap();
+                    (ttf.bound_plfs().0.evaluate(start), ttf.bound_plfs().1.evaluate(end))
+                };
+                let second_start = start + start_val;
+                let second_end = end + end_val;
 
                 if !self.ttf_available(ShortcutId::Outgoing(up), second_start, second_end) {
                     any_up_missing = true;

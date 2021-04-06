@@ -104,12 +104,61 @@ impl PartialShortcut {
             }
 
             // get cached (possibly approximated) TTFs
-            let first_plf = shortcut_graph.partial_ttf(ShortcutId::Incoming(linked_ids.0), self.start, self.end).unwrap();
-            let second_start = first_plf.bound_plfs().0.eval(self.start) + self.start;
-            let second_end = first_plf.bound_plfs().1.eval(self.end) + self.end;
-            let second_plf = shortcut_graph
-                .partial_ttf(ShortcutId::Outgoing(linked_ids.1), second_start, second_end)
-                .unwrap();
+            let partial_first = shortcut_graph.partial_ttf(ShortcutId::Incoming(linked_ids.0), self.start, self.end);
+            let mut first_lower_target = buffers.unpacking_target.push_plf();
+
+            if partial_first.is_none() {
+                if let PeriodicATTF::Approx(lower_plf, _) = shortcut_graph.periodic_ttf(ShortcutId::Incoming(linked_ids.0)).unwrap() {
+                    lower_plf.append_range(self.start, self.end, &mut first_lower_target);
+                }
+            };
+
+            let mut first_upper_target = first_lower_target.storage_mut().push_plf();
+
+            let first_ttf = if let Some(ttf) = partial_first {
+                ttf
+            } else {
+                match shortcut_graph.periodic_ttf(ShortcutId::Incoming(linked_ids.0)).unwrap() {
+                    PeriodicATTF::Exact(plf) => {
+                        plf.append_range(self.start, self.end, &mut first_upper_target);
+                        PartialATTF::Exact(PartialPiecewiseLinearFunction::new(&first_upper_target[..]))
+                    }
+                    PeriodicATTF::Approx(_, upper_plf) => {
+                        upper_plf.append_range(self.start, self.end, &mut first_upper_target);
+                        let plfs = first_upper_target.storage().top_plfs();
+                        PartialATTF::Approx(PartialPiecewiseLinearFunction::new(plfs.0), PartialPiecewiseLinearFunction::new(plfs.1))
+                    }
+                }
+            };
+
+            let second_start = first_ttf.bound_plfs().0.eval(self.start) + self.start;
+            let second_end = first_ttf.bound_plfs().1.eval(self.end) + self.end;
+            let partial_second = shortcut_graph.partial_ttf(ShortcutId::Outgoing(linked_ids.1), second_start, second_end);
+            let mut second_lower_target = buffers.unpacking_tmp.push_plf();
+
+            if partial_second.is_none() {
+                if let PeriodicATTF::Approx(lower_plf, _) = shortcut_graph.periodic_ttf(ShortcutId::Outgoing(linked_ids.1)).unwrap() {
+                    lower_plf.append_range(second_start, second_end, &mut second_lower_target);
+                }
+            };
+
+            let mut second_upper_target = second_lower_target.storage_mut().push_plf();
+
+            let second_ttf = if let Some(ttf) = partial_second {
+                ttf
+            } else {
+                match shortcut_graph.periodic_ttf(ShortcutId::Outgoing(linked_ids.1)).unwrap() {
+                    PeriodicATTF::Exact(plf) => {
+                        plf.append_range(second_start, second_end, &mut second_upper_target);
+                        PartialATTF::Exact(PartialPiecewiseLinearFunction::new(&second_upper_target[..]))
+                    }
+                    PeriodicATTF::Approx(_, upper_plf) => {
+                        upper_plf.append_range(second_start, second_end, &mut second_upper_target);
+                        let plfs = second_upper_target.storage().top_plfs();
+                        PartialATTF::Approx(PartialPiecewiseLinearFunction::new(plfs.0), PartialPiecewiseLinearFunction::new(plfs.1))
+                    }
+                }
+            };
 
             // when the current shortcut is always infinity, the linked paths will always be better.
             if !self.is_valid_path() {
@@ -117,7 +166,7 @@ impl PartialShortcut {
                     ACTUALLY_LINKED.fetch_add(1, Relaxed);
                 }
                 // link functions
-                let linked = first_plf.link(&second_plf, self.start, self.end);
+                let linked = first_ttf.link(&second_ttf, self.start, self.end);
 
                 self.upper_bound = min(self.upper_bound, PartialATTF::from(&linked).static_upper_bound());
                 debug_assert!(
@@ -135,10 +184,16 @@ impl PartialShortcut {
             let self_plf = self.partial_ttf(shortcut_graph, self.start, self.end).unwrap();
 
             // link TTFs in triangle
-            let linked_ipps = first_plf.link(&second_plf, self.start, self.end);
+            let linked_ipps = first_ttf.link(&second_ttf, self.start, self.end);
             if cfg!(feature = "detailed-stats") {
                 ACTUALLY_LINKED.fetch_add(1, Relaxed);
             }
+            drop(first_ttf);
+            drop(first_upper_target);
+            drop(first_lower_target);
+            drop(second_ttf);
+            drop(second_upper_target);
+            drop(second_lower_target);
 
             let linked = PartialATTF::from(&linked_ipps);
             // these bounds are more tight than the previous ones
