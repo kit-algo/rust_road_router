@@ -53,7 +53,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let _blocked = block_reporting();
                     let at = start + 0.5 * (end - start);
                     let mut result = ea_server.query(TDQuery { from, to, departure: at }).unwrap();
-                    assert!(PeriodicPiecewiseLinearFunction::new(&tt).evaluate(at).fuzzy_eq(result.distance()));
+                    assert!(PartialPiecewiseLinearFunction::new(&tt).eval(at).fuzzy_eq(result.distance()));
                     let gt_path = result.path();
                     g.check_path(&gt_path);
                     g.check_path(&g.get_path_with_times(at, &path));
@@ -61,7 +61,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 for paths in paths.windows(2) {
                     check_segment(paths[0].0, paths[1].0, &paths[0].1);
                 }
-                check_segment(paths.last().unwrap().0, period(), &paths.last().unwrap().1);
+                check_segment(paths.last().unwrap().0, Timestamp::new(9. * 3600.), &paths.last().unwrap().1);
 
                 report!("path_switches", paths.len() - 1);
                 let mut paths: Vec<_> = paths.into_iter().map(|(_, path)| path).collect();

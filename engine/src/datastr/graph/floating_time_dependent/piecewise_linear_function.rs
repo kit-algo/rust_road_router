@@ -536,7 +536,7 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
         self.len() == 1 || self.lower_bound().fuzzy_eq(self.upper_bound())
     }
 
-    pub(super) fn eval(&self, t: Timestamp) -> FlWeight {
+    pub fn eval(&self, t: Timestamp) -> FlWeight {
         if self.ipps.len() == 1 {
             return self.ipps.first().unwrap().val;
         }

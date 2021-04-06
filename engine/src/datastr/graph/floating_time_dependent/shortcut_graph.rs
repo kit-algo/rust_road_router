@@ -1216,7 +1216,6 @@ impl<'a> ReconstructionGraph<'a> {
         }
 
         for (start, end) in state.requested_times.drain(..) {
-            // dbg!(shortcut_id, start, end, dir_graph.edge_sources(edge_id as usize));
             self.cache(shortcut_id, start, end, buffers);
             debug_assert!(self.ttf_available(shortcut_id, start, end));
         }
