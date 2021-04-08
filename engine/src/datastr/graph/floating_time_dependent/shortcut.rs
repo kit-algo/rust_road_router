@@ -122,6 +122,10 @@ impl Shortcut {
                 // link functions
                 let linked = first_plf.link(&second_plf);
 
+                if self.upper_bound.fuzzy_lt(PeriodicATTF::from(&linked).static_lower_bound()) {
+                    return;
+                }
+
                 self.upper_bound = min(self.upper_bound, PeriodicATTF::from(&linked).static_upper_bound());
                 debug_assert!(
                     !cfg!(feature = "tdcch-precustomization") || !self.upper_bound.fuzzy_lt(self.lower_bound),

@@ -168,6 +168,10 @@ impl PartialShortcut {
                 // link functions
                 let linked = first_ttf.link(&second_ttf, self.start, self.end);
 
+                if self.upper_bound.fuzzy_lt(PartialATTF::from(&linked).static_lower_bound()) {
+                    return;
+                }
+
                 self.upper_bound = min(self.upper_bound, PartialATTF::from(&linked).static_upper_bound());
                 debug_assert!(
                     !cfg!(feature = "tdcch-precustomization") || !self.upper_bound.fuzzy_lt(self.lower_bound),
