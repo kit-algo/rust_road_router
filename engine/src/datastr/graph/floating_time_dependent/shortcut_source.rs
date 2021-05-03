@@ -502,13 +502,14 @@ pub trait Sources {
     fn get_switchpoints(&self, start: Timestamp, end: Timestamp, shortcut_graph: &impl ShortcutGraphTrt)
         -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight);
 
-    fn edge_source_at(&self, t: Timestamp) -> Option<&ShortcutSourceData>;
-
-    fn wrapping_iter(&self, start: Timestamp, end: Timestamp) -> WrappingSourceIter;
+    fn edge_source_at(&self, t: Timestamp) -> Option<ShortcutSourceData>;
 }
 
+pub struct PeriodicSources<'a>(pub &'a [(Timestamp, ShortcutSourceData)]);
+pub struct PartialSources<'a>(pub &'a [(Timestamp, ShortcutSourceData)], pub Timestamp);
+
 use std::cmp::{max, min};
-impl Sources for [(Timestamp, ShortcutSourceData)] {
+impl<'a> Sources for PeriodicSources<'a> {
     fn reconstruct_exact_ttf(
         &self,
         start: Timestamp,
@@ -518,7 +519,7 @@ impl Sources for [(Timestamp, ShortcutSourceData)] {
         tmp: &mut ReusablePLFStorage,
     ) {
         // when we have multiple source, we need to do unpacking (and append the results) for all sources which are relevant for the given time range.
-        let mut c = SourceCursor::valid_at(self, start);
+        let mut c = SourceCursor::valid_at(self.0, start);
         while c.cur().0.fuzzy_lt(end) {
             let mut inner_target = tmp.push_plf();
             ShortcutSource::from(c.cur().1).reconstruct_exact_ttf(
@@ -537,7 +538,7 @@ impl Sources for [(Timestamp, ShortcutSourceData)] {
             debug_assert!(points[0].at.fuzzy_lt(points[1].at));
         }
 
-        debug_assert!(!target.last().unwrap().at.fuzzy_lt(end), "{:?}", dbg_each!(self, start, end));
+        debug_assert!(!target.last().unwrap().at.fuzzy_lt(end), "{:?}", dbg_each!(self.0, start, end));
     }
 
     fn get_switchpoints(
@@ -546,7 +547,7 @@ impl Sources for [(Timestamp, ShortcutSourceData)] {
         end: Timestamp,
         shortcut_graph: &impl ShortcutGraphTrt,
     ) -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight) {
-        let mut c = SourceCursor::valid_at(self, start);
+        let mut c = SourceCursor::valid_at(self.0, start);
 
         let (mut switchpoints, mut last_weight) = ShortcutSource::from(c.cur().1).get_switchpoints(max(start, c.cur().0), min(end, c.next().0), shortcut_graph);
 
@@ -569,34 +570,158 @@ impl Sources for [(Timestamp, ShortcutSourceData)] {
         (switchpoints, last_weight)
     }
 
-    fn edge_source_at(&self, t: Timestamp) -> Option<&ShortcutSourceData> {
-        if self.is_empty() {
+    fn edge_source_at(&self, t: Timestamp) -> Option<ShortcutSourceData> {
+        if self.0.is_empty() {
             return None;
         }
-        if self.len() == 1 {
-            return Some(&self[0].1);
+        if self.0.len() == 1 {
+            return Some(self.0[0].1);
         }
 
         let (_, t_period) = t.split_of_period();
-        debug_assert!(self.first().map(|&(t, _)| t == Timestamp::ZERO).unwrap_or(true), "{:?}", self);
-        match self.binary_search_by_key(&t_period, |(t, _)| *t) {
-            Ok(i) => self.get(i),
+        debug_assert!(self.0.first().map(|&(t, _)| t == Timestamp::ZERO).unwrap_or(true), "{:?}", self.0);
+        match self.0.binary_search_by_key(&t_period, |(t, _)| *t) {
+            Ok(i) => self.0.get(i),
             Err(i) => {
-                debug_assert!(self.get(i - 1).map(|&(t, _)| t < t_period).unwrap_or(true));
-                if i < self.len() {
-                    debug_assert!(t_period < self[i].0);
+                debug_assert!(self.0.get(i - 1).map(|&(t, _)| t < t_period).unwrap_or(true));
+                if i < self.0.len() {
+                    debug_assert!(t_period < self.0[i].0);
                 }
-                self.get(i - 1)
+                self.0.get(i - 1)
             }
         }
-        .map(|(_, s)| s)
+        .map(|(_, s)| *s)
+    }
+}
+
+impl<'a> PartialSources<'a> {
+    pub fn sub(sources: &[(Timestamp, ShortcutSourceData)], start: Timestamp) -> &[(Timestamp, ShortcutSourceData)] {
+        assert!(sources[0].0.fuzzy_leq(start));
+
+        let pos = sources.binary_search_by(|p| {
+            use std::cmp::Ordering;
+            if p.0.fuzzy_eq(start) {
+                Ordering::Equal
+            } else if p.0 < start {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            }
+        });
+
+        match pos {
+            Ok(i) => &sources[i..],
+            Err(i) => &sources[i - 1..],
+        }
+    }
+}
+
+struct PartialSourcesIter<'a> {
+    sources: &'a [(Timestamp, ShortcutSourceData)],
+    end: Timestamp,
+}
+
+impl<'a> Iterator for PartialSourcesIter<'a> {
+    type Item = (Timestamp, Timestamp, ShortcutSourceData);
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.sources {
+            [] => None,
+            [(start, source)] => {
+                debug_assert!(start.fuzzy_leq(self.end));
+                self.sources = &[];
+                Some((*start, self.end, *source))
+            }
+            [(start, source), rest @ ..] => {
+                debug_assert!(start.fuzzy_leq(self.end));
+                if self.end.fuzzy_leq(rest[0].0) {
+                    self.sources = &[];
+                    Some((*start, self.end, *source))
+                } else {
+                    self.sources = rest;
+                    Some((*start, rest[0].0, *source))
+                }
+            }
+        }
+    }
+}
+
+impl<'a> Sources for PartialSources<'a> {
+    fn reconstruct_exact_ttf(
+        &self,
+        start: Timestamp,
+        end: Timestamp,
+        shortcut_graph: &impl ShortcutGraphTrt,
+        target: &mut MutTopPLF,
+        tmp: &mut ReusablePLFStorage,
+    ) {
+        debug_assert!(self.0[0].0.fuzzy_leq(start));
+        debug_assert!(end.fuzzy_leq(self.1));
+
+        for (sstart, send, s) in (PartialSourcesIter {
+            sources: PartialSources::sub(self.0, start),
+            end,
+        }) {
+            let mut inner_target = tmp.push_plf();
+            ShortcutSource::from(s).reconstruct_exact_ttf(max(start, sstart), send, shortcut_graph, &mut inner_target, target.storage_mut());
+            PartialPiecewiseLinearFunction::new(&inner_target).append(max(start, sstart), target);
+        }
+
+        for points in target.windows(2) {
+            debug_assert!(points[0].at.fuzzy_lt(points[1].at));
+        }
+
+        debug_assert!(!target.last().unwrap().at.fuzzy_lt(end), "{:?}", dbg_each!(self.0, start, end));
     }
 
-    fn wrapping_iter(&self, start: Timestamp, end: Timestamp) -> WrappingSourceIter {
-        WrappingSourceIter {
-            cursor: SourceCursor::valid_at(&self, start),
+    fn get_switchpoints(
+        &self,
+        start: Timestamp,
+        end: Timestamp,
+        shortcut_graph: &impl ShortcutGraphTrt,
+    ) -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight) {
+        debug_assert!(self.0[0].0.fuzzy_leq(start));
+        debug_assert!(end.fuzzy_leq(self.1));
+
+        PartialSourcesIter {
+            sources: PartialSources::sub(self.0, start),
             end,
         }
+        .fold((Vec::new(), FlWeight::ZERO), |(mut switchpoints, _), (sstart, send, s)| {
+            let (cur_switchpoints, end_weight) = ShortcutSource::from(s).get_switchpoints(max(start, sstart), send, shortcut_graph);
+
+            let extension = if switchpoints.last().map(|last| last.1 == cur_switchpoints.first().unwrap().1).unwrap_or(false) {
+                &cur_switchpoints[1..]
+            } else {
+                &cur_switchpoints
+            };
+            switchpoints.extend_from_slice(extension);
+
+            (switchpoints, end_weight)
+        })
+    }
+
+    fn edge_source_at(&self, t: Timestamp) -> Option<ShortcutSourceData> {
+        if self.0.is_empty() {
+            return None;
+        }
+        debug_assert!(self.0[0].0.fuzzy_leq(t));
+        debug_assert!(t.fuzzy_leq(self.1));
+        if self.0.len() == 1 {
+            return Some(self.0[0].1);
+        }
+
+        debug_assert!(self.0.first().map(|&(t, _)| t == Timestamp::ZERO).unwrap_or(true), "{:?}", self.0);
+        match self.0.binary_search_by_key(&t, |(t, _)| *t) {
+            Ok(i) => self.0.get(i),
+            Err(i) => {
+                debug_assert!(self.0.get(i - 1).map(|&(t, _)| t < t).unwrap_or(true));
+                if i < self.0.len() {
+                    debug_assert!(t < self.0[i].0);
+                }
+                self.0.get(i - 1)
+            }
+        }
+        .map(|(_, s)| *s)
     }
 }
 

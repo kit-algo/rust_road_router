@@ -730,34 +730,43 @@ impl<'a> PartialATTF<'a> {
 
         // if both TTFs are exact, we can link exact
         if let (Exact(first), Exact(second)) = (self, second) {
-            let first = first.sub_plf(start, end);
-            let second_start = start + first.eval(start);
-            let second_end = end + first.eval(end);
-            let second = second.sub_plf(second_start, second_end);
-            let mut result = Vec::new();
-            first.link(&second, start, end, &mut result);
-            return ATTFContainer::Exact(result.into());
+            return ATTFContainer::Exact(Self::link_partials(first, second, start, end));
         }
         // else the result will be approximated anyway
 
         let (first_lower, first_upper) = self.bound_plfs();
         let (second_lower, second_upper) = second.bound_plfs();
-        let first_lower = first_lower.sub_plf(start, end);
-        let first_upper = first_upper.sub_plf(start, end);
-        let second_lower_start = start + first_lower.eval(start);
-        let second_upper_start = start + first_upper.eval(start);
-        let second_lower_end = end + first_lower.eval(end);
-        let second_upper_end = end + first_upper.eval(end);
-
-        let mut result_lower = Vec::new();
-        let mut result_upper = Vec::new();
-        first_lower.link(&second_lower.sub_plf(second_lower_start, second_lower_end), start, end, &mut result_lower);
-        first_upper.link(&second_upper.sub_plf(second_upper_start, second_upper_end), start, end, &mut result_upper);
 
         // TODO reusable buffers or something
 
         // linking two upper bounds is a valid upper bound, same for lower bounds
-        ATTFContainer::Approx(result_lower, result_upper)
+        ATTFContainer::Approx(
+            Self::link_partials(&first_lower, &second_lower, start, end),
+            Self::link_partials(&first_upper, &second_upper, start, end),
+        )
+    }
+
+    fn link_partials(first: &PartialPiecewiseLinearFunction, second: &PartialPiecewiseLinearFunction, start: Timestamp, end: Timestamp) -> Vec<TTFPoint> {
+        let mut result = Vec::new();
+        let first = first.sub_plf(start, end);
+        let second_start = start + first.eval(start);
+        let second_end = end + first.eval(end);
+
+        if second_start.fuzzy_eq(second_end) {
+            let second_val = second.eval(second_start);
+            result.push(TTFPoint {
+                at: first.first().unwrap().at,
+                val: first.first().unwrap().val + second_val,
+            });
+            result.push(TTFPoint {
+                at: first.last().unwrap().at,
+                val: first.last().unwrap().val + second_val,
+            });
+        } else {
+            first.link(&second.sub_plf(second_start, second_end), start, end, &mut result);
+        }
+
+        result
     }
 
     // this ones a bit ugly...

@@ -90,6 +90,10 @@ impl PartialShortcut {
         (|| {
             let other_data = ShortcutSource::Shortcut(linked_ids.0, linked_ids.1).into();
 
+            // if linked_ids == (126454, 127116) {
+            //     dbg!();
+            // }
+
             // if one of the edges of the triangle is an infinity edge we don't need to do anything
             if !(shortcut_graph.is_valid_path(ShortcutId::Incoming(linked_ids.0)) && shortcut_graph.is_valid_path(ShortcutId::Outgoing(linked_ids.1))) {
                 return;
@@ -99,9 +103,18 @@ impl PartialShortcut {
                 shortcut_graph.lower_bound(ShortcutId::Incoming(linked_ids.0)) + shortcut_graph.lower_bound(ShortcutId::Outgoing(linked_ids.1));
 
             // current upper bound always better than linked lower bound - do nothing
-            if self.upper_bound.fuzzy_lt(other_lower_bound) {
+            // if self.upper_bound.fuzzy_lt(other_lower_bound) {
+            if self
+                .partial_ttf(shortcut_graph, self.start, self.end)
+                .map(|plf| plf.static_upper_bound().fuzzy_lt(other_lower_bound))
+                .unwrap_or(false)
+            {
                 return;
             }
+
+            // if linked_ids == (126454, 127116) {
+            //     dbg!();
+            // }
 
             // get cached (possibly approximated) TTFs
             let partial_first = shortcut_graph.partial_ttf(ShortcutId::Incoming(linked_ids.0), self.start, self.end);
@@ -160,6 +173,10 @@ impl PartialShortcut {
                 }
             };
 
+            // if linked_ids == (126454, 127116) {
+            //     dbg!();
+            // }
+
             // when the current shortcut is always infinity, the linked paths will always be better.
             if !self.is_valid_path() {
                 if cfg!(feature = "detailed-stats") {
@@ -168,9 +185,9 @@ impl PartialShortcut {
                 // link functions
                 let linked = first_ttf.link(&second_ttf, self.start, self.end);
 
-                if self.upper_bound.fuzzy_lt(PartialATTF::from(&linked).static_lower_bound()) {
-                    return;
-                }
+                // if self.upper_bound.fuzzy_lt(PartialATTF::from(&linked).static_lower_bound()) {
+                //     return;
+                // }
 
                 self.upper_bound = min(self.upper_bound, PartialATTF::from(&linked).static_upper_bound());
                 debug_assert!(
@@ -183,6 +200,10 @@ impl PartialShortcut {
                 self.sources = Sources::One(other_data);
                 return;
             }
+
+            // if linked_ids == (126454, 127116) {
+            //     dbg!();
+            // }
 
             // get own cached TTF
             let self_plf = self.partial_ttf(shortcut_graph, self.start, self.end).unwrap();
@@ -208,6 +229,9 @@ impl PartialShortcut {
             // this can be the case because we set self.lower_bound during precustomization as low as possible
             // if we would compare here to self.lower_bound we might never take that branch, even when we would have to.
             if !self_plf.static_lower_bound().fuzzy_lt(other_upper_bound) {
+                // if linked_ids == (126454, 127116) {
+                //     dbg!();
+                // }
                 // new linked function is always better than the current one
                 self.upper_bound = min(self.upper_bound, other_upper_bound);
                 debug_assert!(
@@ -234,7 +258,10 @@ impl PartialShortcut {
                     UNNECESSARY_LINKED.fetch_add(1, Relaxed);
                 }
                 return;
-            } else if self.upper_bound.fuzzy_lt(other_lower_bound) {
+            } else if self_plf.static_upper_bound().fuzzy_lt(other_lower_bound) {
+                // if linked_ids == (126454, 127116) {
+                //     dbg!(linked);
+                // }
                 // current upper bound always better than linked lower bound - keep whatever we currently have
                 return;
             }
@@ -363,46 +390,49 @@ impl PartialShortcut {
             return;
         }
 
-        let new_lower_bound = if cfg!(feature = "tdcch-precustomization") {
-            max(
-                self.lower_bound,
-                self.partial_ttf(shortcut_graph, self.start, self.end).unwrap().static_lower_bound(),
-            )
-        } else {
-            self.partial_ttf(shortcut_graph, self.start, self.end).unwrap().static_lower_bound()
-        };
+        self.lower_bound = self.partial_ttf(shortcut_graph, self.start, self.end).unwrap().static_lower_bound();
+        self.upper_bound = self.partial_ttf(shortcut_graph, self.start, self.end).unwrap().static_upper_bound();
 
-        // The final functions lower bound is worse than the upper bound this shortcut got during pre/post/perfect customization
-        // Thus, we will never need it.
-        if self.upper_bound.fuzzy_lt(new_lower_bound) {
-            self.required = false;
-            self.sources = Sources::None;
-            self.lower_bound = FlWeight::INFINITY;
-            self.upper_bound = FlWeight::INFINITY;
-            return;
-        }
+        // let new_lower_bound = if cfg!(feature = "tdcch-precustomization") {
+        //     max(
+        //         self.lower_bound,
+        //         self.partial_ttf(shortcut_graph, self.start, self.end).unwrap().static_lower_bound(),
+        //     )
+        // } else {
+        //     self.partial_ttf(shortcut_graph, self.start, self.end).unwrap().static_lower_bound()
+        // };
 
-        debug_assert!(
-            !cfg!(feature = "tdcch-precustomization") || !new_lower_bound.fuzzy_lt(self.lower_bound),
-            "{:?}, {:?}",
-            new_lower_bound,
-            self
-        );
-        debug_assert!(!self.upper_bound.fuzzy_lt(new_lower_bound), "{:?}, {:?}", new_lower_bound, self);
-        self.lower_bound = new_lower_bound;
+        // // The final functions lower bound is worse than the upper bound this shortcut got during pre/post/perfect customization
+        // // Thus, we will never need it.
+        // if self.upper_bound.fuzzy_lt(new_lower_bound) {
+        //     self.required = false;
+        //     self.sources = Sources::None;
+        //     self.lower_bound = FlWeight::INFINITY;
+        //     self.upper_bound = FlWeight::INFINITY;
+        //     return;
+        // }
 
-        // upper bound was already set as tight as possible during merging.
-        debug_assert!(
-            self.upper_bound
-                .fuzzy_leq(self.partial_ttf(shortcut_graph, self.start, self.end).unwrap().static_upper_bound()),
-            "{:#?}",
-            (
-                self.lower_bound,
-                self.upper_bound,
-                &self.sources,
-                self.partial_ttf(shortcut_graph, self.start, self.end).unwrap().static_upper_bound()
-            )
-        );
+        // debug_assert!(
+        //     !cfg!(feature = "tdcch-precustomization") || !new_lower_bound.fuzzy_lt(self.lower_bound),
+        //     "{:?}, {:?}",
+        //     new_lower_bound,
+        //     self
+        // );
+        // debug_assert!(!self.upper_bound.fuzzy_lt(new_lower_bound), "{:?}, {:?}", new_lower_bound, self);
+        // self.lower_bound = new_lower_bound;
+
+        // // upper bound was already set as tight as possible during merging.
+        // debug_assert!(
+        //     self.upper_bound
+        //         .fuzzy_leq(self.partial_ttf(shortcut_graph, self.start, self.end).unwrap().static_upper_bound()),
+        //     "{:#?}",
+        //     (
+        //         self.lower_bound,
+        //         self.upper_bound,
+        //         &self.sources,
+        //         self.partial_ttf(shortcut_graph, self.start, self.end).unwrap().static_upper_bound()
+        //     )
+        // );
     }
 
     /// If Shortcuts in skipped triangles are not required, the corresponding `Source` in this shortcut is also not required, so remove it
@@ -499,7 +529,7 @@ impl PartialShortcut {
         match &self.sources {
             Sources::None => unreachable!("There are no TTFs for empty shortcuts"),
             Sources::One(source) => ShortcutSource::from(*source).reconstruct_exact_ttf(start, end, shortcut_graph, target, tmp),
-            Sources::Multi(sources) => sources.reconstruct_exact_ttf(start, end, shortcut_graph, target, tmp),
+            Sources::Multi(sources) => PartialSources(sources, self.end).reconstruct_exact_ttf(start, end, shortcut_graph, target, tmp),
         }
 
         debug_assert!(!target.last().unwrap().at.fuzzy_lt(end), "{:?}", dbg_each!(self, start, end));
@@ -509,15 +539,9 @@ impl PartialShortcut {
         self.sources.len()
     }
 
-    /// Returns an iterator over all the sources combined with a Timestamp for the time from which the corresponding source becomes valid.
+    // Returns an iterator over all the sources combined with a Timestamp for the time from which the corresponding source becomes valid.
     pub fn sources_iter<'s>(&'s self) -> impl Iterator<Item = (Timestamp, ShortcutSourceData)> + 's {
-        self.sources_for(self.start, self.end)
-    }
-
-    pub fn sources_for<'s>(&'s self, start: Timestamp, end: Timestamp) -> impl Iterator<Item = (Timestamp, ShortcutSourceData)> + 's {
-        debug_assert!(self.start.fuzzy_leq(start));
-        debug_assert!(end.fuzzy_leq(self.end));
-        self.sources.wrapping_iter_for(start, end)
+        self.sources.iter(self.start)
     }
 
     pub fn is_constant(&self) -> bool {
@@ -535,17 +559,17 @@ impl PartialShortcut {
         match &self.sources {
             Sources::None => unreachable!("There are no TTFs for empty shortcuts"),
             Sources::One(source) => ShortcutSource::from(*source).get_switchpoints(start, end, shortcut_graph),
-            Sources::Multi(sources) => sources.get_switchpoints(start, end, shortcut_graph),
+            Sources::Multi(sources) => PartialSources(sources, self.end).get_switchpoints(start, end, shortcut_graph),
         }
     }
 
     pub fn unpack_at(&self, t: Timestamp, shortcut_graph: &impl ShortcutGraphTrt, result: &mut Vec<(EdgeId, Timestamp)>) {
         debug_assert!(self.start.fuzzy_leq(t));
         debug_assert!(t.fuzzy_leq(self.end));
-        ShortcutSource::from(*match &self.sources {
+        ShortcutSource::from(match &self.sources {
             Sources::None => unreachable!("There are no paths for empty shortcuts"),
-            Sources::One(source) => source,
-            Sources::Multi(sources) => sources.edge_source_at(t).unwrap(),
+            Sources::One(source) => *source,
+            Sources::Multi(sources) => PartialSources(sources, self.end).edge_source_at(t).unwrap(),
         })
         .unpack_at(t, shortcut_graph, result)
     }
@@ -558,10 +582,10 @@ impl PartialShortcut {
             return self.lower_bound;
         }
 
-        ShortcutSource::from(*match &self.sources {
+        ShortcutSource::from(match &self.sources {
             Sources::None => return FlWeight::INFINITY,
-            Sources::One(source) => source,
-            Sources::Multi(sources) => sources.edge_source_at(t).unwrap(),
+            Sources::One(source) => *source,
+            Sources::Multi(sources) => PartialSources(sources, self.end).edge_source_at(t).unwrap(),
         })
         .evaluate(t, shortcut_graph)
     }

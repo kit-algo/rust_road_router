@@ -525,7 +525,7 @@ impl LiveShortcut {
         match &self.sources {
             Sources::None => unreachable!("There are no TTFs for empty shortcuts"),
             Sources::One(source) => ShortcutSource::from(*source).reconstruct_exact_ttf(start, end, shortcut_graph, target, tmp),
-            Sources::Multi(sources) => sources.reconstruct_exact_ttf(start, end, shortcut_graph, target, tmp),
+            Sources::Multi(sources) => PartialSources(sources, todo!()).reconstruct_exact_ttf(start, end, shortcut_graph, target, tmp),
         }
 
         debug_assert!(!target.last().unwrap().at.fuzzy_lt(end), "{:?}", dbg_each!(self, start, end));
@@ -537,13 +537,8 @@ impl LiveShortcut {
 
     /// Returns an iterator over all the sources combined with a Timestamp for the time from which the corresponding source becomes valid.
     pub fn sources_iter<'s>(&'s self) -> impl Iterator<Item = (Timestamp, ShortcutSourceData)> + 's {
-        self.sources.iter(todo!(), todo!())
+        self.sources.iter(todo!())
     }
-
-    pub fn sources_for<'s>(&'s self, start: Timestamp, end: Timestamp) -> impl Iterator<Item = (Timestamp, ShortcutSourceData)> + 's {
-        self.sources.wrapping_iter_for(start, end)
-    }
-
     pub fn is_constant(&self) -> bool {
         self.constant
     }
@@ -557,15 +552,15 @@ impl LiveShortcut {
         match &self.sources {
             Sources::None => unreachable!("There are no TTFs for empty shortcuts"),
             Sources::One(source) => ShortcutSource::from(*source).get_switchpoints(start, end, shortcut_graph),
-            Sources::Multi(sources) => sources.get_switchpoints(start, end, shortcut_graph),
+            Sources::Multi(sources) => PartialSources(sources, todo!()).get_switchpoints(start, end, shortcut_graph),
         }
     }
 
     pub fn unpack_at(&self, t: Timestamp, shortcut_graph: &impl ShortcutGraphTrt, result: &mut Vec<(EdgeId, Timestamp)>) {
-        ShortcutSource::from(*match &self.sources {
+        ShortcutSource::from(match &self.sources {
             Sources::None => unreachable!("There are no paths for empty shortcuts"),
-            Sources::One(source) => source,
-            Sources::Multi(sources) => sources.edge_source_at(t).unwrap(),
+            Sources::One(source) => *source,
+            Sources::Multi(sources) => PartialSources(sources, todo!()).edge_source_at(t).unwrap(),
         })
         .unpack_at(t, shortcut_graph, result)
     }
@@ -575,10 +570,10 @@ impl LiveShortcut {
             return self.lower_bound;
         }
 
-        ShortcutSource::from(*match &self.sources {
+        ShortcutSource::from(match &self.sources {
             Sources::None => return FlWeight::INFINITY,
-            Sources::One(source) => source,
-            Sources::Multi(sources) => sources.edge_source_at(t).unwrap(),
+            Sources::One(source) => *source,
+            Sources::Multi(sources) => PartialSources(sources, todo!()).edge_source_at(t).unwrap(),
         })
         .evaluate(t, shortcut_graph)
     }

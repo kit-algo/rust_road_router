@@ -425,7 +425,7 @@ impl Shortcut {
         match &self.sources {
             Sources::None => unreachable!("There are no TTFs for empty shortcuts"),
             Sources::One(source) => ShortcutSource::from(*source).reconstruct_exact_ttf(start, end, shortcut_graph, target, tmp),
-            Sources::Multi(sources) => sources.reconstruct_exact_ttf(start, end, shortcut_graph, target, tmp),
+            Sources::Multi(sources) => PeriodicSources(sources).reconstruct_exact_ttf(start, end, shortcut_graph, target, tmp),
         }
 
         debug_assert!(!target.last().unwrap().at.fuzzy_lt(end), "{:?}", dbg_each!(self, start, end));
@@ -437,7 +437,7 @@ impl Shortcut {
 
     /// Returns an iterator over all the sources combined with a Timestamp for the time from which the corresponding source becomes valid.
     pub fn sources_iter<'s>(&'s self) -> impl Iterator<Item = (Timestamp, ShortcutSourceData)> + 's {
-        self.sources_for(Timestamp::ZERO, period())
+        self.sources.iter(Timestamp::ZERO)
     }
 
     pub fn sources_for<'s>(&'s self, start: Timestamp, end: Timestamp) -> impl Iterator<Item = (Timestamp, ShortcutSourceData)> + 's {
@@ -457,15 +457,15 @@ impl Shortcut {
         match &self.sources {
             Sources::None => unreachable!("There are no TTFs for empty shortcuts"),
             Sources::One(source) => ShortcutSource::from(*source).get_switchpoints(start, end, shortcut_graph),
-            Sources::Multi(sources) => sources.get_switchpoints(start, end, shortcut_graph),
+            Sources::Multi(sources) => PeriodicSources(sources).get_switchpoints(start, end, shortcut_graph),
         }
     }
 
     pub fn unpack_at(&self, t: Timestamp, shortcut_graph: &impl ShortcutGraphTrt, result: &mut Vec<(EdgeId, Timestamp)>) {
-        ShortcutSource::from(*match &self.sources {
+        ShortcutSource::from(match &self.sources {
             Sources::None => unreachable!("There are no paths for empty shortcuts"),
-            Sources::One(source) => source,
-            Sources::Multi(sources) => sources.edge_source_at(t).unwrap(),
+            Sources::One(source) => *source,
+            Sources::Multi(sources) => PeriodicSources(sources).edge_source_at(t).unwrap(),
         })
         .unpack_at(t, shortcut_graph, result)
     }
@@ -475,10 +475,10 @@ impl Shortcut {
             return self.lower_bound;
         }
 
-        ShortcutSource::from(*match &self.sources {
+        ShortcutSource::from(match &self.sources {
             Sources::None => return FlWeight::INFINITY,
-            Sources::One(source) => source,
-            Sources::Multi(sources) => sources.edge_source_at(t).unwrap(),
+            Sources::One(source) => *source,
+            Sources::Multi(sources) => PeriodicSources(sources).edge_source_at(t).unwrap(),
         })
         .evaluate(t, shortcut_graph)
     }
@@ -493,19 +493,22 @@ pub enum Sources {
 }
 
 impl Sources {
-    pub fn wrapping_iter_for(&self, start: Timestamp, end: Timestamp) -> SourcesIter {
+    pub fn wrapping_iter_for(&self, start: Timestamp, end: Timestamp) -> SourcesIter<WrappingSourceIter<'_>> {
         match self {
             Sources::None => SourcesIter::None,
             Sources::One(source) => SourcesIter::One(start, std::iter::once(*source)),
-            Sources::Multi(sources) => SourcesIter::Multi(sources.wrapping_iter(start, end)),
+            Sources::Multi(sources) => SourcesIter::Multi(WrappingSourceIter {
+                cursor: SourceCursor::valid_at(sources, start),
+                end,
+            }),
         }
     }
 
-    pub fn iter(&self, start: Timestamp, end: Timestamp) -> SourcesIter {
+    pub fn iter(&self, start: Timestamp) -> SourcesIter<impl Iterator<Item = (Timestamp, ShortcutSourceData)> + '_> {
         match self {
             Sources::None => SourcesIter::None,
             Sources::One(source) => SourcesIter::One(start, std::iter::once(*source)),
-            Sources::Multi(sources) => SourcesIter::Multi(sources.wrapping_iter(start, end)),
+            Sources::Multi(sources) => SourcesIter::Multi(PartialSources::sub(sources, start).iter().copied()),
         }
     }
 
@@ -542,7 +545,10 @@ impl Sources {
         // while self is better we need to copy these over
         // when other becomes better at an intersection we need to insert other_data at the intersection time
         // when self becomes better at an intersection we need to insert the source that was active at that time in the old sources at the new intersection time.
-        for (at, source) in self.iter(start, end) {
+        for (at, source) in self.iter(start) {
+            if end.fuzzy_lt(at) {
+                break;
+            }
             if intersection_iter.peek().is_none() || at < intersection_iter.peek().unwrap().0 {
                 if self_currently_better {
                     if new_sources.last().map(|&(last_at, _)| last_at.fuzzy_eq(at)).unwrap_or(false) {
@@ -588,6 +594,9 @@ impl Sources {
 
         // intersections after the last old source
         for &(at, is_self_better) in intersection_iter {
+            if end.fuzzy_lt(at) {
+                break;
+            }
             if is_self_better {
                 new_sources.push((at, prev_source));
             } else {
@@ -616,13 +625,13 @@ impl Sources {
 }
 
 #[derive(Debug)]
-pub enum SourcesIter<'a> {
+pub enum SourcesIter<I> {
     None,
     One(Timestamp, std::iter::Once<ShortcutSourceData>),
-    Multi(WrappingSourceIter<'a>),
+    Multi(I),
 }
 
-impl<'a> Iterator for SourcesIter<'a> {
+impl<I: Iterator<Item = (Timestamp, ShortcutSourceData)>> Iterator for SourcesIter<I> {
     type Item = (Timestamp, ShortcutSourceData);
 
     fn next(&mut self) -> Option<Self::Item> {

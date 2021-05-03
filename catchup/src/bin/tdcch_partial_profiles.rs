@@ -34,8 +34,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         for _ in 0..50 {
             let _tdcch_query_ctxt = algo_runs_ctxt.push_collection_item();
             eprintln!();
+
             let from: NodeId = rng.gen_range(0..n as NodeId);
             let to: NodeId = rng.gen_range(0..n as NodeId);
+            // let from = 155;
+            // let to = 16713;
+            // let from = 8143630;
+            // let to = 3214074;
+
             report!("from", from);
             report!("to", to);
 

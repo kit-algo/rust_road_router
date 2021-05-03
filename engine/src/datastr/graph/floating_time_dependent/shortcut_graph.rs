@@ -531,7 +531,7 @@ impl<'a> CustomizedGraph<'a> {
 
     pub fn evaluate_and_path_length(&self, shortcut_id: ShortcutId, t: Timestamp) -> (FlWeight, usize) {
         ShortcutSource::from(
-            *shortcut_id
+            shortcut_id
                 .get_with(&self.incoming, &self.outgoing, |g_dir, id| g_dir.edge_source_at(id, t))
                 .unwrap(),
         )
@@ -668,7 +668,7 @@ impl CustomizedSingleDirGraph {
             debug_assert_eq!(
                 self.bounds[edge_idx].0,
                 self.edge_source_at(edge_id, t)
-                    .map(|&source| ShortcutSource::from(source).evaluate(t, customized_graph))
+                    .map(|source| ShortcutSource::from(source).evaluate(t, customized_graph))
                     .unwrap_or(FlWeight::INFINITY),
                 "{:?}, {:?}, {}",
                 self.bounds[edge_idx],
@@ -679,7 +679,7 @@ impl CustomizedSingleDirGraph {
         }
 
         self.edge_source_at(edge_id, t)
-            .map(|&source| ShortcutSource::from(source).evaluate_opt(t, customized_graph, f))
+            .map(|source| ShortcutSource::from(source).evaluate_opt(t, customized_graph, f))
             .unwrap_or(FlWeight::INFINITY)
     }
 
@@ -712,7 +712,7 @@ impl CustomizedSingleDirGraph {
                 edge_id,
             ));
         }
-        self.edge_source_at(edge_id, t).map(|&source| match source.into() {
+        self.edge_source_at(edge_id, t).map(|source| match source.into() {
             ShortcutSource::Shortcut(down, up) => {
                 mark_upward(up);
                 let lower_bound_to_middle = customized_graph.outgoing.bounds()[up as usize].0 + lower_bound_target;
@@ -774,12 +774,12 @@ impl CustomizedSingleDirGraph {
     /// Recursively unpack the edge with the given id at the given timestamp and add the path to `result`
     pub fn unpack_at(&self, edge_id: EdgeId, t: Timestamp, customized_graph: &CustomizedGraph, result: &mut Vec<(EdgeId, Timestamp)>) {
         self.edge_source_at(edge_id, t)
-            .map(|&source| ShortcutSource::from(source).unpack_at(t, customized_graph, result))
+            .map(|source| ShortcutSource::from(source).unpack_at(t, customized_graph, result))
             .expect("can't unpack empty shortcut");
     }
 
-    fn edge_source_at(&self, edge_id: EdgeId, t: Timestamp) -> Option<&ShortcutSourceData> {
-        self.edge_sources(edge_id).edge_source_at(t)
+    fn edge_source_at(&self, edge_id: EdgeId, t: Timestamp) -> Option<ShortcutSourceData> {
+        PeriodicSources(self.edge_sources(edge_id)).edge_source_at(t)
     }
 
     /// Borrow slice of all the source of the edge with given id.
@@ -832,18 +832,15 @@ impl<'a> ShortcutGraphTrt for CustomizedGraph<'a> {
         &self.original_graph
     }
     fn reconstruct_exact_ttf(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp, target: &mut MutTopPLF, tmp: &mut ReusablePLFStorage) {
-        shortcut_id
-            .get_with(&self.incoming, &self.outgoing, CustomizedSingleDirGraph::edge_sources)
+        PeriodicSources(shortcut_id.get_with(&self.incoming, &self.outgoing, CustomizedSingleDirGraph::edge_sources))
             .reconstruct_exact_ttf(start, end, self, target, tmp)
     }
     fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight) {
-        shortcut_id
-            .get_with(&self.incoming, &self.outgoing, CustomizedSingleDirGraph::edge_sources)
-            .get_switchpoints(start, end, self)
+        PeriodicSources(shortcut_id.get_with(&self.incoming, &self.outgoing, CustomizedSingleDirGraph::edge_sources)).get_switchpoints(start, end, self)
     }
     fn unpack_at(&self, shortcut_id: ShortcutId, t: Timestamp, result: &mut Vec<(EdgeId, Timestamp)>) {
         ShortcutSource::from(
-            *shortcut_id
+            shortcut_id
                 .get_with(&self.incoming, &self.outgoing, |g_dir, id| g_dir.edge_source_at(id, t))
                 .unwrap(),
         )
@@ -851,7 +848,7 @@ impl<'a> ShortcutGraphTrt for CustomizedGraph<'a> {
     }
     fn evaluate(&self, shortcut_id: ShortcutId, t: Timestamp) -> FlWeight {
         ShortcutSource::from(
-            *shortcut_id
+            shortcut_id
                 .get_with(&self.incoming, &self.outgoing, |g_dir, id| g_dir.edge_source_at(id, t))
                 .unwrap(),
         )
@@ -1569,7 +1566,7 @@ impl<'a> ShortcutGraphTrt for ReconstructedGraph<'a> {
         match dir_graph.edge_sources(edge_id) {
             &[] => unreachable!("There are no TTFs for empty shortcuts"),
             &[(_, source)] => ShortcutSource::from(source).reconstruct_exact_ttf(start, end, self, target, tmp),
-            sources => sources.reconstruct_exact_ttf(start, end, self, target, tmp),
+            sources => PeriodicSources(sources).reconstruct_exact_ttf(start, end, self, target, tmp),
         }
     }
     fn get_switchpoints(&self, shortcut_id: ShortcutId, start: Timestamp, end: Timestamp) -> (Vec<(Timestamp, Vec<EdgeId>, FlWeight)>, FlWeight) {
@@ -1580,12 +1577,12 @@ impl<'a> ShortcutGraphTrt for ReconstructedGraph<'a> {
         ) {
             &[] => unreachable!("There are no switchpoints for empty shortcuts"),
             &[(_, source)] => ShortcutSource::from(source).get_switchpoints(start, end, self),
-            sources => sources.get_switchpoints(start, end, self),
+            sources => PeriodicSources(sources).get_switchpoints(start, end, self),
         }
     }
     fn unpack_at(&self, shortcut_id: ShortcutId, t: Timestamp, result: &mut Vec<(EdgeId, Timestamp)>) {
         ShortcutSource::from(
-            *shortcut_id
+            shortcut_id
                 .get_with(&self.customized_graph.incoming, &self.customized_graph.outgoing, |g_dir, id| {
                     g_dir.edge_source_at(id, t)
                 })
@@ -1595,7 +1592,7 @@ impl<'a> ShortcutGraphTrt for ReconstructedGraph<'a> {
     }
     fn evaluate(&self, shortcut_id: ShortcutId, t: Timestamp) -> FlWeight {
         ShortcutSource::from(
-            *shortcut_id
+            shortcut_id
                 .get_with(&self.customized_graph.incoming, &self.customized_graph.outgoing, |g_dir, id| {
                     g_dir.edge_source_at(id, t)
                 })
@@ -1767,6 +1764,14 @@ impl<'a> PartialProfileGraphWrapper<'a> {
                 shortcut_id.get_mut_from(incoming_reconstruction_states, outgoing_reconstruction_states),
             );
 
+            for &(start, end) in &state.requested_times {
+                debug_assert!(end - start < FlWeight::new(3600.0 * 3.0));
+            }
+
+            // dbg!(shortcut_id, &state);
+            // if matches!(shortcut_id, ShortcutId::Outgoing(127119)) {
+            // }
+
             if self.delegate(shortcut_id) {
                 self.cache_orig_shortcut_iterative_iteration(
                     shortcut_id,
@@ -1904,9 +1909,13 @@ impl<'a> PartialProfileGraphWrapper<'a> {
 
         for (start, end) in state.requested_times.drain(..) {
             let bounds = bounds(shortcut_id);
-            let inserts = PartialTrt::missing(self.get(shortcut_id), start, end)
+            // if matches!(shortcut_id, ShortcutId::Outgoing(127119)) {
+            //     dbg!(shortcut_id, start, end, bounds);
+            // }
+            let inserts: Vec<_> = PartialTrt::missing(self.get(shortcut_id), start, end)
                 .into_iter()
                 .map(|(start, end)| {
+                    debug_assert!(start.fuzzy_lt(end));
                     let mut shortcut = PartialShortcut::new_finished(start, end, &[], bounds);
 
                     let mut triangles = Vec::new();
@@ -1917,19 +1926,21 @@ impl<'a> PartialProfileGraphWrapper<'a> {
                         ));
                     });
                     triangles.sort_by_key(|&(_, bound)| bound);
-                    let num_triang = triangles.len();
-                    for (triangle, _) in triangles {
+                    for &(triangle, _) in &triangles {
                         shortcut.merge(triangle, self, buffers);
                     }
-                    debug_assert!(
-                        shortcut.partial_ttf(self, start, end).is_some(),
-                        "{:#?}",
-                        (start, end, shortcut_id, num_triang, shortcut)
-                    );
                     shortcut.finalize_bounds(self);
+                    debug_assert!(
+                        shortcut.partial_ttf(self, start, end).is_some() || !shortcut.is_valid_path(),
+                        "{:#?}",
+                        (start, end, shortcut_id, triangles, shortcut)
+                    );
                     shortcut
                 })
                 .collect();
+            // if matches!(shortcut_id, ShortcutId::Outgoing(127119)) {
+            //     dbg!(&inserts);
+            // }
             PartialTrt::insert_all(self.get_mut(shortcut_id), inserts);
             debug_assert!(self.ttf_available(shortcut_id, start, end));
         }
@@ -2144,8 +2155,15 @@ impl<'a> ShortcutGraphTrt for PartialProfileGraphWrapper<'a> {
                 .and_then(|shortcut| shortcut.partial_ttf(self, start, end))
         }
     }
-    fn is_valid_path(&self, _shortcut_id: ShortcutId) -> bool {
-        true
+    fn is_valid_path(&self, shortcut_id: ShortcutId) -> bool {
+        if self.delegate(shortcut_id) {
+            return self.profile_graph.as_reconstructed().is_valid_path(shortcut_id);
+        }
+        if self.is_dummy(shortcut_id) {
+            true
+        } else {
+            self.get(shortcut_id).iter().any(|s| s.is_valid_path())
+        }
     }
     fn lower_bound(&self, shortcut_id: ShortcutId) -> FlWeight {
         if self.delegate(shortcut_id) {

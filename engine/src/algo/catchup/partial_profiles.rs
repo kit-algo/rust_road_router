@@ -400,6 +400,13 @@ impl<'a> Server<'a> {
         };
 
         let st_shortcut_id = customized_graph.outgoing.head().len() + up_shortcuts.len() - 1;
+        // dbg!(customized_graph.incoming.head().len());
+        // dbg!(down_shortcuts.len());
+        // dbg!(customized_graph.incoming.head().len() + down_shortcuts.len());
+        // dbg!(customized_graph.outgoing.head().len());
+        // dbg!(up_shortcuts.len());
+        // dbg!(customized_graph.outgoing.head().len() + up_shortcuts.len());
+        // dbg!(st_shortcut_id);
         let mut profile_graph = PartialProfileGraphWrapper {
             profile_graph: &mut reconstruction_graph,
             down_shortcuts: &mut down_shortcuts[..],
