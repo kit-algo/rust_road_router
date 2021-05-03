@@ -4,8 +4,7 @@
 
 #[macro_use]
 extern crate rocket;
-#[macro_use]
-extern crate serde_derive;
+use serde::{Deserialize, Serialize};
 
 use std::{
     env,
@@ -133,7 +132,7 @@ fn here_query(query_params: Form<HereQuery>, state: State<Mutex<Sender<Request>>
 #[derive(Debug)]
 struct SerializedWeight(Weight);
 
-use serde::de::{Deserialize, Deserializer};
+use serde::de::Deserializer;
 use serde_json::Value;
 
 impl<'de> Deserialize<'de> for SerializedWeight {
