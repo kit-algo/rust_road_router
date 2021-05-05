@@ -4,7 +4,10 @@ use super::generic_dijkstra::*;
 use super::*;
 use crate::datastr::{index_heap::*, timestamped_vector::*};
 
-pub struct GenTopoDijkstra<Ops: DijkstraOps<Graph>, Graph> {
+pub struct GenTopoDijkstra<Graph = OwnedGraph, Ops = DefaultOps>
+where
+    Ops: DijkstraOps<Graph>,
+{
     graph: Graph,
 
     distances: TimestampedVector<Ops::Label>,
@@ -24,10 +27,9 @@ struct ChainStep<LinkResult> {
     next_distance: LinkResult,
 }
 
-impl<Ops, Graph> GenTopoDijkstra<Ops, Graph>
+impl<Graph, Ops> GenTopoDijkstra<Graph, Ops>
 where
     Ops: DijkstraOps<Graph>,
-    <Ops::Label as super::Label>::Key: std::ops::Add<Output = <Ops::Label as super::Label>::Key>,
     Graph: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, Ops::Arc> + SymmetricDegreeGraph,
 {
     pub fn new(graph: Graph) -> Self

@@ -2,12 +2,15 @@ use super::*;
 
 use crate::datastr::rank_select_map::FastClearBitVec;
 use crate::{
-    algo::{dijkstra::gen_topo_dijkstra::*, topocore::*},
+    algo::{a_star::ZeroPotential, dijkstra::gen_topo_dijkstra::*, topocore::*},
     datastr::graph::time_dependent::*,
 };
 
-pub struct Server<P, Ops: DijkstraOps<Graph>, Graph> {
-    forward_dijkstra: GenTopoDijkstra<VirtualTopocoreOps<Ops>, VirtualTopocoreGraph<Graph>>,
+pub struct Server<Graph = OwnedGraph, Ops = DefaultOps, P = ZeroPotential>
+where
+    Ops: DijkstraOps<Graph>,
+{
+    forward_dijkstra: GenTopoDijkstra<VirtualTopocoreGraph<Graph>, VirtualTopocoreOps<Ops>>,
     #[cfg(not(feature = "chpot-no-bcc"))]
     into_comp_graph: VirtualTopocoreGraph<Graph>,
     #[cfg(not(feature = "chpot-no-bcc"))]
@@ -20,7 +23,7 @@ pub struct Server<P, Ops: DijkstraOps<Graph>, Graph> {
     visited: FastClearBitVec,
 }
 
-impl<P: Potential, Ops: DijkstraOps<Graph, Label = Timestamp>, Graph> Server<P, Ops, Graph>
+impl<Graph, Ops: DijkstraOps<Graph, Label = Timestamp>, P: Potential> Server<Graph, Ops, P>
 where
     Graph: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, Ops::Arc>,
 {
@@ -105,7 +108,7 @@ where
     fn distance(
         &mut self,
         mut query: impl GenQuery<Timestamp> + Copy,
-        mut inspect: impl FnMut(NodeId, &NodeOrder, &GenTopoDijkstra<VirtualTopocoreOps<Ops>, VirtualTopocoreGraph<Graph>>, &mut P),
+        mut inspect: impl FnMut(NodeId, &NodeOrder, &GenTopoDijkstra<VirtualTopocoreGraph<Graph>, VirtualTopocoreOps<Ops>>, &mut P),
     ) -> Option<Weight> {
         let to = query.to();
         query.permutate(&self.virtual_topocore.order);
@@ -239,14 +242,15 @@ where
         }
 
         path.reverse();
+        // permute path back??
 
         path
     }
 }
 
-pub struct PathServerWrapper<'s, P, O: DijkstraOps<G>, G, Q>(&'s mut Server<P, O, G>, Q);
+pub struct PathServerWrapper<'s, G, O: DijkstraOps<G>, P, Q>(&'s mut Server<G, O, P>, Q);
 
-impl<'s, P, O, G, Q> PathServer for PathServerWrapper<'s, P, O, G, Q>
+impl<'s, G, O, P, Q> PathServer for PathServerWrapper<'s, G, O, P, Q>
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
@@ -260,7 +264,7 @@ where
     }
 }
 
-impl<'s, P, O, G, Q> PathServerWrapper<'s, P, O, G, Q>
+impl<'s, G, O, P, Q> PathServerWrapper<'s, G, O, P, Q>
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
@@ -295,13 +299,13 @@ where
     }
 }
 
-impl<'s, P: 's, O: 's, G: 's> TDQueryServer<'s, Timestamp, Weight> for Server<P, O, G>
+impl<'s, G: 's, O: 's, P: 's> TDQueryServer<'s, Timestamp, Weight> for Server<G, O, P>
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
     G: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, O::Arc>,
 {
-    type P = PathServerWrapper<'s, P, O, G, TDQuery<Timestamp>>;
+    type P = PathServerWrapper<'s, G, O, P, TDQuery<Timestamp>>;
 
     fn query(&'s mut self, query: TDQuery<Timestamp>) -> Option<QueryResult<Self::P, Weight>> {
         self.distance(query, |_, _, _, _| ())
@@ -309,13 +313,13 @@ where
     }
 }
 
-impl<'s, P: 's, O: 's, G: 's> QueryServer<'s> for Server<P, O, G>
+impl<'s, G: 's, O: 's, P: 's> QueryServer<'s> for Server<G, O, P>
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
     G: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, O::Arc>,
 {
-    type P = PathServerWrapper<'s, P, O, G, Query>;
+    type P = PathServerWrapper<'s, G, O, P, Query>;
 
     fn query(&'s mut self, query: Query) -> Option<QueryResult<Self::P, Weight>> {
         self.distance(query, |_, _, _, _| ())

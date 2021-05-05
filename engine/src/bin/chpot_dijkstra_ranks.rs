@@ -96,7 +96,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
-    let mut topocore: TopoServer<_, _, OwnedGraph> = {
+    let mut topocore: TopoServer<OwnedGraph, _, _> = {
         #[cfg(feature = "chpot_visualize")]
         {
             TopoServer::new(&modified_graph, potential, DefaultOps::default(), &lat, &lng)

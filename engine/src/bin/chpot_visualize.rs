@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // let reversed = OwnedGraph::reversed(&graph);
     let potential = BaselinePotential::new(&graph);
     // let backward_potential = BaselinePotential::new(&reversed);
-    let mut topocore: TopoServer<_, _, OwnedGraph> = TopoServer::new(&modified_graph, potential, DefaultOps::default());
+    let mut topocore: TopoServer<OwnedGraph, _, _> = TopoServer::new(&modified_graph, potential, DefaultOps::default());
     // let mut bidir_dijk_server = BiDirServer::new_with_potentials(modified_graph, potential, backward_potential);
 
     let from_lat = 49.0138685;
