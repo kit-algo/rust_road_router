@@ -139,3 +139,19 @@ impl<PF: Potential, PB: Potential> AveragePotential<PF, PB> {
             .and_then(|dist_t| self.backward_potential.potential(node).map(|dist_s| (dist_t as i32 - dist_s as i32) / 2))
     }
 }
+
+#[derive(Debug)]
+pub struct PotentialForPermutated<P> {
+    pub potential: P,
+    pub order: NodeOrder,
+}
+
+impl<P: Potential> Potential for PotentialForPermutated<P> {
+    fn init(&mut self, target: NodeId) {
+        self.potential.init(self.order.node(target))
+    }
+
+    fn potential(&mut self, node: NodeId) -> Option<Weight> {
+        self.potential.potential(self.order.node(node))
+    }
+}

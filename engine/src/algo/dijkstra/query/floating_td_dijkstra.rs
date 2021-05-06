@@ -81,6 +81,7 @@ impl<'s> TDQueryServer<'s, Timestamp, FlWeight> for Server {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 struct FlTDDijkstraOps();
 
 impl DijkstraOps<TDGraph> for FlTDDijkstraOps {

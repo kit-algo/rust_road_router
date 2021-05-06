@@ -573,14 +573,14 @@ impl<Graph> VirtualTopocoreGraph<Graph> {
             VirtualTopocoreGraph {
                 graph: <Graph as BuildPermutated<G>>::permutated_filtered(&graph, &topocore.order, {
                     let topocore = topocore.clone();
-                    Box::new(move |t, h| !topocore.node_type(t).in_core() || topocore.node_type(h).in_core())
+                    Box::new(move |t, h| topocore.node_type(t).in_core() && topocore.node_type(h).in_core())
                 }),
                 virtual_topocore: topocore.clone(),
             },
             VirtualTopocoreGraph {
                 graph: <Graph as BuildPermutated<G>>::permutated_filtered(&graph, &topocore.order, {
                     let topocore = topocore.clone();
-                    Box::new(move |t, h| !(topocore.node_type(t).in_core() && topocore.node_type(h).in_core()))
+                    Box::new(move |t, h| !topocore.node_type(t).in_core() || !topocore.node_type(h).in_core())
                 }),
                 virtual_topocore: topocore.clone(),
             },

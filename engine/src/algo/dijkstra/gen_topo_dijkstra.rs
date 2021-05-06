@@ -194,6 +194,10 @@ where
         })
     }
 
+    pub fn overwrite_distance(&mut self, node: NodeId, dist: Ops::Label) {
+        self.distances[node as usize] = dist;
+    }
+
     pub fn reinit_queue(&mut self, node: NodeId) {
         self.queue.clear();
         self.queue.push(State {

@@ -5,7 +5,7 @@ use crate::algo::dijkstra::gen_topo_dijkstra::Neutral;
 use crate::datastr::{index_heap::*, timestamped_vector::*};
 use std::borrow::Borrow;
 
-pub trait DijkstraOps<Graph> {
+pub trait DijkstraOps<Graph>: Copy {
     type Label: super::Label + Clone;
     type Arc: Arc;
     type LinkResult;
@@ -14,6 +14,7 @@ pub trait DijkstraOps<Graph> {
     fn merge(&mut self, label: &mut Self::Label, linked: Self::LinkResult) -> bool;
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct DefaultOps();
 
 impl<G> DijkstraOps<G> for DefaultOps {

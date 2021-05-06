@@ -15,6 +15,7 @@ pub mod time_dependent_sampling;
 pub mod topocore;
 
 pub trait GenQuery<Label> {
+    fn new(from: NodeId, to: NodeId, initial_state: Label) -> Self;
     fn from(&self) -> NodeId;
     fn to(&self) -> NodeId;
     fn initial_state(&self) -> Label;
@@ -29,6 +30,10 @@ pub struct Query {
 }
 
 impl GenQuery<Weight> for Query {
+    fn new(from: NodeId, to: NodeId, _initial_state: Weight) -> Self {
+        Query { from, to }
+    }
+
     fn from(&self) -> NodeId {
         self.from
     }
@@ -54,6 +59,13 @@ pub struct TDQuery<T: Copy> {
 }
 
 impl<T: Copy> GenQuery<T> for TDQuery<T> {
+    fn new(from: NodeId, to: NodeId, initial_state: T) -> Self {
+        TDQuery {
+            from,
+            to,
+            departure: initial_state,
+        }
+    }
     fn from(&self) -> NodeId {
         self.from
     }
