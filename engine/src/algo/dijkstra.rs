@@ -1,7 +1,7 @@
 //! Several variants of Dijkstra
 
 use super::*;
-use crate::datastr::index_heap::Indexing;
+use crate::datastr::{index_heap::*, timestamped_vector::*};
 
 pub mod gen_topo_dijkstra;
 pub mod generic_dijkstra;
@@ -46,7 +46,7 @@ impl<W> Indexing for State<W> {
     }
 }
 
-pub trait Label {
+pub trait Label: Clone {
     type Key: Ord;
     fn neutral() -> Self;
     fn key(&self) -> Self::Key;
@@ -62,5 +62,21 @@ impl Label for Weight {
     #[inline(always)]
     fn key(&self) -> Self::Key {
         *self
+    }
+}
+
+pub struct DijkstraData<L: Label> {
+    pub distances: TimestampedVector<L>,
+    pub predecessors: Vec<NodeId>,
+    pub queue: IndexdMinHeap<State<L::Key>>,
+}
+
+impl<L: Label> DijkstraData<L> {
+    pub fn new(n: usize) -> Self {
+        Self {
+            distances: TimestampedVector::new(n, L::neutral()),
+            predecessors: vec![n as NodeId; n],
+            queue: IndexdMinHeap::new(n),
+        }
     }
 }

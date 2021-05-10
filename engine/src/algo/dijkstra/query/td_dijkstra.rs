@@ -2,7 +2,6 @@ use super::*;
 use crate::algo::dijkstra::generic_dijkstra::*;
 use crate::datastr::graph::time_dependent::*;
 
-#[derive(Debug, Clone, Copy)]
 pub struct TDDijkstraOps();
 
 impl DijkstraOps<TDGraph> for TDDijkstraOps {
@@ -31,7 +30,6 @@ impl Default for TDDijkstraOps {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
 pub struct LiveTDDijkstraOps();
 
 impl DijkstraOps<LiveTDGraph> for LiveTDDijkstraOps {

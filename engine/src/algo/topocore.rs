@@ -435,6 +435,8 @@ pub struct VirtualTopocore {
     deg2: usize,
     deg3: usize,
     symmetric_degrees: std::rc::Rc<[u8]>,
+    bcc: std::rc::Rc<[u32]>,
+    bridge: std::rc::Rc<[InRangeOption<NodeId>]>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -470,6 +472,14 @@ impl VirtualTopocore {
             NodeType::OtherBCC(self.symmetric_degrees[node - self.biggest_bcc])
         }
     }
+
+    pub fn bridge_node(&self, node: NodeId) -> Option<NodeId> {
+        if self.node_type(node).in_core() {
+            return None;
+        }
+
+        self.bridge[self.bcc[node as usize - self.biggest_bcc] as usize].value()
+    }
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -502,6 +512,40 @@ pub fn virtual_topocore<'c, Graph: for<'a> LinkIterable<'a, NodeId>>(graph: &Gra
         biggest_bcc.set(v as usize);
     }
 
+    let mut components = vec![0; n];
+    let mut bridge = Vec::new();
+    let mut queue = std::collections::VecDeque::new();
+
+    for node in 0..n {
+        if !biggest_bcc.get(node) && components[node] == 0 {
+            let component_idx = bridge.len() as u32 + 1;
+            queue.push_back(node);
+            components[node] = component_idx;
+            while let Some(node) = queue.pop_front() {
+                for neighbor in (UndirectedGraph { ins: &reversed, outs: graph }).link_iter(node as NodeId) {
+                    if biggest_bcc.get(neighbor as usize) {
+                        if bridge.len() < component_idx as usize {
+                            bridge.push(InRangeOption::new(Some(neighbor)));
+                        } else {
+                            debug_assert_eq!(bridge.last().unwrap().value().unwrap(), neighbor);
+                        }
+                    } else {
+                        if components[neighbor as usize] == 0 {
+                            components[neighbor as usize] = component_idx;
+                            queue.push_back(neighbor as usize);
+                        } else {
+                            debug_assert_eq!(components[neighbor as usize], component_idx);
+                        }
+                    }
+                }
+            }
+
+            if bridge.len() < component_idx as usize {
+                bridge.push(InRangeOption::new(None));
+            }
+        }
+    }
+
     let mut new_order = Vec::with_capacity(n);
 
     let mut biggest_bcc_size = 0;
@@ -520,10 +564,12 @@ pub fn virtual_topocore<'c, Graph: for<'a> LinkIterable<'a, NodeId>>(graph: &Gra
         }
     });
     let mut other_bccs_symmetric_degrees = Vec::with_capacity(n - biggest_bcc_size);
+    let mut bcc = Vec::with_capacity(n - biggest_bcc_size);
     for &node in order.order() {
         if !biggest_bcc.get(node as usize) {
             new_order.push(node);
             other_bccs_symmetric_degrees.push(symmetric_degrees[node as usize]);
+            bcc.push(components[node as usize] - 1);
         }
     }
     let deg3 = new_order.iter().position(|&node| symmetric_degrees[node as usize] < 4).unwrap_or(n as usize);
@@ -533,12 +579,22 @@ pub fn virtual_topocore<'c, Graph: for<'a> LinkIterable<'a, NodeId>>(graph: &Gra
     report!("deg2", deg2);
     report!("deg3", deg3);
 
+    let order = NodeOrder::from_node_order(new_order);
+
+    for bridge_node in &mut bridge {
+        if let Some(bridge) = bridge_node.value() {
+            *bridge_node = InRangeOption::new(Some(order.rank(bridge)));
+        }
+    }
+
     VirtualTopocore {
-        order: NodeOrder::from_node_order(new_order),
+        order,
         biggest_bcc: biggest_bcc_size,
         deg3,
         deg2,
         symmetric_degrees: other_bccs_symmetric_degrees.into(),
+        bcc: bcc.into(),
+        bridge: bridge.into(),
     }
 }
 

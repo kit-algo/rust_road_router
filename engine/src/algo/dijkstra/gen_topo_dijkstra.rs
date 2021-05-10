@@ -2,72 +2,76 @@
 
 use super::generic_dijkstra::*;
 use super::*;
-use crate::datastr::{index_heap::*, timestamped_vector::*};
 
-pub struct GenTopoDijkstra<Graph = OwnedGraph, Ops = DefaultOps>
+pub struct TopoDijkstraRun<'a, Graph = OwnedGraph, Ops = DefaultOps>
 where
     Ops: DijkstraOps<Graph>,
 {
-    graph: Graph,
+    graph: &'a Graph,
 
-    distances: TimestampedVector<Ops::Label>,
-    predecessors: Vec<NodeId>,
-    queue: IndexdMinHeap<State<<Ops::Label as super::Label>::Key>>,
+    distances: &'a mut TimestampedVector<Ops::Label>,
+    predecessors: &'a mut [NodeId],
+    queue: &'a mut IndexdMinHeap<State<<Ops::Label as super::Label>::Key>>,
 
     num_relaxed_arcs: usize,
     num_queue_pushs: usize,
 
-    ops: Ops,
+    ops: &'a mut Ops,
 }
 
-#[derive(Debug)]
-struct ChainStep<LinkResult> {
-    prev_node: NodeId,
-    next_node: NodeId,
-    next_distance: LinkResult,
-}
-
-impl<Graph, Ops> GenTopoDijkstra<Graph, Ops>
+impl<'b, Graph, Ops> TopoDijkstraRun<'b, Graph, Ops>
 where
     Ops: DijkstraOps<Graph>,
     Graph: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, Ops::Arc> + SymmetricDegreeGraph,
 {
-    pub fn new(graph: Graph) -> Self
-    where
-        Ops: Default,
-    {
-        Self::new_with_ops(graph, Default::default())
-    }
-
-    pub fn new_with_ops(graph: Graph, ops: Ops) -> Self {
-        let n = graph.num_nodes();
-
-        Self {
+    pub fn query(graph: &'b Graph, data: &'b mut DijkstraData<Ops::Label>, ops: &'b mut Ops, query: impl GenQuery<Ops::Label>) -> Self {
+        let mut s = Self {
             graph,
-
-            distances: TimestampedVector::new(n, Label::neutral()),
-            predecessors: vec![n as NodeId; n],
-            queue: IndexdMinHeap::new(n),
-
+            ops,
+            predecessors: &mut data.predecessors,
+            queue: &mut data.queue,
+            distances: &mut data.distances,
             num_relaxed_arcs: 0,
             num_queue_pushs: 0,
-
-            ops,
-        }
+        };
+        s.initialize(query);
+        s
     }
 
-    pub fn initialize_query(&mut self, query: impl GenQuery<Ops::Label>) {
-        let from = query.from();
-        // initialize
-        self.num_relaxed_arcs = 0;
-        self.num_queue_pushs = 0;
+    pub fn continue_query(graph: &'b Graph, data: &'b mut DijkstraData<Ops::Label>, ops: &'b mut Ops, node: NodeId) -> Self {
+        let mut s = Self {
+            graph,
+            ops,
+            predecessors: &mut data.predecessors,
+            queue: &mut data.queue,
+            distances: &mut data.distances,
+            num_relaxed_arcs: 0,
+            num_queue_pushs: 0,
+        };
+        s.reinit_queue(node);
+        s
+    }
 
+    fn initialize(&mut self, query: impl GenQuery<Ops::Label>) {
         self.queue.clear();
+        self.distances.reset();
+        self.add_start_node(query);
+    }
+
+    pub fn add_start_node(&mut self, query: impl GenQuery<Ops::Label>) {
+        let from = query.from();
         let init = query.initial_state();
         self.queue.push(State { key: init.key(), node: from });
-
-        self.distances.reset();
         self.distances[from as usize] = init;
+        self.predecessors[from as usize] = from;
+    }
+
+    fn reinit_queue(&mut self, node: NodeId) {
+        self.queue.clear();
+        self.queue.push(State {
+            key: self.distances[node as usize].key(),
+            node,
+        });
     }
 
     #[inline(always)]
@@ -91,7 +95,7 @@ where
         O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
     {
         self.queue.pop().map(|State { node, .. }| {
-            for edge in LinkIterable::<Ops::Arc>::link_iter(&self.graph, node) {
+            for edge in LinkIterable::<Ops::Arc>::link_iter(self.graph, node) {
                 let mut chain = Some(ChainStep {
                     prev_node: node,
                     next_node: edge.head(),
@@ -119,7 +123,7 @@ where
                                 if cfg!(feature = "chpot-no-deg2") {
                                     endpoint = true;
                                 } else {
-                                    for edge in LinkIterable::<Ops::Arc>::link_iter(&self.graph, next_node) {
+                                    for edge in LinkIterable::<Ops::Arc>::link_iter(self.graph, next_node) {
                                         if edge.head() != prev_node {
                                             next_edge = Some(edge);
                                         }
@@ -140,7 +144,7 @@ where
                                     endpoint = true;
                                 } else {
                                     had_deg_three = true;
-                                    for edge in LinkIterable::<Ops::Arc>::link_iter(&self.graph, next_node) {
+                                    for edge in LinkIterable::<Ops::Arc>::link_iter(self.graph, next_node) {
                                         if edge.head() != prev_node {
                                             if next_edge.is_none() {
                                                 next_edge = Some(edge);
@@ -194,23 +198,6 @@ where
         })
     }
 
-    pub fn overwrite_distance(&mut self, node: NodeId, dist: Ops::Label) {
-        self.distances[node as usize] = dist;
-    }
-
-    pub fn reinit_queue(&mut self, node: NodeId) {
-        self.queue.clear();
-        self.queue.push(State {
-            key: self.distances[node as usize].key(),
-            node,
-        });
-    }
-
-    pub fn swap_graph(&mut self, other: &mut Graph) {
-        debug_assert_eq!(self.graph.num_nodes(), other.num_nodes());
-        std::mem::swap(&mut self.graph, other);
-    }
-
     pub fn tentative_distance(&self, node: NodeId) -> &Ops::Label {
         &self.distances[node as usize]
     }
@@ -232,7 +219,14 @@ where
     }
 }
 
-pub type StandardTopoDijkstra<G> = GenTopoDijkstra<DefaultOps, G>;
+#[derive(Debug)]
+struct ChainStep<LinkResult> {
+    prev_node: NodeId,
+    next_node: NodeId,
+    next_distance: LinkResult,
+}
+
+pub type StandardTopoDijkstra = DijkstraData<Weight>;
 
 pub struct Neutral();
 
@@ -244,6 +238,7 @@ impl<T> std::ops::Add<T> for Neutral {
     }
 }
 
+#[derive(Debug)]
 pub enum SymmetricDeg {
     LessEqTwo,
     Three,

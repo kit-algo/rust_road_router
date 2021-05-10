@@ -4,7 +4,10 @@
 //! No node ordering implemented yet, depends on getting a precalculated order.
 
 use super::*;
-use crate::algo::{a_star::*, dijkstra::generic_dijkstra::*};
+use crate::algo::{
+    a_star::*,
+    dijkstra::{generic_dijkstra::*, *},
+};
 use crate::datastr::node_order::NodeOrder;
 
 pub mod query;
@@ -270,8 +273,8 @@ impl<'a> PartialContractionGraph<'a> {
         from: NodeId,
         to: NodeId,
         shortcut_weight: Weight,
-        recycled: (Trash<Weight>, Trash<Weight>),
-    ) -> (bool, (Trash<Weight>, Trash<Weight>)) {
+        recycled: (DijkstraData<Weight>, DijkstraData<Weight>),
+    ) -> (bool, (DijkstraData<Weight>, DijkstraData<Weight>)) {
         // no loop shortcuts ever required
         if from == to {
             return (false, recycled);

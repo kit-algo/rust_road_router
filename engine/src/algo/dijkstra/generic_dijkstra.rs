@@ -2,11 +2,10 @@
 
 use super::*;
 use crate::algo::dijkstra::gen_topo_dijkstra::Neutral;
-use crate::datastr::{index_heap::*, timestamped_vector::*};
 use std::borrow::Borrow;
 
-pub trait DijkstraOps<Graph>: Copy {
-    type Label: super::Label + Clone;
+pub trait DijkstraOps<Graph> {
+    type Label: super::Label;
     type Arc: Arc;
     type LinkResult;
 
@@ -88,7 +87,7 @@ where
     /// For CH preprocessing we reuse the distance array and the queue to reduce allocations.
     /// This method creates an algo struct from recycled data.
     /// The counterpart is the `recycle` method.
-    pub fn from_recycled(graph: BorrowGraph, recycled: Trash<Ops::Label>) -> Self
+    pub fn from_recycled(graph: BorrowGraph, recycled: DijkstraData<Ops::Label>) -> Self
     where
         Ops: Default,
     {
@@ -224,8 +223,8 @@ where
     /// For CH preprocessing we reuse the distance array and the queue to reduce allocations.
     /// This method decomposes this algo struct for later reuse.
     /// The counterpart is `from_recycled`
-    pub fn recycle(self) -> Trash<Ops::Label> {
-        Trash {
+    pub fn recycle(self) -> DijkstraData<Ops::Label> {
+        DijkstraData {
             distances: self.distances,
             predecessors: self.predecessors,
             queue: self.queue,
@@ -253,10 +252,4 @@ where
     fn next(&mut self) -> Option<NodeId> {
         self.settle_next_node(|_| true, |_, _| true, |_| Some(Neutral()))
     }
-}
-
-pub struct Trash<Label: super::Label> {
-    distances: TimestampedVector<Label>,
-    predecessors: Vec<NodeId>,
-    queue: IndexdMinHeap<State<Label::Key>>,
 }

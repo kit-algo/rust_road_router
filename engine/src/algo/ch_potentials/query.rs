@@ -2,7 +2,11 @@ use super::*;
 
 use crate::datastr::rank_select_map::FastClearBitVec;
 use crate::{
-    algo::{a_star::*, dijkstra::gen_topo_dijkstra::*, topocore::*},
+    algo::{
+        a_star::*,
+        dijkstra::{gen_topo_dijkstra::*, *},
+        topocore::*,
+    },
     datastr::graph::time_dependent::*,
 };
 
@@ -12,15 +16,9 @@ where
 {
     core_search: SkipLowDegServer<VirtualTopocoreGraph<Graph>, VirtualTopocoreOps<Ops>, PotentialForPermutated<P>>,
     #[cfg(not(feature = "chpot-no-bcc"))]
-    comp_search: GenTopoDijkstra<VirtualTopocoreGraph<Graph>, VirtualTopocoreOps<Ops>>,
-    #[cfg(not(feature = "chpot-no-bcc"))]
-    reversed_comp_graph: UnweightedOwnedGraph,
-    #[cfg(not(feature = "chpot-no-bcc"))]
-    comp_to_core: NodeId,
+    comp_graph: VirtualTopocoreGraph<Graph>,
 
     virtual_topocore: VirtualTopocore,
-    #[cfg(not(feature = "chpot-no-bcc"))]
-    visited: FastClearBitVec,
 }
 
 impl<Graph, Ops: DijkstraOps<Graph, Label = Timestamp>, P: Potential> Server<Graph, Ops, P>
@@ -33,11 +31,9 @@ where
         Graph: BuildPermutated<G>,
     {
         report_time_with_key("TopoDijkstra preprocessing", "topo_dijk_prepro", move || {
-            let n = graph.num_nodes();
             #[cfg(not(feature = "chpot-no-bcc"))]
             {
                 let (main_graph, comp_graph, virtual_topocore) = VirtualTopocoreGraph::new_topo_dijkstra_graphs(graph);
-                let reversed_comp_graph = UnweightedOwnedGraph::reversed(&comp_graph);
 
                 Self {
                     core_search: SkipLowDegServer::new(
@@ -48,12 +44,9 @@ where
                         },
                         VirtualTopocoreOps(ops),
                     ),
-                    comp_search: GenTopoDijkstra::new_with_ops(comp_graph, VirtualTopocoreOps(ops)),
-                    reversed_comp_graph,
-                    comp_to_core: n as NodeId,
+                    comp_graph,
 
                     virtual_topocore,
-                    visited: FastClearBitVec::new(n),
                 }
             }
             #[cfg(feature = "chpot-no-bcc")]
@@ -76,50 +69,11 @@ where
         })
     }
 
-    #[cfg(not(feature = "chpot-no-bcc"))]
-    fn dfs(
-        graph: &UnweightedOwnedGraph,
-        node: NodeId,
-        visited: &mut FastClearBitVec,
-        border_callback: &mut impl FnMut(NodeId),
-        in_core: &mut impl FnMut(NodeId) -> bool,
-    ) {
-        if visited.get(node as usize) {
-            return;
-        }
-        visited.set(node as usize);
-        if in_core(node) {
-            border_callback(node);
-            return;
-        }
-        for head in graph.link_iter(node) {
-            Self::dfs(graph, head, visited, border_callback, in_core);
-        }
-    }
-
-    #[cfg(not(feature = "chpot-no-bcc"))]
-    fn border(&mut self, node: NodeId) -> Option<NodeId> {
-        let mut border = None;
-        self.visited.clear();
-        let virtual_topocore = &self.virtual_topocore;
-        Self::dfs(
-            &self.reversed_comp_graph,
-            node,
-            &mut self.visited,
-            &mut |node| {
-                let prev = border.replace(node);
-                debug_assert_eq!(prev, None);
-            },
-            &mut |node| virtual_topocore.node_type(node).in_core(),
-        );
-        border
-    }
-
     #[cfg(feature = "chpot-no-bcc")]
     fn distance<Q: GenQuery<Timestamp> + Copy>(
         &mut self,
         mut query: Q,
-        mut inspect: impl FnMut(NodeId, &NodeOrder, &GenTopoDijkstra<VirtualTopocoreGraph<Graph>, VirtualTopocoreOps<Ops>>, &mut PotentialForPermutated<P>),
+        mut inspect: impl FnMut(NodeId, &NodeOrder, &TopoDijkstraRun<VirtualTopocoreGraph<Graph>, VirtualTopocoreOps<Ops>>, &mut PotentialForPermutated<P>),
     ) -> Option<Weight> {
         query.permutate(&self.virtual_topocore.order);
         let order = &self.virtual_topocore.order;
@@ -130,58 +84,75 @@ where
     fn distance<Q: GenQuery<Timestamp> + Copy>(
         &mut self,
         mut query: Q,
-        mut inspect: impl FnMut(NodeId, &NodeOrder, &GenTopoDijkstra<VirtualTopocoreGraph<Graph>, VirtualTopocoreOps<Ops>>, &mut PotentialForPermutated<P>),
+        mut inspect: impl FnMut(NodeId, &NodeOrder, &TopoDijkstraRun<VirtualTopocoreGraph<Graph>, VirtualTopocoreOps<Ops>>, &mut PotentialForPermutated<P>),
     ) -> Option<Weight> {
         query.permutate(&self.virtual_topocore.order);
 
         report!("algo", "Virtual Topocore Component Query");
 
-        let departure = query.initial_state();
-
-        let mut num_queue_pops = 0;
-
-        self.comp_search.initialize_query(query);
-        self.core_search.potential.init(query.to());
-        let border = self.border(query.to());
-
-        let comp_search = &mut self.comp_search;
         let virtual_topocore = &self.virtual_topocore;
         let potential = &mut self.core_search.potential;
 
-        let border_node = if let Some(border_node) = border { border_node } else { return None };
+        let departure = query.initial_state();
+        let mut num_queue_pops = 0;
+        potential.init(query.to());
+
+        let into_core = virtual_topocore.bridge_node(query.from()).unwrap_or(query.from());
+        let out_of_core = virtual_topocore.bridge_node(query.to()).unwrap_or(query.to());
+        let into_core_pot = potential.potential(into_core)?;
+
+        let mut comp_search = TopoDijkstraRun::query(&self.comp_graph, &mut self.core_search.dijkstra_data, &mut self.core_search.ops, query);
 
         while let Some(node) = comp_search.next_step_with_potential(|node| potential.potential(node)) {
             num_queue_pops += 1;
-            inspect(node, &virtual_topocore.order, comp_search, potential);
-            if node == query.to() {
-                return Some(comp_search.tentative_distance(query.to()) - departure);
-            }
-            if virtual_topocore.node_type(node).in_core() {
-                self.comp_to_core = node;
+            inspect(node, &virtual_topocore.order, &comp_search, potential);
+
+            if comp_search
+                .queue()
+                .peek()
+                .map(|e| e.key >= *comp_search.tentative_distance(into_core) + into_core_pot)
+                .unwrap_or(true)
+            {
                 break;
             }
         }
 
-        {
-            let _ctxt = push_context("core_search".to_string());
-            let core_query = Q::new(self.comp_to_core, border_node, *comp_search.tentative_distance(self.comp_to_core));
-            self.core_search.forward_dijkstra.initialize_query(core_query);
-            self.core_search
-                .forward_dijkstra
-                .overwrite_distance(self.comp_to_core, *comp_search.tentative_distance(self.comp_to_core));
-            self.core_search.forward_dijkstra.reinit_queue(self.comp_to_core);
-            self.core_search
-                .distance_manually_initialized(core_query, |n, d, p| inspect(n, &virtual_topocore.order, d, p));
+        if *comp_search.tentative_distance(into_core) >= INFINITY {
+            return None;
         }
 
-        comp_search.overwrite_distance(border_node, *self.core_search.forward_dijkstra.tentative_distance(border_node));
-        comp_search.reinit_queue(border_node);
+        let to_core_pushs = comp_search.num_queue_pushs();
+        let to_core_relaxed = comp_search.num_relaxed_arcs();
 
-        let potential = &mut self.core_search.potential;
+        let core_dist = {
+            let _ctxt = push_context("core_search".to_string());
+            let core_query = Q::new(into_core, out_of_core, *comp_search.tentative_distance(into_core));
+            let mut core_search = TopoDijkstraRun::continue_query(
+                &self.core_search.graph,
+                &mut self.core_search.dijkstra_data,
+                &mut self.core_search.ops,
+                into_core,
+            );
+            SkipLowDegServer::distance_manually_initialized(
+                &mut core_search,
+                core_query,
+                potential,
+                &mut self.core_search.visited,
+                &self.core_search.reversed,
+                |n, d, p| inspect(n, &virtual_topocore.order, d, p),
+            )
+        };
+
+        let mut comp_search = TopoDijkstraRun::continue_query(
+            &self.comp_graph,
+            &mut self.core_search.dijkstra_data,
+            &mut self.core_search.ops,
+            if core_dist.is_some() { out_of_core } else { query.from() },
+        );
 
         while let Some(node) = comp_search.next_step_with_potential(|node| potential.potential(node)) {
             num_queue_pops += 1;
-            inspect(node, &virtual_topocore.order, comp_search, potential);
+            inspect(node, &virtual_topocore.order, &comp_search, potential);
 
             if comp_search
                 .queue()
@@ -194,8 +165,8 @@ where
         }
 
         report!("num_queue_pops", num_queue_pops);
-        report!("num_queue_pushs", comp_search.num_queue_pushs());
-        report!("num_relaxed_arcs", comp_search.num_relaxed_arcs());
+        report!("num_queue_pushs", to_core_pushs + comp_search.num_queue_pushs());
+        report!("num_relaxed_arcs", to_core_relaxed + comp_search.num_relaxed_arcs());
 
         let dist = *comp_search.tentative_distance(query.to());
         if dist < INFINITY {
@@ -240,7 +211,7 @@ where
         path.push(query.to());
 
         while *path.last().unwrap() != query.from() {
-            let next = self.predecessor(*path.last().unwrap());
+            let next = self.core_search.dijkstra_data.predecessors[*path.last().unwrap() as usize];
             path.push(next);
         }
 
@@ -252,36 +223,14 @@ where
         path
     }
 
-    #[cfg(not(feature = "chpot-no-bcc"))]
     fn tentative_distance(&self, node: NodeId) -> Weight {
         let rank = self.virtual_topocore.order.rank(node);
-        if self.virtual_topocore.node_type(rank).in_core() {
-            *self.core_search.forward_dijkstra.tentative_distance(rank)
-        } else {
-            *self.comp_search.tentative_distance(rank)
-        }
+        self.core_search.dijkstra_data.distances[rank as usize]
     }
 
-    #[cfg(feature = "chpot-no-bcc")]
-    fn tentative_distance(&self, node: NodeId) -> Weight {
-        let rank = self.virtual_topocore.order.rank(node);
-        *self.core_search.forward_dijkstra.tentative_distance(rank)
-    }
-
-    #[cfg(not(feature = "chpot-no-bcc"))]
     fn predecessor(&self, node: NodeId) -> NodeId {
         let rank = self.virtual_topocore.order.rank(node);
-        if self.virtual_topocore.node_type(rank).in_core() && rank != self.comp_to_core {
-            self.core_search.forward_dijkstra.predecessor(rank)
-        } else {
-            self.comp_search.predecessor(rank)
-        }
-    }
-
-    #[cfg(feature = "chpot-no-bcc")]
-    fn predecessor(&self, node: NodeId) -> NodeId {
-        let rank = self.virtual_topocore.order.rank(node);
-        self.core_search.forward_dijkstra.predecessor(rank)
+        self.core_search.dijkstra_data.predecessors[rank as usize]
     }
 }
 
@@ -372,7 +321,6 @@ where
     }
 }
 
-#[derive(Debug, Clone, Copy)]
 struct VirtualTopocoreOps<O>(O);
 
 impl<G, O> DijkstraOps<VirtualTopocoreGraph<G>> for VirtualTopocoreOps<O>
@@ -398,7 +346,9 @@ pub struct SkipLowDegServer<Graph = OwnedGraph, Ops = DefaultOps, P = ZeroPotent
 where
     Ops: DijkstraOps<Graph>,
 {
-    forward_dijkstra: GenTopoDijkstra<Graph, Ops>,
+    graph: Graph,
+    dijkstra_data: DijkstraData<Ops::Label>,
+    ops: Ops,
     potential: P,
 
     reversed: UnweightedOwnedGraph,
@@ -413,7 +363,9 @@ where
         let n = graph.num_nodes();
         let reversed = UnweightedOwnedGraph::reversed(&graph);
         Self {
-            forward_dijkstra: GenTopoDijkstra::new_with_ops(graph, ops),
+            graph,
+            dijkstra_data: DijkstraData::new(n),
+            ops,
             potential,
 
             reversed,
@@ -434,29 +386,29 @@ where
         }
     }
 
-    fn distance(&mut self, query: impl GenQuery<Timestamp> + Copy, inspect: impl FnMut(NodeId, &GenTopoDijkstra<Graph, Ops>, &mut P)) -> Option<Weight> {
-        self.forward_dijkstra.initialize_query(query);
+    fn distance(&mut self, query: impl GenQuery<Timestamp> + Copy, inspect: impl FnMut(NodeId, &TopoDijkstraRun<Graph, Ops>, &mut P)) -> Option<Weight> {
+        let mut dijkstra = TopoDijkstraRun::query(&self.graph, &mut self.dijkstra_data, &mut self.ops, query);
         self.potential.init(query.to());
-        self.distance_manually_initialized(query, inspect)
+        Self::distance_manually_initialized(&mut dijkstra, query, &mut self.potential, &mut self.visited, &self.reversed, inspect)
     }
 
     fn distance_manually_initialized(
-        &mut self,
+        dijkstra: &mut TopoDijkstraRun<Graph, Ops>,
         query: impl GenQuery<Timestamp> + Copy,
-        mut inspect: impl FnMut(NodeId, &GenTopoDijkstra<Graph, Ops>, &mut P),
+        potential: &mut P,
+        visited: &mut FastClearBitVec,
+        reversed: &UnweightedOwnedGraph,
+        mut inspect: impl FnMut(NodeId, &TopoDijkstraRun<Graph, Ops>, &mut P),
     ) -> Option<Weight> {
         report!("algo", "Virtual Topocore Core Query");
         let mut num_queue_pops = 0;
 
-        let departure = *self.forward_dijkstra.tentative_distance(query.from());
-        let forward_dijkstra = &mut self.forward_dijkstra;
-        let potential = &mut self.potential;
-
+        let departure = *dijkstra.tentative_distance(query.from());
         let target_pot = potential.potential(query.to())?;
 
         let mut counter = 0;
-        self.visited.clear();
-        Self::dfs(&self.reversed, query.to(), &mut self.visited, &mut |_| {
+        visited.clear();
+        Self::dfs(reversed, query.to(), visited, &mut |_| {
             if counter < 100 {
                 counter += 1;
                 false
@@ -468,14 +420,14 @@ where
             return None;
         }
 
-        while let Some(node) = forward_dijkstra.next_step_with_potential(|node| potential.potential(node)) {
+        while let Some(node) = dijkstra.next_step_with_potential(|node| potential.potential(node)) {
             num_queue_pops += 1;
-            inspect(node, forward_dijkstra, potential);
+            inspect(node, dijkstra, potential);
 
-            if forward_dijkstra
+            if dijkstra
                 .queue()
                 .peek()
-                .map(|e| e.key >= *forward_dijkstra.tentative_distance(query.to()) + target_pot)
+                .map(|e| e.key >= *dijkstra.tentative_distance(query.to()) + target_pot)
                 .unwrap_or(false)
             {
                 break;
@@ -483,10 +435,10 @@ where
         }
 
         report!("num_queue_pops", num_queue_pops);
-        report!("num_queue_pushs", forward_dijkstra.num_queue_pushs());
-        report!("num_relaxed_arcs", forward_dijkstra.num_relaxed_arcs());
+        report!("num_queue_pushs", dijkstra.num_queue_pushs());
+        report!("num_relaxed_arcs", dijkstra.num_relaxed_arcs());
 
-        let dist = *forward_dijkstra.tentative_distance(query.to());
+        let dist = *dijkstra.tentative_distance(query.to());
         if dist < INFINITY {
             Some(dist - departure)
         } else {
@@ -528,7 +480,7 @@ where
         path.push(query.to());
 
         while *path.last().unwrap() != query.from() {
-            let next = self.forward_dijkstra.predecessor(*path.last().unwrap());
+            let next = self.dijkstra_data.predecessors[*path.last().unwrap() as usize];
             path.push(next);
         }
 
@@ -568,7 +520,7 @@ where
                 "var marker = L.marker([{}, {}], {{ icon: blackIcon }}).addTo(map);",
                 lat[node as usize], lng[node as usize]
             );
-            let dist = *self.0.forward_dijkstra.tentative_distance(node);
+            let dist = self.0.dijkstra_data.distances[node as usize];
             let pot = self.lower_bound(node).unwrap_or(INFINITY);
             println!(
                 "marker.bindPopup(\"id: {}<br>distance: {}<br>lower_bound: {}<br>sum: {}\");",
@@ -581,11 +533,11 @@ where
     }
 
     pub fn distance(&self, node: NodeId) -> Weight {
-        *self.0.forward_dijkstra.tentative_distance(node)
+        self.0.dijkstra_data.distances[node as usize]
     }
 
     pub fn predecessor(&self, node: NodeId) -> NodeId {
-        self.0.forward_dijkstra.predecessor(node)
+        self.0.dijkstra_data.predecessors[node as usize]
     }
 
     pub fn potential(&self) -> &P {
