@@ -9,8 +9,6 @@
 //! Thus, `head[first_out[x]..first_out[x+1]]` contains all neighbors of `x`.
 
 use super::*;
-use crate::as_mut_slice::AsMutSlice;
-use crate::as_slice::AsSlice;
 use crate::io::*;
 use crate::util::*;
 use std::mem::swap;
@@ -31,30 +29,30 @@ pub struct FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> {
 
 impl<FirstOutContainer, HeadContainer, WeightContainer> FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
 where
-    FirstOutContainer: AsSlice<EdgeId>,
-    HeadContainer: AsSlice<NodeId>,
-    WeightContainer: AsSlice<Weight>,
+    FirstOutContainer: AsRef<[EdgeId]>,
+    HeadContainer: AsRef<[NodeId]>,
+    WeightContainer: AsRef<[Weight]>,
 {
     /// Borrow a slice of the first_out data
     pub fn first_out(&self) -> &[EdgeId] {
-        self.first_out.as_slice()
+        self.first_out.as_ref()
     }
     /// Borrow a slice of the head data
     pub fn head(&self) -> &[NodeId] {
-        self.head.as_slice()
+        self.head.as_ref()
     }
     /// Borrow a slice of the weight data
     pub fn weight(&self) -> &[Weight] {
-        self.weight.as_slice()
+        self.weight.as_ref()
     }
 
     /// Create a new `FirstOutGraph` from the three containers.
     pub fn new(first_out: FirstOutContainer, head: HeadContainer, weight: WeightContainer) -> FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> {
-        assert!(first_out.as_slice().len() < <NodeId>::max_value() as usize);
-        assert!(head.as_slice().len() < <EdgeId>::max_value() as usize);
-        assert_eq!(*first_out.as_slice().first().unwrap(), 0);
-        assert_eq!(*first_out.as_slice().last().unwrap() as usize, head.as_slice().len());
-        assert_eq!(weight.as_slice().len(), head.as_slice().len());
+        assert!(first_out.as_ref().len() < <NodeId>::max_value() as usize);
+        assert!(head.as_ref().len() < <EdgeId>::max_value() as usize);
+        assert_eq!(*first_out.as_ref().first().unwrap(), 0);
+        assert_eq!(*first_out.as_ref().last().unwrap() as usize, head.as_ref().len());
+        assert_eq!(weight.as_ref().len(), head.as_ref().len());
 
         FirstOutGraph { first_out, head, weight }
     }
@@ -67,9 +65,9 @@ where
 
 impl<FirstOutContainer, HeadContainer, WeightContainer> Deconstruct for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
 where
-    FirstOutContainer: AsSlice<EdgeId>,
-    HeadContainer: AsSlice<NodeId>,
-    WeightContainer: AsSlice<Weight>,
+    FirstOutContainer: AsRef<[EdgeId]>,
+    HeadContainer: AsRef<[NodeId]>,
+    WeightContainer: AsRef<[Weight]>,
 {
     fn store_each(&self, store: &dyn Fn(&str, &dyn Store) -> std::io::Result<()>) -> std::io::Result<()> {
         store("first_out", &self.first_out())?;
@@ -149,9 +147,9 @@ impl<FirstOutContainer, HeadContainer> FirstOutGraph<FirstOutContainer, HeadCont
 
 impl<FirstOutContainer, HeadContainer, WeightContainer> Graph for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
 where
-    FirstOutContainer: AsSlice<EdgeId>,
-    HeadContainer: AsSlice<NodeId>,
-    WeightContainer: AsSlice<Weight>,
+    FirstOutContainer: AsRef<[EdgeId]>,
+    HeadContainer: AsRef<[NodeId]>,
+    WeightContainer: AsRef<[Weight]>,
 {
     fn num_nodes(&self) -> usize {
         self.first_out().len() - 1
@@ -169,9 +167,9 @@ where
 
 impl<'a, FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<'a, Link> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
 where
-    FirstOutContainer: AsSlice<EdgeId>,
-    HeadContainer: AsSlice<NodeId>,
-    WeightContainer: AsSlice<Weight>,
+    FirstOutContainer: AsRef<[EdgeId]>,
+    HeadContainer: AsRef<[NodeId]>,
+    WeightContainer: AsRef<[Weight]>,
 {
     #[allow(clippy::type_complexity)]
     type Iter = std::iter::Map<std::iter::Zip<std::slice::Iter<'a, NodeId>, std::slice::Iter<'a, Weight>>, fn((&NodeId, &Weight)) -> Link>;
@@ -188,9 +186,9 @@ where
 
 impl<'a, FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<'a, NodeId> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
 where
-    FirstOutContainer: AsSlice<EdgeId>,
-    HeadContainer: AsSlice<NodeId>,
-    WeightContainer: AsSlice<Weight>,
+    FirstOutContainer: AsRef<[EdgeId]>,
+    HeadContainer: AsRef<[NodeId]>,
+    WeightContainer: AsRef<[Weight]>,
 {
     type Iter = std::iter::Cloned<std::slice::Iter<'a, NodeId>>;
 
@@ -202,33 +200,33 @@ where
 impl<'a, FirstOutContainer, HeadContainer, WeightContainer> MutLinkIterable<'a, (&'a NodeId, &'a mut Weight)>
     for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
 where
-    FirstOutContainer: AsSlice<EdgeId>,
-    HeadContainer: AsSlice<NodeId>,
-    WeightContainer: AsSlice<Weight> + AsMutSlice<Weight>,
+    FirstOutContainer: AsRef<[EdgeId]>,
+    HeadContainer: AsRef<[NodeId]>,
+    WeightContainer: AsRef<[Weight]> + AsMut<[Weight]>,
 {
     type Iter = std::iter::Zip<std::slice::Iter<'a, NodeId>, std::slice::IterMut<'a, Weight>>;
 
     #[inline]
     fn link_iter_mut(&'a mut self, node: NodeId) -> Self::Iter {
         let range = SlcsIdx(self.first_out(), node as usize).range();
-        self.head.as_slice()[range.clone()].iter().zip(self.weight.as_mut_slice()[range].iter_mut())
+        self.head.as_ref()[range.clone()].iter().zip(self.weight.as_mut()[range].iter_mut())
     }
 }
 
 impl<'a, FirstOutContainer, HeadContainer, WeightContainer> FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
 where
-    WeightContainer: AsMutSlice<Weight>,
+    WeightContainer: AsMut<[Weight]>,
 {
     pub fn weights_mut(&mut self) -> &mut [Weight] {
-        self.weight.as_mut_slice()
+        self.weight.as_mut()
     }
 }
 
 impl<FirstOutContainer, HeadContainer, WeightContainer> RandomLinkAccessGraph for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
 where
-    FirstOutContainer: AsSlice<EdgeId>,
-    HeadContainer: AsSlice<NodeId>,
-    WeightContainer: AsSlice<Weight>,
+    FirstOutContainer: AsRef<[EdgeId]>,
+    HeadContainer: AsRef<[NodeId]>,
+    WeightContainer: AsRef<[Weight]>,
 {
     #[inline]
     fn link(&self, edge_id: EdgeId) -> Link {
@@ -252,9 +250,9 @@ where
 
 impl<'a, FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<'a, LinkWithId> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
 where
-    FirstOutContainer: AsSlice<EdgeId>,
-    HeadContainer: AsSlice<NodeId>,
-    WeightContainer: AsSlice<Weight>,
+    FirstOutContainer: AsRef<[EdgeId]>,
+    HeadContainer: AsRef<[NodeId]>,
+    WeightContainer: AsRef<[Weight]>,
 {
     #[allow(clippy::type_complexity)]
     type Iter = std::iter::Map<std::iter::Zip<std::slice::Iter<'a, NodeId>, std::ops::Range<usize>>, fn((&NodeId, usize)) -> LinkWithId>;
@@ -282,24 +280,24 @@ pub struct UnweightedFirstOutGraph<FirstOutContainer, HeadContainer> {
 
 impl<FirstOutContainer, HeadContainer> UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
 where
-    FirstOutContainer: AsSlice<EdgeId>,
-    HeadContainer: AsSlice<NodeId>,
+    FirstOutContainer: AsRef<[EdgeId]>,
+    HeadContainer: AsRef<[NodeId]>,
 {
     /// Borrow a slice of the first_out data
     pub fn first_out(&self) -> &[EdgeId] {
-        self.first_out.as_slice()
+        self.first_out.as_ref()
     }
     /// Borrow a slice of the head data
     pub fn head(&self) -> &[NodeId] {
-        self.head.as_slice()
+        self.head.as_ref()
     }
 
     /// Create a new `FirstOutGraph` from the three containers.
     pub fn new(first_out: FirstOutContainer, head: HeadContainer) -> Self {
-        assert!(first_out.as_slice().len() < <NodeId>::max_value() as usize);
-        assert!(head.as_slice().len() < <EdgeId>::max_value() as usize);
-        assert_eq!(*first_out.as_slice().first().unwrap(), 0);
-        assert_eq!(*first_out.as_slice().last().unwrap() as usize, head.as_slice().len());
+        assert!(first_out.as_ref().len() < <NodeId>::max_value() as usize);
+        assert!(head.as_ref().len() < <EdgeId>::max_value() as usize);
+        assert_eq!(*first_out.as_ref().first().unwrap(), 0);
+        assert_eq!(*first_out.as_ref().last().unwrap() as usize, head.as_ref().len());
 
         Self { first_out, head }
     }
@@ -312,8 +310,8 @@ where
 
 impl<FirstOutContainer, HeadContainer> Graph for UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
 where
-    FirstOutContainer: AsSlice<EdgeId>,
-    HeadContainer: AsSlice<NodeId>,
+    FirstOutContainer: AsRef<[EdgeId]>,
+    HeadContainer: AsRef<[NodeId]>,
 {
     fn num_nodes(&self) -> usize {
         self.first_out().len() - 1
@@ -331,8 +329,8 @@ where
 
 impl<'a, FirstOutContainer, HeadContainer> LinkIterable<'a, NodeId> for UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
 where
-    FirstOutContainer: AsSlice<EdgeId>,
-    HeadContainer: AsSlice<NodeId>,
+    FirstOutContainer: AsRef<[EdgeId]>,
+    HeadContainer: AsRef<[NodeId]>,
 {
     type Iter = std::iter::Cloned<std::slice::Iter<'a, NodeId>>;
 
@@ -343,8 +341,8 @@ where
 
 impl<FirstOutContainer, HeadContainer> RandomLinkAccessGraph for UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
 where
-    FirstOutContainer: AsSlice<EdgeId>,
-    HeadContainer: AsSlice<NodeId>,
+    FirstOutContainer: AsRef<[EdgeId]>,
+    HeadContainer: AsRef<[NodeId]>,
 {
     #[inline]
     fn link(&self, edge_id: EdgeId) -> Link {

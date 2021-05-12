@@ -26,9 +26,6 @@ pub mod io;
 pub mod link_speed_estimates;
 pub mod util;
 
-mod as_mut_slice;
-mod as_slice;
-
 /// Build time information for experiments.
 #[allow(dead_code)]
 mod built_info {

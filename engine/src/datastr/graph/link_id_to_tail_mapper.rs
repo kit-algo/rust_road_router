@@ -1,7 +1,6 @@
 //! Compact data strcuture to efficiently get the tail node of a given link
 
 use super::*;
-use crate::as_slice::AsSlice;
 use crate::datastr::rank_select_map::*;
 
 /// A compact data strcuture to efficiently get the tail node of a given link.
@@ -19,9 +18,9 @@ impl LinkIdToTailMapper {
     // afterwords as this might invalidate this map.
     pub fn new<FOC, HC, WC>(graph: &FirstOutGraph<FOC, HC, WC>) -> LinkIdToTailMapper
     where
-        FOC: AsSlice<EdgeId>,
-        HC: AsSlice<NodeId>,
-        WC: AsSlice<Weight>,
+        FOC: AsRef<[EdgeId]>,
+        HC: AsRef<[NodeId]>,
+        WC: AsRef<[Weight]>,
     {
         let mut first_out_bits = BitVec::new(graph.num_arcs() + 1);
         let mut deg_zero_nodes_indices = Vec::new();

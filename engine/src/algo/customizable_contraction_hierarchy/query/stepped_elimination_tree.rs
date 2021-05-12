@@ -1,7 +1,6 @@
 //! Elimination Tree path to root traversal while relaxing edges.
 
 use super::*;
-use crate::as_slice::AsSlice;
 use crate::datastr::timestamped_vector::TimestampedVector;
 use crate::util::in_range_option::InRangeOption;
 
@@ -102,9 +101,9 @@ impl<'b, Graph: for<'a> LinkIterGraph<'a>> SteppedEliminationTree<'b, Graph> {
 
 impl<'b, FirstOutContainer, HeadContainer, WeightContainer> SteppedEliminationTree<'b, FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>>
 where
-    FirstOutContainer: AsSlice<EdgeId>,
-    HeadContainer: AsSlice<NodeId>,
-    WeightContainer: AsSlice<Weight>,
+    FirstOutContainer: AsRef<[EdgeId]>,
+    HeadContainer: AsRef<[NodeId]>,
+    WeightContainer: AsRef<[Weight]>,
 {
     /// Unpack path from a start node (the meeting node of the CCH query), so that parent pointers point along the unpacked path.
     pub fn unpack_path(&mut self, target: NodeId, forward: bool, cch: &dyn CCHT, other_weights: &[Weight]) {
