@@ -10,6 +10,7 @@ use crate::{
     util::in_range_option::InRangeOption,
 };
 
+pub mod penalty;
 pub mod query;
 
 #[derive(Debug)]

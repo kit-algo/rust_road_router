@@ -598,6 +598,7 @@ pub fn virtual_topocore<'c, Graph: for<'a> LinkIterable<'a, NodeId>>(graph: &Gra
     }
 }
 
+#[derive(Clone)]
 pub struct VirtualTopocoreGraph<G> {
     pub graph: G,
     virtual_topocore: VirtualTopocore,

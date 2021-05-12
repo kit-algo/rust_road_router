@@ -488,6 +488,14 @@ where
 
         path
     }
+
+    pub(super) fn graph(&self) -> &Graph {
+        &self.graph
+    }
+
+    pub(super) fn graph_mut(&mut self) -> &mut Graph {
+        &mut self.graph
+    }
 }
 
 pub struct BiconnectedPathServerWrapper<'s, G, O: DijkstraOps<G>, P, Q>(&'s mut SkipLowDegServer<G, O, P>, Q);

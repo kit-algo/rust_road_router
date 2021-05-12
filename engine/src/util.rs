@@ -65,6 +65,43 @@ pub trait TapOps: Sized {
 impl<T> TapOps for T where T: Sized {}
 
 #[derive(Debug)]
+pub struct SlcsIdx<'a, Idx>(pub &'a [Idx], pub usize);
+
+impl<'a, Idx> SlcsIdx<'a, Idx>
+where
+    usize: TryFrom<Idx>,
+    <usize as std::convert::TryFrom<Idx>>::Error: std::fmt::Debug,
+    Idx: Copy,
+{
+    pub fn range(&self) -> std::ops::Range<usize> {
+        usize::try_from(self.0[self.1]).unwrap()..usize::try_from(self.0[self.1 + 1]).unwrap()
+    }
+}
+
+impl<'a, Idx, T> std::ops::Index<SlcsIdx<'a, Idx>> for [T]
+where
+    usize: TryFrom<Idx>,
+    <usize as std::convert::TryFrom<Idx>>::Error: std::fmt::Debug,
+    Idx: Copy,
+{
+    type Output = [T];
+    fn index(&self, index: SlcsIdx<'a, Idx>) -> &Self::Output {
+        &self[index.range()]
+    }
+}
+
+impl<'a, Idx, T> std::ops::IndexMut<SlcsIdx<'a, Idx>> for [T]
+where
+    usize: TryFrom<Idx>,
+    <usize as std::convert::TryFrom<Idx>>::Error: std::fmt::Debug,
+    Idx: Copy,
+{
+    fn index_mut(&mut self, index: SlcsIdx<'a, Idx>) -> &mut Self::Output {
+        &mut self[index.range()]
+    }
+}
+
+#[derive(Debug)]
 pub struct Slcs<'a, I, T> {
     first_elem: &'a [I],
     elements: &'a [T],

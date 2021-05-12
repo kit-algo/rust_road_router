@@ -12,6 +12,7 @@ use super::*;
 use crate::as_mut_slice::AsMutSlice;
 use crate::as_slice::AsSlice;
 use crate::io::*;
+use crate::util::*;
 use std::mem::swap;
 
 /// Container struct for the three collections of a graph.
@@ -218,8 +219,17 @@ where
 
     #[inline]
     fn link_iter_mut(&'a mut self, node: NodeId) -> Self::Iter {
-        let range = self.neighbor_edge_indices_usize(node);
+        let range = SlcsIdx(self.first_out(), node as usize).range();
         self.head.as_slice()[range.clone()].iter().zip(self.weight.as_mut_slice()[range].iter_mut())
+    }
+}
+
+impl<'a, FirstOutContainer, HeadContainer, WeightContainer> FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+where
+    WeightContainer: AsMutSlice<Weight>,
+{
+    pub fn weights_mut(&mut self) -> &mut [Weight] {
+        self.weight.as_mut_slice()
     }
 }
 
@@ -380,6 +390,50 @@ impl<G: for<'a> LinkIterable<'a, NodeId>> BuildReversed<G> for UnweightedOwnedGr
         }
 
         Self::from_adjancecy_lists(reversed)
+    }
+}
+
+pub struct ReversedGraphWithEdgeIds {
+    first_out: Vec<EdgeId>,
+    head: Vec<NodeId>,
+    edge_ids: Vec<EdgeId>,
+}
+
+impl<G: for<'a> LinkIterable<'a, LinkWithId>> BuildReversed<G> for ReversedGraphWithEdgeIds {
+    fn reversed(graph: &G) -> Self {
+        // vector of adjacency lists for the reverse graph
+        let mut reversed: Vec<Vec<Link>> = (0..graph.num_nodes()).map(|_| Vec::<Link>::new()).collect();
+
+        // iterate over all edges and insert them in the reversed structure
+        for node in 0..(graph.num_nodes() as NodeId) {
+            for LinkWithId { node: neighbor, edge_id } in graph.link_iter(node) {
+                reversed[neighbor as usize].push(Link { node, weight: edge_id });
+            }
+        }
+
+        let (first_out, head, edge_ids) = OwnedGraph::from_adjancecy_lists(reversed).decompose();
+        ReversedGraphWithEdgeIds { first_out, head, edge_ids }
+    }
+}
+
+impl Graph for ReversedGraphWithEdgeIds {
+    fn degree(&self, node: NodeId) -> usize {
+        SlcsIdx(&self.first_out, node as usize).range().len()
+    }
+    fn num_nodes(&self) -> usize {
+        self.first_out.len() - 1
+    }
+    fn num_arcs(&self) -> usize {
+        self.head.len()
+    }
+}
+
+impl<'a> LinkIterable<'a, (NodeId, EdgeId)> for ReversedGraphWithEdgeIds {
+    type Iter = std::iter::Zip<std::iter::Cloned<std::slice::Iter<'a, NodeId>>, std::iter::Cloned<std::slice::Iter<'a, EdgeId>>>;
+
+    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+        let range = SlcsIdx(&self.first_out, node as usize).range();
+        self.head[range.clone()].iter().cloned().zip(self.edge_ids[range.clone()].iter().cloned())
     }
 }
 

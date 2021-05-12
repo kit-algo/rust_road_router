@@ -10,7 +10,7 @@ pub mod floating_time_dependent;
 pub mod link_id_to_tail_mapper;
 pub mod time_dependent;
 
-pub use self::first_out_graph::{FirstOutGraph, OwnedGraph, UnweightedFirstOutGraph, UnweightedOwnedGraph};
+pub use self::first_out_graph::{FirstOutGraph, OwnedGraph, ReversedGraphWithEdgeIds, UnweightedFirstOutGraph, UnweightedOwnedGraph};
 
 /// Node ids are 32bit unsigned ints
 pub type NodeId = u32;
@@ -45,6 +45,19 @@ impl Arc for (NodeId, EdgeId) {
     #[inline(always)]
     fn head(&self) -> NodeId {
         self.0
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct LinkWithId {
+    pub node: NodeId,
+    pub edge_id: EdgeId,
+}
+
+impl Arc for LinkWithId {
+    #[inline(always)]
+    fn head(&self) -> NodeId {
+        self.node
     }
 }
 
