@@ -64,7 +64,8 @@ pub trait TapOps: Sized {
 
 impl<T> TapOps for T where T: Sized {}
 
-#[derive(Debug)]
+use std::convert::TryFrom;
+
 pub struct SlcsIdx<'a, Idx>(pub &'a [Idx], pub usize);
 
 impl<'a, Idx> SlcsIdx<'a, Idx>
@@ -101,17 +102,7 @@ where
     }
 }
 
-#[derive(Debug)]
-pub struct Slcs<'a, I, T> {
-    first_elem: &'a [I],
-    elements: &'a [T],
-}
-
-impl<'a, I, T> Slcs<'a, I, T> {
-    pub fn new(first_elem: &'a [I], elements: &'a [T]) -> Self {
-        Slcs { first_elem, elements }
-    }
-}
+pub struct Slcs<'a, I, T>(pub &'a [I], pub &'a [T]);
 
 impl<'a, I, T> Slcs<'a, I, T>
 where
@@ -120,11 +111,9 @@ where
     I: Copy,
 {
     pub fn range(&self, idx: usize) -> std::ops::Range<usize> {
-        usize::try_from(self.first_elem[idx]).unwrap()..usize::try_from(self.first_elem[idx + 1]).unwrap()
+        SlcsIdx(self.0, idx).range()
     }
 }
-
-use std::convert::TryFrom;
 
 impl<'a, I, T> std::ops::Index<usize> for Slcs<'a, I, T>
 where
@@ -134,21 +123,11 @@ where
 {
     type Output = [T];
     fn index(&self, idx: usize) -> &<Self as std::ops::Index<usize>>::Output {
-        &self.elements[usize::try_from(self.first_elem[idx]).unwrap()..usize::try_from(self.first_elem[idx + 1]).unwrap()]
+        &self.1[SlcsIdx(self.0, idx)]
     }
 }
 
-#[derive(Debug)]
-pub struct SlcsMut<'a, I, T> {
-    first_elem: &'a [I],
-    elements: &'a mut [T],
-}
-
-impl<'a, I, T> SlcsMut<'a, I, T> {
-    pub fn new(first_elem: &'a [I], elements: &'a mut [T]) -> Self {
-        SlcsMut { first_elem, elements }
-    }
-}
+pub struct SlcsMut<'a, I, T>(pub &'a [I], pub &'a mut [T]);
 
 impl<'a, I, T> std::ops::Index<usize> for SlcsMut<'a, I, T>
 where
@@ -158,7 +137,7 @@ where
 {
     type Output = [T];
     fn index(&self, idx: usize) -> &<Self as std::ops::Index<usize>>::Output {
-        &self.elements[usize::try_from(self.first_elem[idx]).unwrap()..usize::try_from(self.first_elem[idx + 1]).unwrap()]
+        &self.1[SlcsIdx(self.0, idx)]
     }
 }
 
@@ -169,7 +148,7 @@ where
     I: Copy,
 {
     fn index_mut(&mut self, idx: usize) -> &mut <Self as std::ops::Index<usize>>::Output {
-        &mut self.elements[usize::try_from(self.first_elem[idx]).unwrap()..usize::try_from(self.first_elem[idx + 1]).unwrap()]
+        &mut self.1[SlcsIdx(self.0, idx)]
     }
 }
 

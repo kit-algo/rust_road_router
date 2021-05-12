@@ -20,12 +20,7 @@ use std::mem::swap;
 /// Anything that can be dereferenced to a slice works.
 /// Both owned (`Vec<T>`, `Box<[T]>`) and shared (`Rc<[T]>`, `Arc<[T])>`) or borrowed (slices) data is possible.
 #[derive(Debug, Clone)]
-pub struct FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
-where
-    FirstOutContainer: AsSlice<EdgeId>,
-    HeadContainer: AsSlice<NodeId>,
-    WeightContainer: AsSlice<Weight>,
-{
+pub struct FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> {
     // index of first edge of each node +1 entry in the end
     first_out: FirstOutContainer,
     // the node ids to which each edge points
@@ -145,11 +140,7 @@ impl<G: for<'a> LinkIterable<'a, Link>> BuildPermutated<G> for OwnedGraph {
     }
 }
 
-impl<FirstOutContainer, HeadContainer> FirstOutGraph<FirstOutContainer, HeadContainer, Vec<Weight>>
-where
-    FirstOutContainer: AsSlice<EdgeId>,
-    HeadContainer: AsSlice<NodeId>,
-{
+impl<FirstOutContainer, HeadContainer> FirstOutGraph<FirstOutContainer, HeadContainer, Vec<Weight>> {
     pub fn swap_weights(&mut self, mut new_weights: &mut Vec<Weight>) {
         assert!(new_weights.len() == self.weight.len());
         swap(&mut self.weight, &mut new_weights);
@@ -187,7 +178,7 @@ where
 
     #[inline]
     fn link_iter(&'a self, node: NodeId) -> Self::Iter {
-        let range = self.neighbor_edge_indices_usize(node);
+        let range = SlcsIdx(self.first_out(), node as usize).range();
         self.head()[range.clone()]
             .iter()
             .zip(self.weight()[range].iter())
@@ -204,7 +195,7 @@ where
     type Iter = std::iter::Cloned<std::slice::Iter<'a, NodeId>>;
 
     fn link_iter(&'a self, node: NodeId) -> Self::Iter {
-        self.head()[self.neighbor_edge_indices_usize(node)].iter().cloned()
+        self.head()[SlcsIdx(self.first_out(), node as usize)].iter().cloned()
     }
 }
 
@@ -259,16 +250,30 @@ where
     }
 }
 
+impl<'a, FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<'a, LinkWithId> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+where
+    FirstOutContainer: AsSlice<EdgeId>,
+    HeadContainer: AsSlice<NodeId>,
+    WeightContainer: AsSlice<Weight>,
+{
+    #[allow(clippy::type_complexity)]
+    type Iter = std::iter::Map<std::iter::Zip<std::slice::Iter<'a, NodeId>, std::ops::Range<usize>>, fn((&NodeId, usize)) -> LinkWithId>;
+
+    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+        let range = SlcsIdx(self.first_out(), node as usize).range();
+        self.head()[range.clone()]
+            .iter()
+            .zip(range)
+            .map(|(&node, e)| LinkWithId { node, edge_id: e as EdgeId })
+    }
+}
+
 /// Container struct for the collections of an unweighted graph.
 /// Genric over the types of the data collections.
 /// Anything that can be dereferenced to a slice works.
 /// Both owned (`Vec<T>`, `Box<[T]>`) and shared (`Rc<[T]>`, `Arc<[T])>`) or borrowed (slices) data is possible.
 #[derive(Debug, Clone)]
-pub struct UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
-where
-    FirstOutContainer: AsSlice<EdgeId>,
-    HeadContainer: AsSlice<NodeId>,
-{
+pub struct UnweightedFirstOutGraph<FirstOutContainer, HeadContainer> {
     // index of first edge of each node +1 entry in the end
     first_out: FirstOutContainer,
     // the node ids to which each edge points
