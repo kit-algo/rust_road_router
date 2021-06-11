@@ -1,6 +1,6 @@
 #[cfg(feature = "chpot-alt")]
 use crate::algo::alt::ALTPotential;
-#[cfg(feature = "chpot-cch")]
+#[cfg(any(feature = "chpot-cch", debug_assertions))]
 use crate::algo::customizable_contraction_hierarchy::*;
 use crate::{
     algo::{
@@ -55,7 +55,7 @@ pub fn run(
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[0]);
 
-    #[cfg(feature = "chpot-cch")]
+    #[cfg(any(feature = "chpot-cch", debug_assertions))]
     let cch = {
         let cch_order = Vec::load_from(path.join("cch_perm"))?;
         let cch_order = NodeOrder::from_node_order(cch_order);
@@ -71,6 +71,12 @@ pub fn run(
         .reorder_for_seperator_based_customization();
         let _cch_build_ctxt = algo_runs_ctxt.push_collection_item();
         contract(&graph, cch_order)
+    };
+
+    #[cfg(debug_assertions)]
+    let mut cch_server = {
+        let _blocked = block_reporting();
+        customizable_contraction_hierarchy::query::Server::new(customize(&cch, &modified_graph))
     };
 
     let potential = {
@@ -143,6 +149,11 @@ pub fn run(
         query_count += 1;
 
         let (mut res, time) = measure(|| QueryServer::query(&mut topocore, Query { from, to }));
+        #[cfg(debug_assertions)]
+        debug_assert_eq!(
+            res.as_ref().map(|res| res.distance()),
+            QueryServer::query(&mut cch_server, Query { from, to }).map(|res| res.distance())
+        );
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         let dist = res.as_ref().map(|res| res.distance());
         report!("result", dist);
