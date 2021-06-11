@@ -76,7 +76,7 @@ where
 
     #[inline(always)]
     pub fn next_step(&mut self) -> Option<NodeId> {
-        self.settle_next_node(|_| Some(Neutral()))
+        self.settle_next_node(|_| Some(Neutral()), |_| ())
     }
 
     #[inline(always)]
@@ -85,17 +85,27 @@ where
         P: FnMut(NodeId) -> Option<O>,
         O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
     {
-        self.settle_next_node(potential)
+        self.settle_next_node(potential, |_| ())
     }
 
     #[inline(always)]
-    fn settle_next_node<P, O>(&mut self, mut potential: P) -> Option<NodeId>
+    pub fn next_step_with_potential_and_edge_callback<P, O>(&mut self, potential: P, edge_callback: impl FnMut(&Ops::Arc)) -> Option<NodeId>
+    where
+        P: FnMut(NodeId) -> Option<O>,
+        O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
+    {
+        self.settle_next_node(potential, edge_callback)
+    }
+
+    #[inline(always)]
+    fn settle_next_node<P, O>(&mut self, mut potential: P, mut edge_callback: impl FnMut(&Ops::Arc)) -> Option<NodeId>
     where
         P: FnMut(NodeId) -> Option<O>,
         O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
     {
         self.queue.pop().map(|State { node, .. }| {
             for edge in LinkIterable::<Ops::Arc>::link_iter(self.graph, node) {
+                edge_callback(&edge);
                 let mut chain = Some(ChainStep {
                     prev_node: node,
                     next_node: edge.head(),
@@ -163,6 +173,7 @@ where
                         self.predecessors[next_node as usize] = prev_node;
 
                         if let Some(next_edge) = next_edge {
+                            edge_callback(&next_edge);
                             chain = Some(ChainStep {
                                 prev_node: next_node,
                                 next_node: next_edge.head(),
@@ -184,6 +195,7 @@ where
 
                     if chain.is_none() {
                         if let Some((deg_three_node, edge)) = deg_three.take() {
+                            edge_callback(&edge);
                             chain = Some(ChainStep {
                                 prev_node: deg_three_node,
                                 next_distance: self.ops.link(&self.graph, &self.distances[deg_three_node as usize], &edge),
