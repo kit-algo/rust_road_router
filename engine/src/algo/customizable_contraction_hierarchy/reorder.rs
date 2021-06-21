@@ -70,10 +70,10 @@ impl<'a, 'c> CCHReordering<'a, 'c> {
         }
     }
 
-    fn to_ordering(&self, seperators: SeparatorTree, order: &mut Vec<NodeId>) {
+    fn to_ordering(seperators: SeparatorTree, order: &mut Vec<NodeId>) {
         order.extend(seperators.nodes);
         for child in seperators.children {
-            self.to_ordering(child, order);
+            Self::to_ordering(child, order);
         }
     }
 
@@ -82,7 +82,7 @@ impl<'a, 'c> CCHReordering<'a, 'c> {
         let mut separators = self.cch.separators();
         self.reorder_tree(&mut separators, 0);
         let mut order = Vec::new();
-        self.to_ordering(separators, &mut order);
+        Self::to_ordering(separators, &mut order);
 
         for rank in &mut order {
             *rank = self.cch.node_order.node(*rank);
@@ -97,7 +97,29 @@ impl<'a, 'c> CCHReordering<'a, 'c> {
         let mut separators = self.cch.separators();
         self.reorder_children_by_size(&mut separators);
         let mut order = Vec::new();
-        self.to_ordering(separators, &mut order);
+        Self::to_ordering(separators, &mut order);
+
+        for rank in &mut order {
+            *rank = self.cch.node_order.node(*rank);
+        }
+        order.reverse();
+
+        NodeOrder::from_node_order(order)
+    }
+
+    pub fn reorder_bfs(&self) -> NodeOrder {
+        let separators = self.cch.separators();
+        let mut order = Vec::new();
+
+        let mut queue = std::collections::VecDeque::new();
+        queue.push_back(&separators);
+
+        while let Some(sep) = queue.pop_front() {
+            order.extend_from_slice(&sep.nodes);
+            for child in &sep.children {
+                queue.push_back(child);
+            }
+        }
 
         for rank in &mut order {
             *rank = self.cch.node_order.node(*rank);

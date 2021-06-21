@@ -11,6 +11,7 @@ pub mod ch_potentials;
 pub mod contraction_hierarchy;
 pub mod customizable_contraction_hierarchy;
 pub mod dijkstra;
+pub mod hl;
 pub mod time_dependent_sampling;
 pub mod topocore;
 
