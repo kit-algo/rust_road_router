@@ -66,8 +66,19 @@ impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>, P: Potential> S
                 if forward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY) <= backward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY) {
                     if let Some(node) = forward_dijkstra.next_with_improve_callback_and_potential(
                         |head, &dist| {
-                            if dist + forward_potential.borrow_mut().potential(head).unwrap_or(INFINITY) >= *tentative_distance {
-                                return false;
+                            if *tentative_distance < INFINITY {
+                                if dist + forward_potential.borrow_mut().potential(head).unwrap_or(INFINITY) >= *tentative_distance {
+                                    return false;
+                                }
+                                let remaining_by_queue = backward_dijkstra
+                                    .queue()
+                                    .peek()
+                                    .map(|q| q.key)
+                                    .unwrap_or(INFINITY)
+                                    .saturating_sub(backward_potential.borrow_mut().potential(head).unwrap_or(INFINITY));
+                                if dist + remaining_by_queue >= *tentative_distance {
+                                    return false;
+                                }
                             }
                             if dist + backward_dijkstra.tentative_distance(head) < *tentative_distance {
                                 *tentative_distance = dist + backward_dijkstra.tentative_distance(head);
@@ -92,8 +103,19 @@ impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>, P: Potential> S
                 } else {
                     if let Some(node) = backward_dijkstra.next_with_improve_callback_and_potential(
                         |head, &dist| {
-                            if dist + backward_potential.borrow_mut().potential(head).unwrap_or(INFINITY) >= *tentative_distance {
-                                return false;
+                            if *tentative_distance < INFINITY {
+                                if dist + backward_potential.borrow_mut().potential(head).unwrap_or(INFINITY) >= *tentative_distance {
+                                    return false;
+                                }
+                                let remaining_by_queue = forward_dijkstra
+                                    .queue()
+                                    .peek()
+                                    .map(|q| q.key)
+                                    .unwrap_or(INFINITY)
+                                    .saturating_sub(forward_potential.borrow_mut().potential(head).unwrap_or(INFINITY));
+                                if dist + remaining_by_queue >= *tentative_distance {
+                                    return false;
+                                }
                             }
                             if dist + forward_dijkstra.tentative_distance(head) < *tentative_distance {
                                 *tentative_distance = dist + forward_dijkstra.tentative_distance(head);

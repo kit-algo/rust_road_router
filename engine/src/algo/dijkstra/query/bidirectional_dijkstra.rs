@@ -73,7 +73,7 @@ impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>, P: Potential> S
                 if forward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY) <= backward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY) {
                     if let Some(node) = forward_dijkstra.next_with_improve_callback_and_potential(
                         |head, &dist| {
-                            if dist + potential.borrow_mut().forward_potential(head).unwrap_or(INFINITY) >= *tentative_distance {
+                            if searches_met && dist + potential.borrow_mut().forward_potential(head).unwrap_or(INFINITY) >= *tentative_distance {
                                 return false;
                             }
                             if dist + backward_dijkstra.tentative_distance(head) < *tentative_distance {
@@ -102,7 +102,7 @@ impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>, P: Potential> S
                 } else {
                     if let Some(node) = backward_dijkstra.next_with_improve_callback_and_potential(
                         |head, &dist| {
-                            if dist + potential.borrow_mut().backward_potential(head).unwrap_or(INFINITY) >= *tentative_distance {
+                            if searches_met && dist + potential.borrow_mut().backward_potential(head).unwrap_or(INFINITY) >= *tentative_distance {
                                 return false;
                             }
                             if dist + forward_dijkstra.tentative_distance(head) < *tentative_distance {
