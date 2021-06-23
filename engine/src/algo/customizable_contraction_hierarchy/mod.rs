@@ -212,10 +212,10 @@ impl CCH {
         let mut backward_tail = vec![0; backward_head.len()];
 
         for node in 0..(self.num_nodes() as NodeId) {
-            (&mut forward_tail[..])[SlcsIdx(&forward_first_out, node as usize)]
+            forward_tail[SlcsIdx(&forward_first_out).range(node as usize)]
                 .iter_mut()
                 .for_each(|tail| *tail = node);
-            (&mut backward_tail[..])[SlcsIdx(&backward_first_out, node as usize)]
+            backward_tail[SlcsIdx(&backward_first_out).range(node as usize)]
                 .iter_mut()
                 .for_each(|tail| *tail = node);
         }

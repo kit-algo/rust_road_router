@@ -176,7 +176,7 @@ where
 
     #[inline]
     fn link_iter(&'a self, node: NodeId) -> Self::Iter {
-        let range = SlcsIdx(self.first_out(), node as usize).range();
+        let range = SlcsIdx(self.first_out()).range(node as usize);
         self.head()[range.clone()]
             .iter()
             .zip(self.weight()[range].iter())
@@ -193,7 +193,7 @@ where
     type Iter = std::iter::Cloned<std::slice::Iter<'a, NodeId>>;
 
     fn link_iter(&'a self, node: NodeId) -> Self::Iter {
-        self.head()[SlcsIdx(self.first_out(), node as usize)].iter().cloned()
+        self.head()[SlcsIdx(self.first_out()).range(node as usize)].iter().cloned()
     }
 }
 
@@ -208,7 +208,7 @@ where
 
     #[inline]
     fn link_iter_mut(&'a mut self, node: NodeId) -> Self::Iter {
-        let range = SlcsIdx(self.first_out(), node as usize).range();
+        let range = SlcsIdx(self.first_out()).range(node as usize);
         self.head.as_ref()[range.clone()].iter().zip(self.weight.as_mut()[range].iter_mut())
     }
 }
@@ -258,7 +258,7 @@ where
     type Iter = std::iter::Map<std::iter::Zip<std::slice::Iter<'a, NodeId>, std::ops::Range<usize>>, fn((&NodeId, usize)) -> LinkWithId>;
 
     fn link_iter(&'a self, node: NodeId) -> Self::Iter {
-        let range = SlcsIdx(self.first_out(), node as usize).range();
+        let range = SlcsIdx(self.first_out()).range(node as usize);
         self.head()[range.clone()]
             .iter()
             .zip(range)
@@ -421,7 +421,7 @@ impl<G: for<'a> LinkIterable<'a, LinkWithId>> BuildReversed<G> for ReversedGraph
 
 impl Graph for ReversedGraphWithEdgeIds {
     fn degree(&self, node: NodeId) -> usize {
-        SlcsIdx(&self.first_out, node as usize).range().len()
+        SlcsIdx(&self.first_out).range(node as usize).len()
     }
     fn num_nodes(&self) -> usize {
         self.first_out.len() - 1
@@ -435,7 +435,7 @@ impl<'a> LinkIterable<'a, (NodeId, EdgeId)> for ReversedGraphWithEdgeIds {
     type Iter = std::iter::Zip<std::iter::Cloned<std::slice::Iter<'a, NodeId>>, std::iter::Cloned<std::slice::Iter<'a, EdgeId>>>;
 
     fn link_iter(&'a self, node: NodeId) -> Self::Iter {
-        let range = SlcsIdx(&self.first_out, node as usize).range();
+        let range = SlcsIdx(&self.first_out).range(node as usize);
         self.head[range.clone()].iter().cloned().zip(self.edge_ids[range.clone()].iter().cloned())
     }
 }

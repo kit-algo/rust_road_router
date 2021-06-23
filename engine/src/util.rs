@@ -66,7 +66,7 @@ impl<T> TapOps for T where T: Sized {}
 
 use std::convert::TryFrom;
 
-pub struct SlcsIdx<'a, Idx>(pub &'a [Idx], pub usize);
+pub struct SlcsIdx<'a, Idx>(pub &'a [Idx]);
 
 impl<'a, Idx> SlcsIdx<'a, Idx>
 where
@@ -74,31 +74,8 @@ where
     <usize as std::convert::TryFrom<Idx>>::Error: std::fmt::Debug,
     Idx: Copy,
 {
-    pub fn range(&self) -> std::ops::Range<usize> {
-        usize::try_from(self.0[self.1]).unwrap()..usize::try_from(self.0[self.1 + 1]).unwrap()
-    }
-}
-
-impl<'a, Idx, T> std::ops::Index<SlcsIdx<'a, Idx>> for [T]
-where
-    usize: TryFrom<Idx>,
-    <usize as std::convert::TryFrom<Idx>>::Error: std::fmt::Debug,
-    Idx: Copy,
-{
-    type Output = [T];
-    fn index(&self, index: SlcsIdx<'a, Idx>) -> &Self::Output {
-        &self[index.range()]
-    }
-}
-
-impl<'a, Idx, T> std::ops::IndexMut<SlcsIdx<'a, Idx>> for [T]
-where
-    usize: TryFrom<Idx>,
-    <usize as std::convert::TryFrom<Idx>>::Error: std::fmt::Debug,
-    Idx: Copy,
-{
-    fn index_mut(&mut self, index: SlcsIdx<'a, Idx>) -> &mut Self::Output {
-        &mut self[index.range()]
+    pub fn range(&self, idx: usize) -> std::ops::Range<usize> {
+        usize::try_from(self.0[idx]).unwrap()..usize::try_from(self.0[idx + 1]).unwrap()
     }
 }
 
@@ -111,7 +88,7 @@ where
     I: Copy,
 {
     pub fn range(&self, idx: usize) -> std::ops::Range<usize> {
-        SlcsIdx(self.0, idx).range()
+        SlcsIdx(self.0).range(idx)
     }
 }
 
@@ -123,7 +100,7 @@ where
 {
     type Output = [T];
     fn index(&self, idx: usize) -> &<Self as std::ops::Index<usize>>::Output {
-        &self.1[SlcsIdx(self.0, idx)]
+        &self.1[SlcsIdx(self.0).range(idx)]
     }
 }
 
@@ -137,7 +114,7 @@ where
 {
     type Output = [T];
     fn index(&self, idx: usize) -> &<Self as std::ops::Index<usize>>::Output {
-        &self.1[SlcsIdx(self.0, idx)]
+        &self.1[SlcsIdx(self.0).range(idx)]
     }
 }
 
@@ -148,7 +125,7 @@ where
     I: Copy,
 {
     fn index_mut(&mut self, idx: usize) -> &mut <Self as std::ops::Index<usize>>::Output {
-        &mut self.1[SlcsIdx(self.0, idx)]
+        &mut self.1[SlcsIdx(self.0).range(idx)]
     }
 }
 
