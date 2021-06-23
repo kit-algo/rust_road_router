@@ -213,17 +213,41 @@ impl<G: Graph> Graph for AlternativeGraph<G> {
     }
 }
 
-impl<'a, G: for<'b> LinkIterable<'b, L>, L> LinkIterable<'a, L> for AlternativeGraph<G> {
-    type Iter = <G as LinkIterable<'a, L>>::Iter;
+impl<'a, G: for<'b> LinkIterable<'b, L> + RandomLinkAccessGraph, L> LinkIterable<'a, L> for AlternativeGraph<G> {
+    type Iter = FilteredLinkIter<'a, <G as LinkIterable<'a, L>>::Iter>;
 
     #[inline(always)]
     fn link_iter(&'a self, node: NodeId) -> Self::Iter {
-        self.graph.link_iter(node)
+        FilteredLinkIter {
+            iter: self.graph.link_iter(node),
+            edge_ids: self.graph.neighbor_edge_indices_usize(node),
+            contained_edges: &self.contained_edges,
+        }
     }
 }
 
 impl<G: SymmetricDegreeGraph> SymmetricDegreeGraph for AlternativeGraph<G> {
     fn symmetric_degree(&self, node: NodeId) -> SymmetricDeg {
         self.graph.symmetric_degree(node)
+    }
+}
+
+struct FilteredLinkIter<'a, I> {
+    iter: I,
+    edge_ids: std::ops::Range<usize>,
+    contained_edges: &'a FastClearBitVec,
+}
+
+impl<'a, L, I: Iterator<Item = L>> Iterator for FilteredLinkIter<'a, I> {
+    type Item = L;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(e) = self.edge_ids.next() {
+            let next = self.iter.next();
+            if self.contained_edges.get(e) {
+                return next;
+            }
+        }
+        None
     }
 }

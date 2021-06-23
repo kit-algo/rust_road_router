@@ -687,6 +687,27 @@ impl<G> SymmetricDegreeGraph for VirtualTopocoreGraph<G> {
     }
 }
 
+impl<G: BuildReversed<G>> BuildReversed<VirtualTopocoreGraph<G>> for VirtualTopocoreGraph<G> {
+    fn reversed(graph: &VirtualTopocoreGraph<G>) -> Self {
+        Self {
+            graph: G::reversed(&graph.graph),
+            virtual_topocore: graph.virtual_topocore.clone(),
+        }
+    }
+}
+
+impl<G: RandomLinkAccessGraph> RandomLinkAccessGraph for VirtualTopocoreGraph<G> {
+    fn link(&self, edge_id: EdgeId) -> Link {
+        self.graph.link(edge_id)
+    }
+    fn edge_index(&self, from: NodeId, to: NodeId) -> Option<EdgeId> {
+        self.graph.edge_index(from, to)
+    }
+    fn neighbor_edge_indices(&self, node: NodeId) -> std::ops::Range<EdgeId> {
+        self.graph.neighbor_edge_indices(node)
+    }
+}
+
 fn dfs_pre_order<Graph: for<'a> LinkIterable<'a, NodeId>>(graph: &Graph) -> NodeOrder {
     let mut order = Vec::with_capacity(graph.num_nodes());
     dfs(graph, &mut |node| {
