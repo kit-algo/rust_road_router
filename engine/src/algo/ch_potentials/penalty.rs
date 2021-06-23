@@ -57,6 +57,7 @@ impl<P: Potential> Penalty<P> {
 
         if let Some(mut result) = QueryServer::query(&mut self.shortest_path_penalized, query) {
             let base_dist = result.distance;
+            report!("base_dist", base_dist);
             let rejoin_penalty = ((base_dist as f64).sqrt() as Weight) / 2;
             let mut path = result.path();
             let shortest_path_penalized = &mut self.shortest_path_penalized;
@@ -65,12 +66,27 @@ impl<P: Potential> Penalty<P> {
                 .array_windows::<2>()
                 .map(|&[tail, head]| shortest_path_penalized.graph().graph.edge_index(tail, head).unwrap())
                 .collect();
+            alternative_graph_dijkstra.graph_mut().add_edges(&path_edges);
+            let path_orig_len: Weight = path_edges
+                .iter()
+                .map(|&e| alternative_graph_dijkstra.graph().graph.graph.weight()[e as usize])
+                .sum();
+            debug_assert_eq!(base_dist, path_orig_len);
 
+            let mut iterations_ctxt = push_collection_context("iterations".to_string());
+
+            let mut i = 0;
             loop {
+                i += 1;
+                // if i > 5 {
+                //     break;
+                // }
+                let _iteration_ctxt = iterations_ctxt.push_collection_item();
+                report!("iteration", i);
                 for &edge in &path_edges {
                     let weight = &mut shortest_path_penalized.graph_mut().graph.weights_mut()[edge as usize];
                     *weight = ((*weight as f64) * 1.04) as Weight;
-                    if self.edge_penelized.get(edge as usize) {
+                    if !self.edge_penelized.get(edge as usize) {
                         self.edge_penelized.set(edge as usize);
                         self.edges_to_reset.push(edge);
                     }
@@ -80,7 +96,7 @@ impl<P: Potential> Penalty<P> {
                         if rev_head != tail {
                             let weight = &mut shortest_path_penalized.graph_mut().graph.weights_mut()[edge as usize];
                             *weight += rejoin_penalty;
-                            if self.edge_penelized.get(edge as usize) {
+                            if !self.edge_penelized.get(edge as usize) {
                                 self.edge_penelized.set(edge as usize);
                                 self.edges_to_reset.push(edge);
                             }
@@ -88,7 +104,9 @@ impl<P: Potential> Penalty<P> {
                     }
                 }
 
-                let mut result = QueryServer::query(shortest_path_penalized, query).unwrap();
+                let (mut result, time) = measure(|| QueryServer::query(shortest_path_penalized, query).unwrap());
+                report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+                report!("penalty_dist", result.distance());
                 // TODO refactor get path edges
                 path = result.path();
                 path_edges = path
@@ -99,12 +117,15 @@ impl<P: Potential> Penalty<P> {
                     .iter()
                     .map(|&e| alternative_graph_dijkstra.graph().graph.graph.weight()[e as usize])
                     .sum();
+                report!("orig_dist", path_orig_len);
+                debug_assert!(path_orig_len >= base_dist);
 
                 let mut feasable = false;
                 let new_parts: Vec<_> = path_edges
                     .split(|&edge| alternative_graph_dijkstra.graph().contained_edges.get(edge as usize))
-                    .filter(|part| part.is_empty())
+                    .filter(|part| !part.is_empty())
                     .collect();
+
                 for new_part in new_parts {
                     let part_start = result
                         .data()
@@ -116,6 +137,7 @@ impl<P: Potential> Penalty<P> {
                         .sum();
 
                     if part_dist * 10 > base_dist {
+                        let _blocked = block_reporting();
                         if part_dist * 10
                             <= QueryServer::query(
                                 alternative_graph_dijkstra,
@@ -133,6 +155,7 @@ impl<P: Potential> Penalty<P> {
                     }
                 }
 
+                report!("feasable", feasable);
                 if feasable {
                     alternative_graph_dijkstra.graph_mut().add_edges(&path_edges);
                 }
@@ -142,13 +165,17 @@ impl<P: Potential> Penalty<P> {
                 }
             }
 
+            drop(iterations_ctxt);
+
+            report!("num_iterations", i);
+
+            // XBDV
+
             for edge in self.edges_to_reset.drain(..) {
                 let e = edge as usize;
                 self.edge_penelized.unset_all_around(e as usize);
                 shortest_path_penalized.graph_mut().graph.weights_mut()[e as usize] = alternative_graph_dijkstra.graph().graph.graph.weight()[e as usize];
             }
-
-            // XBDV
 
             Some(())
         } else {
