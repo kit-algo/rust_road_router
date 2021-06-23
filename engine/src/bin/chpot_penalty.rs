@@ -65,8 +65,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut penalty_server = {
         let _prepro_ctxt = algo_runs_ctxt.push_collection_item();
-        // penalty::Penalty::new(&graph, forward_pot)
-        penalty::Penalty::new(&graph, forward_pot, backward_pot)
+        penalty::Penalty::new(&graph, forward_pot)
     };
 
     let mut total_query_time = Duration::zero();

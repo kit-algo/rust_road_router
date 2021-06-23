@@ -78,9 +78,9 @@ impl<P: Potential> Penalty<P> {
             let mut i = 0;
             loop {
                 i += 1;
-                // if i > 5 {
-                //     break;
-                // }
+                if i > 5 {
+                    break;
+                }
                 let _iteration_ctxt = iterations_ctxt.push_collection_item();
                 report!("iteration", i);
                 for &edge in &path_edges {
