@@ -321,11 +321,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    let mut meeting_node = graph.num_nodes() as NodeId;
+    let mut _meeting_node = graph.num_nodes() as NodeId;
     for node in 0..graph.num_nodes() {
         let node = node as NodeId;
         if ch_forward_dijkstra.tentative_distance(node) + ch_backward_dijkstra.tentative_distance(node) == *dist {
-            meeting_node = node;
+            _meeting_node = node;
             break;
         }
     }
@@ -630,6 +630,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 //     step
 // }
 
+#[allow(dead_code)]
 fn assign_cell_levels(
     sep_tree: &separator_decomposition::SeparatorTree,
     cch: &CCH,

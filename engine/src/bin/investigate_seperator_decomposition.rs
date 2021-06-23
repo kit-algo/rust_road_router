@@ -52,6 +52,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[allow(dead_code)]
 fn debug_sep_tree(sep_tree: &separator_decomposition::SeparatorTree, cch: &CCH, down_degs: &Vec<usize>) -> usize {
     let mut level = 0;
     for child in &sep_tree.children {

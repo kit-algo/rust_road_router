@@ -630,6 +630,7 @@ where
 scoped_thread_local!(static UPWARD_WORKSPACE_LIVE: RefCell<Vec<PreLiveShortcut>>);
 scoped_thread_local!(static DOWNWARD_WORKSPACE_LIVE: RefCell<Vec<PreLiveShortcut>>);
 
+#[allow(unused)]
 pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
     report!("algo", "CATCHUp Live Customization");
 
