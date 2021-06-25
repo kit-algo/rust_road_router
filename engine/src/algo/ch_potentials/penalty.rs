@@ -127,7 +127,13 @@ impl<P: Potential> Penalty<P> {
                     }
                 }
 
-                let (mut result, time) = measure(|| QueryServer::query(shortest_path_penalized, query).unwrap());
+                let (result, time) = measure(|| shortest_path_penalized.distance_with_cap(query, max_penalized_dist));
+                let mut result = if let Some(result) = result {
+                    result
+                } else {
+                    dbg!("search pruned to death");
+                    break;
+                };
                 report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
                 let penalty_dist = result.distance();
                 report!("penalty_dist", penalty_dist);

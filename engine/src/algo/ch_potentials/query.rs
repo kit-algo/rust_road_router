@@ -140,6 +140,7 @@ where
                 &mut self.core_search.visited,
                 &self.core_search.reversed,
                 |n, d, p| inspect(n, &virtual_topocore.order, d, p),
+                INFINITY,
             )
         };
 
@@ -386,10 +387,24 @@ where
         }
     }
 
-    fn distance(&mut self, query: impl GenQuery<Timestamp> + Copy, inspect: impl FnMut(NodeId, &TopoDijkstraRun<Graph, Ops>, &mut P)) -> Option<Weight> {
+    pub fn distance_with_cap<Q: GenQuery<Timestamp> + Copy>(
+        &mut self,
+        query: Q,
+        cap: Weight,
+    ) -> Option<QueryResult<BiconnectedPathServerWrapper<Graph, Ops, P, Q>, Weight>> {
+        self.distance(query, |_, _, _| (), cap)
+            .map(move |distance| QueryResult::new(distance, BiconnectedPathServerWrapper(self, query)))
+    }
+
+    fn distance(
+        &mut self,
+        query: impl GenQuery<Timestamp> + Copy,
+        inspect: impl FnMut(NodeId, &TopoDijkstraRun<Graph, Ops>, &mut P),
+        cap: Weight,
+    ) -> Option<Weight> {
         let mut dijkstra = TopoDijkstraRun::query(&self.graph, &mut self.dijkstra_data, &mut self.ops, query);
         self.potential.init(query.to());
-        Self::distance_manually_initialized(&mut dijkstra, query, &mut self.potential, &mut self.visited, &self.reversed, inspect)
+        Self::distance_manually_initialized(&mut dijkstra, query, &mut self.potential, &mut self.visited, &self.reversed, inspect, cap)
     }
 
     fn distance_manually_initialized(
@@ -399,6 +414,7 @@ where
         visited: &mut FastClearBitVec,
         reversed: &UnweightedOwnedGraph,
         mut inspect: impl FnMut(NodeId, &TopoDijkstraRun<Graph, Ops>, &mut P),
+        cap: Weight,
     ) -> Option<Weight> {
         report!("algo", "Virtual Topocore Core Query");
         let mut num_queue_pops = 0;
@@ -427,7 +443,8 @@ where
             if dijkstra
                 .queue()
                 .peek()
-                .map(|e| e.key >= *dijkstra.tentative_distance(query.to()) + target_pot)
+                .map(|e| e.key >= *dijkstra.tentative_distance(query.to()) + target_pot || e.key > cap)
+                // .map(|e| e.key >= *dijkstra.tentative_distance(query.to()) + target_pot)
                 .unwrap_or(false)
             {
                 break;
@@ -448,20 +465,24 @@ where
 
     pub fn visualize_query(&mut self, query: impl GenQuery<Timestamp> + Copy, lat: &[f32], lng: &[f32], order: &NodeOrder) -> Option<Weight> {
         let mut num_settled_nodes = 0;
-        let res = self.distance(query, |node, dijk, pot| {
-            let node_id = order.node(node) as usize;
-            println!(
-                "var marker = L.marker([{}, {}], {{ icon: L.dataIcon({{ data: {{ popped: {} }}, ...blueIconOptions }}) }}).addTo(map);",
-                lat[node_id], lng[node_id], num_settled_nodes
-            );
-            println!(
-                "marker.bindPopup(\"id: {}<br>distance: {}<br>potential: {}\");",
-                node_id,
-                dijk.tentative_distance(node),
-                pot.potential(node).unwrap()
-            );
-            num_settled_nodes += 1;
-        });
+        let res = self.distance(
+            query,
+            |node, dijk, pot| {
+                let node_id = order.node(node) as usize;
+                println!(
+                    "var marker = L.marker([{}, {}], {{ icon: L.dataIcon({{ data: {{ popped: {} }}, ...blueIconOptions }}) }}).addTo(map);",
+                    lat[node_id], lng[node_id], num_settled_nodes
+                );
+                println!(
+                    "marker.bindPopup(\"id: {}<br>distance: {}<br>potential: {}\");",
+                    node_id,
+                    dijk.tentative_distance(node),
+                    pot.potential(node).unwrap()
+                );
+                num_settled_nodes += 1;
+            },
+            INFINITY,
+        );
         println!(
             "L.marker([{}, {}], {{ title: \"from\", icon: blackIcon }}).addTo(map);",
             lat[query.from() as usize],
@@ -566,7 +587,7 @@ where
     type P = BiconnectedPathServerWrapper<'s, G, O, P, TDQuery<Timestamp>>;
 
     fn query(&'s mut self, query: TDQuery<Timestamp>) -> Option<QueryResult<Self::P, Weight>> {
-        self.distance(query, |_, _, _| ())
+        self.distance(query, |_, _, _| (), INFINITY)
             .map(move |distance| QueryResult::new(distance, BiconnectedPathServerWrapper(self, query)))
     }
 }
@@ -580,7 +601,7 @@ where
     type P = BiconnectedPathServerWrapper<'s, G, O, P, Query>;
 
     fn query(&'s mut self, query: Query) -> Option<QueryResult<Self::P, Weight>> {
-        self.distance(query, |_, _, _| ())
+        self.distance(query, |_, _, _| (), INFINITY)
             .map(move |distance| QueryResult::new(distance, BiconnectedPathServerWrapper(self, query)))
     }
 }
