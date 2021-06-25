@@ -519,8 +519,7 @@ where
     }
 
     pub(super) fn potential(&self) -> &P {
-        use std::borrow::Borrow;
-        self.potential.borrow()
+        &self.potential
     }
 }
 
