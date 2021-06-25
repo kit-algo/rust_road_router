@@ -58,7 +58,12 @@ impl<P: Potential> Penalty<P> {
         if let Some(mut result) = QueryServer::query(&mut self.shortest_path_penalized, query) {
             let base_dist = result.distance;
             report!("base_dist", base_dist);
-            let rejoin_penalty = ((base_dist as f64).sqrt() as Weight) / 2;
+
+            let max_orig_dist = base_dist * 11 / 10;
+            let rejoin_penalty = base_dist / 500;
+
+            let max_penalized_dist = max_orig_dist * 11 / 10 + 2 * rejoin_penalty;
+
             let mut path = result.path();
             let shortest_path_penalized = &mut self.shortest_path_penalized;
             let alternative_graph_dijkstra = &mut self.alternative_graph_dijkstra;
@@ -76,26 +81,44 @@ impl<P: Potential> Penalty<P> {
             let mut iterations_ctxt = push_collection_context("iterations".to_string());
 
             let mut i = 0;
+            let mut s = 0;
             loop {
                 i += 1;
-                if i > 5 {
-                    break;
-                }
                 let _iteration_ctxt = iterations_ctxt.push_collection_item();
                 report!("iteration", i);
                 for &edge in &path_edges {
                     let weight = &mut shortest_path_penalized.graph_mut().graph.weights_mut()[edge as usize];
-                    *weight = ((*weight as f64) * 1.04) as Weight;
+                    *weight = *weight * 11 / 10;
                     if !self.edge_penelized.get(edge as usize) {
                         self.edge_penelized.set(edge as usize);
                         self.edges_to_reset.push(edge);
                     }
                 }
-                for &[tail, head] in path.array_windows::<2>() {
+                let dists: Vec<_> = std::iter::once(0)
+                    .chain(path_edges.iter().scan(0, |state, &edge| {
+                        *state += shortest_path_penalized.graph().graph.weight()[edge as usize];
+                        Some(*state)
+                    }))
+                    .collect();
+                let total_penalized_dist = dists.last().unwrap();
+                for (&[tail, head], &[tail_dist, head_dist]) in path.array_windows::<2>().zip(dists.array_windows::<2>()) {
                     for (rev_head, edge) in LinkIterable::<(NodeId, EdgeId)>::link_iter(&self.reversed, head) {
                         if rev_head != tail {
                             let weight = &mut shortest_path_penalized.graph_mut().graph.weights_mut()[edge as usize];
-                            *weight += rejoin_penalty;
+                            *weight += rejoin_penalty * head_dist / total_penalized_dist;
+                            if !self.edge_penelized.get(edge as usize) {
+                                self.edge_penelized.set(edge as usize);
+                                self.edges_to_reset.push(edge);
+                            }
+                        }
+                    }
+
+                    for (edge_head, edge) in LinkIterable::<NodeId>::link_iter(&alternative_graph_dijkstra.graph().graph, tail)
+                        .zip(alternative_graph_dijkstra.graph().graph.neighbor_edge_indices(tail))
+                    {
+                        if edge_head != head {
+                            let weight = &mut shortest_path_penalized.graph_mut().graph.weights_mut()[edge as usize];
+                            *weight += rejoin_penalty * tail_dist / total_penalized_dist;
                             if !self.edge_penelized.get(edge as usize) {
                                 self.edge_penelized.set(edge as usize);
                                 self.edges_to_reset.push(edge);
@@ -106,7 +129,8 @@ impl<P: Potential> Penalty<P> {
 
                 let (mut result, time) = measure(|| QueryServer::query(shortest_path_penalized, query).unwrap());
                 report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-                report!("penalty_dist", result.distance());
+                let penalty_dist = result.distance();
+                report!("penalty_dist", penalty_dist);
                 // TODO refactor get path edges
                 path = result.path();
                 path_edges = path
@@ -158,9 +182,13 @@ impl<P: Potential> Penalty<P> {
                 report!("feasable", feasable);
                 if feasable {
                     alternative_graph_dijkstra.graph_mut().add_edges(&path_edges);
+                    s += 1;
                 }
 
-                if path_orig_len * 10 > base_dist * 11 {
+                if path_orig_len > max_orig_dist || penalty_dist > max_penalized_dist || s >= 10 {
+                    dbg!(path_orig_len > max_orig_dist);
+                    dbg!(penalty_dist > max_penalized_dist);
+                    dbg!(s > 10);
                     break;
                 }
             }
