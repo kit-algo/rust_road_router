@@ -76,7 +76,7 @@ where
 
     #[inline(always)]
     pub fn next_step(&mut self) -> Option<NodeId> {
-        self.settle_next_node(|_| Some(Neutral()), |_| ())
+        self.settle_next_node(|_| Some(Neutral()), |_| (), |_, _| true)
     }
 
     #[inline(always)]
@@ -85,7 +85,7 @@ where
         P: FnMut(NodeId) -> Option<O>,
         O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
     {
-        self.settle_next_node(potential, |_| ())
+        self.settle_next_node(potential, |_| (), |_, _| true)
     }
 
     #[inline(always)]
@@ -94,14 +94,24 @@ where
         P: FnMut(NodeId) -> Option<O>,
         O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
     {
-        self.settle_next_node(potential, edge_callback)
+        self.settle_next_node(potential, edge_callback, |_, _| true)
     }
 
     #[inline(always)]
-    fn settle_next_node<P, O>(&mut self, mut potential: P, mut edge_callback: impl FnMut(&Ops::Arc)) -> Option<NodeId>
+    pub fn next_with_improve_callback_and_potential<P, O>(&mut self, improve_callback: impl FnMut(NodeId, &Ops::Label) -> bool, potential: P) -> Option<NodeId>
     where
         P: FnMut(NodeId) -> Option<O>,
         O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
+    {
+        self.settle_next_node(potential, |_| (), improve_callback)
+    }
+
+    #[inline(always)]
+    fn settle_next_node<P, O, I>(&mut self, mut potential: P, mut edge_callback: impl FnMut(&Ops::Arc), mut improve_callback: I) -> Option<NodeId>
+    where
+        P: FnMut(NodeId) -> Option<O>,
+        O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
+        I: FnMut(NodeId, &Ops::Label) -> bool,
     {
         self.queue.pop().map(|State { node, .. }| {
             for edge in LinkIterable::<Ops::Arc>::link_iter(self.graph, node) {
@@ -180,14 +190,16 @@ where
                                 next_distance: self.ops.link(&self.graph, next_distance, &next_edge),
                             });
                         } else if endpoint {
-                            if let Some(key) = potential(next_node).map(|p| p + next_distance.key()) {
-                                let next = State { key, node: next_node };
-                                if let Some(other) = self.queue.get(next.as_index()) {
-                                    debug_assert!(other.key >= next.key);
-                                    self.queue.decrease_key(next);
-                                } else {
-                                    self.num_queue_pushs += 1;
-                                    self.queue.push(next);
+                            if improve_callback(next_node, next_distance) {
+                                if let Some(key) = potential(next_node).map(|p| p + next_distance.key()) {
+                                    let next = State { key, node: next_node };
+                                    if let Some(other) = self.queue.get(next.as_index()) {
+                                        debug_assert!(other.key >= next.key);
+                                        self.queue.decrease_key(next);
+                                    } else {
+                                        self.num_queue_pushs += 1;
+                                        self.queue.push(next);
+                                    }
                                 }
                             }
                         }

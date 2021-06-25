@@ -7,7 +7,7 @@ use crate::datastr::rank_select_map::*;
 
 pub struct Penalty<P> {
     virtual_topocore: VirtualTopocore,
-    shortest_path_penalized: query::SkipLowDegServer<VirtualTopocoreGraph<OwnedGraph>, DefaultOps, PotentialForPermutated<P>, true, true>,
+    shortest_path_penalized: query::BiDirSkipLowDegServer<PotentialForPermutated<P>>,
     alternative_graph_dijkstra: query::SkipLowDegServer<AlternativeGraph<VirtualTopocoreGraph<OwnedGraph>>, DefaultOps, ZeroPotential, true, true>,
     reversed: ReversedGraphWithEdgeIds,
     edge_penelized: BitVec,
@@ -15,7 +15,7 @@ pub struct Penalty<P> {
 }
 
 impl<P: Potential> Penalty<P> {
-    pub fn new<G>(graph: &G, potential: P) -> Self
+    pub fn new<G>(graph: &G, forward_potential: P, backward_potential: P) -> Self
     where
         G: LinkIterable<NodeId>,
         OwnedGraph: BuildPermutated<G>,
@@ -25,13 +25,16 @@ impl<P: Potential> Penalty<P> {
 
         let reversed = ReversedGraphWithEdgeIds::reversed(&main_graph);
         Self {
-            shortest_path_penalized: query::SkipLowDegServer::new(
+            shortest_path_penalized: query::BiDirSkipLowDegServer::new(
                 main_graph.clone(),
                 PotentialForPermutated {
                     order: virtual_topocore.order.clone(),
-                    potential,
+                    potential: forward_potential,
                 },
-                DefaultOps::default(),
+                PotentialForPermutated {
+                    order: virtual_topocore.order.clone(),
+                    potential: backward_potential,
+                },
             ),
             alternative_graph_dijkstra: query::SkipLowDegServer::new(
                 AlternativeGraph {
@@ -69,7 +72,7 @@ impl<P: Potential> Penalty<P> {
             let alternative_graph_dijkstra = &mut self.alternative_graph_dijkstra;
             let mut path_edges: Vec<_> = path
                 .array_windows::<2>()
-                .map(|&[tail, head]| shortest_path_penalized.graph().graph.edge_index(tail, head).unwrap())
+                .map(|&[tail, head]| shortest_path_penalized.graph().edge_index(tail, head).unwrap())
                 .collect();
             alternative_graph_dijkstra.graph_mut().add_edges(&path_edges);
             let path_orig_len: Weight = path_edges
@@ -87,8 +90,8 @@ impl<P: Potential> Penalty<P> {
                 let _iteration_ctxt = iterations_ctxt.push_collection_item();
                 report!("iteration", i);
                 for &edge in &path_edges {
-                    let weight = &mut shortest_path_penalized.graph_mut().graph.weights_mut()[edge as usize];
-                    *weight = *weight * 11 / 10;
+                    let weight = shortest_path_penalized.graph().weight()[edge as usize];
+                    shortest_path_penalized.set_edge_weight(edge, weight * 11 / 10);
                     if !self.edge_penelized.get(edge as usize) {
                         self.edge_penelized.set(edge as usize);
                         self.edges_to_reset.push(edge);
@@ -96,7 +99,7 @@ impl<P: Potential> Penalty<P> {
                 }
                 let dists: Vec<_> = std::iter::once(0)
                     .chain(path_edges.iter().scan(0, |state, &edge| {
-                        *state += shortest_path_penalized.graph().graph.weight()[edge as usize];
+                        *state += shortest_path_penalized.graph().weight()[edge as usize];
                         Some(*state)
                     }))
                     .collect();
@@ -104,8 +107,8 @@ impl<P: Potential> Penalty<P> {
                 for (&[tail, head], &[tail_dist, head_dist]) in path.array_windows::<2>().zip(dists.array_windows::<2>()) {
                     for (rev_head, edge) in LinkIterable::<(NodeId, EdgeId)>::link_iter(&self.reversed, head) {
                         if rev_head != tail {
-                            let weight = &mut shortest_path_penalized.graph_mut().graph.weights_mut()[edge as usize];
-                            *weight += rejoin_penalty * head_dist / total_penalized_dist;
+                            let weight = shortest_path_penalized.graph().weight()[edge as usize];
+                            shortest_path_penalized.set_edge_weight(edge, weight + rejoin_penalty * head_dist / total_penalized_dist);
                             if !self.edge_penelized.get(edge as usize) {
                                 self.edge_penelized.set(edge as usize);
                                 self.edges_to_reset.push(edge);
@@ -117,8 +120,8 @@ impl<P: Potential> Penalty<P> {
                         .zip(alternative_graph_dijkstra.graph().graph.neighbor_edge_indices(tail))
                     {
                         if edge_head != head {
-                            let weight = &mut shortest_path_penalized.graph_mut().graph.weights_mut()[edge as usize];
-                            *weight += rejoin_penalty * tail_dist / total_penalized_dist;
+                            let weight = shortest_path_penalized.graph().weight()[edge as usize];
+                            shortest_path_penalized.set_edge_weight(edge, weight + rejoin_penalty * tail_dist / total_penalized_dist);
                             if !self.edge_penelized.get(edge as usize) {
                                 self.edge_penelized.set(edge as usize);
                                 self.edges_to_reset.push(edge);
@@ -157,9 +160,7 @@ impl<P: Potential> Penalty<P> {
                     .collect();
 
                 for new_part in new_parts {
-                    let part_start = result
-                        .data()
-                        .predecessor(alternative_graph_dijkstra.graph().graph.graph.head()[new_part[0] as usize]);
+                    let part_start = shortest_path_penalized.tail(new_part[0]);
                     let part_end = alternative_graph_dijkstra.graph().graph.graph.head()[*new_part.last().unwrap() as usize];
                     let part_dist: Weight = new_part
                         .iter()
@@ -207,7 +208,7 @@ impl<P: Potential> Penalty<P> {
             for edge in self.edges_to_reset.drain(..) {
                 let e = edge as usize;
                 self.edge_penelized.unset_all_around(e as usize);
-                shortest_path_penalized.graph_mut().graph.weights_mut()[e as usize] = alternative_graph_dijkstra.graph().graph.graph.weight()[e as usize];
+                shortest_path_penalized.set_edge_weight(edge, alternative_graph_dijkstra.graph().graph.graph.weight()[e as usize]);
             }
 
             Some(())
