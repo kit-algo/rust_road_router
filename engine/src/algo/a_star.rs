@@ -83,6 +83,10 @@ impl<P> RecyclingPotential<P> {
     pub fn new(potential: P) -> Self {
         Self { potential, target: None }
     }
+
+    pub fn inner(&self) -> &P {
+        &self.potential
+    }
 }
 
 impl<P: Potential> Potential for RecyclingPotential<P> {
@@ -144,6 +148,12 @@ impl<PF: Potential, PB: Potential> AveragePotential<PF, PB> {
 pub struct PotentialForPermutated<P> {
     pub potential: P,
     pub order: NodeOrder,
+}
+
+impl<P> PotentialForPermutated<P> {
+    pub fn inner(&self) -> &P {
+        &self.potential
+    }
 }
 
 impl<P: Potential> Potential for PotentialForPermutated<P> {

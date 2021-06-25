@@ -517,6 +517,11 @@ where
     pub(super) fn graph_mut(&mut self) -> &mut Graph {
         &mut self.graph
     }
+
+    pub(super) fn potential(&self) -> &P {
+        use std::borrow::Borrow;
+        self.potential.borrow()
+    }
 }
 
 pub struct BiconnectedPathServerWrapper<'s, G, O: DijkstraOps<G>, P, Q>(&'s mut SkipLowDegServer<G, O, P>, Q);
