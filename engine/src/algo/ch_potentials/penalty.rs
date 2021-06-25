@@ -217,8 +217,12 @@ impl<P: Potential> Penalty<P> {
         }
     }
 
-    pub fn potential(&self) -> &P {
-        self.shortest_path_penalized.potential().inner()
+    pub fn forward_potential(&self) -> std::cell::Ref<P> {
+        std::cell::Ref::map(self.shortest_path_penalized.forward_potential(), |p| p.inner())
+    }
+
+    pub fn backward_potential(&self) -> std::cell::Ref<P> {
+        std::cell::Ref::map(self.shortest_path_penalized.backward_potential(), |p| p.inner())
     }
 }
 

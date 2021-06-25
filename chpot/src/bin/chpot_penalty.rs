@@ -51,7 +51,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let (_, time) = measure(|| penalty_server.alternatives(Query { from, to }));
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-        report!("pot_evals", penalty_server.potential().inner().num_pot_computations());
+        report!(
+            "pot_evals",
+            penalty_server.forward_potential().inner().num_pot_computations() + penalty_server.backward_potential().inner().num_pot_computations()
+        );
         eprintln!();
 
         total_query_time = total_query_time + time;

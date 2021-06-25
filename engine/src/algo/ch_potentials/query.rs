@@ -621,7 +621,7 @@ where
     }
 }
 
-use std::cell::RefCell;
+use std::cell::*;
 
 pub struct BiDirSkipLowDegServer<P = ZeroPotential> {
     forward_graph: VirtualTopocoreGraph<OwnedGraph>,
@@ -832,6 +832,14 @@ impl<P: Potential> BiDirSkipLowDegServer<P> {
     pub(super) fn set_edge_weight(&mut self, edge: EdgeId, weight: Weight) {
         self.forward_graph.graph.weights_mut()[edge as usize] = weight;
         self.backward_graph.graph.weights_mut()[self.forward_to_backward_edge_ids[edge as usize] as usize] = weight;
+    }
+
+    pub(super) fn forward_potential(&self) -> Ref<P> {
+        self.forward_potential.borrow()
+    }
+
+    pub(super) fn backward_potential(&self) -> Ref<P> {
+        self.backward_potential.borrow()
     }
 }
 
