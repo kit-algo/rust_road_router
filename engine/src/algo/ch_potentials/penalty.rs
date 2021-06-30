@@ -130,7 +130,7 @@ impl<P: Potential> Penalty<P> {
                     }
                 }
 
-                let (result, time) = measure(|| shortest_path_penalized.distance_with_cap(query, max_penalized_dist));
+                let (result, time) = measure(|| shortest_path_penalized.distance_with_cap(query, max_penalized_dist, max_orig_dist));
                 report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
                 let mut result = if let Some(result) = result.found() {
                     result
