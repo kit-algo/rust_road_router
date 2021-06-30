@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let lng = Vec::<f32>::load_from(path.join("longitude"))?;
 
     let graph = FirstOutGraph::new(first_out, head, travel_time);
-    // let reversed = FirstOutGraph::reversed(&graph);
+    let reversed = FirstOutGraph::reversed(&graph);
 
     let order = Vec::load_from(path.join("ch_order"))?;
     let node_order = NodeOrder::from_node_order(order);
@@ -77,7 +77,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         })
         .unwrap() as NodeId;
 
-    let mut pot = BaselinePotential::new(&graph);
+    // let mut pot = BaselinePotential::new(&graph);
+    let mut pot = ZeroPotential();
 
     let mut dijkstra_rank = vec![graph.num_nodes(); graph.num_nodes()];
     let mut discovered = vec![graph.num_nodes(); graph.num_nodes()];
@@ -88,6 +89,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let pot_downscale = |est| est * 3 / 5;
 
     let mut i = 0;
+
+    let mut backward_dijkstra_rank = vec![graph.num_nodes(); graph.num_nodes()];
+    let mut backward_discovered = vec![graph.num_nodes(); graph.num_nodes()];
+    let mut backward_dijkstra = GenericDijkstra::<OwnedGraph, DefaultOps, &OwnedGraph>::new(&reversed);
+    backward_dijkstra.initialize_query(Query { from: to, to: std::u32::MAX });
 
     // ########################## Dijkstra/A/ ##########################
 
@@ -108,30 +114,47 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let dist = forward_dijkstra.tentative_distance(to);
 
+    i = 0;
+    while let Some(node) = backward_dijkstra.next() {
+        backward_dijkstra_rank[node as usize] = i;
+        backward_discovered[node as usize] = i;
+        i += 1;
+    }
+
+    for node in 0..graph.num_nodes() {
+        for link in LinkIterable::<Link>::link_iter(&reversed, node as NodeId) {
+            backward_discovered[link.node as usize] = std::cmp::min(backward_discovered[link.node as usize], backward_dijkstra_rank[node]);
+        }
+    }
+
     // ########################## Dijkstra/A* Output ##########################
 
-    // for node in 0..graph.num_nodes() {
-    //     println!(
-    //         "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" class=\"node\" style=\"--settled: {}; --discovered: {};\" />",
-    //         x_coord(node),
-    //         y_coord(node),
-    //         x_coord(node),
-    //         y_coord(node),
-    //         dijkstra_rank[node],
-    //         discovered[node],
-    //     );
-    //     for link in LinkIterable::<Link>::link_iter(&graph, node as NodeId) {
-    //         println!(
-    //             "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" class=\"arc\" style=\"--tail-settled: {}; --head-settled: {};\" />",
-    //             x_coord(node),
-    //             y_coord(node),
-    //             x_coord(link.node as usize),
-    //             y_coord(link.node as usize),
-    //             dijkstra_rank[node],
-    //             dijkstra_rank[link.node as usize]
-    //         );
-    //     }
-    // }
+    for node in 0..graph.num_nodes() {
+        println!(
+            "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" class=\"node\" style=\"--settled: {}; --discovered: {}; --backward-settled: {}; --backward-discovered: {};\" />",
+            x_coord(node),
+            y_coord(node),
+            x_coord(node),
+            y_coord(node),
+            dijkstra_rank[node],
+            discovered[node],
+            backward_dijkstra_rank[node],
+            backward_discovered[node],
+        );
+        for link in LinkIterable::<Link>::link_iter(&graph, node as NodeId) {
+            println!(
+                "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" class=\"arc\" style=\"--tail-settled: {}; --head-settled: {}; --backward-tail-settled: {}; --backward-head-settled: {};\" />",
+                x_coord(node),
+                y_coord(node),
+                x_coord(link.node as usize),
+                y_coord(link.node as usize),
+                dijkstra_rank[node],
+                dijkstra_rank[link.node as usize],
+                backward_dijkstra_rank[link.node as usize],
+                backward_dijkstra_rank[node],
+            );
+        }
+    }
 
     // let mut cur_node = to;
     // while cur_node != from {
@@ -514,47 +537,47 @@ fn main() -> Result<(), Box<dyn Error>> {
     let hl = HubLabels::new(&up, &down);
     let best = hl.hub_and_dist(node_order.rank(from), node_order.rank(to)).unwrap().0;
 
-    for label in &hl.forward_labels()[node_order.rank(from) as usize] {
-        println!(
-            "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" class=\"arc{}\" />",
-            x_coord(from as usize),
-            y_coord(from as usize),
-            x_coord(node_order.node(label.0) as usize),
-            y_coord(node_order.node(label.0) as usize),
-            if best == label.0 { " shortest" } else { "" }
-        );
+    // for label in &hl.forward_labels()[node_order.rank(from) as usize] {
+    //     println!(
+    //         "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" class=\"arc{}\" />",
+    //         x_coord(from as usize),
+    //         y_coord(from as usize),
+    //         x_coord(node_order.node(label.0) as usize),
+    //         y_coord(node_order.node(label.0) as usize),
+    //         if best == label.0 { " shortest" } else { "" }
+    //     );
 
-        println!(
-            "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" class=\"node hl-forward{}\" style=\"--rank: {};\" />",
-            x_coord(node_order.node(label.0) as usize),
-            y_coord(node_order.node(label.0) as usize),
-            x_coord(node_order.node(label.0) as usize),
-            y_coord(node_order.node(label.0) as usize),
-            if best == label.0 { " shortest" } else { "" },
-            label.0
-        );
-    }
+    //     println!(
+    //         "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" class=\"node hl-forward{}\" style=\"--rank: {};\" />",
+    //         x_coord(node_order.node(label.0) as usize),
+    //         y_coord(node_order.node(label.0) as usize),
+    //         x_coord(node_order.node(label.0) as usize),
+    //         y_coord(node_order.node(label.0) as usize),
+    //         if best == label.0 { " shortest" } else { "" },
+    //         label.0
+    //     );
+    // }
 
-    for label in &hl.backward_labels()[node_order.rank(to) as usize] {
-        println!(
-            "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" class=\"arc{}\" />",
-            x_coord(to as usize),
-            y_coord(to as usize),
-            x_coord(node_order.node(label.0) as usize),
-            y_coord(node_order.node(label.0) as usize),
-            if best == label.0 { " shortest" } else { "" }
-        );
+    // for label in &hl.backward_labels()[node_order.rank(to) as usize] {
+    //     println!(
+    //         "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" class=\"arc{}\" />",
+    //         x_coord(to as usize),
+    //         y_coord(to as usize),
+    //         x_coord(node_order.node(label.0) as usize),
+    //         y_coord(node_order.node(label.0) as usize),
+    //         if best == label.0 { " shortest" } else { "" }
+    //     );
 
-        println!(
-            "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" class=\"node hl-backward{}\" style=\"--rank: {};\" />",
-            x_coord(node_order.node(label.0) as usize),
-            y_coord(node_order.node(label.0) as usize),
-            x_coord(node_order.node(label.0) as usize),
-            y_coord(node_order.node(label.0) as usize),
-            if best == label.0 { " shortest" } else { "" },
-            label.0
-        );
-    }
+    //     println!(
+    //         "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" class=\"node hl-backward{}\" style=\"--rank: {};\" />",
+    //         x_coord(node_order.node(label.0) as usize),
+    //         y_coord(node_order.node(label.0) as usize),
+    //         x_coord(node_order.node(label.0) as usize),
+    //         y_coord(node_order.node(label.0) as usize),
+    //         if best == label.0 { " shortest" } else { "" },
+    //         label.0
+    //     );
+    // }
 
     // ########################## CH-Pot Output ##########################
 
