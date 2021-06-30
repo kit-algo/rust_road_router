@@ -118,9 +118,7 @@ pub fn run(
         }
     };
 
-    let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
     let mut topocore = DijkServer::<_, DefaultOps, _>::with_potential(modified_graph, potential);
-    drop(virtual_topocore_ctxt);
 
     let mut query_count = 0;
     let mut total_query_time = Duration::zero();
