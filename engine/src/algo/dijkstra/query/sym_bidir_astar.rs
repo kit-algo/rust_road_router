@@ -97,8 +97,6 @@ impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>, P: Potential> S
                             self.meeting_node = to;
                             return Some(*tentative_distance);
                         }
-                    } else {
-                        return None;
                     }
                 } else {
                     if let Some(node) = backward_dijkstra.next_with_improve_callback_and_potential(
@@ -134,8 +132,6 @@ impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>, P: Potential> S
                             self.meeting_node = from;
                             return Some(*tentative_distance);
                         }
-                    } else {
-                        return None;
                     }
                 }
             }
