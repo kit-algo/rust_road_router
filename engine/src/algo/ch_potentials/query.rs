@@ -715,7 +715,9 @@ impl<P: Potential> BiDirSkipLowDegServer<P> {
             {
                 let stop_dist = std::cmp::min(*tentative_distance, cap);
 
-                if forward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY) <= backward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY) {
+                dir_toggle = !dir_toggle;
+
+                if dir_toggle {
                     if let Some(node) = forward_dijkstra.next_with_improve_callback_and_potential(
                         |head, &dist| {
                             // if dist + forward_potential.borrow_mut().potential(head).unwrap_or(INFINITY) > cap {
@@ -752,7 +754,6 @@ impl<P: Potential> BiDirSkipLowDegServer<P> {
                         },
                         |node| forward_potential.borrow_mut().potential(node),
                     ) {
-                        forward_queue_pops += 1;
                         num_queue_pops += 1;
                         if node == query.to() {
                             *meeting_node = query.to();
