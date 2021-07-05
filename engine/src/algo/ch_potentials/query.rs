@@ -308,15 +308,18 @@ where
     }
 }
 
-impl<'s, G: 's, O: 's, P: 's> QueryServer<'s> for Server<G, O, P>
+impl<G, O, P> QueryServer for Server<G, O, P>
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
     G: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, O::Arc>,
 {
-    type P = PathServerWrapper<'s, G, O, P, Query>;
+    type P<'s>
+    where
+        Self: 's,
+    = PathServerWrapper<'s, G, O, P, Query>;
 
-    fn query(&'s mut self, query: Query) -> Option<QueryResult<Self::P, Weight>> {
+    fn query(&mut self, query: Query) -> Option<QueryResult<Self::P<'_>, Weight>> {
         self.distance(query, |_, _, _, _| ())
             .map(move |distance| QueryResult::new(distance, PathServerWrapper(self, query)))
     }
@@ -596,15 +599,18 @@ where
     }
 }
 
-impl<'s, G: 's, O: 's, P: 's> QueryServer<'s> for SkipLowDegServer<G, O, P>
+impl<G, O, P> QueryServer for SkipLowDegServer<G, O, P>
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
     G: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, O::Arc> + SymmetricDegreeGraph,
 {
-    type P = BiconnectedPathServerWrapper<'s, G, O, P, Query>;
+    type P<'s>
+    where
+        Self: 's,
+    = BiconnectedPathServerWrapper<'s, G, O, P, Query>;
 
-    fn query(&'s mut self, query: Query) -> Option<QueryResult<Self::P, Weight>> {
+    fn query(&mut self, query: Query) -> Option<QueryResult<Self::P<'_>, Weight>> {
         self.distance(query, |_, _, _| (), INFINITY)
             .map(move |distance| QueryResult::new(distance, BiconnectedPathServerWrapper(self, query)))
     }

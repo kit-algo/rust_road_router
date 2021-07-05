@@ -114,31 +114,21 @@ impl<T: Copy> GenQuery<T> for TDQuery<T> {
 /// }
 /// ```
 #[derive(Debug)]
-pub struct QueryResult<'s, P, W> {
+pub struct QueryResult<P, W> {
     // just the plain distance
     // the infinity case is ignored here, in that case, there will be no query result at all
     distance: W,
     // Reference to some object - usually a proxy around the query server to lazily retrieve the path
     // Usually this will borrow the server, but the type checker does not know this in a generic context
     path_server: P,
-    // To tell the type checker, that we have a reference of the server we use this phantomdata
-    // Actually this is not strictly necessary - it just makes the generic context behave the same
-    // As currently all concrete implementations.
-    // If we wanted to relax the requirements to only the query types which actually needed to borrow
-    // the query state for path retrieval, we could drop this phantom.
-    phantom: std::marker::PhantomData<&'s ()>,
 }
 
-impl<'s, P, W: Copy> QueryResult<'s, P, W>
+impl<P, W: Copy> QueryResult<P, W>
 where
     P: PathServer,
 {
     fn new(distance: W, path_server: P) -> Self {
-        Self {
-            distance,
-            path_server,
-            phantom: std::marker::PhantomData {},
-        }
+        Self { distance, path_server }
     }
 
     /// Retrieve shortest distance of a query
@@ -159,12 +149,14 @@ where
 
 /// Trait for query algorithm servers.
 /// The lifetime parameter is necessary, so the PathServer type can have a lifetime parameter.
-pub trait QueryServer<'s> {
+pub trait QueryServer {
     /// Just for internal use. Type of the object that can retrieve the actual shortest path.
-    type P: PathServer;
+    type P<'s>: PathServer
+    where
+        Self: 's;
     /// Calculate the shortest distance from a given source to target.
     /// Will return None if source and target are not connected.
-    fn query(&'s mut self, query: Query) -> Option<QueryResult<'s, Self::P, Weight>>;
+    fn query(&mut self, query: Query) -> Option<QueryResult<Self::P<'_>, Weight>>;
 }
 
 /// Trait for time-dependent query algorithm servers.
@@ -174,7 +166,7 @@ pub trait TDQueryServer<'s, T: Copy, W> {
     type P: PathServer;
     /// Calculate the shortest distance from a given source to target.
     /// Will return None if source and target are not connected.
-    fn query(&'s mut self, query: TDQuery<T>) -> Option<QueryResult<'s, Self::P, W>>;
+    fn query(&'s mut self, query: TDQuery<T>) -> Option<QueryResult<Self::P, W>>;
 }
 
 /// Just for internal use.

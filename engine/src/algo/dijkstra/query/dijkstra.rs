@@ -173,12 +173,13 @@ impl<'s, G: for<'a> LinkIterable<'a, O::Arc>, O: DijkstraOps<G, Label = Weight>,
     }
 }
 
-impl<'s, G: 's + for<'a> LinkIterable<'a, O::Arc>, O: 's + DijkstraOps<G, Label = Weight>, P: Potential + 's, B: Borrow<G> + 's> QueryServer<'s>
-    for Server<G, O, P, B>
-{
-    type P = PathServerWrapper<'s, Query, G, O, P, B>;
+impl<G: for<'a> LinkIterable<'a, O::Arc>, O: DijkstraOps<G, Label = Weight>, P: Potential, B: Borrow<G>> QueryServer for Server<G, O, P, B> {
+    type P<'s>
+    where
+        Self: 's,
+    = PathServerWrapper<'s, Query, G, O, P, B>;
 
-    fn query(&'s mut self, query: Query) -> Option<QueryResult<Self::P, Weight>> {
+    fn query(&mut self, query: Query) -> Option<QueryResult<Self::P<'_>, Weight>> {
         self.distance(query)
             .map(move |distance| QueryResult::new(distance, PathServerWrapper(self, query)))
     }

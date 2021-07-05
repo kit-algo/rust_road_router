@@ -4,14 +4,13 @@ use rust_road_router::{
     algo::{ch_potentials::*, dijkstra::query::bidirectional_dijkstra::Server, *},
     cli::CliErr,
     datastr::{graph::*, node_order::NodeOrder},
-    experiments::a_star::NUM_QUERIES,
+    experiments::{self, a_star::NUM_QUERIES},
     io::*,
     report::*,
 };
 use std::{env, error::Error, path::Path};
 
 use rand::prelude::*;
-use time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting();
@@ -99,28 +98,7 @@ pub fn run(
 
     let mut bidir_a_star = Server::new_with_potentials(modified_graph, forward_pot, backward_pot);
 
-    let mut total_query_time = Duration::zero();
-
-    for _i in 0..NUM_QUERIES {
-        let _query_ctxt = algo_runs_ctxt.push_collection_item();
-        let from: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
-        let to: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
-
-        report!("from", from);
-        report!("to", to);
-
-        let (mut res, time) = measure(|| QueryServer::query(&mut bidir_a_star, Query { from, to }));
-        report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-        let dist = res.as_ref().map(|res| res.distance());
-        report!("result", dist);
-        res.as_mut().map(|res| res.path());
-
-        total_query_time = total_query_time + time;
-    }
-
-    if NUM_QUERIES > 0 {
-        eprintln!("Avg. query time {}", total_query_time / (NUM_QUERIES as i32))
-    };
+    experiments::run_random_queries(graph.num_nodes(), &mut bidir_a_star, &mut rng, &mut algo_runs_ctxt, NUM_QUERIES);
 
     Ok(())
 }

@@ -216,10 +216,13 @@ impl<'s, G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>, P: Potentia
     }
 }
 
-impl<'s, G: 's + for<'a> LinkIterGraph<'a>, H: 's + for<'a> LinkIterGraph<'a>, P: 's + Potential> QueryServer<'s> for Server<G, H, P> {
-    type P = PathServerWrapper<'s, G, H, P>;
+impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>, P: Potential> QueryServer for Server<G, H, P> {
+    type P<'s>
+    where
+        Self: 's,
+    = PathServerWrapper<'s, G, H, P>;
 
-    fn query(&'s mut self, query: Query) -> Option<QueryResult<Self::P, Weight>> {
+    fn query(&mut self, query: Query) -> Option<QueryResult<Self::P<'_>, Weight>> {
         self.distance(query.from, query.to)
             .map(move |distance| QueryResult::new(distance, PathServerWrapper(self, query)))
     }

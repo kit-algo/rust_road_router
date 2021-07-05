@@ -151,10 +151,10 @@ impl<'s> PathServer for PathServerWrapper<'s> {
     }
 }
 
-impl<'s> QueryServer<'s> for Server {
-    type P = PathServerWrapper<'s>;
+impl QueryServer for Server {
+    type P<'s> = PathServerWrapper<'s>;
 
-    fn query(&'s mut self, query: Query) -> Option<QueryResult<Self::P, Weight>> {
+    fn query(&mut self, query: Query) -> Option<QueryResult<Self::P<'_>, Weight>> {
         self.distance(query.from, query.to)
             .map(move |distance| QueryResult::new(distance, PathServerWrapper(self, query)))
     }
