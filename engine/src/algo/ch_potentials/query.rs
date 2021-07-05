@@ -294,15 +294,18 @@ where
     }
 }
 
-impl<'s, G: 's, O: 's, P: 's> TDQueryServer<'s, Timestamp, Weight> for Server<G, O, P>
+impl<G, O, P> TDQueryServer<Timestamp, Weight> for Server<G, O, P>
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
     G: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, O::Arc>,
 {
-    type P = PathServerWrapper<'s, G, O, P, TDQuery<Timestamp>>;
+    type P<'s>
+    where
+        Self: 's,
+    = PathServerWrapper<'s, G, O, P, TDQuery<Timestamp>>;
 
-    fn query(&'s mut self, query: TDQuery<Timestamp>) -> Option<QueryResult<Self::P, Weight>> {
+    fn td_query(&mut self, query: TDQuery<Timestamp>) -> Option<QueryResult<Self::P<'_>, Weight>> {
         self.distance(query, |_, _, _, _| ())
             .map(move |distance| QueryResult::new(distance, PathServerWrapper(self, query)))
     }
@@ -585,15 +588,18 @@ where
     }
 }
 
-impl<'s, G: 's, O: 's, P: 's> TDQueryServer<'s, Timestamp, Weight> for SkipLowDegServer<G, O, P>
+impl<G, O, P> TDQueryServer<Timestamp, Weight> for SkipLowDegServer<G, O, P>
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
     G: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, O::Arc> + SymmetricDegreeGraph,
 {
-    type P = BiconnectedPathServerWrapper<'s, G, O, P, TDQuery<Timestamp>>;
+    type P<'s>
+    where
+        Self: 's,
+    = BiconnectedPathServerWrapper<'s, G, O, P, TDQuery<Timestamp>>;
 
-    fn query(&'s mut self, query: TDQuery<Timestamp>) -> Option<QueryResult<Self::P, Weight>> {
+    fn td_query(&mut self, query: TDQuery<Timestamp>) -> Option<QueryResult<Self::P<'_>, Weight>> {
         self.distance(query, |_, _, _| (), INFINITY)
             .map(move |distance| QueryResult::new(distance, BiconnectedPathServerWrapper(self, query)))
     }

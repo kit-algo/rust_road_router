@@ -160,12 +160,14 @@ pub trait QueryServer {
 
 /// Trait for time-dependent query algorithm servers.
 /// The lifetime parameter is necessary, so the PathServer type can have a lifetime parameter.
-pub trait TDQueryServer<'s, T: Copy, W> {
+pub trait TDQueryServer<T: Copy, W> {
     /// Just for internal use. Type of the object that can retrieve the actual shortest path.
-    type P: PathServer;
+    type P<'s>: PathServer
+    where
+        Self: 's;
     /// Calculate the shortest distance from a given source to target.
     /// Will return None if source and target are not connected.
-    fn query(&'s mut self, query: TDQuery<T>) -> Option<QueryResult<Self::P, W>>;
+    fn td_query(&mut self, query: TDQuery<T>) -> Option<QueryResult<Self::P<'_>, W>>;
 }
 
 /// Just for internal use.

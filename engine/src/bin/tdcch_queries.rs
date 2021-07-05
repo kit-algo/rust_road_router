@@ -32,7 +32,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let at = Timestamp::new(rng.gen_range(0.0, f64::from(period())));
             td_dijk_server.ranks(from, at, |to, ea_ground_truth, rank| {
                 let _tdcch_query_ctxt = algo_runs_ctxt.push_collection_item();
-                let (mut result, duration) = measure(|| server.query(TDQuery { from, to, departure: at }).unwrap());
+                let (mut result, duration) = measure(|| server.td_query(TDQuery { from, to, departure: at }).unwrap());
 
                 report!("from", from);
                 report!("to", to);
@@ -80,7 +80,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let at = Timestamp::new(f64::from(at) / 1000.0);
 
             let dijkstra_query_ctxt = algo_runs_ctxt.push_collection_item();
-            let (ground_truth, time) = measure(|| td_dijk_server.query(TDQuery { from, to, departure: at }).map(|res| res.distance() + at));
+            let (ground_truth, time) = measure(|| td_dijk_server.td_query(TDQuery { from, to, departure: at }).map(|res| res.distance() + at));
             report!("from", from);
             report!("to", to);
             report!("departure_time", f64::from(at));
@@ -93,7 +93,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             dijkstra_time = dijkstra_time + time;
 
             let _tdcch_query_ctxt = algo_runs_ctxt.push_collection_item();
-            let (result, time) = measure(|| server.query(TDQuery { from, to, departure: at }));
+            let (result, time) = measure(|| server.td_query(TDQuery { from, to, departure: at }));
             tdcch_time = tdcch_time + time;
 
             report!("from", from);

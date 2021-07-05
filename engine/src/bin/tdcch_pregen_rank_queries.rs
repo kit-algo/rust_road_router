@@ -48,7 +48,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let at = Timestamp::new(f64::from(at[q_idx]) / 1000.0);
 
                 let _tdcch_query_ctxt = algo_runs_ctxt.push_collection_item();
-                let (result, time) = measure(|| server.query(TDQuery { from, to, departure: at }));
+                let (result, time) = measure(|| server.td_query(TDQuery { from, to, departure: at }));
 
                 report!("from", from);
                 report!("to", to);

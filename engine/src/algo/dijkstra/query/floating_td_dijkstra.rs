@@ -72,10 +72,10 @@ impl<'s> PathServer for PathServerWrapper<'s> {
     }
 }
 
-impl<'s> TDQueryServer<'s, Timestamp, FlWeight> for Server {
-    type P = PathServerWrapper<'s>;
+impl TDQueryServer<Timestamp, FlWeight> for Server {
+    type P<'s> = PathServerWrapper<'s>;
 
-    fn query(&'s mut self, query: TDQuery<Timestamp>) -> Option<QueryResult<Self::P, FlWeight>> {
+    fn td_query(&mut self, query: TDQuery<Timestamp>) -> Option<QueryResult<Self::P<'_>, FlWeight>> {
         self.distance(query)
             .map(move |distance| QueryResult::new(distance, PathServerWrapper(self, query)))
     }

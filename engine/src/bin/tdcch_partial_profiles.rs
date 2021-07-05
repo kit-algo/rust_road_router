@@ -52,7 +52,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let mut check_segment = |start: Timestamp, end: Timestamp, path: &[EdgeId]| {
                     let _blocked = block_reporting();
                     let at = start + 0.5 * (end - start);
-                    let mut result = ea_server.query(TDQuery { from, to, departure: at }).unwrap();
+                    let mut result = ea_server.td_query(TDQuery { from, to, departure: at }).unwrap();
                     assert!(PartialPiecewiseLinearFunction::new(&tt).eval(at).fuzzy_eq(result.distance()));
                     let gt_path = result.path();
                     g.check_path(&gt_path);
