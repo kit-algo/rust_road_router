@@ -5,7 +5,7 @@ use rust_road_router::{
         a_star::*,
         contraction_hierarchy,
         customizable_contraction_hierarchy::*,
-        dijkstra::{gen_topo_dijkstra::*, generic_dijkstra::*, *},
+        dijkstra::{gen_topo_dijkstra::*, *},
         hl::HubLabels,
         topocore::*,
         Query,
@@ -82,8 +82,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut dijkstra_rank = vec![graph.num_nodes(); graph.num_nodes()];
     let mut discovered = vec![graph.num_nodes(); graph.num_nodes()];
-    let mut forward_dijkstra = GenericDijkstra::<OwnedGraph, DefaultOps, &OwnedGraph>::new(&graph);
-    forward_dijkstra.initialize_query(Query { from, to: std::u32::MAX });
+    let mut fw_ops = DefaultOps();
+    let mut fw_data = DijkstraData::new(graph.num_nodes());
+    let mut forward_dijkstra = DijkstraRun::query(&graph, &mut fw_data, &mut fw_ops, Query { from, to: std::u32::MAX });
     pot.init(to);
 
     let pot_downscale = |est| est * 3 / 5;
@@ -92,8 +93,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut backward_dijkstra_rank = vec![graph.num_nodes(); graph.num_nodes()];
     let mut backward_discovered = vec![graph.num_nodes(); graph.num_nodes()];
-    let mut backward_dijkstra = GenericDijkstra::<OwnedGraph, DefaultOps, &OwnedGraph>::new(&reversed);
-    backward_dijkstra.initialize_query(Query { from: to, to: std::u32::MAX });
+    let mut bw_ops = DefaultOps();
+    let mut bw_data = DijkstraData::new(graph.num_nodes());
+    let mut backward_dijkstra = DijkstraRun::query(&reversed, &mut bw_data, &mut bw_ops, Query { from: to, to: std::u32::MAX });
 
     // ########################## Dijkstra/A/ ##########################
 
@@ -306,12 +308,18 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut ch_for_dijkstra_rank = vec![graph.num_nodes(); graph.num_nodes()];
     let mut ch_for_discovered = vec![graph.num_nodes(); graph.num_nodes()];
-    let mut ch_forward_dijkstra = GenericDijkstra::<OwnedGraph, DefaultOps, &OwnedGraph>::new(&up);
+    let mut fw_ops = DefaultOps();
+    let mut fw_data = DijkstraData::new(graph.num_nodes());
+    let mut ch_forward_dijkstra = DijkstraRun::query(
+        &up,
+        &mut fw_data,
+        &mut fw_ops,
+        Query {
+            from: node_order.rank(from),
+            to: std::u32::MAX,
+        },
+    );
     // let mut ch_forward_dijkstra = GenericDijkstra::<FirstOutGraph<&[_], &[_], Vec<_>>, DefaultOps, &FirstOutGraph<&[_], &[_], Vec<_>>>::new(&up);
-    ch_forward_dijkstra.initialize_query(Query {
-        from: node_order.rank(from),
-        to: std::u32::MAX,
-    });
     for (i, node) in (&mut ch_forward_dijkstra).enumerate() {
         ch_for_dijkstra_rank[node_order.node(node) as usize] = i;
         ch_for_discovered[node_order.node(node) as usize] = i;
@@ -326,12 +334,16 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut ch_back_dijkstra_rank = vec![graph.num_nodes(); graph.num_nodes()];
     let mut ch_back_discovered = vec![graph.num_nodes(); graph.num_nodes()];
-    let mut ch_backward_dijkstra = GenericDijkstra::<OwnedGraph, DefaultOps, &OwnedGraph>::new(&down);
+    let mut ch_backward_dijkstra = DijkstraRun::query(
+        &down,
+        &mut bw_data,
+        &mut bw_ops,
+        Query {
+            from: node_order.rank(to),
+            to: std::u32::MAX,
+        },
+    );
     // let mut ch_backward_dijkstra = GenericDijkstra::<FirstOutGraph<&[_], &[_], Vec<_>>, DefaultOps, &FirstOutGraph<&[_], &[_], Vec<_>>>::new(&down);
-    ch_backward_dijkstra.initialize_query(Query {
-        from: node_order.rank(to),
-        to: std::u32::MAX,
-    });
     for (i, node) in (&mut ch_backward_dijkstra).enumerate() {
         ch_back_dijkstra_rank[node_order.node(node) as usize] = i;
         ch_back_discovered[node_order.node(node) as usize] = i;

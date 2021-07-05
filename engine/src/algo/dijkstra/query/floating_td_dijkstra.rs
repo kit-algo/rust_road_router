@@ -4,13 +4,15 @@ use crate::datastr::graph::floating_time_dependent::*;
 use crate::report::*;
 
 pub struct Server {
-    dijkstra: GenericDijkstra<TDGraph, FlTDDijkstraOps>,
+    graph: TDGraph,
+    data: DijkstraData<Timestamp>,
 }
 
 impl Server {
     pub fn new(graph: TDGraph) -> Server {
         Server {
-            dijkstra: GenericDijkstra::new(graph),
+            data: DijkstraData::new(graph.num_nodes()),
+            graph,
         }
     }
 
@@ -18,29 +20,36 @@ impl Server {
     where
         F: (FnMut(NodeId, Timestamp, usize)),
     {
-        self.dijkstra.initialize_query(TDQuery {
-            from,
-            to: self.dijkstra.graph().num_nodes() as NodeId,
-            departure: departure_time,
-        });
+        let mut ops = FlTDDijkstraOps();
+        let mut dijkstra = DijkstraRun::query(
+            &self.graph,
+            &mut self.data,
+            &mut ops,
+            TDQuery {
+                from,
+                to: self.graph.num_nodes() as NodeId,
+                departure: departure_time,
+            },
+        );
 
         let mut i: usize = 0;
-        while let Some(node) = self.dijkstra.next() {
+        while let Some(node) = dijkstra.next() {
             i += 1;
             if (i & (i - 1)) == 0 {
                 // power of two
-                callback(node, *self.dijkstra.tentative_distance(node), i.trailing_zeros() as usize);
+                callback(node, *dijkstra.tentative_distance(node), i.trailing_zeros() as usize);
             }
         }
     }
 
     fn distance(&mut self, query: TDQuery<Timestamp>) -> Option<FlWeight> {
         report!("algo", "Floating TD-Dijkstra");
-        self.dijkstra.initialize_query(query);
+        let mut ops = FlTDDijkstraOps();
+        let mut dijkstra = DijkstraRun::query(&self.graph, &mut self.data, &mut ops, query);
 
-        while let Some(node) = self.dijkstra.next() {
+        while let Some(node) = dijkstra.next() {
             if node == query.to {
-                return Some(*self.dijkstra.tentative_distance(node) - query.departure);
+                return Some(*dijkstra.tentative_distance(node) - query.departure);
             }
         }
 
@@ -49,11 +58,11 @@ impl Server {
 
     fn path(&self, query: TDQuery<Timestamp>) -> Vec<(NodeId, Timestamp)> {
         let mut path = Vec::new();
-        path.push((query.to, *self.dijkstra.tentative_distance(query.to)));
+        path.push((query.to, self.data.distances[query.to as usize]));
 
         while path.last().unwrap().0 != query.from {
-            let next = self.dijkstra.predecessor(path.last().unwrap().0);
-            let t = *self.dijkstra.tentative_distance(next);
+            let next = self.data.predecessors[path.last().unwrap().0 as usize];
+            let t = self.data.distances[next as usize];
             path.push((next, t));
         }
 

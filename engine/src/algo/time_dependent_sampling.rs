@@ -12,7 +12,7 @@ use super::*;
 use crate::{
     algo::{
         customizable_contraction_hierarchy::{customize, query::Server as CCHServer, CCH},
-        dijkstra::{generic_dijkstra::*, query::td_dijkstra::TDDijkstraOps},
+        dijkstra::{generic_dijkstra::*, query::td_dijkstra::TDDijkstraOps, *},
     },
     datastr::{graph::time_dependent::*, graph::RandomLinkAccessGraph, timestamped_vector::TimestampedVector},
 };
@@ -22,8 +22,9 @@ use std::ops::Range;
 /// Query server struct for TD-S.
 /// Implements the common query trait.
 pub struct Server<'a> {
+    graph: TDGraph,
     // The Dijkstra algo on the original graph
-    dijkstra: GenericDijkstra<TDGraph, TDDijkstraOps>,
+    dijkstra_data: DijkstraData<Weight>,
     // A CCH Server for each time window
     samples: Vec<CCHServer<'a, CCH>>,
     // marking edges in the subgraph we perform dijkstra on
@@ -59,8 +60,9 @@ impl<'a> Server<'a> {
 
         Server {
             active_edges: TimestampedVector::new(graph.num_arcs(), false),
-            dijkstra: GenericDijkstra::new(graph),
+            dijkstra_data: DijkstraData::new(graph.num_nodes()),
             samples,
+            graph,
         }
     }
 
@@ -72,18 +74,19 @@ impl<'a> Server<'a> {
             let result = server.query(Query { from, to });
             if let Some(mut result) = result {
                 for edge in result.path().windows(2) {
-                    self.active_edges[self.dijkstra.graph().edge_index(edge[0], edge[1]).unwrap() as usize] = true;
+                    self.active_edges[self.graph.edge_index(edge[0], edge[1]).unwrap() as usize] = true;
                 }
             }
         }
 
         // dijkstra on subgraph
-        self.dijkstra.initialize_query(TDQuery { from, to, departure });
+        let mut ops = TDDijkstraOps();
+        let mut dijkstra = DijkstraRun::query(&self.graph, &mut self.dijkstra_data, &mut ops, TDQuery { from, to, departure });
 
         let active_edges = &self.active_edges;
-        while let Some(node) = self.dijkstra.next_filtered_edges(|&(_, edge_id)| active_edges[edge_id as usize]) {
+        while let Some(node) = dijkstra.next_filtered_edges(|&(_, edge_id)| active_edges[edge_id as usize]) {
             if node == to {
-                return Some(*self.dijkstra.tentative_distance(node) - departure);
+                return Some(dijkstra.tentative_distance(node) - departure);
             }
         }
 
@@ -95,7 +98,7 @@ impl<'a> Server<'a> {
         path.push(query.to);
 
         while *path.last().unwrap() != query.from {
-            let next = self.dijkstra.predecessor(*path.last().unwrap());
+            let next = self.dijkstra_data.predecessors[*path.last().unwrap() as usize];
             path.push(next);
         }
 

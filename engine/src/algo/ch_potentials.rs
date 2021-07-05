@@ -3,7 +3,7 @@ use crate::{
     algo::{
         a_star::Potential,
         customizable_contraction_hierarchy::{query::stepped_elimination_tree::SteppedEliminationTree, *},
-        dijkstra::generic_dijkstra::*,
+        dijkstra::*,
     },
     datastr::{node_order::*, timestamped_vector::TimestampedVector},
     report::*,
@@ -93,7 +93,8 @@ pub struct CHPotential<GF, GB> {
     order: NodeOrder,
     potentials: TimestampedVector<InRangeOption<Weight>>,
     forward: GF,
-    backward_dijkstra: GenericDijkstra<GB>,
+    backward: GB,
+    dijkstra_data: DijkstraData<Weight>,
     num_pot_computations: usize,
 }
 
@@ -104,7 +105,8 @@ impl<GF: for<'a> LinkIterGraph<'a>, GB: for<'a> LinkIterGraph<'a>> CHPotential<G
             order,
             potentials: TimestampedVector::new(n, InRangeOption::new(None)),
             forward,
-            backward_dijkstra: GenericDijkstra::new(backward),
+            backward,
+            dijkstra_data: DijkstraData::new(n),
             num_pot_computations: 0,
         }
     }
@@ -116,7 +118,7 @@ impl<GF: for<'a> LinkIterGraph<'a>, GB: for<'a> LinkIterGraph<'a>> CHPotential<G
     fn potential_internal(
         potentials: &mut TimestampedVector<InRangeOption<Weight>>,
         forward: &GF,
-        backward: &GenericDijkstra<GB>,
+        backward_data: &DijkstraData<Weight>,
         node: NodeId,
         num_pot_computations: &mut usize,
     ) -> Weight {
@@ -126,11 +128,11 @@ impl<GF: for<'a> LinkIterGraph<'a>, GB: for<'a> LinkIterGraph<'a>> CHPotential<G
         *num_pot_computations += 1;
 
         let min_by_up = LinkIterable::<Link>::link_iter(forward, node)
-            .map(|edge| edge.weight + Self::potential_internal(potentials, forward, backward, edge.node, num_pot_computations))
+            .map(|edge| edge.weight + Self::potential_internal(potentials, forward, backward_data, edge.node, num_pot_computations))
             .min()
             .unwrap_or(INFINITY);
 
-        potentials[node as usize] = InRangeOption::new(Some(std::cmp::min(*backward.tentative_distance(node), min_by_up)));
+        potentials[node as usize] = InRangeOption::new(Some(std::cmp::min(backward_data.distances[node as usize], min_by_up)));
 
         potentials[node as usize].value().unwrap()
     }
@@ -140,23 +142,24 @@ impl<GF: for<'a> LinkIterGraph<'a>, GB: for<'a> LinkIterGraph<'a>> Potential for
     fn init(&mut self, target: NodeId) {
         self.num_pot_computations = 0;
         self.potentials.reset();
-        self.backward_dijkstra.initialize_query(Query {
-            from: self.order.rank(target),
-            to: std::u32::MAX,
-        });
-        while let Some(_) = self.backward_dijkstra.next() {}
+
+        let mut ops = DefaultOps();
+        let mut backward_dijkstra_run = DijkstraRun::query(
+            &self.backward,
+            &mut self.dijkstra_data,
+            &mut ops,
+            Query {
+                from: self.order.rank(target),
+                to: std::u32::MAX,
+            },
+        );
+        while let Some(_) = backward_dijkstra_run.next() {}
     }
 
     fn potential(&mut self, node: NodeId) -> Option<Weight> {
         let node = self.order.rank(node);
 
-        let dist = Self::potential_internal(
-            &mut self.potentials,
-            &self.forward,
-            &self.backward_dijkstra,
-            node,
-            &mut self.num_pot_computations,
-        );
+        let dist = Self::potential_internal(&mut self.potentials, &self.forward, &self.dijkstra_data, node, &mut self.num_pot_computations);
 
         if dist < INFINITY {
             Some(dist)

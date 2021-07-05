@@ -3,7 +3,10 @@
 use std::{env, error::Error, path::Path};
 
 use rust_road_router::{
-    algo::{dijkstra::generic_dijkstra::*, Query},
+    algo::{
+        dijkstra::{generic_dijkstra::*, DijkstraData},
+        Query,
+    },
     cli::CliErr,
     datastr::graph::*,
     io::Load,
@@ -66,11 +69,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     println!("</g>");
 
-    let mut dijkstra = GenericDijkstra::<OwnedGraph, DefaultOps, &OwnedGraph>::new(&graph);
-    dijkstra.initialize_query(Query {
-        from: start_node as NodeId,
-        to: std::u32::MAX,
-    });
+    let mut ops = DefaultOps();
+    let mut data = DijkstraData::<Weight>::new(graph.num_nodes());
+    let dijkstra = DijkstraRun::query(
+        &graph,
+        &mut data,
+        &mut ops,
+        Query {
+            from: start_node as NodeId,
+            to: std::u32::MAX,
+        },
+    );
 
     let mut counter = 0;
     for node in dijkstra {

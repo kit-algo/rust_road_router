@@ -3,7 +3,7 @@ use crate::report::*;
 use crate::{
     algo::{
         a_star::*,
-        dijkstra::{generic_dijkstra::*, query::dijkstra::*},
+        dijkstra::{query::dijkstra::ServerWrapper, *},
     },
     datastr::rank_select_map::BitVec,
 };
@@ -188,9 +188,11 @@ impl ALTPotential {
         report!("num_landmarks", num_landmarks);
         let n = graph.num_nodes() as NodeId;
         let mut landmarks = Vec::with_capacity(num_landmarks);
-        let mut dijkstra = GenericDijkstra::<G, DefaultOps, &G>::new(graph);
+        let mut dijkstra_data = DijkstraData::new(graph.num_nodes());
 
-        dijkstra.initialize_query(Query { from: initial_landmark, to: n });
+        let mut ops = DefaultOps();
+        let mut dijkstra = DijkstraRun::query(graph, &mut dijkstra_data, &mut ops, Query { from: initial_landmark, to: n });
+
         let mut last_node = initial_landmark;
 
         report_time("landmark_selection", || {
@@ -199,7 +201,7 @@ impl ALTPotential {
                     last_node = node;
                 }
 
-                dijkstra.initialize_query(Query { from: last_node, to: n });
+                dijkstra.initialize(Query { from: last_node, to: n });
                 for &l in &landmarks {
                     dijkstra.add_start_node(Query { from: l, to: n })
                 }

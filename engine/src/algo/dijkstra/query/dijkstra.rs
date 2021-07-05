@@ -9,7 +9,8 @@ pub struct Server<Graph = OwnedGraph, Ops = DefaultOps, P = ZeroPotential, Graph
 where
     Ops: DijkstraOps<Graph>,
 {
-    dijkstra: GenericDijkstra<Graph, Ops, GraphBorrow>,
+    graph: GraphBorrow,
+    dijkstra: DijkstraData<Ops::Label>,
     potential: P,
 }
 
@@ -19,12 +20,10 @@ where
     Graph: for<'a> LinkIterable<'a, Ops::Arc>,
     GraphBorrow: Borrow<Graph>,
 {
-    pub fn new(graph: GraphBorrow) -> Self
-    where
-        Ops: Default,
-    {
+    pub fn new(graph: GraphBorrow) -> Self {
         Self {
-            dijkstra: GenericDijkstra::new(graph),
+            dijkstra: DijkstraData::new(graph.borrow().num_nodes()),
+            graph,
             potential: ZeroPotential(),
         }
     }
@@ -32,17 +31,15 @@ where
 
 impl<Graph, Ops, P, GraphBorrow> Server<Graph, Ops, P, GraphBorrow>
 where
-    Ops: DijkstraOps<Graph, Label = Weight>,
+    Ops: DijkstraOps<Graph, Label = Weight> + Default,
     Graph: for<'a> LinkIterable<'a, Ops::Arc>,
     P: Potential,
     GraphBorrow: Borrow<Graph>,
 {
-    pub fn with_potential(graph: GraphBorrow, potential: P) -> Self
-    where
-        Ops: Default,
-    {
+    pub fn with_potential(graph: GraphBorrow, potential: P) -> Self {
         Self {
-            dijkstra: GenericDijkstra::new(graph),
+            dijkstra: DijkstraData::new(graph.borrow().num_nodes()),
+            graph,
             potential,
         }
     }
@@ -50,10 +47,10 @@ where
     fn distance(&mut self, query: impl GenQuery<Weight>) -> Option<Weight> {
         report!("algo", "Dijkstra Query");
         let to = query.to();
-        self.dijkstra.initialize_query(query);
+        let mut ops = Ops::default();
+        let mut dijkstra = DijkstraRun::query(self.graph.borrow(), &mut self.dijkstra, &mut ops, query);
         self.potential.init(to);
 
-        let dijkstra = &mut self.dijkstra;
         let potential = &mut self.potential;
 
         let mut result = None;
@@ -67,8 +64,8 @@ where
         }
 
         report!("num_queue_pops", num_queue_pops);
-        report!("num_queue_pushs", self.dijkstra.num_queue_pushs());
-        report!("num_relaxed_arcs", self.dijkstra.num_relaxed_arcs());
+        report!("num_queue_pushs", dijkstra.num_queue_pushs());
+        report!("num_relaxed_arcs", dijkstra.num_relaxed_arcs());
 
         result
     }
@@ -78,7 +75,7 @@ where
         path.push(query.to());
 
         while *path.last().unwrap() != query.from() {
-            let next = self.dijkstra.predecessor(*path.last().unwrap());
+            let next = self.dijkstra.predecessors[*path.last().unwrap() as usize];
             path.push(next);
         }
 
@@ -91,17 +88,23 @@ where
     where
         F: (FnMut(NodeId, Weight, usize)),
     {
-        self.dijkstra.initialize_query(Query {
-            from,
-            to: self.dijkstra.graph().num_nodes() as NodeId,
-        });
+        let mut ops = Ops::default();
+        let mut dijkstra = DijkstraRun::query(
+            self.graph.borrow(),
+            &mut self.dijkstra,
+            &mut ops,
+            Query {
+                from,
+                to: self.graph.borrow().num_nodes() as NodeId,
+            },
+        );
 
         let mut i: usize = 0;
-        while let Some(node) = self.dijkstra.next() {
+        while let Some(node) = dijkstra.next() {
             i += 1;
             if (i & (i - 1)) == 0 {
                 // power of two
-                callback(node, *self.dijkstra.tentative_distance(node), i.trailing_zeros() as usize);
+                callback(node, *dijkstra.tentative_distance(node), i.trailing_zeros() as usize);
             }
         }
     }
@@ -109,7 +112,7 @@ where
     pub fn one_to_all(&mut self, from: NodeId) -> ServerWrapper<Graph, Ops, P, GraphBorrow> {
         self.distance(Query {
             from,
-            to: self.dijkstra.graph().num_nodes() as NodeId,
+            to: self.graph.borrow().num_nodes() as NodeId,
         });
         ServerWrapper(self)
     }
@@ -121,7 +124,7 @@ where
 
 impl<'s, Q, G, O, P, B> PathServer for PathServerWrapper<'s, Q, G, O, P, B>
 where
-    O: DijkstraOps<G, Label = Weight>,
+    O: DijkstraOps<G, Label = Weight> + Default,
     G: for<'a> LinkIterable<'a, O::Arc>,
     Q: GenQuery<Weight> + Copy,
     P: Potential,
@@ -136,7 +139,7 @@ where
 
 impl<'s, Q, G, O, P, B> PathServerWrapper<'s, Q, G, O, P, B>
 where
-    O: DijkstraOps<G, Label = Weight>,
+    O: DijkstraOps<G, Label = Weight> + Default,
     G: for<'a> LinkIterable<'a, O::Arc>,
     Q: GenQuery<Weight> + Copy,
     P: Potential,
@@ -149,13 +152,13 @@ where
                 "var marker = L.marker([{}, {}], {{ icon: blueIcon }}).addTo(map);",
                 lat[node as usize], lng[node as usize]
             );
-            let dist = self.0.dijkstra.tentative_distance(node);
+            let dist = self.0.dijkstra.distances[node as usize];
             println!("marker.bindPopup(\"id: {}<br>distance: {}\");", node, dist / 1000);
         }
     }
 
     pub fn distance(&self, node: NodeId) -> Weight {
-        *self.0.dijkstra.tentative_distance(node)
+        self.0.dijkstra.distances[node as usize]
     }
 }
 
@@ -165,15 +168,15 @@ where
 
 impl<'s, G: for<'a> LinkIterable<'a, O::Arc>, O: DijkstraOps<G, Label = Weight>, P: Potential, B: Borrow<G>> ServerWrapper<'s, G, O, P, B> {
     pub fn distance(&self, node: NodeId) -> Weight {
-        *self.0.dijkstra.tentative_distance(node)
+        self.0.dijkstra.distances[node as usize]
     }
 
     pub fn predecessor(&self, node: NodeId) -> NodeId {
-        self.0.dijkstra.predecessor(node)
+        self.0.dijkstra.predecessors[node as usize]
     }
 }
 
-impl<G: for<'a> LinkIterable<'a, O::Arc>, O: DijkstraOps<G, Label = Weight>, P: Potential, B: Borrow<G>> QueryServer for Server<G, O, P, B> {
+impl<G: for<'a> LinkIterable<'a, O::Arc>, O: DijkstraOps<G, Label = Weight> + Default, P: Potential, B: Borrow<G>> QueryServer for Server<G, O, P, B> {
     type P<'s>
     where
         Self: 's,
@@ -185,7 +188,7 @@ impl<G: for<'a> LinkIterable<'a, O::Arc>, O: DijkstraOps<G, Label = Weight>, P: 
     }
 }
 
-impl<G: for<'a> LinkIterable<'a, O::Arc>, O: DijkstraOps<G, Label = Weight>, P: Potential, B: Borrow<G>> TDQueryServer<Timestamp, Weight>
+impl<G: for<'a> LinkIterable<'a, O::Arc>, O: DijkstraOps<G, Label = Weight> + Default, P: Potential, B: Borrow<G>> TDQueryServer<Timestamp, Weight>
     for Server<G, O, P, B>
 {
     type P<'s>

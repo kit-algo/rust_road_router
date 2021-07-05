@@ -42,79 +42,58 @@ impl Default for DefaultOps {
     }
 }
 
-pub struct GenericDijkstra<Graph = OwnedGraph, Ops = DefaultOps, BorrowGraph = Graph>
+pub struct DijkstraRun<'a, Graph = OwnedGraph, Ops = DefaultOps>
 where
     Ops: DijkstraOps<Graph>,
 {
-    graph: BorrowGraph,
+    graph: &'a Graph,
 
-    distances: TimestampedVector<Ops::Label>,
-    predecessors: Vec<NodeId>,
-    queue: IndexdMinHeap<State<<Ops::Label as super::Label>::Key>>,
+    distances: &'a mut TimestampedVector<Ops::Label>,
+    predecessors: &'a mut Vec<NodeId>,
+    queue: &'a mut IndexdMinHeap<State<<Ops::Label as super::Label>::Key>>,
 
-    ops: Ops,
+    ops: &'a mut Ops,
 
     num_relaxed_arcs: usize,
     num_queue_pushs: usize,
 }
 
-impl<Graph, Ops, BorrowGraph> GenericDijkstra<Graph, Ops, BorrowGraph>
+impl<'b, Graph, Ops> DijkstraRun<'b, Graph, Ops>
 where
     Graph: for<'a> LinkIterable<'a, Ops::Arc>,
     Ops: DijkstraOps<Graph>,
-    BorrowGraph: Borrow<Graph>,
 {
-    pub fn new(graph: BorrowGraph) -> Self
-    where
-        Ops: Default,
-    {
-        let n = graph.borrow().num_nodes();
-
-        GenericDijkstra {
+    pub fn query(graph: &'b Graph, data: &'b mut DijkstraData<Ops::Label>, ops: &'b mut Ops, query: impl GenQuery<Ops::Label>) -> Self {
+        let mut s = Self {
             graph,
-
-            distances: TimestampedVector::new(n, Label::neutral()),
-            predecessors: vec![n as NodeId; n],
-            queue: IndexdMinHeap::new(n),
-
-            ops: Default::default(),
-
+            ops,
+            predecessors: &mut data.predecessors,
+            queue: &mut data.queue,
+            distances: &mut data.distances,
             num_relaxed_arcs: 0,
             num_queue_pushs: 0,
-        }
+        };
+        s.initialize(query);
+        s
     }
 
-    /// For CH preprocessing we reuse the distance array and the queue to reduce allocations.
-    /// This method creates an algo struct from recycled data.
-    /// The counterpart is the `recycle` method.
-    pub fn from_recycled(graph: BorrowGraph, recycled: DijkstraData<Ops::Label>) -> Self
-    where
-        Ops: Default,
-    {
-        let n = graph.borrow().num_nodes();
-        assert!(recycled.distances.len() >= n);
-        assert!(recycled.predecessors.len() >= n);
-
-        Self {
+    pub fn continue_query(graph: &'b Graph, data: &'b mut DijkstraData<Ops::Label>, ops: &'b mut Ops, node: NodeId) -> Self {
+        let mut s = Self {
             graph,
-            distances: recycled.distances,
-            predecessors: recycled.predecessors,
-            queue: recycled.queue,
-            ops: Default::default(),
-
+            ops,
+            predecessors: &mut data.predecessors,
+            queue: &mut data.queue,
+            distances: &mut data.distances,
             num_relaxed_arcs: 0,
             num_queue_pushs: 0,
-        }
+        };
+        s.reinit_queue(node);
+        s
     }
 
-    pub fn initialize_query(&mut self, query: impl GenQuery<Ops::Label>) {
-        // reset
+    pub fn initialize(&mut self, query: impl GenQuery<Ops::Label>) {
         self.queue.clear();
         self.distances.reset();
-
-        self.num_relaxed_arcs = 0;
-        self.num_queue_pushs = 0;
-
         self.add_start_node(query);
     }
 
@@ -124,6 +103,14 @@ where
         self.queue.push(State { key: init.key(), node: from });
         self.distances[from as usize] = init;
         self.predecessors[from as usize] = from;
+    }
+
+    fn reinit_queue(&mut self, node: NodeId) {
+        self.queue.clear();
+        self.queue.push(State {
+            key: self.distances[node as usize].key(),
+            node,
+        });
     }
 
     #[inline(always)]
@@ -220,17 +207,6 @@ where
         &self.queue
     }
 
-    /// For CH preprocessing we reuse the distance array and the queue to reduce allocations.
-    /// This method decomposes this algo struct for later reuse.
-    /// The counterpart is `from_recycled`
-    pub fn recycle(self) -> DijkstraData<Ops::Label> {
-        DijkstraData {
-            distances: self.distances,
-            predecessors: self.predecessors,
-            queue: self.queue,
-        }
-    }
-
     pub fn num_relaxed_arcs(&self) -> usize {
         self.num_relaxed_arcs
     }
@@ -240,11 +216,10 @@ where
     }
 }
 
-impl<Ops, Graph, A> Iterator for GenericDijkstra<Graph, Ops, A>
+impl<'b, Ops, Graph> Iterator for DijkstraRun<'b, Graph, Ops>
 where
     Ops: DijkstraOps<Graph>,
     Graph: for<'a> LinkIterable<'a, Ops::Arc>,
-    A: Borrow<Graph>,
 {
     type Item = NodeId;
 

@@ -98,7 +98,13 @@ pub fn run(
 
     let mut bidir_a_star = Server::new_with_potentials(modified_graph, forward_pot, backward_pot);
 
-    experiments::run_random_queries(graph.num_nodes(), &mut bidir_a_star, &mut rng, &mut algo_runs_ctxt, NUM_QUERIES);
+    experiments::run_random_queries(
+        graph.num_nodes(),
+        &mut bidir_a_star,
+        &mut rng,
+        &mut algo_runs_ctxt,
+        experiments::chpot::num_queries(),
+    );
 
     Ok(())
 }

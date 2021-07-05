@@ -4,10 +4,7 @@
 //! No node ordering implemented yet, depends on getting a precalculated order.
 
 use super::*;
-use crate::algo::{
-    a_star::*,
-    dijkstra::{generic_dijkstra::*, *},
-};
+use crate::algo::{a_star::*, dijkstra::*};
 use crate::datastr::node_order::NodeOrder;
 
 pub mod query;
@@ -164,11 +161,8 @@ impl ContractionGraph {
 
         // we start with the complete graph
         let mut graph = self.partial_graph();
-        // witness search servers with recycling for reduced allocations
-        let mut recycled = (
-            GenericDijkstra::<ForwardWrapper>::new(ForwardWrapper { graph: &graph }).recycle(),
-            GenericDijkstra::<BackwardWrapper>::new(BackwardWrapper { graph: &graph }).recycle(),
-        );
+        // witness search dijkstra data
+        let mut data = (DijkstraData::new(graph.nodes.len()), DijkstraData::new(graph.nodes.len()));
 
         // split of the lowest node, the one that will be contracted
         while let Some((node, mut subgraph)) = graph.remove_lowest() {
@@ -181,8 +175,8 @@ impl ContractionGraph {
             for &(Link { node: from, weight: from_wght }, _) in &node.incoming {
                 for &(Link { node: to, weight: to_wght }, _) in &node.outgoing {
                     // do witness search to check if we need the shortcut
-                    let (shortcut_required, new_recycled) = subgraph.shortcut_required(from, to, from_wght + to_wght, recycled);
-                    recycled = new_recycled;
+                    let (shortcut_required, new_data) = subgraph.shortcut_required(from, to, from_wght + to_wght, data);
+                    data = new_data;
                     if shortcut_required {
                         let middle_node_id = subgraph.id_offset - 1;
                         // insert shortcut
@@ -282,9 +276,10 @@ impl<'a> PartialContractionGraph<'a> {
 
         // create server from recycled stuff
         let mut server = crate::algo::dijkstra::query::bidirectional_dijkstra::Server {
-            forward_dijkstra: GenericDijkstra::from_recycled(ForwardWrapper { graph: &self }, recycled.0),
-            backward_dijkstra: GenericDijkstra::from_recycled(BackwardWrapper { graph: &self }, recycled.1),
-            tentative_distance: INFINITY,
+            forward: ForwardWrapper { graph: &self },
+            backward: BackwardWrapper { graph: &self },
+            forward_data: recycled.0,
+            backward_data: recycled.1,
             meeting_node: 0,
             potential: std::cell::RefCell::new(AveragePotential::new(ZeroPotential(), ZeroPotential())),
         };
@@ -296,7 +291,7 @@ impl<'a> PartialContractionGraph<'a> {
             None => true,
         };
 
-        (res, (server.forward_dijkstra.recycle(), server.backward_dijkstra.recycle()))
+        (res, (server.forward_data, server.backward_data))
     }
 }
 

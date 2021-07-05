@@ -8,9 +8,10 @@
 use super::*;
 
 pub struct Server {
-    forward_dijkstra: GenericDijkstra<OwnedGraph>,
-    backward_dijkstra: GenericDijkstra<OwnedGraph>,
-    tentative_distance: Weight,
+    forward: OwnedGraph,
+    backward: OwnedGraph,
+    forward_data: DijkstraData<Weight>,
+    backward_data: DijkstraData<Weight>,
     meeting_node: NodeId,
     shortcut_middle_nodes: Option<(Vec<NodeId>, Vec<NodeId>)>,
     order: NodeOrder,
@@ -18,10 +19,12 @@ pub struct Server {
 
 impl Server {
     pub fn new(ch: ContractionHierarchy, order: NodeOrder) -> Server {
+        let n = ch.forward.num_nodes();
         Server {
-            forward_dijkstra: GenericDijkstra::new(ch.forward),
-            backward_dijkstra: GenericDijkstra::new(ch.backward),
-            tentative_distance: INFINITY,
+            forward: ch.forward,
+            backward: ch.backward,
+            forward_data: DijkstraData::new(n),
+            backward_data: DijkstraData::new(n),
             meeting_node: 0,
             shortcut_middle_nodes: ch.middle_nodes,
             order,
@@ -33,10 +36,12 @@ impl Server {
         let to = self.order.rank(to);
 
         // initialize
-        self.tentative_distance = INFINITY;
+        let mut tentative_distance = INFINITY;
 
-        self.forward_dijkstra.initialize_query(Query { from, to });
-        self.backward_dijkstra.initialize_query(Query { from: to, to: from });
+        let mut fw_ops = DefaultOps();
+        let mut bw_ops = DefaultOps();
+        let mut forward_dijkstra = DijkstraRun::query(&self.forward, &mut self.forward_data, &mut fw_ops, Query { from, to });
+        let mut backward_dijkstra = DijkstraRun::query(&self.backward, &mut self.backward_data, &mut bw_ops, Query { from: to, to: from });
 
         let mut forward_progress = 0;
         let mut backward_progress = 0;
@@ -44,14 +49,14 @@ impl Server {
         let mut backward_done = false;
 
         // compare tentative distance to both directions progress individually rather than the sum!
-        while (self.tentative_distance > forward_progress || self.tentative_distance > backward_progress) && !(forward_done && backward_done) {
+        while (tentative_distance > forward_progress || tentative_distance > backward_progress) && !(forward_done && backward_done) {
             if backward_done || (forward_progress <= backward_progress && !forward_done) {
-                if let Some(node) = self.forward_dijkstra.next() {
-                    let distance = *self.forward_dijkstra.tentative_distance(node);
+                if let Some(node) = forward_dijkstra.next() {
+                    let distance = *forward_dijkstra.tentative_distance(node);
                     forward_progress = distance;
 
-                    if distance + self.backward_dijkstra.tentative_distance(node) < self.tentative_distance {
-                        self.tentative_distance = distance + self.backward_dijkstra.tentative_distance(node);
+                    if distance + backward_dijkstra.tentative_distance(node) < tentative_distance {
+                        tentative_distance = distance + backward_dijkstra.tentative_distance(node);
                         self.meeting_node = node;
                     }
 
@@ -62,12 +67,12 @@ impl Server {
                     forward_done = true;
                 }
             } else {
-                if let Some(node) = self.backward_dijkstra.next() {
-                    let distance = *self.backward_dijkstra.tentative_distance(node);
+                if let Some(node) = backward_dijkstra.next() {
+                    let distance = *backward_dijkstra.tentative_distance(node);
                     backward_progress = distance;
 
-                    if distance + self.forward_dijkstra.tentative_distance(node) < self.tentative_distance {
-                        self.tentative_distance = distance + self.forward_dijkstra.tentative_distance(node);
+                    if distance + forward_dijkstra.tentative_distance(node) < tentative_distance {
+                        tentative_distance = distance + forward_dijkstra.tentative_distance(node);
                         self.meeting_node = node;
                     }
 
@@ -80,7 +85,7 @@ impl Server {
             }
         }
 
-        match self.tentative_distance {
+        match tentative_distance {
             INFINITY => None,
             dist => Some(dist),
         }
@@ -96,13 +101,13 @@ impl Server {
         forwad_path.push_front(self.meeting_node);
 
         while *forwad_path.front().unwrap() != query.from {
-            let next = self.forward_dijkstra.predecessor(*forwad_path.front().unwrap());
+            let next = self.forward_data.predecessors[*forwad_path.front().unwrap() as usize];
             let mut shortcut_stack = vec![next];
 
             while let Some(node) = shortcut_stack.pop() {
-                let next = self.forward_dijkstra.predecessor(*forwad_path.front().unwrap());
-                let middle = forward_middle_nodes[self.forward_dijkstra.graph().edge_index(node, next).unwrap() as usize];
-                if middle < self.forward_dijkstra.graph().num_nodes() as NodeId {
+                let next = self.forward_data.predecessors[*forwad_path.front().unwrap() as usize];
+                let middle = forward_middle_nodes[self.forward.edge_index(node, next).unwrap() as usize];
+                if middle < self.forward.num_nodes() as NodeId {
                     shortcut_stack.push(node);
                     shortcut_stack.push(middle);
                 } else {
@@ -115,13 +120,13 @@ impl Server {
         backward_path.push_back(self.meeting_node);
 
         while *backward_path.back().unwrap() != query.to {
-            let next = self.backward_dijkstra.predecessor(*backward_path.back().unwrap());
+            let next = self.backward_data.predecessors[*backward_path.back().unwrap() as usize];
             let mut shortcut_stack = vec![next];
 
             while let Some(node) = shortcut_stack.pop() {
-                let next = self.backward_dijkstra.predecessor(*backward_path.back().unwrap());
-                let middle = backward_middle_nodes[self.backward_dijkstra.graph().edge_index(node, next).unwrap() as usize];
-                if middle < self.backward_dijkstra.graph().num_nodes() as NodeId {
+                let next = self.backward_data.predecessors[*backward_path.back().unwrap() as usize];
+                let middle = backward_middle_nodes[self.backward.edge_index(node, next).unwrap() as usize];
+                if middle < self.backward.num_nodes() as NodeId {
                     shortcut_stack.push(node);
                     shortcut_stack.push(middle);
                 } else {

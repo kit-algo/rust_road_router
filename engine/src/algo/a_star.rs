@@ -1,5 +1,5 @@
 use super::*;
-use crate::{algo::dijkstra::generic_dijkstra::*, report::*};
+use crate::{algo::dijkstra::*, report::*};
 
 pub trait Potential {
     fn init(&mut self, target: NodeId);
@@ -39,16 +39,18 @@ impl<P: Potential> Potential for TurnExpandedPotential<P> {
 }
 
 pub struct BaselinePotential {
-    dijkstra: GenericDijkstra<OwnedGraph>,
+    graph: OwnedGraph,
+    data: DijkstraData<Weight>,
 }
 
 impl BaselinePotential {
-    pub fn new<G>(graph: &G) -> Self
+    pub fn new<G: Graph>(graph: &G) -> Self
     where
         OwnedGraph: BuildReversed<G>,
     {
         Self {
-            dijkstra: GenericDijkstra::new(OwnedGraph::reversed(&graph)),
+            graph: OwnedGraph::reversed(&graph),
+            data: DijkstraData::new(graph.num_nodes()),
         }
     }
 }
@@ -56,17 +58,23 @@ impl BaselinePotential {
 impl Potential for BaselinePotential {
     fn init(&mut self, target: NodeId) {
         report_time_with_key("BaselinePotential init", "baseline_pot_init", || {
-            self.dijkstra.initialize_query(Query {
-                from: target,
-                to: self.dijkstra.graph().num_nodes() as NodeId,
-            });
-            while let Some(_) = self.dijkstra.next() {}
+            let mut ops = DefaultOps();
+            let mut dijkstra = DijkstraRun::query(
+                &self.graph,
+                &mut self.data,
+                &mut ops,
+                Query {
+                    from: target,
+                    to: self.graph.num_nodes() as NodeId,
+                },
+            );
+            while let Some(_) = dijkstra.next() {}
         })
     }
 
     fn potential(&mut self, node: NodeId) -> Option<Weight> {
-        if *self.dijkstra.tentative_distance(node) < INFINITY {
-            Some(*self.dijkstra.tentative_distance(node))
+        if self.data.distances[node as usize] < INFINITY {
+            Some(self.data.distances[node as usize])
         } else {
             None
         }

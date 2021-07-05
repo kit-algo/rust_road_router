@@ -1,11 +1,7 @@
 // Plot a subgraph within given geographic boundaries to a SVG.
 
 use rust_road_router::{
-    algo::{
-        contraction_hierarchy,
-        dijkstra::{generic_dijkstra::*, query::dijkstra::*},
-        Query, QueryServer,
-    },
+    algo::{contraction_hierarchy, dijkstra::*, *},
     cli::CliErr,
     datastr::{graph::*, node_order::NodeOrder, rank_select_map::*},
     io::*,
@@ -102,15 +98,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     // }
 
     let mut forward_settled_nodes = BitVec::new(graph.num_nodes());
-    let mut forward_dijkstra = GenericDijkstra::<OwnedGraph, DefaultOps, &OwnedGraph>::new(&up);
-    forward_dijkstra.initialize_query(Query { from: 0, to: std::u32::MAX });
+    let mut fw_ops = DefaultOps();
+    let mut fw_data = DijkstraData::new(graph.num_nodes());
+    let forward_dijkstra = DijkstraRun::query(&up, &mut fw_data, &mut fw_ops, Query { from: 0, to: std::u32::MAX });
     for node in forward_dijkstra {
         forward_settled_nodes.set(node as usize);
     }
 
     let mut backward_settled_nodes = BitVec::new(graph.num_nodes());
-    let mut backward_dijkstra = GenericDijkstra::<OwnedGraph, DefaultOps, &OwnedGraph>::new(&down);
-    backward_dijkstra.initialize_query(Query { from: 100, to: std::u32::MAX });
+    let mut bw_ops = DefaultOps();
+    let mut bw_data = DijkstraData::new(graph.num_nodes());
+    let backward_dijkstra = DijkstraRun::query(&up, &mut bw_data, &mut bw_ops, Query { from: 100, to: std::u32::MAX });
     for node in backward_dijkstra {
         backward_settled_nodes.set(node as usize);
     }

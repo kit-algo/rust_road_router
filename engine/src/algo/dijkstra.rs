@@ -7,7 +7,8 @@ pub mod gen_topo_dijkstra;
 pub mod generic_dijkstra;
 pub mod query;
 
-pub use generic_dijkstra::{DefaultOps, DijkstraOps};
+pub use generic_dijkstra::{DefaultOps, DijkstraOps, DijkstraRun};
+pub use query::dijkstra::Server;
 
 /// Result of a single iteration
 #[derive(Debug, Clone)]
