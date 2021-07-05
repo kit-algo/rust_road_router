@@ -55,7 +55,7 @@ impl<P: Potential> Penalty<P> {
         let query = Query { from: core_from, to: core_to };
         self.alternative_graph_dijkstra.graph_mut().clear();
 
-        if let Some(mut result) = QueryServer::query(&mut self.shortest_path_penalized, query) {
+        if let Some(mut result) = self.shortest_path_penalized.query(query) {
             let base_dist = result.distance;
             report!("base_dist", base_dist);
 
@@ -169,15 +169,13 @@ impl<P: Potential> Penalty<P> {
                     if part_dist * 10 > base_dist {
                         let _blocked = block_reporting();
                         if part_dist * 10
-                            <= QueryServer::query(
-                                alternative_graph_dijkstra,
-                                Query {
+                            <= alternative_graph_dijkstra
+                                .query(Query {
                                     from: part_start,
                                     to: part_end,
-                                },
-                            )
-                            .map(|r| r.distance * 11)
-                            .unwrap_or(INFINITY)
+                                })
+                                .map(|r| r.distance * 11)
+                                .unwrap_or(INFINITY)
                         {
                             feasable = true;
                             break;

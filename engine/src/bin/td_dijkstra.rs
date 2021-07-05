@@ -74,7 +74,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let _query_ctxt = algo_runs_ctxt.push_collection_item();
             report!("from", from);
             report!("to", to);
-            let (ea, time) = measure(|| TDQueryServer::td_query(&mut server, TDQuery { from, to, departure: at }).map(|res| res.distance() + at));
+            let (ea, time) = measure(|| server.td_query(TDQuery { from, to, departure: at }).map(|res| res.distance() + at));
             report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
             report!("result", ea.unwrap_or(INFINITY));
             total_time = total_time + time;

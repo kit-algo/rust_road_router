@@ -152,7 +152,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let from: NodeId = rng.gen_range(0, n as NodeId);
         let to: NodeId = rng.gen_range(0, n as NodeId);
 
-        let (mut res, time) = measure(|| QueryServer::query(&mut topocore, Query { from, to }));
+        let (mut res, time) = measure(|| topocore.query(Query { from, to }));
 
         query_count += 1;
 

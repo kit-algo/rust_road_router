@@ -117,7 +117,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         server.ranks(from, |to, _dist, rank| {
             let _query_ctxt = algo_runs_ctxt.push_collection_item();
-            let (mut res, time) = measure(|| QueryServer::query(&mut topocore, Query { from, to }));
+            let (mut res, time) = measure(|| topocore.query(Query { from, to }));
 
             report!("from", from);
             report!("to", to);

@@ -51,10 +51,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         };
 
         report_time("simple dijkstra", || {
-            assert_eq!(
-                QueryServer::query(&mut simple_server, Query { from, to }).map(|res| res.distance()),
-                ground_truth
-            );
+            assert_eq!(simple_server.query(Query { from, to }).map(|res| res.distance()), ground_truth);
         });
         report_time("bidir dijkstra", || {
             assert_eq!(bi_dir_server.query(Query { from, to }).map(|res| res.distance()), ground_truth);

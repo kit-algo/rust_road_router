@@ -130,7 +130,7 @@ pub fn run(
 
         #[cfg(feature = "chpot-oracle")]
         {
-            QueryServer::query(&mut topocore, Query { from, to });
+            topocore.query(Query { from, to });
         }
 
         report!("from", from);
@@ -138,7 +138,7 @@ pub fn run(
 
         query_count += 1;
 
-        let (mut res, time) = measure(|| QueryServer::query(&mut topocore, Query { from, to }));
+        let (mut res, time) = measure(|| topocore.query(Query { from, to }));
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         let dist = res.as_ref().map(|res| res.distance());
         report!("result", dist);

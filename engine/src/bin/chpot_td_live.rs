@@ -194,7 +194,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         report!("from", from);
         report!("to", to);
         report!("at", now);
-        let (mut res, time) = measure(|| TDQueryServer::td_query(&mut server, TDQuery { from, to, departure: now }));
+        let (mut res, time) = measure(|| server.td_query(TDQuery { from, to, departure: now }));
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         report!("result", res.as_ref().map(|res| res.distance()));
         #[cfg(all(not(feature = "chpot-only-topo"), not(feature = "chpot-alt")))]
@@ -222,7 +222,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         report!("from", from);
         report!("to", to);
         report!("at", at);
-        let (ea, time) = measure(|| TDQueryServer::td_query(&mut server, TDQuery { from, to, departure: at }).map(|res| res.distance()));
+        let (ea, time) = measure(|| server.td_query(TDQuery { from, to, departure: at }).map(|res| res.distance()));
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         report!("result", ea);
         dijkstra_time = dijkstra_time + time;
