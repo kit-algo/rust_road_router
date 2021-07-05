@@ -21,12 +21,24 @@ pub fn run_random_queries(
     reporting_context: &mut CollectionContextGuard,
     num_queries: usize,
 ) {
+    run_queries(
+        std::iter::from_fn(move || Some((rng.gen_range(0, num_nodes as NodeId), rng.gen_range(0, num_nodes as NodeId)))),
+        server,
+        reporting_context,
+        num_queries,
+    );
+}
+
+pub fn run_queries(
+    query_iter: impl Iterator<Item = (NodeId, NodeId)>,
+    server: &mut impl QueryServer,
+    reporting_context: &mut CollectionContextGuard,
+    num_queries: usize,
+) {
     let mut total_query_time = Duration::zero();
 
-    for _ in 0..num_queries {
+    for (from, to) in query_iter.take(num_queries) {
         let _query_ctxt = reporting_context.push_collection_item();
-        let from: NodeId = rng.gen_range(0, num_nodes as NodeId);
-        let to: NodeId = rng.gen_range(0, num_nodes as NodeId);
 
         report!("from", from);
         report!("to", to);

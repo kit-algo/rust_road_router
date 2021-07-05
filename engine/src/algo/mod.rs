@@ -148,7 +148,6 @@ where
 }
 
 /// Trait for query algorithm servers.
-/// The lifetime parameter is necessary, so the PathServer type can have a lifetime parameter.
 pub trait QueryServer {
     /// Just for internal use. Type of the object that can retrieve the actual shortest path.
     type P<'s>: PathServer
