@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate rust_road_router;
 use rust_road_router::{
-    algo::{ch_potentials::*, dijkstra::query::bidirectional_dijkstra::Server, *},
+    algo::{ch_potentials::*, dijkstra::query::bidirectional_dijkstra::Server},
     cli::CliErr,
     datastr::{graph::*, node_order::NodeOrder},
     experiments::{self, a_star::NUM_QUERIES},

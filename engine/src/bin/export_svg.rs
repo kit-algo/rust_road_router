@@ -535,7 +535,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // ########################## Hub Labeling ##########################
 
     let hl = HubLabels::new(&up, &down);
-    let best = hl.hub_and_dist(node_order.rank(from), node_order.rank(to)).unwrap().0;
+    let _best = hl.hub_and_dist(node_order.rank(from), node_order.rank(to)).unwrap().0;
 
     // for label in &hl.forward_labels()[node_order.rank(from) as usize] {
     //     println!(
