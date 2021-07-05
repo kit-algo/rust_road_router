@@ -19,10 +19,9 @@ use time::Duration;
 
 /// Number of queries performed for each experiment.
 /// Can be overriden through the CHPOT_NUM_QUERIES env var.
-#[cfg(not(override_chpot_num_queries))]
-pub const NUM_QUERIES: usize = 10000;
-#[cfg(override_chpot_num_queries)]
-pub const NUM_QUERIES: usize = include!(concat!(env!("OUT_DIR"), "/CHPOT_NUM_QUERIES"));
+pub fn num_queries() -> usize {
+    std::env::var("CHPOT_NUM_QUERIES").map_or(10000, |num| num.parse().unwrap())
+}
 
 pub fn run(
     path: &Path,
@@ -133,7 +132,7 @@ pub fn run(
     let mut query_count = 0;
     let mut total_query_time = Duration::zero();
 
-    for _i in 0..NUM_QUERIES {
+    for _i in 0..num_queries() {
         let _query_ctxt = algo_runs_ctxt.push_collection_item();
         let from: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
         let to: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
@@ -173,7 +172,7 @@ pub fn run(
     };
 
     let mut server = DijkServer::<_, DefaultOps>::new(modified_graph);
-    super::run_random_queries(graph.num_nodes(), &mut server, &mut rng, &mut algo_runs_ctxt, super::NUM_DIJKSTRA_QUERIES);
+    super::run_random_queries(graph.num_nodes(), &mut server, &mut rng, &mut algo_runs_ctxt, super::num_dijkstra_queries());
 
     Ok(())
 }

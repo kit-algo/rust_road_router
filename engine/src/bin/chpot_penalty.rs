@@ -4,7 +4,7 @@ use rust_road_router::{
     algo::{a_star::RecyclingPotential, ch_potentials::*, *},
     cli::CliErr,
     datastr::{graph::*, node_order::NodeOrder},
-    experiments::a_star::NUM_QUERIES,
+    experiments,
     io::*,
     report::*,
 };
@@ -69,8 +69,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let mut total_query_time = Duration::zero();
+    let num_queries = experiments::chpot::num_queries();
 
-    for _i in 0..NUM_QUERIES {
+    for _i in 0..num_queries {
         let _query_ctxt = algo_runs_ctxt.push_collection_item();
         let from: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
         let to: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
@@ -87,8 +88,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         total_query_time = total_query_time + time;
     }
 
-    if NUM_QUERIES > 0 {
-        eprintln!("Avg. query time {}", total_query_time / (NUM_QUERIES as i32))
+    if num_queries > 0 {
+        eprintln!("Avg. query time {}", total_query_time / (num_queries as i32))
     };
 
     Ok(())

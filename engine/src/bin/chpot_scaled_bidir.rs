@@ -4,7 +4,7 @@ use rust_road_router::{
     algo::{ch_potentials::*, dijkstra::query::bidirectional_dijkstra::Server},
     cli::CliErr,
     datastr::{graph::*, node_order::NodeOrder},
-    experiments::{self, a_star::NUM_QUERIES},
+    experiments,
     io::*,
     report::*,
 };

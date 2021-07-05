@@ -42,7 +42,7 @@ pub fn main() -> Result<(), Box<dyn Error>> {
         &mut server,
         &mut rng,
         &mut &mut algo_runs_ctxt,
-        rust_road_router::experiments::NUM_DIJKSTRA_QUERIES,
+        rust_road_router::experiments::num_dijkstra_queries(),
     );
 
     Ok(())

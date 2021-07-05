@@ -211,7 +211,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut server = Server::new(&graph, potential, LiveTDDijkstraOps::default());
     drop(virtual_topocore_ctxt);
 
-    let num_queries = rust_road_router::experiments::chpot::NUM_QUERIES;
+    let num_queries = rust_road_router::experiments::chpot::num_queries();
 
     let mut astar_time = Duration::zero();
 
@@ -236,7 +236,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     eprintln!("A* {}", astar_time / (num_queries as i32));
 
-    let num_queries = rust_road_router::experiments::NUM_DIJKSTRA_QUERIES;
+    let num_queries = rust_road_router::experiments::num_dijkstra_queries();
 
     let mut server = DijkServer::<_, LiveTDDijkstraOps>::new(graph);
 

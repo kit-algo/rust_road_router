@@ -1,9 +1,8 @@
 /// Number of dijkstra queries performed for experiments.
 /// Can be overriden through the NUM_DIJKSTRA_QUERIES env var.
-#[cfg(not(override_num_dijkstra_queries))]
-pub const NUM_DIJKSTRA_QUERIES: usize = 1000;
-#[cfg(override_num_dijkstra_queries)]
-pub const NUM_DIJKSTRA_QUERIES: usize = include!(concat!(env!("OUT_DIR"), "/NUM_DIJKSTRA_QUERIES"));
+pub fn num_dijkstra_queries() -> usize {
+    std::env::var("NUM_DIJKSTRA_QUERIES").map_or(1000, |num| num.parse().unwrap())
+}
 
 use rand::prelude::*;
 use time::Duration;

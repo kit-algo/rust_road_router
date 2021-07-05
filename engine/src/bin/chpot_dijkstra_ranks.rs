@@ -112,7 +112,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut server = DijkServer::<_, DefaultOps, _>::new(graph);
 
-    for _i in 0..rust_road_router::experiments::NUM_DIJKSTRA_QUERIES {
+    for _i in 0..rust_road_router::experiments::num_dijkstra_queries() {
         let from: NodeId = rng.gen_range(0, n as NodeId);
 
         server.ranks(from, |to, _dist, rank| {

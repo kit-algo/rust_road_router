@@ -17,13 +17,6 @@ use std::{error::Error, path::Path};
 use rand::prelude::*;
 use time::Duration;
 
-/// Number of queries performed for each experiment.
-/// Can be overriden through the CHPOT_NUM_QUERIES env var.
-#[cfg(not(override_chpot_num_queries))]
-pub const NUM_QUERIES: usize = 10000;
-#[cfg(override_chpot_num_queries)]
-pub const NUM_QUERIES: usize = include!(concat!(env!("OUT_DIR"), "/CHPOT_NUM_QUERIES"));
-
 pub fn run(
     path: &Path,
     modify_travel_time: impl FnOnce(&FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>, &mut StdRng, &mut [Weight]) -> Result<(), Box<dyn Error>>,
@@ -123,7 +116,7 @@ pub fn run(
     let mut query_count = 0;
     let mut total_query_time = Duration::zero();
 
-    for _i in 0..NUM_QUERIES {
+    for _i in 0..super::chpot::num_queries() {
         let _query_ctxt = algo_runs_ctxt.push_collection_item();
         let from: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
         let to: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
