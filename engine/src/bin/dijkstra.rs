@@ -1,16 +1,9 @@
 #[macro_use]
 extern crate rust_road_router;
-use rust_road_router::{
-    algo::{dijkstra::*, *},
-    cli::CliErr,
-    datastr::graph::*,
-    io::*,
-    report::*,
-};
+use rust_road_router::{algo::dijkstra::*, cli::CliErr, datastr::graph::*, experiments, io::*, report::*};
 use std::{env, error::Error, path::Path};
 
 use rand::prelude::*;
-use time::Duration;
 
 pub fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting();
@@ -42,29 +35,15 @@ pub fn main() -> Result<(), Box<dyn Error>> {
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[0]);
 
-    let mut query_count = 0;
     let mut rng = StdRng::from_seed(seed);
-    let mut total_query_time = Duration::zero();
 
-    for _i in 0..rust_road_router::experiments::NUM_DIJKSTRA_QUERIES {
-        let _query_ctxt = algo_runs_ctxt.push_collection_item();
-        let from: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
-        let to: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
-
-        report!("from", from);
-        report!("to", to);
-
-        query_count += 1;
-
-        let (dist, time) = measure(|| QueryServer::query(&mut server, Query { from, to }).map(|res| res.distance()));
-        report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-        report!("result", dist.unwrap_or(INFINITY));
-        total_query_time = total_query_time + time;
-    }
-
-    if query_count > 0 {
-        eprintln!("Avg. query time {}", total_query_time / (query_count as i32))
-    };
+    experiments::run_random_queries(
+        graph.num_nodes(),
+        &mut server,
+        &mut rng,
+        &mut &mut algo_runs_ctxt,
+        rust_road_router::experiments::NUM_DIJKSTRA_QUERIES,
+    );
 
     Ok(())
 }

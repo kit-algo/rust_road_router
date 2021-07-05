@@ -11,6 +11,7 @@ use rust_road_router::{
     },
     cli::CliErr,
     datastr::{graph::*, node_order::NodeOrder},
+    experiments,
     io::*,
     report::*,
 };
@@ -177,21 +178,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut server = DijkServer::<_, DefaultOps>::new(exp_graph);
 
-    for _i in 0..rust_road_router::experiments::NUM_DIJKSTRA_QUERIES {
-        let _query_ctxt = algo_runs_ctxt.push_collection_item();
-        let from: NodeId = rng.gen_range(0, n as NodeId);
-        let to: NodeId = rng.gen_range(0, n as NodeId);
-
-        report!("from", from);
-        report!("to", to);
-
-        query_count += 1;
-
-        let (res, time) = measure(|| QueryServer::query(&mut server, Query { from, to }));
-        report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-        let dist = res.as_ref().map(|res| res.distance());
-        report!("result", dist);
-    }
+    experiments::run_random_queries(
+        graph.num_nodes(),
+        &mut server,
+        &mut rng,
+        &mut &mut algo_runs_ctxt,
+        rust_road_router::experiments::NUM_DIJKSTRA_QUERIES,
+    );
 
     Ok(())
 }
