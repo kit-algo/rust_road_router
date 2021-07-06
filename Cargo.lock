@@ -1344,7 +1344,6 @@ version = "0.1.0"
 dependencies = [
  "built",
  "core_affinity",
- "nav-types",
  "rand 0.6.5",
  "rayon",
  "scoped-tls",

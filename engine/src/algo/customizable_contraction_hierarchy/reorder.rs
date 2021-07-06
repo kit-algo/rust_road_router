@@ -16,20 +16,10 @@ pub struct CCHReordering<'a, 'c> {
 
 impl<'a, 'c> CCHReordering<'a, 'c> {
     fn distance(&self, n1: NodeId, n2: NodeId) -> NonNan {
-        use nav_types::WGS84;
-        NonNan::new(
-            WGS84::new(
-                self.latitude[self.cch.node_order.node(n1) as usize],
-                self.longitude[self.cch.node_order.node(n1) as usize],
-                0.0,
-            )
-            .distance(&WGS84::new(
-                self.latitude[self.cch.node_order.node(n2) as usize],
-                self.longitude[self.cch.node_order.node(n2) as usize],
-                0.0,
-            )),
-        )
-        .unwrap()
+        let delta_lat = self.latitude[self.cch.node_order.node(n1) as usize] - self.latitude[self.cch.node_order.node(n2) as usize];
+        let delta_lng = self.longitude[self.cch.node_order.node(n1) as usize] - self.longitude[self.cch.node_order.node(n2) as usize];
+
+        NonNan::new(delta_lat * delta_lat + delta_lng * delta_lng).unwrap()
     }
 
     fn reorder_sep(&self, nodes: &mut [NodeId]) {

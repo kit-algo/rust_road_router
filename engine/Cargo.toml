@@ -35,7 +35,6 @@ detailed-stats = []
 
 [dependencies]
 time = "^0.1.40"
-nav-types = "^0.3.0"
 rand = "^0.6.1"
 serde_json = "^1.0.35"
 rayon = "^1.4.1"
