@@ -14,7 +14,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let first_out = Vec::load_from(path.join("first_out"))?;
     let head = Vec::load_from(path.join("head"))?;
 
-    let graph = FirstOutGraph::new(first_out, head.clone(), head);
+    let graph = UnweightedFirstOutGraph::new(first_out, head);
 
     let cch_folder = path.join("cch");
     let node_order = NodeOrder::reconstruct_from(&cch_folder)?;

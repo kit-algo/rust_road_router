@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let lat = Vec::<f32>::load_from(path.join("latitude"))?;
     let lng = Vec::<f32>::load_from(path.join("longitude"))?;
 
-    let graph = FirstOutGraph::new(first_out, head.clone(), head);
+    let graph = UnweightedFirstOutGraph::new(first_out, head);
 
     let cch_folder = path.join("cch");
     let node_order = NodeOrder::reconstruct_from(&cch_folder)?;

@@ -56,8 +56,7 @@ pub struct CCHReconstrctor<'g, Graph> {
 impl<'g, Graph: RandomLinkAccessGraph> ReconstructPrepared<CCH> for CCHReconstrctor<'g, Graph> {
     fn reconstruct_with(self, loader: Loader) -> std::io::Result<CCH> {
         let head: Vec<NodeId> = loader.load("cch_head")?;
-        let m = head.len();
-        let cch_graph = OwnedGraph::new(loader.load("cch_first_out")?, head, vec![INFINITY; m]);
+        let cch_graph = UnweightedOwnedGraph::new(loader.load("cch_first_out")?, head);
         assert_eq!(cch_graph.num_nodes(), self.original_graph.num_nodes());
         Ok(CCH::new_from(self.original_graph, self.node_order, cch_graph))
     }
@@ -70,7 +69,7 @@ impl CCH {
     }
 
     // this method creates all the other structures from the contracted graph
-    fn new_from<Graph: RandomLinkAccessGraph>(original_graph: &Graph, node_order: NodeOrder, contracted_graph: OwnedGraph) -> Self {
+    fn new_from<Graph: RandomLinkAccessGraph>(original_graph: &Graph, node_order: NodeOrder, contracted_graph: UnweightedOwnedGraph) -> Self {
         let elimination_tree = Self::build_elimination_tree(&contracted_graph);
         let n = contracted_graph.num_nodes() as NodeId;
         let m = contracted_graph.num_arcs();
@@ -79,7 +78,7 @@ impl CCH {
         let cch_edge_to_orig_arc = (0..n)
             .flat_map(|node| {
                 let node_order = &node_order;
-                LinkIterable::<Link>::link_iter(&contracted_graph, node).map(move |Link { node: neighbor, .. }| {
+                LinkIterable::<NodeId>::link_iter(&contracted_graph, node).map(move |neighbor| {
                     (
                         InRangeOption::new(original_graph.edge_index(node_order.node(node), node_order.node(neighbor))),
                         InRangeOption::new(original_graph.edge_index(node_order.node(neighbor), node_order.node(node))),
@@ -95,7 +94,7 @@ impl CCH {
         }
 
         let inverted = inverted_with_orig_edge_ids_as_weights(&contracted_graph);
-        let (first_out, head, _) = contracted_graph.decompose();
+        let (first_out, head) = contracted_graph.decompose();
 
         CCH {
             first_out,
@@ -113,7 +112,7 @@ impl CCH {
         SeparatorTree::new(&self.elimination_tree)
     }
 
-    fn build_elimination_tree(graph: &OwnedGraph) -> Vec<InRangeOption<NodeId>> {
+    fn build_elimination_tree(graph: &UnweightedOwnedGraph) -> Vec<InRangeOption<NodeId>> {
         (0..graph.num_nodes())
             .map(|node_id| LinkIterable::<NodeId>::link_iter(graph, node_id as NodeId).min())
             .map(InRangeOption::new)
@@ -255,10 +254,10 @@ impl Graph for CCH {
     }
 }
 
-fn inverted_with_orig_edge_ids_as_weights<'a>(graph: &'a (impl RandomLinkAccessGraph + LinkIterGraph<'a>)) -> OwnedGraph {
+fn inverted_with_orig_edge_ids_as_weights<'a>(graph: &'a (impl RandomLinkAccessGraph + LinkIterable<'a, NodeId>)) -> OwnedGraph {
     let mut inverted = vec![Vec::new(); graph.num_nodes()];
     for current_node in 0..(graph.num_nodes() as NodeId) {
-        for (Link { node, .. }, edge_id) in graph.link_iter(current_node).zip(graph.neighbor_edge_indices(current_node)) {
+        for (node, edge_id) in graph.link_iter(current_node).zip(graph.neighbor_edge_indices(current_node)) {
             // the heads of inverted will be sorted ascending for each node, because current node goes from 0 to n
             inverted[node as usize].push((current_node, edge_id));
         }

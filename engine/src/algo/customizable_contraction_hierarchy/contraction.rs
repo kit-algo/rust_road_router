@@ -225,12 +225,12 @@ impl<'a> IndexMut<usize> for PartialContractionGraph<'a> {
 pub struct ContractedGraph<'a, Graph: 'a>(ContractionGraph<'a, Graph>);
 
 impl<'a, Graph: 'a> ContractedGraph<'a, Graph> {
-    pub fn decompose(self) -> (OwnedGraph, NodeOrder, &'a Graph) {
+    pub fn decompose(self) -> (UnweightedOwnedGraph, NodeOrder, &'a Graph) {
         (adjancecy_lists_to_first_out_graph(self.0.nodes), self.0.node_order, self.0.original_graph)
     }
 }
 
-fn adjancecy_lists_to_first_out_graph(adjancecy_lists: Vec<Node>) -> OwnedGraph {
+fn adjancecy_lists_to_first_out_graph(adjancecy_lists: Vec<Node>) -> UnweightedOwnedGraph {
     let n = adjancecy_lists.len();
 
     let first_out: Vec<EdgeId> = {
@@ -241,6 +241,5 @@ fn adjancecy_lists_to_first_out_graph(adjancecy_lists: Vec<Node>) -> OwnedGraph 
 
     let head: Vec<NodeId> = adjancecy_lists.into_iter().flat_map(|neighbors| neighbors.edges.into_iter()).collect();
 
-    let m = head.len();
-    OwnedGraph::new(first_out, head, vec![INFINITY; m])
+    UnweightedOwnedGraph::new(first_out, head)
 }
