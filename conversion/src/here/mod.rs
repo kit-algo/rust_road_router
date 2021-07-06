@@ -1,6 +1,6 @@
-use crate::datastr::graph::*;
-use crate::datastr::rank_select_map::{BitVec, RankSelectMap};
-use crate::util::in_range_option::*;
+use rust_road_router::datastr::graph::*;
+use rust_road_router::datastr::rank_select_map::{BitVec, RankSelectMap};
+use rust_road_router::util::in_range_option::*;
 use std::error::Error;
 use std::fmt;
 use std::iter;

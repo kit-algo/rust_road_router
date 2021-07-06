@@ -1,6 +1,6 @@
 // WIP: CH potentials for TD Routing.
 
-use std::{env, error::Error, fs::File, path::Path};
+use std::{env, error::Error, path::Path};
 
 #[macro_use]
 extern crate rust_road_router;
@@ -16,7 +16,6 @@ use rust_road_router::{
     datastr::{
         graph::{time_dependent::*, *},
         node_order::NodeOrder,
-        rank_select_map::*,
     },
     experiments,
     io::*,
@@ -24,8 +23,6 @@ use rust_road_router::{
     util::in_range_option::*,
 };
 
-use csv::ReaderBuilder;
-use glob::glob;
 use rand::prelude::*;
 use time::Duration;
 
@@ -43,15 +40,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let first_ipp_of_arc = Vec::load_from(path.join("first_ipp_of_arc"))?;
     let ipp_departure_time = Vec::<u32>::load_from(path.join("ipp_departure_time"))?;
     let ipp_travel_time = Vec::load_from(path.join("ipp_travel_time"))?;
-
-    let geo_distance = Vec::<EdgeId>::load_from(path.join("geo_distance"))?;
-    let osm_node_ids = Vec::<u64>::load_from(path.join("osm_node_ids"))?;
-
-    let mut osm_ids_present = BitVec::new(*osm_node_ids.last().unwrap() as usize + 1);
-    for osm_id in osm_node_ids {
-        osm_ids_present.set(osm_id as usize);
-    }
-    let id_map = RankSelectMap::new(osm_ids_present);
+    let live_travel_time = Vec::<Weight>::load_from(path.join("live_travel_time"))?;
 
     report!("unprocessed_graph", { "num_nodes": first_out.len() - 1, "num_arcs": head.len(), "num_ipps": ipp_departure_time.len() });
 
@@ -66,50 +55,22 @@ fn main() -> Result<(), Box<dyn Error>> {
         .collect::<Vec<Weight>>();
     unify_parallel_edges(&mut FirstOutGraph::new(graph.first_out(), graph.head(), &mut lower_bound[..]));
 
-    let arg = &args.next().ok_or(CliErr("No live data directory arg given"))?;
-    let live_dir = Path::new(arg);
-
-    let mut live = vec![InRangeOption::new(None); graph.num_arcs()];
-
-    let mut total = 0;
-    let mut found = 0;
-    let mut too_fast = 0;
-
-    for live_file in glob(live_dir.join("*").to_str().unwrap()).unwrap() {
-        let file = File::open(live_file?.clone()).unwrap();
-        let mut reader = ReaderBuilder::new()
-            .has_headers(false)
-            .delimiter(b',')
-            .quoting(false)
-            .double_quote(false)
-            .escape(None)
-            .from_reader(file);
-
-        for line in reader.records() {
-            total += 1;
-
-            let record = line?;
-            let from = record[0].parse()?;
-            let to = record[1].parse()?;
-            let speed = record[2].parse::<u32>()?;
-
-            if let (Some(from), Some(to)) = (id_map.get(from), id_map.get(to)) {
-                if let Some(edge_idx) = graph.edge_index(from as NodeId, to as NodeId) {
-                    found += 1;
-                    let edge_idx = edge_idx as usize;
-
-                    let new_tt = 100 * 36 * geo_distance[edge_idx] / speed;
-                    if lower_bound[edge_idx] <= new_tt {
-                        live[edge_idx] = InRangeOption::new(Some(new_tt));
-                    } else {
-                        too_fast += 1;
-                    }
-                }
+    let mut live_count = 0;
+    let live = live_travel_time
+        .iter()
+        .zip(lower_bound.iter())
+        .map(|(&live_tt, &lower_bound)| {
+            if live_tt >= lower_bound {
+                live_count += 1;
+                Some(live_tt)
+            } else {
+                None
             }
-        }
-    }
+        })
+        .map(InRangeOption::new)
+        .collect();
 
-    report!("live_traffic", { "num_modifications": total, "num_matched": found, "num_too_fast": too_fast });
+    report!("live_traffic", { "num_applied": live_count });
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
 

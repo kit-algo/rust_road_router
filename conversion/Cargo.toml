@@ -10,3 +10,4 @@ authors = ["Tim 'tim3z' Zeitz <mail@tim3z.net>"]
 rust_road_router = { path = "../engine" }
 csv = "^1.0.2"
 glob = "^0.2.11"
+nav-types = "^0.3.0"

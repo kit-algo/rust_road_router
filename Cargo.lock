@@ -209,6 +209,7 @@ version = "0.1.0"
 dependencies = [
  "csv",
  "glob 0.2.11",
+ "nav-types",
  "rust_road_router",
 ]
 
@@ -1343,8 +1344,6 @@ version = "0.1.0"
 dependencies = [
  "built",
  "core_affinity",
- "csv",
- "glob 0.2.11",
  "nav-types",
  "rand 0.6.5",
  "rayon",
@@ -1442,6 +1441,7 @@ dependencies = [
 name = "server"
 version = "0.1.0"
 dependencies = [
+ "conversion",
  "crossbeam-utils 0.5.0",
  "fux_kdtree",
  "rocket",

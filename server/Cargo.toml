@@ -5,6 +5,7 @@ authors = ["Tim \"S.D.Eagle\" Zeitz <dev.tim.zeitz@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+conversion = { path = "../conversion" }
 rust_road_router = { path = "../engine" }
 rocket = "^0.4.0"
 serde = { version = "^1.0.5", features = ["derive"] }

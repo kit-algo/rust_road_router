@@ -24,7 +24,6 @@ pub mod cli;
 pub mod datastr;
 pub mod experiments;
 pub mod export;
-pub mod import;
 pub mod io;
 pub mod link_speed_estimates;
 pub mod util;

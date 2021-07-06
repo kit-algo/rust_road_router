@@ -21,6 +21,7 @@ use rocket_contrib::json::Json;
 
 use kdtree::kdtree::{Kdtree, KdtreePointTrait};
 
+use conversion::here::link_id_mapper::*;
 use rust_road_router::{
     algo::{
         customizable_contraction_hierarchy::{contract, customize as cch_customize, query::Server, CCHReordering},
@@ -32,7 +33,6 @@ use rust_road_router::{
         node_order::NodeOrder,
         rank_select_map::*,
     },
-    import::here::link_id_mapper::*,
     io::*,
     report::report_time,
 };

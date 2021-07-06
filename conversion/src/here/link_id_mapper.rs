@@ -1,5 +1,5 @@
 use super::*;
-use crate::datastr::rank_select_map::*;
+use rust_road_router::datastr::rank_select_map::*;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LinkDirection {
