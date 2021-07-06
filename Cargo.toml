@@ -1,5 +1,6 @@
 [workspace]
-members = ["engine", "server", "conversion"]
+members = ["engine", "server", "conversion", "visualization"]
+resolver = "2"
 
 [profile.dev]
 opt-level = 3
