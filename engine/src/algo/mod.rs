@@ -91,11 +91,11 @@ impl<T: Copy> GenQuery<T> for TDQuery<T> {
 ///
 /// ```
 /// # use rust_road_router::algo::*;
-/// fn fine(mut server: impl for<'s> QueryServer<'s>) {
+/// fn fine(mut server: impl QueryServer) {
 ///     let mut result = server.query(Query { from: 0, to: 1 }).unwrap();
 ///     dbg!(result.distance());
 ///     dbg!(result.path().len());
-///     std::mem::drop(result); // necessary because of higher ranked trait bound
+///     std::mem::drop(result);
 ///     let mut result2 = server.query(Query { from: 1, to: 0 }).unwrap();
 ///     dbg!(result2.distance());
 ///     dbg!(result2.path().len());
@@ -106,7 +106,7 @@ impl<T: Copy> GenQuery<T> for TDQuery<T> {
 ///
 /// ```compile_fail
 /// # use rust_road_router::algo::*;
-/// fn fine(mut server: impl for<'s> QueryServer<'s>) {
+/// fn fine(mut server: impl for QueryServer) {
 ///     let mut result = server.query(Query { from: 0, to: 1 }).unwrap();
 ///     dbg!(result.distance());
 ///     let mut result2 = server.query(Query { from: 1, to: 0 }).unwrap();
