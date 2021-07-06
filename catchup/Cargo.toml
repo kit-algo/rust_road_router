@@ -10,5 +10,5 @@ authors = ["Tim 'tim3z' Zeitz <mail@tim3z.net>"]
 rust_road_router = { path = "../engine" }
 time = "^0.1.40"
 rand = "^0.8.4"
-rayon = "^1.4.1"
-csv = "^1.0.2"
+rayon = "^1.5.1"
+csv = "^1.1.6"

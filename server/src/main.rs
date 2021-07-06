@@ -319,7 +319,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         let head = &head;
 
                         // asynchronous customization
-                        scope.spawn(move || {
+                        scope.spawn(move |_| {
                             for (here_link_id, is_from_ref, weight) in updates.into_iter() {
                                 if is_from_ref {
                                     if let Some(link_idx) = id_mapper.here_to_local_link_id(here_link_id, LinkDirection::FromRef) {
@@ -335,7 +335,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                     }
                 }
             }
-        });
+        })
+        .unwrap();
     });
 
     rocket::ignite()

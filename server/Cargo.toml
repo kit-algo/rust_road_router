@@ -8,10 +8,10 @@ edition = "2018"
 conversion = { path = "../conversion" }
 rust_road_router = { path = "../engine" }
 rocket = "^0.4.0"
-serde = { version = "^1.0.5", features = ["derive"] }
-serde_json = "^1.0.5"
+serde = { version = "^1.0.64", features = ["derive"] }
+serde_json = "^1.0.64"
 fux_kdtree = "^0.2.0"
-crossbeam-utils = "^0.5.0"
+crossbeam-utils = "^0.8.5"
 
 [dependencies.rocket_contrib]
 version = "^0.4.0"
