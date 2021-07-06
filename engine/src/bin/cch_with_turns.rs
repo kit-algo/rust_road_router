@@ -5,14 +5,11 @@
 use std::{env, error::Error, path::Path};
 
 use rust_road_router::{
-    algo::{
-        customizable_contraction_hierarchy::{query::Server, *},
-        *,
-    },
+    algo::customizable_contraction_hierarchy::{query::Server, *},
     cli::CliErr,
     datastr::{graph::*, node_order::NodeOrder},
+    experiments,
     io::Load,
-    report::benchmark::report_time,
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -46,18 +43,19 @@ fn main() -> Result<(), Box<dyn Error>> {
     let to = Vec::load_from(path.join("test/exp_target"))?;
     let ground_truth = Vec::load_from(path.join("test/exp_travel_time_length"))?;
 
-    report_time("10000 CCH queries", || {
-        for ((&from, &to), &ground_truth) in from.iter().zip(to.iter()).zip(ground_truth.iter()).take(10000) {
-            let ground_truth = match ground_truth {
-                INFINITY => None,
-                val => Some(val),
-            };
-
-            let mut result = server.query(Query { from, to });
-            assert_eq!(result.as_ref().map(|res| res.distance()), ground_truth);
-            result.as_mut().map(|res| res.path());
-        }
+    let mut gt_iter = ground_truth.iter().map(|&gt| match gt {
+        INFINITY => None,
+        val => Some(val),
     });
+
+    experiments::run_queries(
+        from.iter().copied().zip(to.iter().copied()).take(10000),
+        &mut server,
+        None,
+        |_, _, _| (),
+        |_| (),
+        |_, _| gt_iter.next(),
+    );
 
     Ok(())
 }

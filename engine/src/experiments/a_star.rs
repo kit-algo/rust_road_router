@@ -6,16 +6,15 @@ use crate::{
     algo::{
         ch_potentials::*,
         dijkstra::{generic_dijkstra::DefaultOps, query::dijkstra::Server as DijkServer},
-        *,
     },
     datastr::{graph::*, node_order::NodeOrder},
+    experiments,
     io::*,
     report::*,
 };
 use std::{error::Error, path::Path};
 
 use rand::prelude::*;
-use time::Duration;
 
 pub fn run(
     path: &Path,
@@ -111,36 +110,19 @@ pub fn run(
 
     let mut topocore = DijkServer::<_, DefaultOps, _>::with_potential(modified_graph, potential);
 
-    let mut query_count = 0;
-    let mut total_query_time = Duration::zero();
-
-    for _i in 0..super::chpot::num_queries() {
-        let _query_ctxt = algo_runs_ctxt.push_collection_item();
-        let from: NodeId = rng.gen_range(0..graph.num_nodes() as NodeId);
-        let to: NodeId = rng.gen_range(0..graph.num_nodes() as NodeId);
-
-        #[cfg(feature = "chpot-oracle")]
-        {
-            topocore.query(Query { from, to });
-        }
-
-        report!("from", from);
-        report!("to", to);
-
-        query_count += 1;
-
-        let (mut res, time) = measure(|| topocore.query(Query { from, to }));
-        report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-        let dist = res.as_ref().map(|res| res.distance());
-        report!("result", dist);
-        res.as_mut().map(|res| res.path());
-
-        total_query_time = total_query_time + time;
-    }
-
-    if query_count > 0 {
-        eprintln!("Avg. query time {}", total_query_time / (query_count as i32))
-    };
+    experiments::run_random_queries_with_pre_callback(
+        graph.num_nodes(),
+        &mut topocore,
+        &mut rng,
+        &mut algo_runs_ctxt,
+        super::chpot::num_queries(),
+        |_from, _to, _server| {
+            #[cfg(feature = "chpot-oracle")]
+            {
+                _server.query(Query { from: _from, to: _to });
+            }
+        },
+    );
 
     Ok(())
 }

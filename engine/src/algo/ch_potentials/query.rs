@@ -288,6 +288,10 @@ where
     pub fn lower_bound(&mut self, node: NodeId) -> Option<Weight> {
         self.0.core_search.potential.potential(node)
     }
+
+    pub fn query(&self) -> &Q {
+        &self.1
+    }
 }
 
 impl<G, O, P> TDQueryServer<Timestamp, Weight> for Server<G, O, P>

@@ -16,9 +16,7 @@ use rust_road_router::{
     report::*,
 };
 
-use rand::prelude::*;
 use std::{env, error::Error, path::Path};
-use time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting("chpot_turns");
@@ -135,38 +133,31 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     drop(virtual_topocore_ctxt);
 
-    let mut query_count = 0;
-    let mut total_query_time = Duration::zero();
-
-    let n = exp_graph.num_nodes();
-    for _i in 0..rust_road_router::experiments::chpot::num_queries() {
-        let _query_ctxt = algo_runs_ctxt.push_collection_item();
-        let from: NodeId = rng.gen_range(0..n as NodeId);
-        let to: NodeId = rng.gen_range(0..n as NodeId);
-
-        let (mut res, time) = measure(|| topocore.query(Query { from, to }));
-
-        query_count += 1;
-
-        report!("from", from);
-        report!("to", to);
-        report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-        let dist = res.as_ref().map(|res| res.distance());
-        report!("result", dist);
-        res.as_mut().map(|res| res.path());
-        #[cfg(all(not(feature = "chpot-only-topo"), not(feature = "chpot-alt")))]
-        report!(
-            "num_pot_computations",
-            res.as_mut().map(|res| res.data().potential().inner().num_pot_computations()).unwrap_or(0)
-        );
-        report!("lower_bound", res.as_mut().map(|res| res.data().lower_bound(from)).flatten());
-
-        total_query_time = total_query_time + time;
-    }
-
-    if query_count > 0 {
-        eprintln!("Avg. query time {}", total_query_time / (query_count as i32))
-    };
+    experiments::run_random_queries_with_callbacks(
+        graph.num_nodes(),
+        &mut topocore,
+        &mut rng,
+        &mut algo_runs_ctxt,
+        experiments::chpot::num_queries(),
+        |_, _, _| (),
+        |mut res| {
+            #[cfg(all(not(feature = "chpot-only-topo"), not(feature = "chpot-alt")))]
+            report!(
+                "num_pot_computations",
+                res.as_mut().map(|res| res.data().potential().inner().num_pot_computations()).unwrap_or(0)
+            );
+            report!(
+                "lower_bound",
+                res.as_mut()
+                    .map(|res| {
+                        let from = res.data().query().from();
+                        res.data().lower_bound(from)
+                    })
+                    .flatten()
+            );
+        },
+        |_, _| None,
+    );
 
     let mut server = DijkServer::<_, DefaultOps>::new(exp_graph);
 
