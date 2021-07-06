@@ -1,7 +1,7 @@
 // CATCHUp query experiments with pregenerated queries with source and target drawn uniformly at random.
 // Takes as input one directory arg which should contain the all data.
 
-use std::{env, error::Error, path::Path};
+use std::{error::Error, path::Path};
 
 use crate::{
     algo::customizable_contraction_hierarchy::*,
@@ -19,8 +19,6 @@ use crate::{
 use rand::prelude::*;
 
 pub fn setup(path: &Path, run: impl FnOnce(&TDGraph, &mut StdRng, &CCH, &CustomizedGraph) -> Result<(), Box<dyn Error>>) -> Result<(), Box<dyn Error>> {
-    report!("start_time", format!("{}", time::now_utc().rfc822()));
-    report!("args", env::args().collect::<Vec<String>>());
     report!("num_threads", rayon::current_num_threads());
 
     let seed = Default::default();

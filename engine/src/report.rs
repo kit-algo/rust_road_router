@@ -277,7 +277,7 @@ macro_rules! report_silent {
     ($k:expr, $($json:tt)+) => { report_silent($k.to_string(), json!($($json)+)) };
 }
 
-pub fn enable_reporting() -> ReportingGuard {
+pub fn enable_reporting(program: &str) -> ReportingGuard {
     REPORTER.with(|reporter| reporter.replace(Some(Reporter::default())));
 
     report!("git_revision", built_info::GIT_VERSION.unwrap_or(""));
@@ -290,6 +290,10 @@ pub fn enable_reporting() -> ReportingGuard {
     if let Ok(hostname) = std::process::Command::new("hostname").output() {
         report!("hostname", String::from_utf8(hostname.stdout).unwrap().trim());
     }
+
+    report!("program", program);
+    report!("start_time", format!("{}", time::now_utc().rfc822()));
+    report!("args", std::env::args().collect::<Vec<String>>());
 
     ReportingGuard(())
 }

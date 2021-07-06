@@ -4,10 +4,7 @@ use rust_road_router::{cli::CliErr, datastr::graph::time_dependent::*, datastr::
 use std::{env, error::Error, path::Path};
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut args = env::args();
-    args.next();
-
-    let arg = &args.next().ok_or(CliErr("No directory arg given"))?;
+    let arg = &env::args().skip(1).next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 
     let first_out = Vec::load_from(path.join("first_out"))?;

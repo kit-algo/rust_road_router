@@ -11,14 +11,9 @@ use rust_road_router::{
 use std::{env, error::Error, path::Path};
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let _reporter = enable_reporting();
+    let _reporter = enable_reporting("explore_graph_catchup");
 
-    report!("start_time", format!("{}", time::now_utc().rfc822()));
-    report!("args", env::args().collect::<Vec<String>>());
-
-    let mut args = env::args();
-    args.next();
-    let arg = &args.next().ok_or(CliErr("No directory arg given"))?;
+    let arg = &env::args().skip(1).next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 
     let first_out = Vec::load_from(path.join("first_out"))?;

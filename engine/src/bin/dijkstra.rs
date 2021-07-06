@@ -6,15 +6,9 @@ use std::{env, error::Error, path::Path};
 use rand::prelude::*;
 
 pub fn main() -> Result<(), Box<dyn Error>> {
-    let _reporter = enable_reporting();
+    let _reporter = enable_reporting("dijkstra");
 
-    report!("program", "dijkstra");
-    report!("start_time", format!("{}", time::now_utc().rfc822()));
-    report!("args", env::args().collect::<Vec<String>>());
-
-    let mut args = env::args();
-    args.next();
-    let arg = &args.next().ok_or(CliErr("No graph directory arg given"))?;
+    let arg = &env::args().skip(1).next().ok_or(CliErr("No graph directory arg given"))?;
     let path = Path::new(arg);
 
     let seed = Default::default();

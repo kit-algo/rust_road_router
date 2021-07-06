@@ -11,8 +11,7 @@ use csv::ReaderBuilder;
 use glob::glob;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut args = env::args();
-    args.next();
+    let mut args = env::args().skip(1);
     let arg = &args.next().ok_or(CliErr("No graph directory arg given"))?;
     let path = Path::new(arg);
 

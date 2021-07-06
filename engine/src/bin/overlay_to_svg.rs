@@ -12,9 +12,7 @@ use rust_road_router::{
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut args = env::args();
-    args.next();
-
+    let mut args = env::args().skip(1);
     let arg = &args.next().expect("No directory arg given");
     let path = Path::new(arg);
 

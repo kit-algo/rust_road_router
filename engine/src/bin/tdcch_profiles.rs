@@ -19,8 +19,7 @@ use rand::prelude::*;
 use time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let _reporter = enable_reporting();
-    report!("program", "tdcch_profiles");
+    let _reporter = enable_reporting("tdcch_profiles");
 
     setup(Path::new(&env::args().skip(1).next().unwrap()), |g, rng, cch, td_cch_graph| {
         let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());

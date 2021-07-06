@@ -9,10 +9,7 @@ use rust_road_router::{
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut args = env::args();
-    args.next();
-
-    let in_dir = &args.next().ok_or(CliErr("No input directory arg given"))?;
+    let in_dir = &env::args().skip(1).next().ok_or(CliErr("No input directory arg given"))?;
 
     let source = CSVSource::new(Path::new(in_dir));
     let data = read_graph(&source, (-360 * 100_000, -360 * 100_000), (360 * 100_000, 360 * 100_000));

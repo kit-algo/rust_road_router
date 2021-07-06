@@ -5,8 +5,7 @@ use std::{env, error::Error, fs::File, io::prelude::*, path::Path};
 use rust_road_router::{cli::CliErr, datastr::graph::INFINITY, io::*};
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut args = env::args();
-    args.next();
+    let mut args = env::args().skip(1);
     let arg = &args.next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 

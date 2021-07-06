@@ -8,8 +8,7 @@ use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut args = env::args();
-    args.next();
+    let mut args = env::args().skip(1);
 
     let input = &args.next().ok_or(CliErr("No input tpgr given"))?;
     let input = Path::new(input);

@@ -29,19 +29,13 @@ use rand::prelude::*;
 use time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let _reporter = enable_reporting();
+    let _reporter = enable_reporting("chpot_td_live");
 
     let seed = Default::default();
     report!("seed", seed);
     let mut rng = StdRng::from_seed(seed);
 
-    report!("program", "chpot_td_live");
-    report!("start_time", format!("{}", time::now_utc().rfc822()));
-    report!("args", env::args().collect::<Vec<String>>());
-
-    let mut args = env::args();
-    args.next();
-
+    let mut args = env::args().skip(1);
     let arg = &args.next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 

@@ -11,8 +11,7 @@ use std::{convert::TryFrom, env, error::Error, fs::File, path::Path};
 use csv::ReaderBuilder;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut args = env::args();
-    args.next();
+    let mut args = env::args().skip(1);
     let arg = &args.next().ok_or(CliErr("No graph directory arg given"))?;
     let path = Path::new(arg);
 

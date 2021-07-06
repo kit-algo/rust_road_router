@@ -9,8 +9,7 @@ use rust_road_router::{
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut args = env::args();
-    args.next();
+    let mut args = env::args().skip(1);
 
     let in_dir = &args.next().ok_or(CliErr("No input directory arg given"))?;
     let out_dir = &args.next().ok_or(CliErr("No output directory arg given"))?;

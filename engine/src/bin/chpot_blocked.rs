@@ -7,15 +7,8 @@ const TUNNEL_BIT: u8 = 1;
 const FREEWAY_BIT: u8 = 2;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let _reporter = enable_reporting();
-
-    report!("program", "chpot_blocked");
-    report!("start_time", format!("{}", time::now_utc().rfc822()));
-    report!("args", env::args().collect::<Vec<String>>());
-
-    let mut args = env::args();
-    args.next();
-    let arg = &args.next().ok_or(CliErr("No graph directory arg given"))?;
+    let _reporter = enable_reporting("chpot_blocked");
+    let arg = &env::args().skip(1).next().ok_or(CliErr("No graph directory arg given"))?;
     let path = Path::new(arg);
 
     let arc_category = Vec::<u8>::load_from(path.join("arc_category"))?;

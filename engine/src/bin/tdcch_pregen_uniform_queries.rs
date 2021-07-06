@@ -17,8 +17,7 @@ use rust_road_router::{
 use time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let _reporter = enable_reporting();
-    report!("program", "tdcch_pregen_uniform_queries");
+    let _reporter = enable_reporting("tdcch_pregen_uniform_queries");
     let arg = env::args().skip(1).next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(&arg);
 
