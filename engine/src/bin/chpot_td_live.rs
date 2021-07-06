@@ -141,9 +141,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     for _i in 0..num_queries {
         let _query_ctxt = algo_runs_ctxt.push_collection_item();
-        let from: NodeId = rng.gen_range(0, n as NodeId);
-        let to: NodeId = rng.gen_range(0, n as NodeId);
-        // let at: NodeId = rng.gen_range(0, period() as Timestamp);
+        let from: NodeId = rng.gen_range(0..n as NodeId);
+        let to: NodeId = rng.gen_range(0..n as NodeId);
+        // let at: NodeId = rng.gen_range(0..period() as Timestamp);
 
         report!("from", from);
         report!("to", to);
@@ -169,9 +169,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     for _i in 0..num_queries {
         let _query_ctxt = algo_runs_ctxt.push_collection_item();
-        let from: NodeId = rng.gen_range(0, n as NodeId);
-        let to: NodeId = rng.gen_range(0, n as NodeId);
-        let at: NodeId = rng.gen_range(0, period() as Timestamp);
+        let from: NodeId = rng.gen_range(0..n as NodeId);
+        let to: NodeId = rng.gen_range(0..n as NodeId);
+        let at: NodeId = rng.gen_range(0..period() as Timestamp);
 
         report!("from", from);
         report!("to", to);

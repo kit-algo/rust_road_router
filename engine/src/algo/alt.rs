@@ -89,7 +89,7 @@ impl ALTPotential {
         let mut visited = BitVec::new(n as usize);
 
         while landmarks.len() < num_landmarks {
-            let r = rng.gen_range(0, n);
+            let r = rng.gen_range(0..n);
             let ctx = landmark_runs_ctxt.push_collection_item();
             let dists = server.one_to_all(r);
             drop(ctx);

@@ -106,7 +106,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut server = DijkServer::<_, DefaultOps, _>::new(graph);
 
     for _i in 0..experiments::num_dijkstra_queries() {
-        let from: NodeId = rng.gen_range(0, n as NodeId);
+        let from: NodeId = rng.gen_range(0..n as NodeId);
 
         server.ranks(from, |to, _dist, rank| {
             let _query_ctxt = algo_runs_ctxt.push_collection_item();

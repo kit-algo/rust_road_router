@@ -21,7 +21,7 @@ pub fn run_random_queries(
     num_queries: usize,
 ) {
     run_queries(
-        std::iter::from_fn(move || Some((rng.gen_range(0, num_nodes as NodeId), rng.gen_range(0, num_nodes as NodeId)))),
+        std::iter::from_fn(move || Some((rng.gen_range(0..num_nodes as NodeId), rng.gen_range(0..num_nodes as NodeId)))),
         server,
         reporting_context,
         num_queries,

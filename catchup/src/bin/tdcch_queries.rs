@@ -28,8 +28,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut rank_times = vec![Vec::new(); 64];
 
         for _ in 0..50 {
-            let from: NodeId = rng.gen_range(0, g.num_nodes() as NodeId);
-            let at = Timestamp::new(rng.gen_range(0.0, f64::from(period())));
+            let from: NodeId = rng.gen_range(0..g.num_nodes() as NodeId);
+            let at = Timestamp::new(rng.gen_range(0.0..f64::from(period())));
             td_dijk_server.ranks(from, at, |to, ea_ground_truth, rank| {
                 let _tdcch_query_ctxt = algo_runs_ctxt.push_collection_item();
                 let (mut result, duration) = measure(|| server.td_query(TDQuery { from, to, departure: at }).unwrap());
@@ -74,9 +74,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut tdcch_time = Duration::zero();
 
         for _ in 0..num_queries {
-            let from: NodeId = rng.gen_range(0, g.num_nodes() as NodeId);
-            let to: NodeId = rng.gen_range(0, g.num_nodes() as NodeId);
-            let at: u32 = rng.gen_range(0, 86400000);
+            let from: NodeId = rng.gen_range(0..g.num_nodes() as NodeId);
+            let to: NodeId = rng.gen_range(0..g.num_nodes() as NodeId);
+            let at: u32 = rng.gen_range(0..86400000);
             let at = Timestamp::new(f64::from(at) / 1000.0);
 
             let dijkstra_query_ctxt = algo_runs_ctxt.push_collection_item();

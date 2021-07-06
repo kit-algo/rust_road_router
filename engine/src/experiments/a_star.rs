@@ -116,8 +116,8 @@ pub fn run(
 
     for _i in 0..super::chpot::num_queries() {
         let _query_ctxt = algo_runs_ctxt.push_collection_item();
-        let from: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
-        let to: NodeId = rng.gen_range(0, graph.num_nodes() as NodeId);
+        let from: NodeId = rng.gen_range(0..graph.num_nodes() as NodeId);
+        let to: NodeId = rng.gen_range(0..graph.num_nodes() as NodeId);
 
         #[cfg(feature = "chpot-oracle")]
         {

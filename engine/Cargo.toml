@@ -35,7 +35,7 @@ detailed-stats = []
 
 [dependencies]
 time = "^0.1.40"
-rand = "^0.6.1"
+rand = "^0.8.4"
 serde_json = "^1.0.35"
 rayon = "^1.4.1"
 core_affinity = "^0.5.9"

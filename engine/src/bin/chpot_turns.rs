@@ -141,8 +141,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let n = exp_graph.num_nodes();
     for _i in 0..rust_road_router::experiments::chpot::num_queries() {
         let _query_ctxt = algo_runs_ctxt.push_collection_item();
-        let from: NodeId = rng.gen_range(0, n as NodeId);
-        let to: NodeId = rng.gen_range(0, n as NodeId);
+        let from: NodeId = rng.gen_range(0..n as NodeId);
+        let to: NodeId = rng.gen_range(0..n as NodeId);
 
         let (mut res, time) = measure(|| topocore.query(Query { from, to }));
 
