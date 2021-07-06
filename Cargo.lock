@@ -197,6 +197,7 @@ name = "conversion"
 version = "0.1.0"
 dependencies = [
  "csv",
+ "glob 0.2.11",
  "rust_road_router",
 ]
 
@@ -1630,6 +1631,13 @@ dependencies = [
  "idna 0.2.3",
  "matches",
  "percent-encoding 2.1.0",
+]
+
+[[package]]
+name = "utils"
+version = "0.1.0"
+dependencies = [
+ "rust_road_router",
 ]
 
 [[package]]
