@@ -23,7 +23,7 @@ use time::Duration;
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting("chpot_turns");
 
-    let mut seed = experiments::rng(Default::default());
+    let mut rng = experiments::rng(Default::default());
 
     let arg = &env::args().skip(1).next().ok_or(CliErr("No graph directory arg given"))?;
     let path = Path::new(arg);

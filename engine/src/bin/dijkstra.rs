@@ -3,15 +3,13 @@ extern crate rust_road_router;
 use rust_road_router::{algo::dijkstra::*, cli::CliErr, datastr::graph::*, experiments, io::*, report::*};
 use std::{env, error::Error, path::Path};
 
-use rand::prelude::*;
-
 pub fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting("dijkstra");
 
     let arg = &env::args().skip(1).next().ok_or(CliErr("No graph directory arg given"))?;
     let path = Path::new(arg);
 
-    let mut seed = experiments::rng(Default::default());
+    let mut rng = experiments::rng(Default::default());
 
     let first_out = Vec::<NodeId>::load_from(path.join("first_out"))?;
     let head = Vec::<EdgeId>::load_from(path.join("head"))?;

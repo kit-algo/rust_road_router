@@ -19,6 +19,7 @@ use rust_road_router::{
         node_order::NodeOrder,
         rank_select_map::*,
     },
+    experiments,
     io::*,
     report::*,
     util::in_range_option::*,
@@ -32,7 +33,7 @@ use time::Duration;
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting("chpot_turns_td_live");
 
-    let mut seed = experiments::rng(Default::default());
+    let mut rng = experiments::rng(Default::default());
 
     let mut args = env::args().skip(1);
     let arg = &args.next().ok_or(CliErr("No directory arg given"))?;
@@ -203,7 +204,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut server = Server::new(&graph, potential, LiveTDDijkstraOps::default());
     drop(virtual_topocore_ctxt);
 
-    let num_queries = rust_road_router::experiments::chpot::num_queries();
+    let num_queries = experiments::chpot::num_queries();
 
     let mut astar_time = Duration::zero();
 
@@ -228,7 +229,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     eprintln!("A* {}", astar_time / (num_queries as i32));
 
-    let num_queries = rust_road_router::experiments::num_dijkstra_queries();
+    let num_queries = experiments::num_dijkstra_queries();
 
     let mut server = DijkServer::<_, LiveTDDijkstraOps>::new(graph);
 

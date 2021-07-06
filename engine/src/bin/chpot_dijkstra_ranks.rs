@@ -10,6 +10,7 @@ use rust_road_router::{
     },
     cli::CliErr,
     datastr::{graph::*, node_order::NodeOrder},
+    experiments,
     io::*,
     report::*,
 };
@@ -20,7 +21,7 @@ use std::{env, error::Error, path::Path};
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting("chpot_ranks");
 
-    let mut seed = experiments::rng(Default::default());
+    let mut rng = experiments::rng(Default::default());
 
     let arg = &env::args().skip(1).next().ok_or(CliErr("No graph directory arg given"))?;
     let path = Path::new(arg);
@@ -104,7 +105,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut server = DijkServer::<_, DefaultOps, _>::new(graph);
 
-    for _i in 0..rust_road_router::experiments::num_dijkstra_queries() {
+    for _i in 0..experiments::num_dijkstra_queries() {
         let from: NodeId = rng.gen_range(0, n as NodeId);
 
         server.ranks(from, |to, _dist, rank| {

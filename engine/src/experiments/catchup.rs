@@ -21,7 +21,7 @@ use rand::prelude::*;
 pub fn setup(path: &Path, run: impl FnOnce(&TDGraph, &mut StdRng, &CCH, &CustomizedGraph) -> Result<(), Box<dyn Error>>) -> Result<(), Box<dyn Error>> {
     report!("num_threads", rayon::current_num_threads());
 
-    let mut seed = super::rng(Default::default());
+    let mut rng = super::rng(Default::default());
 
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[0]);

@@ -14,6 +14,7 @@ use rust_road_router::{
     cli::CliErr,
     datastr::graph::*,
     datastr::{graph::time_dependent::*, node_order::NodeOrder},
+    experiments,
     io::*,
     report::*,
 };
@@ -24,7 +25,7 @@ use time::Duration;
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting("chpot_td");
 
-    let mut seed = experiments::rng(Default::default());
+    let mut rng = experiments::rng(Default::default());
 
     let arg = &env::args().skip(1).next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
@@ -105,7 +106,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut server = Server::new(&graph, potential, TDDijkstraOps::default());
     drop(virtual_topocore_ctxt);
 
-    let num_queries = rust_road_router::experiments::chpot::num_queries();
+    let num_queries = experiments::chpot::num_queries();
 
     let mut astar_time = Duration::zero();
 
@@ -131,7 +132,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     eprintln!("A* {}", astar_time / (num_queries as i32));
 
-    let num_queries = rust_road_router::experiments::num_dijkstra_queries();
+    let num_queries = experiments::num_dijkstra_queries();
 
     let mut server = DijkServer::<_, TDDijkstraOps, _>::new(graph);
 
