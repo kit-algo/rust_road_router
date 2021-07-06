@@ -31,9 +31,7 @@ use time::Duration;
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting("chpot_td_live");
 
-    let seed = Default::default();
-    report!("seed", seed);
-    let mut rng = StdRng::from_seed(seed);
+    let mut seed = experiments::rng(Default::default());
 
     let mut args = env::args().skip(1);
     let arg = &args.next().ok_or(CliErr("No directory arg given"))?;

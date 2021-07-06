@@ -55,3 +55,8 @@ pub fn run_queries(
         eprintln!("Avg. query time {}", total_query_time / (num_queries as i32))
     };
 }
+
+pub fn rng(seed: <StdRng as SeedableRng>::Seed) -> StdRng {
+    report!("seed", seed);
+    StdRng::from_seed(seed)
+}

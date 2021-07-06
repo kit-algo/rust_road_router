@@ -11,8 +11,7 @@ pub fn main() -> Result<(), Box<dyn Error>> {
     let arg = &env::args().skip(1).next().ok_or(CliErr("No graph directory arg given"))?;
     let path = Path::new(arg);
 
-    let seed = Default::default();
-    report!("seed", seed);
+    let mut seed = experiments::rng(Default::default());
 
     let first_out = Vec::<NodeId>::load_from(path.join("first_out"))?;
     let head = Vec::<EdgeId>::load_from(path.join("head"))?;
@@ -28,8 +27,6 @@ pub fn main() -> Result<(), Box<dyn Error>> {
 
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[0]);
-
-    let mut rng = StdRng::from_seed(seed);
 
     experiments::run_random_queries(
         graph.num_nodes(),

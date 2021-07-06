@@ -20,9 +20,7 @@ use std::{env, error::Error, path::Path};
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting("chpot_ranks");
 
-    let seed = Default::default();
-    report!("seed", seed);
-    let mut rng = StdRng::from_seed(seed);
+    let mut seed = experiments::rng(Default::default());
 
     let arg = &env::args().skip(1).next().ok_or(CliErr("No graph directory arg given"))?;
     let path = Path::new(arg);
