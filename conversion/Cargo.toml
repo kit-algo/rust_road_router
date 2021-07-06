@@ -1,0 +1,11 @@
+[package]
+name = "conversion"
+version = "0.1.0"
+edition = "2018"
+authors = ["Tim 'tim3z' Zeitz <mail@tim3z.net>"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rust_road_router = { path = "../engine" }
+csv = "^1.0.2"

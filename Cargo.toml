@@ -1,5 +1,5 @@
 [workspace]
-members = ["engine", "server"]
+members = ["engine", "server", "conversion"]
 
 [profile.dev]
 opt-level = 3
