@@ -21,9 +21,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let first_out = Vec::load_from(path.join("first_out"))?;
     let head = Vec::load_from(path.join("head"))?;
-    let weight = vec![0; head.len()];
 
-    let graph = OwnedGraph::new(first_out, head, weight);
+    let graph = UnweightedOwnedGraph::new(first_out, head);
 
     report!("graph", { "num_nodes": graph.num_nodes(), "num_arcs": graph.num_arcs() });
 

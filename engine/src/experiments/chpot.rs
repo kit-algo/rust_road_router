@@ -15,7 +15,6 @@ use crate::{
 use std::{error::Error, path::Path};
 
 use rand::prelude::*;
-use time::Duration;
 
 /// Number of queries performed for each experiment.
 /// Can be overriden through the CHPOT_NUM_QUERIES env var.
