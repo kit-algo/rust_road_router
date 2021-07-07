@@ -1,5 +1,7 @@
 use super::*;
 use crate::datastr::graph::Graph as GraphTrait;
+use crate::io::*;
+use crate::report::*;
 use crate::util::{in_range_option::*, *};
 
 type IPPIndex = u32;
@@ -342,5 +344,27 @@ impl BuildPermutated<LiveTDGraph> for LiveTDGraph {
             soon: graph.soon,
             live,
         }
+    }
+}
+
+impl Reconstruct for Graph {
+    fn reconstruct_with(loader: Loader) -> std::io::Result<Self> {
+        let first_out: Vec<_> = loader.load("first_out")?;
+        let head: Vec<_> = loader.load("head")?;
+        let ipp_departure_time: Vec<_> = loader.load("ipp_departure_time")?;
+
+        report!("unprocessed_graph", { "num_nodes": first_out.len() - 1, "num_arcs": head.len(), "num_ipps": ipp_departure_time.len() });
+
+        let graph = Self::new(
+            first_out,
+            head,
+            loader.load("first_ipp_of_arc")?,
+            ipp_departure_time,
+            loader.load("ipp_travel_time")?,
+        );
+
+        report!("graph", { "num_nodes": graph.num_nodes(), "num_arcs": graph.num_arcs(), "num_ipps": graph.num_ipps(), "num_constant_ttfs": graph.num_constant() });
+
+        Ok(graph)
     }
 }
