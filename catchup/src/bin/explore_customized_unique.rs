@@ -6,10 +6,7 @@ use std::{env, error::Error, path::Path};
 use rust_road_router::{
     algo::customizable_contraction_hierarchy::*,
     cli::CliErr,
-    datastr::{
-        graph::floating_time_dependent::{shortcut_graph::CustomizedGraphReconstrctor, *},
-        node_order::NodeOrder,
-    },
+    datastr::graph::floating_time_dependent::{shortcut_graph::CustomizedGraphReconstrctor, *},
     io::*,
 };
 
@@ -20,12 +17,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let graph = TDGraph::reconstruct_from(&path)?;
 
     let cch_folder = path.join("cch");
-    let node_order = NodeOrder::reconstruct_from(&cch_folder)?;
-    let cch = CCHReconstrctor {
-        original_graph: &graph,
-        node_order,
-    }
-    .reconstruct_from(&cch_folder)?;
+    let cch = CCHReconstrctor(&graph).reconstruct_from(&cch_folder)?;
 
     let customized_folder = path.join("customized");
 

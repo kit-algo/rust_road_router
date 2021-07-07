@@ -24,17 +24,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let graph = graph.line_graph(|_edge1_idx, _edge2_idx| Some(0));
 
     // use InertialFlowCutter with edge order (cut based) and separator reordering to obtain
-    let cch_order = Vec::load_from(path.join("cch_exp_perm"))?;
-    let cch_order = NodeOrder::from_node_order(cch_order);
-
-    let cch = contract(&graph, cch_order);
-    let cch_order = CCHReordering {
-        cch: &cch,
-        latitude: &[],
-        longitude: &[],
-    }
-    .reorder_for_seperator_based_customization();
-    let cch = contract(&graph, cch_order);
+    let order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_exp_perm"))?);
+    let cch = CCH::fix_order_and_build(&graph, order);
     let cch = cch.into_directed_cch();
 
     let mut server = Server::new(customize_directed(&cch, &graph));

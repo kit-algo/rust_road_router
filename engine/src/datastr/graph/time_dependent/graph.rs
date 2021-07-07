@@ -274,6 +274,10 @@ impl LiveTDGraph {
         });
         Self { graph, live, soon: self.soon }
     }
+
+    pub fn graph(&self) -> &Graph {
+        &self.graph
+    }
 }
 
 impl crate::datastr::graph::Graph for LiveTDGraph {

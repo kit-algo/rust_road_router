@@ -69,20 +69,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     #[cfg(feature = "chpot-cch")]
     let cch = {
-        let cch_order = Vec::load_from(path.join("cch_perm"))?;
-        let cch_order = NodeOrder::from_node_order(cch_order);
-
-        let cch_build_ctxt = algo_runs_ctxt.push_collection_item();
-        let cch = contract(&graph, cch_order);
-        drop(cch_build_ctxt);
-        let cch_order = CCHReordering {
-            cch: &cch,
-            latitude: &[],
-            longitude: &[],
-        }
-        .reorder_for_seperator_based_customization();
-        let _cch_build_ctxt = algo_runs_ctxt.push_collection_item();
-        contract(&graph, cch_order)
+        let _blocked = block_reporting();
+        let order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm"))?);
+        CCH::fix_order_and_build(&graph, order)
     };
 
     let potential = TurnExpandedPotential::new(&graph, {
@@ -141,7 +130,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         if iter.peek() == Some(&(&edge1_idx, &edge2_idx)) {
             return None;
         }
-        if tail[edge1_idx as usize] == head[edge2_idx as usize] {
+        if tail[edge1_idx as usize] == graph.graph().head()[edge2_idx as usize] {
             return None;
         }
         Some(0)

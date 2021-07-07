@@ -5,13 +5,7 @@ use std::{env, error::Error, path::Path};
 
 #[macro_use]
 extern crate rust_road_router;
-use rust_road_router::{
-    algo::customizable_contraction_hierarchy::*,
-    cli::CliErr,
-    datastr::{graph::floating_time_dependent::*, node_order::NodeOrder},
-    io::*,
-    report::*,
-};
+use rust_road_router::{algo::customizable_contraction_hierarchy::*, cli::CliErr, datastr::graph::floating_time_dependent::*, io::*, report::*};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting("tdcch_customization");
@@ -25,12 +19,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
 
     let cch_folder = path.join("cch");
-    let node_order = NodeOrder::reconstruct_from(&cch_folder)?;
-    let cch = CCHReconstrctor {
-        original_graph: &graph,
-        node_order,
-    }
-    .reconstruct_from(&cch_folder)?;
+    let cch = CCHReconstrctor(&graph).reconstruct_from(&cch_folder)?;
 
     let customized_folder = path.join("customized");
 

@@ -147,6 +147,10 @@ impl<'a> Loader<'a> {
     pub fn load<T: Load, P: AsRef<Path>>(&self, path: P) -> Result<T> {
         T::load_from(self.path.join(path))
     }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
 }
 
 /// A trait to allow deserializing more complex objects of a different type `T` (similar to `Reconstruct`).

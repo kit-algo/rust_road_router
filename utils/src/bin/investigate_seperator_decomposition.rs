@@ -1,11 +1,6 @@
 use std::{env, error::Error, path::Path};
 
-use rust_road_router::{
-    algo::customizable_contraction_hierarchy::*,
-    cli::CliErr,
-    datastr::{graph::*, node_order::NodeOrder},
-    io::*,
-};
+use rust_road_router::{algo::customizable_contraction_hierarchy::*, cli::CliErr, datastr::graph::*, io::*};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let arg = &env::args().skip(1).next().ok_or(CliErr("No directory arg given"))?;
@@ -17,12 +12,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let graph = UnweightedFirstOutGraph::new(first_out, head);
 
     let cch_folder = path.join("cch");
-    let node_order = NodeOrder::reconstruct_from(&cch_folder)?;
-    let cch = CCHReconstrctor {
-        original_graph: &graph,
-        node_order,
-    }
-    .reconstruct_from(&cch_folder)?;
+    let cch = CCHReconstrctor(&graph).reconstruct_from(&cch_folder)?;
 
     let mut down_degs = vec![0; graph.num_nodes()];
     for node in 0..graph.num_nodes() {

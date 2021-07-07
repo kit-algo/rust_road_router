@@ -47,22 +47,30 @@ impl Deconstruct for CCH {
     }
 }
 
-#[derive(Debug)]
-pub struct CCHReconstrctor<'g, Graph> {
-    pub original_graph: &'g Graph,
-    pub node_order: NodeOrder,
-}
+pub struct CCHReconstrctor<'g, Graph>(pub &'g Graph);
 
 impl<'g, Graph: RandomLinkAccessGraph> ReconstructPrepared<CCH> for CCHReconstrctor<'g, Graph> {
     fn reconstruct_with(self, loader: Loader) -> std::io::Result<CCH> {
+        let node_order = NodeOrder::reconstruct_from(&loader.path())?;
         let head: Vec<NodeId> = loader.load("cch_head")?;
         let cch_graph = UnweightedOwnedGraph::new(loader.load("cch_first_out")?, head);
-        assert_eq!(cch_graph.num_nodes(), self.original_graph.num_nodes());
-        Ok(CCH::new_from(self.original_graph, self.node_order, cch_graph))
+        assert_eq!(cch_graph.num_nodes(), self.0.num_nodes());
+        Ok(CCH::new_from(self.0, node_order, cch_graph))
     }
 }
 
 impl CCH {
+    pub fn fix_order_and_build(graph: &(impl LinkIterable<NodeId> + RandomLinkAccessGraph), order: NodeOrder) -> Self {
+        let cch = contract(graph, order);
+        let order = CCHReordering {
+            cch: &cch,
+            latitude: &[],
+            longitude: &[],
+        }
+        .reorder_for_seperator_based_customization();
+        contract(graph, order)
+    }
+
     fn new<Graph: RandomLinkAccessGraph>(contracted_graph: ContractedGraph<Graph>) -> CCH {
         let (cch, order, orig) = contracted_graph.decompose();
         Self::new_from(orig, order, cch)

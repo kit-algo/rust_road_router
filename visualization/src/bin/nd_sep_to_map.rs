@@ -1,11 +1,6 @@
 use std::{env, error::Error, path::Path};
 
-use rust_road_router::{
-    algo::customizable_contraction_hierarchy::*,
-    cli::CliErr,
-    datastr::{graph::*, node_order::NodeOrder},
-    io::*,
-};
+use rust_road_router::{algo::customizable_contraction_hierarchy::*, cli::CliErr, datastr::graph::*, io::*};
 
 const MAX_LEVEL: usize = 20;
 
@@ -21,12 +16,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let graph = UnweightedFirstOutGraph::new(first_out, head);
 
     let cch_folder = path.join("cch");
-    let node_order = NodeOrder::reconstruct_from(&cch_folder)?;
-    let cch = CCHReconstrctor {
-        original_graph: &graph,
-        node_order,
-    }
-    .reconstruct_from(&cch_folder)?;
+    let cch = CCHReconstrctor(&graph).reconstruct_from(&cch_folder)?;
 
     let mut sizes = vec![0; MAX_LEVEL];
     let mut cells = vec![0; MAX_LEVEL];

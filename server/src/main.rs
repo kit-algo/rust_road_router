@@ -24,7 +24,7 @@ use kdtree::kdtree::{Kdtree, KdtreePointTrait};
 use conversion::here::link_id_mapper::*;
 use rust_road_router::{
     algo::{
-        customizable_contraction_hierarchy::{contract, customize as cch_customize, query::Server, CCHReordering},
+        customizable_contraction_hierarchy::{customize as cch_customize, query::Server, CCH},
         *,
     },
     cli::CliErr,
@@ -206,22 +206,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         let id_mapper = LinkIdMapper::new(link_id_mapping, here_rank_to_link_id, head.len());
 
         let graph = FirstOutGraph::new(&first_out[..], &head[..], travel_time.clone());
-
         let link_id_to_tail_mapper = LinkIdToTailMapper::new(&graph);
 
-        let cch = contract(&graph, cch_order);
-        let cch_order = CCHReordering {
-            cch: &cch,
-            latitude: &[],
-            longitude: &[],
-        }
-        .reorder_for_seperator_based_customization();
-        let cch = contract(&graph, cch_order);
-
+        let cch = CCH::fix_order_and_build(&graph, cch_order);
         let server = Arc::new(Mutex::new(Server::new(cch_customize(&cch, &graph))));
 
         let coords = |node: NodeId| -> (f32, f32) { (lat[node as usize], lng[node as usize]) };
-
         let closest_node = |(p_lat, p_lng): (f32, f32)| -> NodeId {
             tree.nearest_search(&NodeCoord {
                 coords: [f64::from(p_lat), f64::from(p_lng)],
