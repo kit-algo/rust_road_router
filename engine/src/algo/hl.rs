@@ -8,8 +8,8 @@ pub struct HubLabels {
 impl HubLabels {
     pub fn new<G, H>(up: &G, down: &H) -> Self
     where
-        G: for<'a> LinkIterGraph<'a>,
-        H: for<'a> LinkIterGraph<'a>,
+        G: LinkIterGraph,
+        H: LinkIterGraph,
     {
         HubLabels {
             outgoing: vec![Vec::new(); up.num_nodes()],
@@ -20,8 +20,8 @@ impl HubLabels {
 
     fn compute_labels_from_ch<G, H>(mut self, up: &G, down: &H) -> Self
     where
-        G: for<'a> LinkIterGraph<'a>,
-        H: for<'a> LinkIterGraph<'a>,
+        G: LinkIterGraph,
+        H: LinkIterGraph,
     {
         for node in (0..up.num_nodes()).rev() {
             self.outgoing[node].push((node as NodeId, 0));

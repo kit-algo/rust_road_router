@@ -21,7 +21,7 @@ pub use reorder::*;
 pub mod query;
 
 /// Execute first phase, that is metric independent preprocessing.
-pub fn contract<Graph: for<'a> LinkIterable<'a, NodeId> + RandomLinkAccessGraph>(graph: &Graph, node_order: NodeOrder) -> CCH {
+pub fn contract<Graph: LinkIterable<NodeId> + RandomLinkAccessGraph>(graph: &Graph, node_order: NodeOrder) -> CCH {
     CCH::new(ContractionGraph::new(graph, node_order).contract())
 }
 
@@ -254,7 +254,7 @@ impl Graph for CCH {
     }
 }
 
-fn inverted_with_orig_edge_ids_as_weights<'a>(graph: &'a (impl RandomLinkAccessGraph + LinkIterable<'a, NodeId>)) -> OwnedGraph {
+fn inverted_with_orig_edge_ids_as_weights(graph: &(impl RandomLinkAccessGraph + LinkIterable<NodeId>)) -> OwnedGraph {
     let mut inverted = vec![Vec::new(); graph.num_nodes()];
     for current_node in 0..(graph.num_nodes() as NodeId) {
         for (node, edge_id) in graph.link_iter(current_node).zip(graph.neighbor_edge_indices(current_node)) {

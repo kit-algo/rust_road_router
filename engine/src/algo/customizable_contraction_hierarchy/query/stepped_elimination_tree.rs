@@ -5,7 +5,7 @@ use crate::datastr::timestamped_vector::TimestampedVector;
 use crate::util::in_range_option::InRangeOption;
 
 #[derive(Debug)]
-pub struct SteppedEliminationTree<'b, Graph: for<'a> LinkIterGraph<'a>> {
+pub struct SteppedEliminationTree<'b, Graph> {
     graph: Graph,
     distances: TimestampedVector<Weight>,
     predecessors: Vec<NodeId>,
@@ -14,7 +14,7 @@ pub struct SteppedEliminationTree<'b, Graph: for<'a> LinkIterGraph<'a>> {
     origin: Option<NodeId>,
 }
 
-impl<'b, Graph: for<'a> LinkIterGraph<'a>> SteppedEliminationTree<'b, Graph> {
+impl<'b, Graph: LinkIterGraph> SteppedEliminationTree<'b, Graph> {
     pub fn new(graph: Graph, elimination_tree: &'b [InRangeOption<NodeId>]) -> SteppedEliminationTree<'b, Graph> {
         let n = graph.num_nodes();
 

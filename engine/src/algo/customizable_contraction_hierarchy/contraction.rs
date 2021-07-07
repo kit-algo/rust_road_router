@@ -85,7 +85,7 @@ pub struct ContractionGraph<'a, Graph: 'a> {
     original_graph: &'a Graph,
 }
 
-impl<'a, Graph: for<'b> LinkIterable<'b, NodeId>> ContractionGraph<'a, Graph> {
+impl<'a, Graph: LinkIterable<NodeId>> ContractionGraph<'a, Graph> {
     /// Preprocessing preparation
     pub fn new(graph: &'a Graph, node_order: NodeOrder) -> ContractionGraph<'a, Graph> {
         let n = graph.num_nodes() as NodeId;

@@ -156,11 +156,11 @@ impl GraphTrait for Graph {
     }
 }
 
-impl<'a> LinkIterable<'a, NodeId> for Graph {
-    type Iter = std::iter::Cloned<std::slice::Iter<'a, NodeId>>;
+impl LinkIterable<NodeId> for Graph {
+    type Iter<'a> = std::iter::Cloned<std::slice::Iter<'a, NodeId>>;
 
     #[inline(always)]
-    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+    fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         self.head[self.neighbor_edge_indices_usize(node)].iter().cloned()
     }
 }
@@ -185,10 +185,10 @@ impl RandomLinkAccessGraph for Graph {
     }
 }
 
-impl<'a> LinkIterable<'a, (NodeId, EdgeId)> for Graph {
-    type Iter = std::iter::Zip<std::iter::Cloned<std::slice::Iter<'a, NodeId>>, std::ops::Range<EdgeId>>;
+impl LinkIterable<(NodeId, EdgeId)> for Graph {
+    type Iter<'a> = std::iter::Zip<std::iter::Cloned<std::slice::Iter<'a, NodeId>>, std::ops::Range<EdgeId>>;
     #[inline(always)]
-    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+    fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         let range = self.neighbor_edge_indices_usize(node);
         self.head[range].iter().cloned().zip(self.neighbor_edge_indices(node))
     }
@@ -286,17 +286,17 @@ impl crate::datastr::graph::Graph for LiveTDGraph {
     }
 }
 
-impl<'a> LinkIterable<'a, NodeId> for LiveTDGraph {
-    type Iter = <Graph as LinkIterable<'a, NodeId>>::Iter;
+impl LinkIterable<NodeId> for LiveTDGraph {
+    type Iter<'a> = <Graph as LinkIterable<NodeId>>::Iter<'a>;
 
-    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+    fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         LinkIterable::<NodeId>::link_iter(&self.graph, node)
     }
 }
-impl<'a> LinkIterable<'a, (NodeId, EdgeId)> for LiveTDGraph {
-    type Iter = <Graph as LinkIterable<'a, (NodeId, EdgeId)>>::Iter;
+impl LinkIterable<(NodeId, EdgeId)> for LiveTDGraph {
+    type Iter<'a> = <Graph as LinkIterable<(NodeId, EdgeId)>>::Iter<'a>;
 
-    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+    fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         LinkIterable::<(NodeId, EdgeId)>::link_iter(&self.graph, node)
     }
 }

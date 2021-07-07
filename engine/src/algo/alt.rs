@@ -20,7 +20,7 @@ pub struct ALTPotential {
 impl ALTPotential {
     pub fn new<G>(graph: &G, landmarks: Vec<NodeId>) -> Self
     where
-        G: for<'a> LinkIterable<'a, Link>,
+        G: LinkIterable<Link>,
         OwnedGraph: BuildReversed<G>,
     {
         let mut landmark_runs_ctxt = push_collection_context("landmark_dijkstras".to_string());
@@ -70,7 +70,7 @@ impl ALTPotential {
 
     pub fn new_with_avoid<G>(graph: &G, num_landmarks: usize, rng: &mut StdRng) -> Self
     where
-        G: for<'a> LinkIterable<'a, Link>,
+        G: LinkIterable<Link>,
         OwnedGraph: BuildReversed<G>,
     {
         report!("algo", "Avoid Landmarks");
@@ -155,7 +155,7 @@ impl ALTPotential {
         sp_tree: &ServerWrapper<G, DefaultOps, ZeroPotential, &G>,
     ) -> bool
     where
-        G: for<'a> LinkIterable<'a, Link>,
+        G: LinkIterable<Link>,
     {
         visited.set(r as usize);
 
@@ -182,7 +182,7 @@ impl ALTPotential {
 
     pub fn farthest_landmarks<G>(graph: &G, num_landmarks: usize, initial_landmark: NodeId) -> Vec<NodeId>
     where
-        G: for<'a> LinkIterable<'a, Link>,
+        G: LinkIterable<Link>,
     {
         report!("algo", "Farthest Landmarks");
         report!("num_landmarks", num_landmarks);

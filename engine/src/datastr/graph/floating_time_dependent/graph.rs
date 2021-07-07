@@ -222,10 +222,10 @@ impl RandomLinkAccessGraph for Graph {
     }
 }
 
-impl<'a> LinkIterable<'a, (NodeId, EdgeId)> for Graph {
-    type Iter = std::iter::Zip<std::iter::Cloned<std::slice::Iter<'a, NodeId>>, std::ops::Range<EdgeId>>;
+impl LinkIterable<(NodeId, EdgeId)> for Graph {
+    type Iter<'a> = std::iter::Zip<std::iter::Cloned<std::slice::Iter<'a, NodeId>>, std::ops::Range<EdgeId>>;
     #[inline(always)]
-    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+    fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         let range = self.neighbor_edge_indices_usize(node);
         self.head[range].iter().cloned().zip(self.neighbor_edge_indices(node))
     }

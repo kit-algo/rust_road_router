@@ -34,18 +34,16 @@ impl<'a, G: Graph, H> Graph for UndirectedGraph<'a, G, H> {
     }
 }
 
-impl<'a, 'b, L, G: LinkIterable<'a, L>, H: LinkIterable<'a, L>> LinkIterable<'a, L> for UndirectedGraph<'b, G, H> {
-    type Iter = std::iter::Chain<G::Iter, H::Iter>;
+impl<'b, L, G: LinkIterable<L>, H: LinkIterable<L>> LinkIterable<L> for UndirectedGraph<'b, G, H> {
+    type Iter<'a> = std::iter::Chain<G::Iter<'a>, H::Iter<'a>>;
 
-    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+    fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         self.ins.link_iter(node).chain(self.outs.link_iter(node))
     }
 }
 
 #[allow(clippy::cognitive_complexity)]
-pub fn preprocess<'c, Graph: for<'a> LinkIterGraph<'a> + for<'a> LinkIterable<'a, NodeId>, ReorderBCC: Bool, Deg1: Bool, Deg2: Bool, Deg3: Bool>(
-    graph: &Graph,
-) -> Topocore {
+pub fn preprocess<'c, Graph: LinkIterGraph + LinkIterable<NodeId>, ReorderBCC: Bool, Deg1: Bool, Deg2: Bool, Deg3: Bool>(graph: &Graph) -> Topocore {
     let order = dfs_pre_order(graph);
 
     let n = graph.num_nodes();
@@ -483,7 +481,7 @@ impl VirtualTopocore {
 }
 
 #[allow(clippy::cognitive_complexity)]
-pub fn virtual_topocore<'c, Graph: for<'a> LinkIterable<'a, NodeId>>(graph: &Graph) -> VirtualTopocore {
+pub fn virtual_topocore<'c, Graph: LinkIterable<NodeId>>(graph: &Graph) -> VirtualTopocore {
     let order = dfs_pre_order(graph);
     let n = graph.num_nodes();
 
@@ -607,7 +605,7 @@ pub struct VirtualTopocoreGraph<G> {
 impl<Graph> VirtualTopocoreGraph<Graph> {
     pub fn new<G>(graph: &G) -> (Self, VirtualTopocore)
     where
-        G: for<'a> LinkIterable<'a, NodeId>,
+        G: LinkIterable<NodeId>,
         Graph: BuildPermutated<G>,
     {
         let topocore = virtual_topocore(graph);
@@ -622,7 +620,7 @@ impl<Graph> VirtualTopocoreGraph<Graph> {
 
     pub fn new_topo_dijkstra_graphs<G>(graph: &G) -> (Self, Self, VirtualTopocore)
     where
-        G: for<'a> LinkIterable<'a, NodeId>,
+        G: LinkIterable<NodeId>,
         Graph: BuildPermutated<G>,
     {
         let topocore = virtual_topocore(graph);
@@ -658,11 +656,11 @@ impl<G: Graph> Graph for VirtualTopocoreGraph<G> {
     }
 }
 
-impl<'a, G: for<'b> LinkIterable<'b, L>, L> LinkIterable<'a, L> for VirtualTopocoreGraph<G> {
-    type Iter = <G as LinkIterable<'a, L>>::Iter;
+impl<G: LinkIterable<L>, L> LinkIterable<L> for VirtualTopocoreGraph<G> {
+    type Iter<'a> = <G as LinkIterable<L>>::Iter<'a>;
 
     #[inline(always)]
-    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+    fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         self.graph.link_iter(node)
     }
 }
@@ -708,7 +706,7 @@ impl<G: RandomLinkAccessGraph> RandomLinkAccessGraph for VirtualTopocoreGraph<G>
     }
 }
 
-fn dfs_pre_order<Graph: for<'a> LinkIterable<'a, NodeId>>(graph: &Graph) -> NodeOrder {
+fn dfs_pre_order<Graph: LinkIterable<NodeId>>(graph: &Graph) -> NodeOrder {
     let mut order = Vec::with_capacity(graph.num_nodes());
     dfs(graph, &mut |node| {
         order.push(node);
@@ -716,7 +714,7 @@ fn dfs_pre_order<Graph: for<'a> LinkIterable<'a, NodeId>>(graph: &Graph) -> Node
     NodeOrder::from_node_order(order)
 }
 
-fn dfs<Graph: for<'a> LinkIterable<'a, NodeId>>(graph: &Graph, visit: &mut impl FnMut(NodeId)) {
+fn dfs<Graph: LinkIterable<NodeId>>(graph: &Graph, visit: &mut impl FnMut(NodeId)) {
     let mut visited = BitVec::new(graph.num_nodes());
     let mut stack = Vec::new();
     for node in 0..graph.num_nodes() {
@@ -740,7 +738,7 @@ fn dfs<Graph: for<'a> LinkIterable<'a, NodeId>>(graph: &Graph, visit: &mut impl 
     }
 }
 
-fn biconnected<Graph: for<'a> LinkIterable<'a, NodeId>>(graph: &Graph) -> Vec<Vec<(NodeId, NodeId)>> {
+fn biconnected<Graph: LinkIterable<NodeId>>(graph: &Graph) -> Vec<Vec<(NodeId, NodeId)>> {
     let mut stack = Vec::new();
 
     let mut dfs_num_counter = 0;

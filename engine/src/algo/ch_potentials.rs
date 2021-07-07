@@ -26,7 +26,7 @@ pub struct CCHPotential<'a> {
 impl<'a> CCHPotential<'a> {
     pub fn new<Graph>(cch: &'a CCH, lower_bound: &Graph) -> Self
     where
-        Graph: for<'b> LinkIterGraph<'b> + RandomLinkAccessGraph + Sync,
+        Graph: LinkIterGraph + RandomLinkAccessGraph + Sync,
     {
         let customized = customize(cch, lower_bound);
         let (forward_up_graph, backward_up_graph) = customized.into_ch_graphs();
@@ -98,7 +98,7 @@ pub struct CHPotential<GF, GB> {
     num_pot_computations: usize,
 }
 
-impl<GF: for<'a> LinkIterGraph<'a>, GB: for<'a> LinkIterGraph<'a>> CHPotential<GF, GB> {
+impl<GF: LinkIterGraph, GB: LinkIterGraph> CHPotential<GF, GB> {
     pub fn new(forward: GF, backward: GB, order: NodeOrder) -> Self {
         let n = forward.num_nodes();
         Self {
@@ -138,7 +138,7 @@ impl<GF: for<'a> LinkIterGraph<'a>, GB: for<'a> LinkIterGraph<'a>> CHPotential<G
     }
 }
 
-impl<GF: for<'a> LinkIterGraph<'a>, GB: for<'a> LinkIterGraph<'a>> Potential for CHPotential<GF, GB> {
+impl<GF: LinkIterGraph, GB: LinkIterGraph> Potential for CHPotential<GF, GB> {
     fn init(&mut self, target: NodeId) {
         self.num_pot_computations = 0;
         self.potentials.reset();

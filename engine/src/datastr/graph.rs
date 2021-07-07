@@ -69,12 +69,12 @@ pub trait Graph {
     fn degree(&self, node: NodeId) -> usize;
 }
 
-pub trait LinkIterable<'a, Link>: Graph {
+pub trait LinkIterable<Link>: Graph {
     /// Type of the outgoing neighbor iterator.
-    type Iter: Iterator<Item = Link> + 'a;
+    type Iter<'a>: Iterator<Item = Link>;
 
     /// Get a iterator over the outgoing links of the given node.
-    fn link_iter(&'a self, node: NodeId) -> Self::Iter;
+    fn link_iter(&self, node: NodeId) -> Self::Iter<'_>;
 }
 
 pub trait MutLinkIterable<'a, Link>: Graph {
@@ -86,10 +86,10 @@ pub trait MutLinkIterable<'a, Link>: Graph {
 }
 
 /// Trait for graph data structures which allow iterating over outgoing links of a node.
-pub trait LinkIterGraph<'a>: LinkIterable<'a, Link> {
+pub trait LinkIterGraph: LinkIterable<Link> {
     /// Split the graph in an upward graph of outgoing edges and a
     /// downward graph of incoming edges based on the node order passed.
-    fn ch_split(&'a self, order: &NodeOrder) -> (OwnedGraph, OwnedGraph) {
+    fn ch_split(&self, order: &NodeOrder) -> (OwnedGraph, OwnedGraph) {
         let mut up: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new()).collect();
         let mut down: Vec<Vec<Link>> = (0..self.num_nodes()).map(|_| Vec::<Link>::new()).collect();
 
@@ -108,7 +108,7 @@ pub trait LinkIterGraph<'a>: LinkIterable<'a, Link> {
     }
 }
 
-impl<'a, G: for<'b> LinkIterable<'b, Link>> LinkIterGraph<'a> for G {}
+impl<G: LinkIterable<Link>> LinkIterGraph for G {}
 
 /// Utility function for preprocessing graphs with parallel edges.
 /// Will ensure, that all parallel edges have the lowest weight.
@@ -208,18 +208,18 @@ impl<G: Graph> Graph for InfinityFilteringGraph<G> {
     }
 }
 
-impl<'a, G: for<'b> LinkIterable<'b, Link>> LinkIterable<'a, Link> for InfinityFilteringGraph<G> {
-    type Iter = std::iter::Filter<<G as LinkIterable<'a, Link>>::Iter, fn(&Link) -> bool>;
+impl<G: LinkIterable<Link>> LinkIterable<Link> for InfinityFilteringGraph<G> {
+    type Iter<'a> = std::iter::Filter<<G as LinkIterable<Link>>::Iter<'a>, fn(&Link) -> bool>;
 
-    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+    fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         self.0.link_iter(node).filter(|l| l.weight < INFINITY)
     }
 }
 
-impl<'a, G: for<'b> LinkIterable<'b, Link>> LinkIterable<'a, NodeId> for InfinityFilteringGraph<G> {
-    type Iter = std::iter::Map<<Self as LinkIterable<'a, Link>>::Iter, fn(Link) -> NodeId>;
+impl<G: LinkIterable<Link>> LinkIterable<NodeId> for InfinityFilteringGraph<G> {
+    type Iter<'a> = std::iter::Map<<Self as LinkIterable<Link>>::Iter<'a>, fn(Link) -> NodeId>;
 
-    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
-        LinkIterable::<'a, Link>::link_iter(self, node).map(|l| l.node)
+    fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
+        LinkIterable::<Link>::link_iter(self, node).map(|l| l.node)
     }
 }

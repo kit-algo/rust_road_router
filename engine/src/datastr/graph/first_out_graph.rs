@@ -97,7 +97,7 @@ impl OwnedGraph {
     }
 }
 
-impl<G: for<'a> LinkIterable<'a, Link>> BuildReversed<G> for OwnedGraph {
+impl<G: LinkIterable<Link>> BuildReversed<G> for OwnedGraph {
     fn reversed(graph: &G) -> Self {
         // vector of adjacency lists for the reverse graph
         let mut reversed: Vec<Vec<Link>> = (0..graph.num_nodes()).map(|_| Vec::<Link>::new()).collect();
@@ -113,7 +113,7 @@ impl<G: for<'a> LinkIterable<'a, Link>> BuildReversed<G> for OwnedGraph {
     }
 }
 
-impl<G: for<'a> LinkIterable<'a, Link>> BuildPermutated<G> for OwnedGraph {
+impl<G: LinkIterable<Link>> BuildPermutated<G> for OwnedGraph {
     fn permutated_filtered(graph: &G, order: &NodeOrder, mut predicate: Box<dyn FnMut(NodeId, NodeId) -> bool>) -> Self {
         let mut first_out: Vec<EdgeId> = Vec::with_capacity(graph.num_nodes() + 1);
         first_out.push(0);
@@ -165,17 +165,17 @@ where
     }
 }
 
-impl<'a, FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<'a, Link> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+impl<FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<Link> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
     WeightContainer: AsRef<[Weight]>,
 {
     #[allow(clippy::type_complexity)]
-    type Iter = std::iter::Map<std::iter::Zip<std::slice::Iter<'a, NodeId>, std::slice::Iter<'a, Weight>>, fn((&NodeId, &Weight)) -> Link>;
+    type Iter<'a> = std::iter::Map<std::iter::Zip<std::slice::Iter<'a, NodeId>, std::slice::Iter<'a, Weight>>, fn((&NodeId, &Weight)) -> Link>;
 
     #[inline]
-    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+    fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         let range = SlcsIdx(self.first_out()).range(node as usize);
         self.head()[range.clone()]
             .iter()
@@ -184,15 +184,15 @@ where
     }
 }
 
-impl<'a, FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<'a, NodeId> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+impl<FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<NodeId> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
     WeightContainer: AsRef<[Weight]>,
 {
-    type Iter = std::iter::Cloned<std::slice::Iter<'a, NodeId>>;
+    type Iter<'a> = std::iter::Cloned<std::slice::Iter<'a, NodeId>>;
 
-    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+    fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         self.head()[SlcsIdx(self.first_out()).range(node as usize)].iter().cloned()
     }
 }
@@ -248,16 +248,16 @@ where
     }
 }
 
-impl<'a, FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<'a, LinkWithId> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+impl<FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<LinkWithId> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
     WeightContainer: AsRef<[Weight]>,
 {
     #[allow(clippy::type_complexity)]
-    type Iter = std::iter::Map<std::iter::Zip<std::slice::Iter<'a, NodeId>, std::ops::Range<usize>>, fn((&NodeId, usize)) -> LinkWithId>;
+    type Iter<'a> = std::iter::Map<std::iter::Zip<std::slice::Iter<'a, NodeId>, std::ops::Range<usize>>, fn((&NodeId, usize)) -> LinkWithId>;
 
-    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+    fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         let range = SlcsIdx(self.first_out()).range(node as usize);
         self.head()[range.clone()]
             .iter()
@@ -327,14 +327,14 @@ where
     }
 }
 
-impl<'a, FirstOutContainer, HeadContainer> LinkIterable<'a, NodeId> for UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
+impl<FirstOutContainer, HeadContainer> LinkIterable<NodeId> for UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
 {
-    type Iter = std::iter::Cloned<std::slice::Iter<'a, NodeId>>;
+    type Iter<'a> = std::iter::Cloned<std::slice::Iter<'a, NodeId>>;
 
-    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+    fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         self.head()[self.neighbor_edge_indices_usize(node)].iter().cloned()
     }
 }
@@ -380,7 +380,7 @@ impl UnweightedOwnedGraph {
     }
 }
 
-impl<G: for<'a> LinkIterable<'a, NodeId>> BuildReversed<G> for UnweightedOwnedGraph {
+impl<G: LinkIterable<NodeId>> BuildReversed<G> for UnweightedOwnedGraph {
     fn reversed(graph: &G) -> Self {
         // vector of adjacency lists for the reverse graph
         let mut reversed: Vec<Vec<NodeId>> = (0..graph.num_nodes()).map(|_| Vec::<NodeId>::new()).collect();
@@ -402,7 +402,7 @@ pub struct ReversedGraphWithEdgeIds {
     edge_ids: Vec<EdgeId>,
 }
 
-impl<G: for<'a> LinkIterable<'a, LinkWithId>> BuildReversed<G> for ReversedGraphWithEdgeIds {
+impl<G: LinkIterable<LinkWithId>> BuildReversed<G> for ReversedGraphWithEdgeIds {
     fn reversed(graph: &G) -> Self {
         // vector of adjacency lists for the reverse graph
         let mut reversed: Vec<Vec<Link>> = (0..graph.num_nodes()).map(|_| Vec::<Link>::new()).collect();
@@ -431,10 +431,10 @@ impl Graph for ReversedGraphWithEdgeIds {
     }
 }
 
-impl<'a> LinkIterable<'a, (NodeId, EdgeId)> for ReversedGraphWithEdgeIds {
-    type Iter = std::iter::Zip<std::iter::Cloned<std::slice::Iter<'a, NodeId>>, std::iter::Cloned<std::slice::Iter<'a, EdgeId>>>;
+impl LinkIterable<(NodeId, EdgeId)> for ReversedGraphWithEdgeIds {
+    type Iter<'a> = std::iter::Zip<std::iter::Cloned<std::slice::Iter<'a, NodeId>>, std::iter::Cloned<std::slice::Iter<'a, EdgeId>>>;
 
-    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+    fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         let range = SlcsIdx(&self.first_out).range(node as usize);
         self.head[range.clone()].iter().cloned().zip(self.edge_ids[range.clone()].iter().cloned())
     }

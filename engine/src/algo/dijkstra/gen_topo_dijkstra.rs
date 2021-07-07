@@ -22,7 +22,7 @@ where
 impl<'b, Graph, Ops> TopoDijkstraRun<'b, Graph, Ops>
 where
     Ops: DijkstraOps<Graph>,
-    Graph: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, Ops::Arc> + SymmetricDegreeGraph,
+    Graph: LinkIterable<NodeId> + LinkIterable<Ops::Arc> + SymmetricDegreeGraph,
 {
     pub fn query(graph: &'b Graph, data: &'b mut DijkstraData<Ops::Label>, ops: &'b mut Ops, query: impl GenQuery<Ops::Label>) -> Self {
         let mut s = Self {

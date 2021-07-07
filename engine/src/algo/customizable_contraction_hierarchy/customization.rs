@@ -18,7 +18,7 @@ scoped_thread_local!(static DOWNWARD_WORKSPACE: RefCell<Vec<Weight>>);
 /// This may lead to wrong query results.
 pub fn customize<'c, Graph>(cch: &'c CCH, metric: &Graph) -> Customized<'c, CCH>
 where
-    Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph + Sync,
+    Graph: LinkIterGraph + RandomLinkAccessGraph + Sync,
 {
     let m = cch.num_arcs();
     // buffers for the customized weights
@@ -35,7 +35,7 @@ where
 /// Same as [customize], except with a `DirectedCCH`
 pub fn customize_directed<'c, Graph>(cch: &'c DirectedCCH, metric: &Graph) -> Customized<'c, DirectedCCH>
 where
-    Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph + Sync,
+    Graph: LinkIterGraph + RandomLinkAccessGraph + Sync,
 {
     // buffers for the customized weights
     let mut upward_weights = vec![INFINITY; cch.forward_head.len()];
@@ -64,7 +64,7 @@ pub fn always_infinity(cch: &CCH) -> Customized<CCH> {
 
 fn prepare_weights<Graph>(cch: &CCH, upward_weights: &mut [Weight], downward_weights: &mut [Weight], metric: &Graph)
 where
-    Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph + Sync,
+    Graph: LinkIterGraph + RandomLinkAccessGraph + Sync,
 {
     report_time_with_key("CCH apply weights", "respecting", || {
         upward_weights
@@ -84,7 +84,7 @@ where
 
 fn prepare_weights_directed<Graph>(cch: &DirectedCCH, upward_weights: &mut [Weight], downward_weights: &mut [Weight], metric: &Graph)
 where
-    Graph: for<'a> LinkIterGraph<'a> + RandomLinkAccessGraph + Sync,
+    Graph: LinkIterGraph + RandomLinkAccessGraph + Sync,
 {
     report_time_with_key("CCH apply weights", "respecting", || {
         upward_weights

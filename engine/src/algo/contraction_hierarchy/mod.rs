@@ -101,7 +101,7 @@ struct ContractionGraph {
 
 impl ContractionGraph {
     // Create a ContractionGraph from a regular graph and an order.
-    fn new<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, order: NodeOrder) -> ContractionGraph {
+    fn new<Graph: LinkIterGraph>(graph: &Graph, order: NodeOrder) -> ContractionGraph {
         let n = graph.num_nodes();
 
         // We need to:
@@ -296,7 +296,7 @@ impl<'a> PartialContractionGraph<'a> {
 }
 
 /// Create an overlay graph by contracting a fixed number of nodes
-pub fn overlay<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, order: NodeOrder, contraction_count: usize) -> (OwnedGraph, OwnedGraph) {
+pub fn overlay<Graph: LinkIterGraph>(graph: &Graph, order: NodeOrder, contraction_count: usize) -> (OwnedGraph, OwnedGraph) {
     let mut graph = ContractionGraph::new(graph, order);
     graph.contract_partially(contraction_count);
     let ch = graph.into_first_out_graphs();
@@ -304,7 +304,7 @@ pub fn overlay<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, order: NodeOrder
 }
 
 /// Perform CH Preprocessing
-pub fn contract<Graph: for<'a> LinkIterGraph<'a>>(graph: &Graph, order: NodeOrder) -> ContractionHierarchy {
+pub fn contract<Graph: LinkIterGraph>(graph: &Graph, order: NodeOrder) -> ContractionHierarchy {
     let mut graph = ContractionGraph::new(graph, order);
     graph.contract();
     graph.into_first_out_graphs()
@@ -371,10 +371,10 @@ impl<'a> Iterator for LinkMappingIterator<'a> {
     }
 }
 
-impl<'a, 'b> LinkIterable<'b, Link> for ForwardWrapper<'a> {
-    type Iter = LinkMappingIterator<'b>;
+impl<'a> LinkIterable<Link> for ForwardWrapper<'a> {
+    type Iter<'b> = LinkMappingIterator<'b>;
 
-    fn link_iter(&'b self, node: NodeId) -> Self::Iter {
+    fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         LinkMappingIterator {
             iter: self.graph.nodes[node as usize].outgoing.iter(),
             offset: self.graph.id_offset,
@@ -382,10 +382,10 @@ impl<'a, 'b> LinkIterable<'b, Link> for ForwardWrapper<'a> {
     }
 }
 
-impl<'a, 'b> LinkIterable<'b, Link> for BackwardWrapper<'a> {
-    type Iter = LinkMappingIterator<'b>;
+impl<'a> LinkIterable<Link> for BackwardWrapper<'a> {
+    type Iter<'b> = LinkMappingIterator<'b>;
 
-    fn link_iter(&'b self, node: NodeId) -> Self::Iter {
+    fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         LinkMappingIterator {
             iter: self.graph.nodes[node as usize].incoming.iter(),
             offset: self.graph.id_offset,

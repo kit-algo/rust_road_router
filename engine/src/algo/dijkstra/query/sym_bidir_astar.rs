@@ -14,13 +14,13 @@ pub struct Server<G, H, P> {
     pub backward_potential: RefCell<P>,
 }
 
-impl<G: for<'a> LinkIterGraph<'a>> Server<G, OwnedGraph, ZeroPotential> {
+impl<G: LinkIterGraph> Server<G, OwnedGraph, ZeroPotential> {
     pub fn new(graph: G) -> Self {
         Self::new_with_potentials(graph, ZeroPotential(), ZeroPotential())
     }
 }
 
-impl<G: for<'a> LinkIterGraph<'a>, P: Potential> Server<G, OwnedGraph, P> {
+impl<G: LinkIterGraph, P: Potential> Server<G, OwnedGraph, P> {
     pub fn new_with_potentials(graph: G, forward_pot: P, backward_pot: P) -> Self {
         let n = graph.num_nodes();
         let reversed = OwnedGraph::reversed(&graph);
@@ -37,7 +37,7 @@ impl<G: for<'a> LinkIterGraph<'a>, P: Potential> Server<G, OwnedGraph, P> {
     }
 }
 
-impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>, P: Potential> Server<G, H, P> {
+impl<G: LinkIterGraph, H: LinkIterGraph, P: Potential> Server<G, H, P> {
     fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
         self.distance_with_cap(from, to, INFINITY, |_, _, _| ())
     }
@@ -202,9 +202,9 @@ impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>, P: Potential> S
     }
 }
 
-pub struct PathServerWrapper<'s, G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>, P>(&'s Server<G, H, P>, Query);
+pub struct PathServerWrapper<'s, G: LinkIterGraph, H: LinkIterGraph, P>(&'s Server<G, H, P>, Query);
 
-impl<'s, G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>, P: Potential> PathServer for PathServerWrapper<'s, G, H, P> {
+impl<'s, G: LinkIterGraph, H: LinkIterGraph, P: Potential> PathServer for PathServerWrapper<'s, G, H, P> {
     type NodeInfo = NodeId;
 
     fn path(&mut self) -> Vec<Self::NodeInfo> {
@@ -212,7 +212,7 @@ impl<'s, G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>, P: Potentia
     }
 }
 
-impl<G: for<'a> LinkIterGraph<'a>, H: for<'a> LinkIterGraph<'a>, P: Potential> QueryServer for Server<G, H, P> {
+impl<G: LinkIterGraph, H: LinkIterGraph, P: Potential> QueryServer for Server<G, H, P> {
     type P<'s>
     where
         Self: 's,

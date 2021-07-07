@@ -17,7 +17,7 @@ where
 impl<Graph, Ops, GraphBorrow> Server<Graph, Ops, ZeroPotential, GraphBorrow>
 where
     Ops: DijkstraOps<Graph, Label = Weight>,
-    Graph: for<'a> LinkIterable<'a, Ops::Arc>,
+    Graph: LinkIterable<Ops::Arc>,
     GraphBorrow: Borrow<Graph>,
 {
     pub fn new(graph: GraphBorrow) -> Self {
@@ -32,7 +32,7 @@ where
 impl<Graph, Ops, P, GraphBorrow> Server<Graph, Ops, P, GraphBorrow>
 where
     Ops: DijkstraOps<Graph, Label = Weight> + Default,
-    Graph: for<'a> LinkIterable<'a, Ops::Arc>,
+    Graph: LinkIterable<Ops::Arc>,
     P: Potential,
     GraphBorrow: Borrow<Graph>,
 {
@@ -125,7 +125,7 @@ where
 impl<'s, Q, G, O, P, B> PathServer for PathServerWrapper<'s, Q, G, O, P, B>
 where
     O: DijkstraOps<G, Label = Weight> + Default,
-    G: for<'a> LinkIterable<'a, O::Arc>,
+    G: LinkIterable<O::Arc>,
     Q: GenQuery<Weight> + Copy,
     P: Potential,
     B: Borrow<G>,
@@ -140,7 +140,7 @@ where
 impl<'s, Q, G, O, P, B> PathServerWrapper<'s, Q, G, O, P, B>
 where
     O: DijkstraOps<G, Label = Weight> + Default,
-    G: for<'a> LinkIterable<'a, O::Arc>,
+    G: LinkIterable<O::Arc>,
     Q: GenQuery<Weight> + Copy,
     P: Potential,
     B: Borrow<G>,
@@ -166,7 +166,7 @@ pub struct ServerWrapper<'s, G = OwnedGraph, O = DefaultOps, P = ZeroPotential, 
 where
     O: DijkstraOps<G>;
 
-impl<'s, G: for<'a> LinkIterable<'a, O::Arc>, O: DijkstraOps<G, Label = Weight>, P: Potential, B: Borrow<G>> ServerWrapper<'s, G, O, P, B> {
+impl<'s, G: LinkIterable<O::Arc>, O: DijkstraOps<G, Label = Weight>, P: Potential, B: Borrow<G>> ServerWrapper<'s, G, O, P, B> {
     pub fn distance(&self, node: NodeId) -> Weight {
         self.0.dijkstra.distances[node as usize]
     }
@@ -176,7 +176,7 @@ impl<'s, G: for<'a> LinkIterable<'a, O::Arc>, O: DijkstraOps<G, Label = Weight>,
     }
 }
 
-impl<G: for<'a> LinkIterable<'a, O::Arc>, O: DijkstraOps<G, Label = Weight> + Default, P: Potential, B: Borrow<G>> QueryServer for Server<G, O, P, B> {
+impl<G: LinkIterable<O::Arc>, O: DijkstraOps<G, Label = Weight> + Default, P: Potential, B: Borrow<G>> QueryServer for Server<G, O, P, B> {
     type P<'s>
     where
         Self: 's,
@@ -188,9 +188,7 @@ impl<G: for<'a> LinkIterable<'a, O::Arc>, O: DijkstraOps<G, Label = Weight> + De
     }
 }
 
-impl<G: for<'a> LinkIterable<'a, O::Arc>, O: DijkstraOps<G, Label = Weight> + Default, P: Potential, B: Borrow<G>> TDQueryServer<Timestamp, Weight>
-    for Server<G, O, P, B>
-{
+impl<G: LinkIterable<O::Arc>, O: DijkstraOps<G, Label = Weight> + Default, P: Potential, B: Borrow<G>> TDQueryServer<Timestamp, Weight> for Server<G, O, P, B> {
     type P<'s>
     where
         Self: 's,

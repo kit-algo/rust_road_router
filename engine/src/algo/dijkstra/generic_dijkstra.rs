@@ -60,7 +60,7 @@ where
 
 impl<'b, Graph, Ops> DijkstraRun<'b, Graph, Ops>
 where
-    Graph: for<'a> LinkIterable<'a, Ops::Arc>,
+    Graph: LinkIterable<Ops::Arc>,
     Ops: DijkstraOps<Graph>,
 {
     pub fn query(graph: &'b Graph, data: &'b mut DijkstraData<Ops::Label>, ops: &'b mut Ops, query: impl GenQuery<Ops::Label>) -> Self {
@@ -219,7 +219,7 @@ where
 impl<'b, Ops, Graph> Iterator for DijkstraRun<'b, Graph, Ops>
 where
     Ops: DijkstraOps<Graph>,
-    Graph: for<'a> LinkIterable<'a, Ops::Arc>,
+    Graph: LinkIterable<Ops::Arc>,
 {
     type Item = NodeId;
 

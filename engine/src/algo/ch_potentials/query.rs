@@ -19,11 +19,11 @@ where
 
 impl<Graph, Ops: DijkstraOps<Graph, Label = Timestamp>, P: Potential> Server<Graph, Ops, P>
 where
-    Graph: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, Ops::Arc>,
+    Graph: LinkIterable<NodeId> + LinkIterable<Ops::Arc>,
 {
     pub fn new<G>(graph: &G, potential: P, ops: Ops) -> Self
     where
-        G: for<'a> LinkIterable<'a, NodeId>,
+        G: LinkIterable<NodeId>,
         Graph: BuildPermutated<G>,
     {
         report_time_with_key("TopoDijkstra preprocessing", "topo_dijk_prepro", move || {
@@ -237,7 +237,7 @@ impl<'s, G, O, P, Q> PathServer for PathServerWrapper<'s, G, O, P, Q>
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
-    G: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, O::Arc>,
+    G: LinkIterable<NodeId> + LinkIterable<O::Arc>,
     Q: GenQuery<Timestamp> + Copy,
 {
     type NodeInfo = NodeId;
@@ -251,7 +251,7 @@ impl<'s, G, O, P, Q> PathServerWrapper<'s, G, O, P, Q>
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
-    G: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, O::Arc>,
+    G: LinkIterable<NodeId> + LinkIterable<O::Arc>,
     Q: GenQuery<Timestamp> + Copy,
 {
     /// Print path with debug info as js to stdout.
@@ -298,7 +298,7 @@ impl<G, O, P> TDQueryServer<Timestamp, Weight> for Server<G, O, P>
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
-    G: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, O::Arc>,
+    G: LinkIterable<NodeId> + LinkIterable<O::Arc>,
 {
     type P<'s>
     where
@@ -315,7 +315,7 @@ impl<G, O, P> QueryServer for Server<G, O, P>
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
-    G: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, O::Arc>,
+    G: LinkIterable<NodeId> + LinkIterable<O::Arc>,
 {
     type P<'s>
     where
@@ -364,7 +364,7 @@ where
 
 impl<Graph, Ops: DijkstraOps<Graph, Label = Timestamp>, P: Potential> SkipLowDegServer<Graph, Ops, P>
 where
-    Graph: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, Ops::Arc> + SymmetricDegreeGraph,
+    Graph: LinkIterable<NodeId> + LinkIterable<Ops::Arc> + SymmetricDegreeGraph,
 {
     pub fn new(graph: Graph, potential: P, ops: Ops) -> Self {
         let n = graph.num_nodes();
@@ -535,7 +535,7 @@ impl<'s, G, O, P, Q> PathServer for BiconnectedPathServerWrapper<'s, G, O, P, Q>
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
-    G: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, O::Arc> + SymmetricDegreeGraph,
+    G: LinkIterable<NodeId> + LinkIterable<O::Arc> + SymmetricDegreeGraph,
     Q: GenQuery<Timestamp> + Copy,
 {
     type NodeInfo = NodeId;
@@ -549,7 +549,7 @@ impl<'s, G, O, P, Q> BiconnectedPathServerWrapper<'s, G, O, P, Q>
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
-    G: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, O::Arc> + SymmetricDegreeGraph,
+    G: LinkIterable<NodeId> + LinkIterable<O::Arc> + SymmetricDegreeGraph,
     Q: GenQuery<Timestamp> + Copy,
 {
     /// Print path with debug info as js to stdout.
@@ -592,7 +592,7 @@ impl<G, O, P> TDQueryServer<Timestamp, Weight> for SkipLowDegServer<G, O, P>
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
-    G: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, O::Arc> + SymmetricDegreeGraph,
+    G: LinkIterable<NodeId> + LinkIterable<O::Arc> + SymmetricDegreeGraph,
 {
     type P<'s>
     where
@@ -609,7 +609,7 @@ impl<G, O, P> QueryServer for SkipLowDegServer<G, O, P>
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
-    G: for<'a> LinkIterable<'a, NodeId> + for<'a> LinkIterable<'a, O::Arc> + SymmetricDegreeGraph,
+    G: LinkIterable<NodeId> + LinkIterable<O::Arc> + SymmetricDegreeGraph,
 {
     type P<'s>
     where

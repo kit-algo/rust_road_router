@@ -17,7 +17,7 @@ pub struct Penalty<P> {
 impl<P: Potential> Penalty<P> {
     pub fn new<G>(graph: &G, potential: P) -> Self
     where
-        G: for<'a> LinkIterable<'a, NodeId>,
+        G: LinkIterable<NodeId>,
         OwnedGraph: BuildPermutated<G>,
     {
         let (main_graph, _, virtual_topocore) = VirtualTopocoreGraph::new_topo_dijkstra_graphs(graph);
@@ -249,11 +249,11 @@ impl<G: Graph> Graph for AlternativeGraph<G> {
     }
 }
 
-impl<'a, G: for<'b> LinkIterable<'b, L> + RandomLinkAccessGraph, L> LinkIterable<'a, L> for AlternativeGraph<G> {
-    type Iter = FilteredLinkIter<'a, <G as LinkIterable<'a, L>>::Iter>;
+impl<G: LinkIterable<L> + RandomLinkAccessGraph, L> LinkIterable<L> for AlternativeGraph<G> {
+    type Iter<'a> = FilteredLinkIter<'a, <G as LinkIterable<L>>::Iter<'a>>;
 
     #[inline(always)]
-    fn link_iter(&'a self, node: NodeId) -> Self::Iter {
+    fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         FilteredLinkIter {
             iter: self.graph.link_iter(node),
             edge_ids: self.graph.neighbor_edge_indices_usize(node),

@@ -5,7 +5,7 @@ use std::fs::File;
 use std::io::{Result, Write};
 
 /// Export graph in DIMACs .gr format.
-pub fn write_graph_to_gr<G: for<'a> LinkIterGraph<'a>>(graph: &G, filename: &str) -> Result<()> {
+pub fn write_graph_to_gr<G: LinkIterGraph>(graph: &G, filename: &str) -> Result<()> {
     let mut file = File::create(filename)?;
     writeln!(&mut file, "p sp {} {}", graph.num_nodes(), graph.num_arcs())?;
 
