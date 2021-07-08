@@ -39,10 +39,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let n = graph.num_nodes();
     let live_travel_time = Vec::<Weight>::load_from(path.join("live_travel_time"))?;
 
-    let mut lower_bound = (0..graph.num_arcs() as EdgeId)
+    let lower_bound = (0..graph.num_arcs() as EdgeId)
         .map(|edge_id| graph.travel_time_function(edge_id).lower_bound())
         .collect::<Vec<Weight>>();
-    unify_parallel_edges(&mut FirstOutGraph::new(graph.first_out(), graph.head(), &mut lower_bound[..]));
 
     let mut live_count = 0;
     let live = live_travel_time

@@ -49,20 +49,13 @@ pub fn run(
 
     let first_out = Vec::<NodeId>::load_from(path.join("first_out"))?;
     let head = Vec::<EdgeId>::load_from(path.join("head"))?;
-    let mut travel_time = Vec::<EdgeId>::load_from(path.join("travel_time"))?;
+    let travel_time = Vec::<EdgeId>::load_from(path.join("travel_time"))?;
     let mut modified_travel_time = travel_time.clone();
 
-    let mut graph = FirstOutGraph::new(&first_out[..], &head[..], &mut travel_time[..]);
-    unify_parallel_edges(&mut graph);
-    drop(graph);
     let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
-
     report!("graph", { "num_nodes": graph.num_nodes(), "num_arcs": graph.num_arcs() });
 
     modify_travel_time(&graph, &mut rng, &mut modified_travel_time)?;
-    let mut modified_graph = FirstOutGraph::new(&first_out[..], &head[..], &mut modified_travel_time[..]);
-    unify_parallel_edges(&mut modified_graph);
-    drop(modified_graph);
     let modified_graph = FirstOutGraph::new(&first_out[..], &head[..], &modified_travel_time[..]);
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
