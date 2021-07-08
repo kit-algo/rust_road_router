@@ -3,7 +3,7 @@ extern crate rust_road_router;
 use rust_road_router::{
     algo::{a_star::RecyclingPotential, ch_potentials::*, *},
     cli::CliErr,
-    datastr::{graph::*, node_order::NodeOrder},
+    datastr::graph::*,
     experiments,
     io::*,
     report::*,
@@ -28,23 +28,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[0]);
 
-    let forward_first_out = Vec::<EdgeId>::load_from(path.join("lower_bound_ch/forward_first_out"))?;
-    let forward_head = Vec::<NodeId>::load_from(path.join("lower_bound_ch/forward_head"))?;
-    let forward_weight = Vec::<Weight>::load_from(path.join("lower_bound_ch/forward_weight"))?;
-    let backward_first_out = Vec::<EdgeId>::load_from(path.join("lower_bound_ch/backward_first_out"))?;
-    let backward_head = Vec::<NodeId>::load_from(path.join("lower_bound_ch/backward_head"))?;
-    let backward_weight = Vec::<Weight>::load_from(path.join("lower_bound_ch/backward_weight"))?;
-    let order = NodeOrder::from_node_order(Vec::<NodeId>::load_from(path.join("lower_bound_ch/order"))?);
-    let forward_pot = RecyclingPotential::new(CHPotential::new(
-        FirstOutGraph::new(&forward_first_out[..], &forward_head[..], &forward_weight[..]),
-        FirstOutGraph::new(&backward_first_out[..], &backward_head[..], &backward_weight[..]),
-        order.clone(),
-    ));
-    let backward_pot = RecyclingPotential::new(CHPotential::new(
-        FirstOutGraph::new(&backward_first_out[..], &backward_head[..], &backward_weight[..]),
-        FirstOutGraph::new(&forward_first_out[..], &forward_head[..], &forward_weight[..]),
-        order.clone(),
-    ));
+    let chpot_data = CHPotLoader::reconstruct_from(&path.join("lower_bound_ch"))?;
+    let (forward_pot, backward_pot) = chpot_data.potentials();
+    let (forward_pot, backward_pot) = (RecyclingPotential::new(forward_pot), RecyclingPotential::new(backward_pot));
 
     let mut penalty_server = {
         let _prepro_ctxt = algo_runs_ctxt.push_collection_item();

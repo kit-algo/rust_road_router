@@ -6,6 +6,7 @@ use crate::{
         dijkstra::*,
     },
     datastr::{node_order::*, timestamped_vector::TimestampedVector},
+    io::*,
     report::*,
     util::in_range_option::InRangeOption,
 };
@@ -166,5 +167,68 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> Potential for CHPotential<GF, GB> {
         } else {
             None
         }
+    }
+}
+
+impl Reconstruct for CHPotential<OwnedGraph, OwnedGraph> {
+    fn reconstruct_with(loader: Loader) -> std::io::Result<Self> {
+        let forward_first_out = loader.load("forward_first_out")?;
+        let forward_head = loader.load("forward_head")?;
+        let forward_weight = loader.load("forward_weight")?;
+        let backward_first_out = loader.load("backward_first_out")?;
+        let backward_head = loader.load("backward_head")?;
+        let backward_weight = loader.load("backward_weight")?;
+        let order = NodeOrder::from_node_order(loader.load("order")?);
+        Ok(Self::new(
+            OwnedGraph::new(forward_first_out, forward_head, forward_weight),
+            OwnedGraph::new(backward_first_out, backward_head, backward_weight),
+            order,
+        ))
+    }
+}
+
+pub struct CHPotLoader {
+    forward_first_out: Vec<EdgeId>,
+    forward_head: Vec<NodeId>,
+    forward_weight: Vec<Weight>,
+    backward_first_out: Vec<EdgeId>,
+    backward_head: Vec<NodeId>,
+    backward_weight: Vec<Weight>,
+    order: NodeOrder,
+}
+
+impl Reconstruct for CHPotLoader {
+    fn reconstruct_with(loader: Loader) -> std::io::Result<Self> {
+        Ok(Self {
+            forward_first_out: loader.load("forward_first_out")?,
+            forward_head: loader.load("forward_head")?,
+            forward_weight: loader.load("forward_weight")?,
+            backward_first_out: loader.load("backward_first_out")?,
+            backward_head: loader.load("backward_head")?,
+            backward_weight: loader.load("backward_weight")?,
+            order: NodeOrder::from_node_order(loader.load("order")?),
+        })
+    }
+}
+
+impl CHPotLoader {
+    pub fn potentials(
+        &self,
+    ) -> (
+        CHPotential<FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>, FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>>,
+        CHPotential<FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>, FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>>,
+    ) {
+        (
+            CHPotential::new(
+                FirstOutGraph::new(&self.forward_first_out[..], &self.forward_head[..], &self.forward_weight[..]),
+                FirstOutGraph::new(&self.backward_first_out[..], &self.backward_head[..], &self.backward_weight[..]),
+                self.order.clone(),
+            ),
+            CHPotential::new(
+                FirstOutGraph::new(&self.backward_first_out[..], &self.backward_head[..], &self.backward_weight[..]),
+                FirstOutGraph::new(&self.forward_first_out[..], &self.forward_head[..], &self.forward_weight[..]),
+                self.order.clone(),
+            ),
+        )
     }
 }
