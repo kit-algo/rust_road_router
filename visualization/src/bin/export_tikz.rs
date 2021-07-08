@@ -21,14 +21,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let max_x = args.next().ok_or(CliErr("No max_x arg given"))?.parse::<f64>()?;
     let max_y = args.next().ok_or(CliErr("No max_y arg given"))?.parse::<f64>()?;
 
-    let first_out = Vec::load_from(path.join("first_out"))?;
-    let head = Vec::load_from(path.join("head"))?;
-    let travel_time = Vec::load_from(path.join("travel_time"))?;
+    let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
+
     let order = Vec::load_from(path.join("ch_order"))?;
     let node_order = NodeOrder::from_node_order(order);
     let lat = Vec::<f32>::load_from(path.join("latitude"))?;
     let lng = Vec::<f32>::load_from(path.join("longitude"))?;
-    let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
 
     let (up, down) = contraction_hierarchy::overlay(&graph, node_order.clone(), graph.num_nodes());
 

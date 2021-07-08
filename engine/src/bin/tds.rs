@@ -7,22 +7,14 @@ use rust_road_router::{
     algo::{customizable_contraction_hierarchy, time_dependent_sampling::Server, *},
     cli::CliErr,
     datastr::{graph::time_dependent::*, node_order::NodeOrder},
-    io::Load,
+    io::*,
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
     let arg = &env::args().skip(1).next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 
-    let first_out = Vec::load_from(path.join("first_out"))?;
-    let head = Vec::load_from(path.join("head"))?;
-    let first_ipp_of_arc = Vec::load_from(path.join("first_ipp_of_arc"))?;
-    let ipp_departure_time = Vec::load_from(path.join("ipp_departure_time"))?;
-    let ipp_travel_time = Vec::load_from(path.join("ipp_travel_time"))?;
-
-    println!("nodes: {}, arcs: {}, ipps: {}", first_out.len() - 1, head.len(), ipp_departure_time.len());
-
-    let graph = TDGraph::new(first_out, head, first_ipp_of_arc, ipp_departure_time, ipp_travel_time);
+    let graph = TDGraph::reconstruct_from(&path)?;
     let cch_order = Vec::load_from(path.join("cch_perm"))?;
 
     let cch = customizable_contraction_hierarchy::contract(&graph, NodeOrder::from_node_order(cch_order));

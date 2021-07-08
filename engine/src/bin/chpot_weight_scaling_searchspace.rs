@@ -15,11 +15,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let from = args.next().ok_or(CliErr("No from node arg given"))?.parse::<NodeId>()?;
     let to = args.next().ok_or(CliErr("No to node arg given"))?.parse::<NodeId>()?;
 
-    let first_out = Vec::load_from(path.join("first_out"))?;
-    let head = Vec::load_from(path.join("head"))?;
-    let travel_time = Vec::load_from(path.join("travel_time"))?;
-
-    let graph = FirstOutGraph::new(first_out, head, travel_time);
+    let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
     let reversed = OwnedGraph::reversed(&graph);
 
     let n = graph.num_nodes();

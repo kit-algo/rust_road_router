@@ -10,7 +10,9 @@ pub mod floating_time_dependent;
 pub mod link_id_to_tail_mapper;
 pub mod time_dependent;
 
-pub use self::first_out_graph::{FirstOutGraph, OwnedGraph, ReversedGraphWithEdgeIds, UnweightedFirstOutGraph, UnweightedOwnedGraph};
+pub use self::first_out_graph::{
+    FirstOutGraph, OwnedGraph, ReversedGraphWithEdgeIds, UnweightedFirstOutGraph, UnweightedOwnedGraph, WeightedGraphReconstructor,
+};
 
 /// Node ids are 32bit unsigned ints
 pub type NodeId = u32;

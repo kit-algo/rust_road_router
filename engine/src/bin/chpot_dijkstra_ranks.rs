@@ -26,14 +26,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &env::args().skip(1).next().ok_or(CliErr("No graph directory arg given"))?;
     let path = Path::new(arg);
 
-    let first_out = Vec::load_from(path.join("first_out"))?;
-    let head = Vec::load_from(path.join("head"))?;
-    let travel_time = Vec::<Weight>::load_from(path.join("travel_time"))?;
+    let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
 
-    let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
-
-    let increased_weights = travel_time.iter().map(|&w| w * 15 / 10).collect::<Vec<_>>();
-    let modified_graph = FirstOutGraph::new(&first_out[..], &head[..], &increased_weights[..]);
+    let increased_weights = graph.weight().iter().map(|&w| w * 15 / 10).collect::<Vec<_>>();
+    let modified_graph = FirstOutGraph::new(graph.first_out(), graph.head(), &increased_weights[..]);
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
 

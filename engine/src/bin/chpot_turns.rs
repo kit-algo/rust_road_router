@@ -26,9 +26,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &env::args().skip(1).next().ok_or(CliErr("No graph directory arg given"))?;
     let path = Path::new(arg);
 
-    let first_out = Vec::load_from(path.join("first_out"))?;
-    let head = Vec::load_from(path.join("head"))?;
-    let travel_time = Vec::load_from(path.join("travel_time"))?;
+    let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
 
     #[cfg(feature = "chpot_visualize")]
     let lat = Vec::<f32>::load_from(path.join("latitude"))?;
@@ -37,8 +35,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let forbidden_turn_from_arc = Vec::<EdgeId>::load_from(path.join("forbidden_turn_from_arc"))?;
     let forbidden_turn_to_arc = Vec::<EdgeId>::load_from(path.join("forbidden_turn_to_arc"))?;
-
-    let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
 
     let mut tail = Vec::with_capacity(graph.num_arcs());
     for node in 0..graph.num_nodes() {
@@ -61,7 +57,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         if iter.peek() == Some(&(&edge1_idx, &edge2_idx)) {
             return None;
         }
-        if tail[edge1_idx as usize] == head[edge2_idx as usize] {
+        if tail[edge1_idx as usize] == graph.head()[edge2_idx as usize] {
             return None;
         }
         Some(0)

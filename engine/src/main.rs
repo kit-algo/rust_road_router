@@ -1,4 +1,4 @@
-use std::{env, error::Error, path::Path, sync::Arc};
+use std::{env, error::Error, path::Path};
 
 use rust_road_router::{
     algo::{
@@ -11,7 +11,7 @@ use rust_road_router::{
     },
     cli::CliErr,
     datastr::{graph::*, node_order::NodeOrder},
-    io::Load,
+    io::{Load, ReconstructPrepared},
     report::benchmark::report_time,
 };
 
@@ -19,17 +19,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &env::args().skip(1).next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 
-    let first_out = Arc::new(Vec::load_from(path.join("first_out"))?);
-    let head = Arc::new(Vec::load_from(path.join("head"))?);
-    let travel_time = Arc::new(Vec::load_from(path.join("travel_time"))?);
-
     let from = Vec::load_from(path.join("test/source"))?;
     let to = Vec::load_from(path.join("test/target"))?;
     let ground_truth = Vec::load_from(path.join("test/travel_time_length"))?;
 
-    let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
-    let mut simple_server = DijkServer::<_, DefaultOps>::new(graph.clone());
-    let mut bi_dir_server = BiDijkServer::new(graph.clone());
+    let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
+    let mut simple_server = DijkServer::<_, DefaultOps>::new(graph.borrowed());
+    let mut bi_dir_server = BiDijkServer::new(graph.borrowed());
 
     let ch_first_out = Vec::load_from(path.join("travel_time_ch/first_out"))?;
     let ch_head = Vec::load_from(path.join("travel_time_ch/head"))?;

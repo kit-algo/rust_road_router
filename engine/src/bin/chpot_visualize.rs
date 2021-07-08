@@ -11,16 +11,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &env::args().skip(1).next().ok_or(CliErr("No graph directory arg given"))?;
     let path = Path::new(arg);
 
-    let first_out = Vec::<NodeId>::load_from(path.join("first_out"))?;
-    let head = Vec::<EdgeId>::load_from(path.join("head"))?;
-    let travel_time = Vec::<EdgeId>::load_from(path.join("travel_time"))?;
+    let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
+    let modified_travel_time: Vec<Weight> = graph.weight().iter().map(|&weight| (weight as f64 * 1.5) as Weight).collect();
+    let modified_graph = FirstOutGraph::new(graph.first_out(), graph.head(), &modified_travel_time[..]);
+
+    let n = graph.num_nodes();
     let lat = Vec::<f32>::load_from(path.join("latitude"))?;
     let lng = Vec::<f32>::load_from(path.join("longitude"))?;
-    let modified_travel_time: Vec<Weight> = travel_time.iter().map(|&weight| (weight as f64 * 1.5) as Weight).collect();
-
-    let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
-    let n = graph.num_nodes();
-    let modified_graph = FirstOutGraph::new(&first_out[..], &head[..], &modified_travel_time[..]);
 
     // let reversed = OwnedGraph::reversed(&graph);
     let potential = BaselinePotential::new(&graph);

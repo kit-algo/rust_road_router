@@ -3,8 +3,6 @@
 
 use std::{env, error::Error, path::Path};
 
-#[macro_use]
-extern crate rust_road_router;
 use rust_road_router::{
     algo::customizable_contraction_hierarchy::*,
     cli::CliErr,
@@ -19,12 +17,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &env::args().skip(1).next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 
-    let first_out = Vec::load_from(path.join("first_out"))?;
-    let head = Vec::load_from(path.join("head"))?;
-
-    let graph = UnweightedOwnedGraph::new(first_out, head);
-
-    report!("graph", { "num_nodes": graph.num_nodes(), "num_arcs": graph.num_arcs() });
+    let graph = UnweightedOwnedGraph::reconstruct_from(&path)?;
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
 

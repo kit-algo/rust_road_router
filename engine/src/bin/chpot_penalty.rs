@@ -21,12 +21,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut rng = experiments::rng(Default::default());
 
-    let first_out = Vec::<NodeId>::load_from(path.join("first_out"))?;
-    let head = Vec::<EdgeId>::load_from(path.join("head"))?;
-    let travel_time = Vec::<EdgeId>::load_from(path.join("travel_time"))?;
-
-    let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
-    report!("graph", { "num_nodes": graph.num_nodes(), "num_arcs": graph.num_arcs() });
+    let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
 

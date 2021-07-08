@@ -22,17 +22,11 @@ pub fn run(
 ) -> Result<(), Box<dyn Error>> {
     let mut rng = super::rng(Default::default());
 
-    let first_out = Vec::<NodeId>::load_from(path.join("first_out"))?;
-    let head = Vec::<EdgeId>::load_from(path.join("head"))?;
-    let travel_time = Vec::<EdgeId>::load_from(path.join("travel_time"))?;
-    let mut modified_travel_time = travel_time.clone();
+    let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
+    let mut modified_travel_time = graph.weight().to_vec();
 
-    let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
-
-    report!("graph", { "num_nodes": graph.num_nodes(), "num_arcs": graph.num_arcs() });
-
-    modify_travel_time(&graph, &mut rng, &mut modified_travel_time)?;
-    let modified_graph = FirstOutGraph::new(&first_out[..], &head[..], &modified_travel_time[..]);
+    modify_travel_time(&graph.borrowed(), &mut rng, &mut modified_travel_time)?;
+    let modified_graph = FirstOutGraph::new(graph.first_out(), graph.head(), &modified_travel_time[..]);
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
 

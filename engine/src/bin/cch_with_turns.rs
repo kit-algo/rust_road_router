@@ -9,18 +9,14 @@ use rust_road_router::{
     cli::CliErr,
     datastr::{graph::*, node_order::NodeOrder},
     experiments,
-    io::Load,
+    io::*,
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
     let arg = &env::args().skip(1).next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 
-    let first_out = Vec::load_from(path.join("first_out"))?;
-    let head = Vec::load_from(path.join("head"))?;
-    let travel_time = Vec::load_from(path.join("travel_time"))?;
-
-    let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
+    let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
     let graph = graph.line_graph(|_edge1_idx, _edge2_idx| Some(0));
 
     // use InertialFlowCutter with edge order (cut based) and separator reordering to obtain

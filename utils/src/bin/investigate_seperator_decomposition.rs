@@ -6,10 +6,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &env::args().skip(1).next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 
-    let first_out = Vec::load_from(path.join("first_out"))?;
-    let head = Vec::load_from(path.join("head"))?;
-
-    let graph = UnweightedFirstOutGraph::new(first_out, head);
+    let graph = UnweightedFirstOutGraph::reconstruct_from(&path)?;
 
     let cch_folder = path.join("cch");
     let cch = CCHReconstrctor(&graph).reconstruct_from(&cch_folder)?;

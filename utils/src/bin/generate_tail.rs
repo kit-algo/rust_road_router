@@ -6,10 +6,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &env::args().skip(1).next().ok_or(CliErr("No graph directory arg given"))?;
     let path = Path::new(arg);
 
-    let first_out = Vec::load_from(path.join("first_out"))?;
-    let head = Vec::load_from(path.join("head"))?;
-
-    let graph = FirstOutGraph::new(&first_out[..], &head[..], &head[..]);
+    let graph = UnweightedOwnedGraph::reconstruct_from(&path)?;
 
     let mut tail = Vec::with_capacity(graph.num_arcs());
     for node in 0..graph.num_nodes() {

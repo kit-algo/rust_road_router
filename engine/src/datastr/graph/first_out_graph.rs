@@ -10,6 +10,7 @@
 
 use super::*;
 use crate::io::*;
+use crate::report::*;
 use crate::util::*;
 use std::mem::swap;
 
@@ -60,6 +61,14 @@ where
     /// Decompose the graph into its three seperate data containers
     pub fn decompose(self) -> (FirstOutContainer, HeadContainer, WeightContainer) {
         (self.first_out, self.head, self.weight)
+    }
+
+    pub fn borrowed(&self) -> FirstOutGraph<&[EdgeId], &[NodeId], &[EdgeId]> {
+        FirstOutGraph {
+            first_out: self.first_out(),
+            head: self.head(),
+            weight: self.weight(),
+        }
     }
 }
 
@@ -135,6 +144,16 @@ impl<G: LinkIterable<Link>> BuildPermutated<G> for OwnedGraph {
         }
 
         OwnedGraph::new(first_out, head, weight)
+    }
+}
+
+pub struct WeightedGraphReconstructor(pub &'static str);
+
+impl ReconstructPrepared<OwnedGraph> for WeightedGraphReconstructor {
+    fn reconstruct_with(self, loader: Loader) -> std::io::Result<OwnedGraph> {
+        let g = OwnedGraph::new(loader.load("first_out")?, loader.load("head")?, loader.load(self.0)?);
+        report!("graph", { "num_nodes": g.num_nodes(), "num_arcs": g.num_arcs() });
+        Ok(g)
     }
 }
 
@@ -393,6 +412,14 @@ impl<G: LinkIterable<NodeId>> BuildReversed<G> for UnweightedOwnedGraph {
         }
 
         Self::from_adjancecy_lists(reversed)
+    }
+}
+
+impl Reconstruct for UnweightedOwnedGraph {
+    fn reconstruct_with(loader: Loader) -> std::io::Result<Self> {
+        let g = Self::new(loader.load("first_out")?, loader.load("head")?);
+        report!("graph", { "num_nodes": g.num_nodes(), "num_arcs": g.num_arcs() });
+        Ok(g)
     }
 }
 

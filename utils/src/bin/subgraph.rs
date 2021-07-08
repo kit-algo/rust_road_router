@@ -20,9 +20,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &args.next().ok_or(CliErr("No output directory arg given"))?;
     let out_path = Path::new(arg);
 
-    let first_out = Vec::load_from(path.join("first_out"))?;
-    let head = Vec::load_from(path.join("head"))?;
-    let travel_time = Vec::load_from(path.join("travel_time"))?;
+    let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
     let lat = Vec::<f32>::load_from(path.join("latitude"))?;
     let lng = Vec::<f32>::load_from(path.join("longitude"))?;
 
@@ -36,7 +34,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let in_bounding_box = |node| lat[node] >= min_lat && lat[node] <= max_lat && lng[node] >= min_lon && lng[node] <= max_lon;
 
-    let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
     let mut new_nodes = BitVec::new(graph.num_nodes());
 
     for node in 0..graph.num_nodes() {

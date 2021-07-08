@@ -16,8 +16,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &args.next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 
-    let first_out = Vec::load_from(path.join("first_out"))?;
-    let head = Vec::load_from(path.join("head"))?;
+    let graph = UnweightedOwnedGraph::reconstruct_from(&path)?;
 
     let geo_distance = Vec::<EdgeId>::load_from(path.join("geo_distance"))?;
     let osm_node_ids = Vec::<u64>::load_from(path.join("osm_node_ids"))?;
@@ -27,8 +26,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         osm_ids_present.set(osm_id as usize);
     }
     let id_map = RankSelectMap::new(osm_ids_present);
-
-    let graph = UnweightedOwnedGraph::new(first_out, head);
 
     let arg = &args.next().ok_or(CliErr("No live data directory arg given"))?;
     let live_dir = Path::new(arg);

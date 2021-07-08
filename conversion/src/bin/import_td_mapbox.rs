@@ -15,13 +15,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &args.next().ok_or(CliErr("No graph directory arg given"))?;
     let path = Path::new(arg);
 
-    let first_out = Vec::<NodeId>::load_from(path.join("first_out"))?;
-    let head = Vec::<EdgeId>::load_from(path.join("head"))?;
-    let travel_time = Vec::<Weight>::load_from(path.join("travel_time"))?;
+    let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
     let geo_distance = Vec::<Weight>::load_from(path.join("geo_distance"))?;
     let osm_node_ids = Vec::<u64>::load_from(path.join("osm_node_ids"))?;
-
-    let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
 
     for ids in osm_node_ids.windows(2) {
         assert!(ids[0] < ids[1]);
@@ -96,7 +92,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let num_buckets = speeds.len() as Timestamp;
                     let bucket_len = 1000 * 60 * 5;
 
-                    let v_max = geo_distance[edge_idx] * 3600 / travel_time[edge_idx];
+                    let v_max = geo_distance[edge_idx] * 3600 / graph.weight()[edge_idx];
 
                     let mut speed_profile: Vec<(Timestamp, u32)> = speeds
                         .iter()
@@ -144,7 +140,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             first_ipp_of_arc.push(first_ipp_of_arc.last().unwrap() + profiles[idx].len() as u32);
         } else {
             ipp_departure_time.push(0);
-            ipp_travel_time.push(travel_time[arc_idx]);
+            ipp_travel_time.push(graph.weight()[arc_idx]);
             first_ipp_of_arc.push(first_ipp_of_arc.last().unwrap() + 1);
         }
     }

@@ -8,7 +8,7 @@ use rust_road_router::{
     algo::contraction_hierarchy,
     cli::CliErr,
     datastr::{graph::*, node_order::*},
-    io::Load,
+    io::*,
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -23,9 +23,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let contraction_count = args.next().ok_or(CliErr("No contraction count arg given"))?.parse::<usize>()?;
 
-    let first_out = Vec::load_from(path.join("first_out"))?;
-    let head = Vec::load_from(path.join("head"))?;
-    let travel_time = Vec::load_from(path.join("travel_time"))?;
+    let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
+
     let order = Vec::load_from(path.join("ch_order"))?;
     let node_order = NodeOrder::from_node_order(order);
     let lat = Vec::<f32>::load_from(path.join("latitude"))?;
@@ -33,7 +32,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let in_bounding_box = |node| lat[node] >= min_lat && lat[node] <= max_lat && lng[node] >= min_lon && lng[node] <= max_lon;
 
-    let graph = FirstOutGraph::new(&first_out[..], &head[..], &travel_time[..]);
     let (up, down) = contraction_hierarchy::overlay(&graph, node_order.clone(), contraction_count);
 
     println!("<svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" viewBox=\"{} {} {} {}\" style=\"transform: scale(1,-1);\" preserveAspectRatio=\"none\">", min_lon, min_lat, max_lon - min_lon, max_lat - min_lat);

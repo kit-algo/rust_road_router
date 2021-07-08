@@ -2,7 +2,7 @@
 
 use std::{env, error::Error, path::Path};
 
-use rust_road_router::{cli::CliErr, datastr::graph::*, export::*, io::Load};
+use rust_road_router::{cli::CliErr, datastr::graph::*, export::*, io::*};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args().skip(1);
@@ -12,10 +12,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &args.next().ok_or(CliErr("No output directory arg given"))?;
     let output_path = Path::new(arg);
 
-    let first_out = Vec::load_from(input_path.join("first_out"))?;
-    let head = Vec::load_from(input_path.join("head"))?;
-    let travel_time = Vec::load_from(input_path.join("travel_time"))?;
-    let graph = FirstOutGraph::new(first_out, head, travel_time);
+    let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&input_path)?;
     let lat = Vec::load_from(input_path.join("latitude"))?;
     let lng = Vec::load_from(input_path.join("longitude"))?;
 
