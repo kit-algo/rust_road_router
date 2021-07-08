@@ -874,13 +874,16 @@ where
     }
 }
 
-impl<'s, P: 's> QueryServer<'s> for BiDirSkipLowDegServer<P>
+impl<P> QueryServer for BiDirSkipLowDegServer<P>
 where
     P: Potential,
 {
-    type P = BiDirCorePathServerWrapper<'s, P, Query>;
+    type P<'s>
+    where
+        Self: 's,
+    = BiDirCorePathServerWrapper<'s, P, Query>;
 
-    fn query(&'s mut self, query: Query) -> Option<QueryResult<Self::P, Weight>> {
+    fn query(&mut self, query: Query) -> Option<QueryResult<Self::P<'_>, Weight>> {
         self.distance(query, INFINITY, INFINITY)
             .map(move |distance| QueryResult::new(distance, BiDirCorePathServerWrapper(self, query)))
     }
