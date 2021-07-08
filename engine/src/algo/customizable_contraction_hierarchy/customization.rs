@@ -71,12 +71,12 @@ where
             .par_iter_mut()
             .zip(downward_weights.par_iter_mut())
             .zip(cch.cch_edge_to_orig_arc.par_iter())
-            .for_each(|((up_weight, down_weight), &(up_arc, down_arc))| {
-                if let Some(up_arc) = up_arc.value() {
-                    *up_weight = metric.link(up_arc).weight;
+            .for_each(|((up_weight, down_weight), (up_arcs, down_arcs))| {
+                for &up_arc in up_arcs {
+                    *up_weight = std::cmp::min(metric.link(up_arc).weight, *up_weight);
                 }
-                if let Some(down_arc) = down_arc.value() {
-                    *down_weight = metric.link(down_arc).weight;
+                for &down_arc in down_arcs {
+                    *down_weight = std::cmp::min(metric.link(down_arc).weight, *down_weight);
                 }
             });
     });
@@ -90,17 +90,17 @@ where
         upward_weights
             .par_iter_mut()
             .zip(cch.forward_cch_edge_to_orig_arc.par_iter())
-            .for_each(|(up_weight, &up_arc)| {
-                if let Some(up_arc) = up_arc.value() {
-                    *up_weight = metric.link(up_arc).weight;
+            .for_each(|(up_weight, up_arcs)| {
+                for &up_arc in up_arcs {
+                    *up_weight = std::cmp::min(metric.link(up_arc).weight, *up_weight);
                 }
             });
         downward_weights
             .par_iter_mut()
             .zip(cch.backward_cch_edge_to_orig_arc.par_iter())
-            .for_each(|(down_weight, &down_arc)| {
-                if let Some(down_arc) = down_arc.value() {
-                    *down_weight = metric.link(down_arc).weight;
+            .for_each(|(down_weight, down_arcs)| {
+                for &down_arc in down_arcs {
+                    *down_weight = std::cmp::min(metric.link(down_arc).weight, *down_weight);
                 }
             });
     });
@@ -112,11 +112,11 @@ fn prepare_zero_weights(cch: &CCH, upward_weights: &mut [Weight], downward_weigh
             .par_iter_mut()
             .zip(downward_weights.par_iter_mut())
             .zip(cch.cch_edge_to_orig_arc.par_iter())
-            .for_each(|((up_weight, down_weight), &(up_arc, down_arc))| {
-                if up_arc.value().is_some() {
+            .for_each(|((up_weight, down_weight), (up_arcs, down_arcs))| {
+                if !up_arcs.is_empty() {
                     *up_weight = 0;
                 }
-                if down_arc.value().is_some() {
+                if !down_arcs.is_empty() {
                     *down_weight = 0;
                 }
             });

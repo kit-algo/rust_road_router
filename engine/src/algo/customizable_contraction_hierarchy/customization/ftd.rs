@@ -40,11 +40,13 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
             .par_iter_mut()
             .zip(downward.par_iter_mut())
             .zip(cch.cch_edge_to_orig_arc.par_iter())
-            .for_each(|((up_weight, down_weight), &(up_arc, down_arc))| {
-                if let Some(up_arc) = up_arc.value() {
+            .for_each(|((up_weight, down_weight), (up_arcs, down_arcs))| {
+                assert!(up_arcs.len() <= 1);
+                assert!(down_arcs.len() <= 1);
+                for &up_arc in up_arcs {
                     *up_weight = Shortcut::new(Some(up_arc), metric);
                 }
-                if let Some(down_arc) = down_arc.value() {
+                for &down_arc in down_arcs {
                     *down_weight = Shortcut::new(Some(down_arc), metric);
                 }
             });
@@ -652,11 +654,13 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
             .par_iter_mut()
             .zip(downward.par_iter_mut())
             .zip(cch.cch_edge_to_orig_arc.par_iter())
-            .for_each(|((up_weight, down_weight), &(up_arc, down_arc))| {
-                if let Some(up_arc) = up_arc.value() {
+            .for_each(|((up_weight, down_weight), (up_arcs, down_arcs))| {
+                assert!(up_arcs.len() <= 1);
+                assert!(down_arcs.len() <= 1);
+                for &up_arc in up_arcs {
                     *up_weight = LiveShortcut::new(Some(up_arc), &metric);
                 }
-                if let Some(down_arc) = down_arc.value() {
+                for &down_arc in down_arcs {
                     *down_weight = LiveShortcut::new(Some(down_arc), &metric);
                 }
             });
