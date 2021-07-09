@@ -1,5 +1,3 @@
-#[macro_use]
-extern crate rust_road_router;
 #[cfg(feature = "chpot-cch")]
 use rust_road_router::{algo::customizable_contraction_hierarchy::*, datastr::node_order::NodeOrder};
 use rust_road_router::{
@@ -7,7 +5,6 @@ use rust_road_router::{
         a_star::*,
         ch_potentials::{query::Server as TopoServer, *},
         dijkstra::{generic_dijkstra::DefaultOps, query::dijkstra::Server as DijkServer},
-        *,
     },
     cli::CliErr,
     datastr::graph::*,
@@ -114,22 +111,22 @@ fn main() -> Result<(), Box<dyn Error>> {
         &mut algo_runs_ctxt,
         experiments::chpot::num_queries(),
         |_, _, _| (),
-        |mut res| {
-            #[cfg(all(not(feature = "chpot-only-topo"), not(feature = "chpot-alt")))]
-            report!(
-                "num_pot_computations",
-                res.as_mut().map(|res| res.data().potential().inner().num_pot_computations()).unwrap_or(0)
-            );
-            report!(
-                "lower_bound",
-                res.as_mut()
-                    .map(|res| {
-                        let from = res.data().query().from();
-                        res.data().lower_bound(from)
-                    })
-                    .flatten()
-            );
-        },
+        // |mut res| {
+        //     #[cfg(all(not(feature = "chpot-only-topo"), not(feature = "chpot-alt")))]
+        //     report!(
+        //         "num_pot_computations",
+        //         res.as_mut().map(|res| res.data().potential().inner().num_pot_computations()).unwrap_or(0)
+        //     );
+        //     report!(
+        //         "lower_bound",
+        //         res.as_mut()
+        //             .map(|res| {
+        //                 let from = res.data().query().from();
+        //                 res.data().lower_bound(from)
+        //             })
+        //             .flatten()
+        //     );
+        // },
         |_, _| None,
     );
 

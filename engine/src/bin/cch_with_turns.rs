@@ -40,7 +40,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         &mut server,
         None,
         |_, _, _| (),
-        |_| (),
+        // |_| (),
         |_, _| gt_iter.next(),
     );
 

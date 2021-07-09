@@ -104,22 +104,22 @@ pub fn run(
                 _server.query(Query { from: _from, to: _to });
             }
         },
-        |mut res| {
-            #[cfg(all(not(feature = "chpot-only-topo"), not(feature = "chpot-alt")))]
-            report!(
-                "num_pot_computations",
-                res.as_mut().map(|res| res.data().potential().num_pot_computations()).unwrap_or(0)
-            );
-            report!(
-                "lower_bound",
-                res.as_mut()
-                    .map(|res| {
-                        let from = res.data().query().from();
-                        res.data().lower_bound(from)
-                    })
-                    .flatten()
-            );
-        },
+        // |mut res| {
+        //     #[cfg(all(not(feature = "chpot-only-topo"), not(feature = "chpot-alt")))]
+        //     report!(
+        //         "num_pot_computations",
+        //         res.as_mut().map(|res| res.data().potential().num_pot_computations()).unwrap_or(0)
+        //     );
+        //     report!(
+        //         "lower_bound",
+        //         res.as_mut()
+        //             .map(|res| {
+        //                 let from = res.data().query().from();
+        //                 res.data().lower_bound(from)
+        //             })
+        //             .flatten()
+        //     );
+        // },
         |_from, _to| {
             #[cfg(debug_assertions)]
             {
