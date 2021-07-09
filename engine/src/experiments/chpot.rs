@@ -6,7 +6,6 @@ use crate::{
     algo::{
         ch_potentials::{query::Server as TopoServer, *},
         dijkstra::{generic_dijkstra::DefaultOps, query::dijkstra::Server as DijkServer},
-        *,
     },
     datastr::graph::*,
     io::*,

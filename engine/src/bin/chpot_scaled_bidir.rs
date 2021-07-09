@@ -25,7 +25,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let path = Path::new(arg);
 
     let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
-    let geo_distance = Vec::<Weight>::load_from(path.join("distance"))?;
+    let geo_distance = Vec::<Weight>::load_from(path.join("geo_distance"))?;
     let chpot_data = CHPotLoader::reconstruct_from(&path.join("lower_bound_ch"))?;
 
     let rng = experiments::rng(Default::default());

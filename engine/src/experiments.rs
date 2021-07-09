@@ -82,7 +82,7 @@ pub fn run_queries<S: QueryServer>(
     let mut total_query_time = Duration::zero();
     let mut num_queries = 0;
 
-    for (from, to) in query_iter.take(num_queries) {
+    for (from, to) in query_iter {
         num_queries += 1;
         let _query_ctxt = reporting_context.as_mut().map(|ctxt| ctxt.push_collection_item());
 
