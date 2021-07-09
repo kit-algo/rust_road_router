@@ -1,14 +1,14 @@
 #[cfg(feature = "chpot-alt")]
 use crate::algo::alt::ALTPotential;
 #[cfg(any(feature = "chpot-cch", debug_assertions))]
-use crate::algo::customizable_contraction_hierarchy::*;
+use crate::{algo::customizable_contraction_hierarchy::*, datastr::node_order::NodeOrder};
 use crate::{
     algo::{
         ch_potentials::{query::Server as TopoServer, *},
         dijkstra::{generic_dijkstra::DefaultOps, query::dijkstra::Server as DijkServer},
         *,
     },
-    datastr::{graph::*, node_order::NodeOrder},
+    datastr::graph::*,
     io::*,
     report::*,
 };
@@ -120,10 +120,10 @@ pub fn run(
                     .flatten()
             );
         },
-        |from, to| {
+        |_from, _to| {
             #[cfg(debug_assertions)]
             {
-                Some(cch_server.query(Query { from, to }).map(|res| res.distance()))
+                Some(cch_server.query(Query { from: _from, to: _to }).map(|res| res.distance()))
             }
             #[cfg(not(debug_assertions))]
             {
