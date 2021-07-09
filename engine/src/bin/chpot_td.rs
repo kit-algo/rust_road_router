@@ -4,7 +4,7 @@ use std::{env, error::Error, path::Path};
 #[macro_use]
 extern crate rust_road_router;
 #[cfg(feature = "chpot-cch")]
-use rust_road_router::algo::customizable_contraction_hierarchy::*;
+use rust_road_router::{algo::customizable_contraction_hierarchy::*, datastr::node_order::NodeOrder};
 use rust_road_router::{
     algo::{
         ch_potentials::{query::Server, *},
@@ -12,8 +12,8 @@ use rust_road_router::{
         *,
     },
     cli::CliErr,
+    datastr::graph::time_dependent::*,
     datastr::graph::*,
-    datastr::{graph::time_dependent::*, node_order::NodeOrder},
     experiments,
     io::*,
     report::*,

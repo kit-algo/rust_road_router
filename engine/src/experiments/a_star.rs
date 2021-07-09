@@ -1,13 +1,13 @@
 #[cfg(feature = "chpot-alt")]
 use crate::algo::alt::ALTPotential;
 #[cfg(feature = "chpot-cch")]
-use crate::algo::customizable_contraction_hierarchy::*;
+use crate::{algo::customizable_contraction_hierarchy::*, datastr::node_order::NodeOrder};
 use crate::{
     algo::{
         ch_potentials::*,
         dijkstra::{generic_dijkstra::DefaultOps, query::dijkstra::Server as DijkServer},
     },
-    datastr::{graph::*, node_order::NodeOrder},
+    datastr::graph::*,
     experiments,
     io::*,
     report::*,
