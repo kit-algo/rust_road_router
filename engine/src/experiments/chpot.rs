@@ -1,11 +1,15 @@
 #[cfg(feature = "chpot-alt")]
 use crate::algo::alt::ALTPotential;
 #[cfg(any(feature = "chpot-cch", debug_assertions))]
-use crate::{algo::customizable_contraction_hierarchy::*, datastr::node_order::NodeOrder};
+use crate::{
+    algo::customizable_contraction_hierarchy::{query::Server as CCHServer, *},
+    datastr::node_order::NodeOrder,
+};
 use crate::{
     algo::{
         ch_potentials::{query::Server as TopoServer, *},
         dijkstra::{generic_dijkstra::DefaultOps, query::dijkstra::Server as DijkServer},
+        *,
     },
     datastr::graph::*,
     io::*,
@@ -48,7 +52,7 @@ pub fn run(
     #[cfg(debug_assertions)]
     let mut cch_server = {
         let _blocked = block_reporting();
-        customizable_contraction_hierarchy::query::Server::new(customize(&cch, &modified_graph))
+        CCHServer::new(customize(&cch, &modified_graph))
     };
 
     let potential = {
