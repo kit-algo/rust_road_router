@@ -118,7 +118,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 fn kmh_to_mpms(speed: f64) -> f64 {
     // speed * 1000.0 / 3600.0 / 1000.0
-    speed / 3600.0
+    speed * 1000.0 / 3600.0 / 10.0
 }
 
 struct ProbabilisticSpeedWeightedScaler {
