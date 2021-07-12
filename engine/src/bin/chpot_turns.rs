@@ -25,11 +25,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
 
-    #[cfg(feature = "chpot_visualize")]
-    let lat = Vec::<f32>::load_from(path.join("latitude"))?;
-    #[cfg(feature = "chpot_visualize")]
-    let lng = Vec::<f32>::load_from(path.join("longitude"))?;
-
     let forbidden_turn_from_arc = Vec::<EdgeId>::load_from(path.join("forbidden_turn_from_arc"))?;
     let forbidden_turn_to_arc = Vec::<EdgeId>::load_from(path.join("forbidden_turn_to_arc"))?;
 
@@ -92,16 +87,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     });
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
-    let mut topocore: TopoServer<OwnedGraph, _, _> = {
-        #[cfg(feature = "chpot_visualize")]
-        {
-            TopoServer::new(&exp_graph, potential, DefaultOps::default(), &lat, &lng)
-        }
-        #[cfg(not(feature = "chpot_visualize"))]
-        {
-            TopoServer::new(&exp_graph, potential, DefaultOps::default())
-        }
-    };
+    let mut topocore: TopoServer<OwnedGraph, _, _, true, true, true> = TopoServer::new(&exp_graph, potential, DefaultOps::default());
     drop(virtual_topocore_ctxt);
 
     experiments::run_random_queries_with_callbacks(

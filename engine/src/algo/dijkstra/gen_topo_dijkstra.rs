@@ -3,7 +3,7 @@
 use super::generic_dijkstra::*;
 use super::*;
 
-pub struct TopoDijkstraRun<'a, Graph = OwnedGraph, Ops = DefaultOps>
+pub struct TopoDijkstraRun<'a, Graph, Ops, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool>
 where
     Ops: DijkstraOps<Graph>,
 {
@@ -19,7 +19,7 @@ where
     ops: &'a mut Ops,
 }
 
-impl<'b, Graph, Ops> TopoDijkstraRun<'b, Graph, Ops>
+impl<'b, Graph, Ops, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool> TopoDijkstraRun<'b, Graph, Ops, SKIP_DEG_2, SKIP_DEG_3>
 where
     Ops: DijkstraOps<Graph>,
     Graph: LinkIterable<NodeId> + LinkIterable<Ops::Arc> + SymmetricDegreeGraph,
@@ -130,7 +130,7 @@ where
 
                         match self.graph.symmetric_degree(next_node) {
                             SymmetricDeg::LessEqTwo => {
-                                if cfg!(feature = "chpot-no-deg2") {
+                                if !SKIP_DEG_2 {
                                     endpoint = true;
                                 } else {
                                     for edge in LinkIterable::<Ops::Arc>::link_iter(self.graph, next_node) {
@@ -141,7 +141,7 @@ where
                                 }
                             }
                             SymmetricDeg::Three => {
-                                if cfg!(feature = "chpot-no-deg3")
+                                if !SKIP_DEG_3
                                     || had_deg_three
                                     || self.queue.contains_index(
                                         State {

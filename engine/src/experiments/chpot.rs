@@ -91,7 +91,14 @@ pub fn run(
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
     let infinity_filtered_graph = InfinityFilteringGraph(modified_graph);
-    let mut topocore: TopoServer<OwnedGraph, _, _> = TopoServer::new(&infinity_filtered_graph, potential, DefaultOps::default());
+    let mut topocore: TopoServer<
+        OwnedGraph,
+        _,
+        _,
+        { !cfg!(feature = "chpot-no-bcc") },
+        { !cfg!(feature = "chpot-no-deg2") },
+        { !cfg!(feature = "chpot-no-deg3") },
+    > = TopoServer::new(&infinity_filtered_graph, potential, DefaultOps::default());
     let InfinityFilteringGraph(modified_graph) = infinity_filtered_graph;
     drop(virtual_topocore_ctxt);
 

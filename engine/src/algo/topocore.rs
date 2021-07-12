@@ -603,7 +603,7 @@ pub struct VirtualTopocoreGraph<G> {
 }
 
 impl<Graph> VirtualTopocoreGraph<Graph> {
-    pub fn new<G>(graph: &G) -> (Self, VirtualTopocore)
+    pub fn new<G>(graph: &G) -> (Self, Self, VirtualTopocore)
     where
         G: LinkIterable<NodeId>,
         Graph: BuildPermutated<G>,
@@ -612,6 +612,10 @@ impl<Graph> VirtualTopocoreGraph<Graph> {
         (
             VirtualTopocoreGraph {
                 graph: <Graph as BuildPermutated<G>>::permutated(&graph, &topocore.order),
+                virtual_topocore: topocore.clone(),
+            },
+            VirtualTopocoreGraph {
+                graph: <Graph as BuildPermutated<G>>::permutated_filtered(&graph, &topocore.order, Box::new(|_, _| false)),
                 virtual_topocore: topocore.clone(),
             },
             topocore,

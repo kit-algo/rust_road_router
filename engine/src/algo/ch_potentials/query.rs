@@ -6,18 +6,17 @@ use crate::{
     datastr::graph::time_dependent::*,
 };
 
-pub struct Server<Graph = OwnedGraph, Ops = DefaultOps, P = ZeroPotential>
+pub struct Server<Graph, Ops, P, const BCC_CORE: bool, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool>
 where
     Ops: DijkstraOps<Graph>,
 {
-    core_search: SkipLowDegServer<VirtualTopocoreGraph<Graph>, VirtualTopocoreOps<Ops>, PotentialForPermutated<P>>,
-    #[cfg(not(feature = "chpot-no-bcc"))]
+    core_search: SkipLowDegServer<VirtualTopocoreGraph<Graph>, VirtualTopocoreOps<Ops>, PotentialForPermutated<P>, SKIP_DEG_2, SKIP_DEG_3>,
     comp_graph: VirtualTopocoreGraph<Graph>,
 
     virtual_topocore: VirtualTopocore,
 }
 
-impl<Graph, Ops: DijkstraOps<Graph, Label = Timestamp>, P: Potential> Server<Graph, Ops, P>
+impl<Graph, Ops: DijkstraOps<Graph, Label = Timestamp>, P: Potential> Server<Graph, Ops, P, true, true, true>
 where
     Graph: LinkIterable<NodeId> + LinkIterable<Ops::Arc>,
 {
@@ -26,63 +25,59 @@ where
         G: LinkIterable<NodeId>,
         Graph: BuildPermutated<G>,
     {
+        Self::new_custom(graph, potential, ops)
+    }
+}
+
+impl<Graph, Ops: DijkstraOps<Graph, Label = Timestamp>, P: Potential, const BCC_CORE: bool, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool>
+    Server<Graph, Ops, P, BCC_CORE, SKIP_DEG_2, SKIP_DEG_3>
+where
+    Graph: LinkIterable<NodeId> + LinkIterable<Ops::Arc>,
+{
+    pub fn new_custom<G>(graph: &G, potential: P, ops: Ops) -> Self
+    where
+        G: LinkIterable<NodeId>,
+        Graph: BuildPermutated<G>,
+    {
         report_time_with_key("TopoDijkstra preprocessing", "topo_dijk_prepro", move || {
-            #[cfg(not(feature = "chpot-no-bcc"))]
-            {
-                let (main_graph, comp_graph, virtual_topocore) = VirtualTopocoreGraph::new_topo_dijkstra_graphs(graph);
+            let (main_graph, comp_graph, virtual_topocore) = if BCC_CORE {
+                VirtualTopocoreGraph::new_topo_dijkstra_graphs(graph)
+            } else {
+                VirtualTopocoreGraph::new(graph)
+            };
 
-                Self {
-                    core_search: SkipLowDegServer::new(
-                        main_graph,
-                        PotentialForPermutated {
-                            order: virtual_topocore.order.clone(),
-                            potential,
-                        },
-                        VirtualTopocoreOps(ops),
-                    ),
-                    comp_graph,
+            Self {
+                core_search: SkipLowDegServer::new(
+                    main_graph,
+                    PotentialForPermutated {
+                        order: virtual_topocore.order.clone(),
+                        potential,
+                    },
+                    VirtualTopocoreOps(ops),
+                ),
+                comp_graph,
 
-                    virtual_topocore,
-                }
-            }
-            #[cfg(feature = "chpot-no-bcc")]
-            {
-                let (main_graph, virtual_topocore) = VirtualTopocoreGraph::new(graph);
-
-                Self {
-                    core_search: SkipLowDegServer::new(
-                        main_graph,
-                        PotentialForPermutated {
-                            order: virtual_topocore.order.clone(),
-                            potential,
-                        },
-                        VirtualTopocoreOps(ops),
-                    ),
-
-                    virtual_topocore,
-                }
+                virtual_topocore,
             }
         })
     }
 
-    #[cfg(feature = "chpot-no-bcc")]
     fn distance<Q: GenQuery<Timestamp> + Copy>(
         &mut self,
         mut query: Q,
-        mut inspect: impl FnMut(NodeId, &NodeOrder, &TopoDijkstraRun<VirtualTopocoreGraph<Graph>, VirtualTopocoreOps<Ops>>, &mut PotentialForPermutated<P>),
+        mut inspect: impl FnMut(
+            NodeId,
+            &NodeOrder,
+            &TopoDijkstraRun<VirtualTopocoreGraph<Graph>, VirtualTopocoreOps<Ops>, SKIP_DEG_2, SKIP_DEG_3>,
+            &mut PotentialForPermutated<P>,
+        ),
     ) -> Option<Weight> {
         query.permutate(&self.virtual_topocore.order);
-        let order = &self.virtual_topocore.order;
-        self.core_search.distance(query, |n, d, p| inspect(n, order, d, p))
-    }
 
-    #[cfg(not(feature = "chpot-no-bcc"))]
-    fn distance<Q: GenQuery<Timestamp> + Copy>(
-        &mut self,
-        mut query: Q,
-        mut inspect: impl FnMut(NodeId, &NodeOrder, &TopoDijkstraRun<VirtualTopocoreGraph<Graph>, VirtualTopocoreOps<Ops>>, &mut PotentialForPermutated<P>),
-    ) -> Option<Weight> {
-        query.permutate(&self.virtual_topocore.order);
+        if !BCC_CORE {
+            let order = &self.virtual_topocore.order;
+            return self.core_search.distance(query, |n, d, p| inspect(n, order, d, p), INFINITY);
+        }
 
         report!("algo", "Virtual Topocore Component Query");
 
@@ -231,9 +226,13 @@ where
     }
 }
 
-pub struct PathServerWrapper<'s, G, O: DijkstraOps<G>, P, Q>(&'s mut Server<G, O, P>, Q);
+pub struct PathServerWrapper<'s, G, O: DijkstraOps<G>, P, Q, const BCC_CORE: bool, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool>(
+    &'s mut Server<G, O, P, BCC_CORE, SKIP_DEG_2, SKIP_DEG_3>,
+    Q,
+);
 
-impl<'s, G, O, P, Q> PathServer for PathServerWrapper<'s, G, O, P, Q>
+impl<'s, G, O, P, Q, const BCC_CORE: bool, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool> PathServer
+    for PathServerWrapper<'s, G, O, P, Q, BCC_CORE, SKIP_DEG_2, SKIP_DEG_3>
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
@@ -247,7 +246,7 @@ where
     }
 }
 
-impl<'s, G, O, P, Q> PathServerWrapper<'s, G, O, P, Q>
+impl<'s, G, O, P, Q, const BCC_CORE: bool, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool> PathServerWrapper<'s, G, O, P, Q, BCC_CORE, SKIP_DEG_2, SKIP_DEG_3>
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
@@ -294,7 +293,8 @@ where
     }
 }
 
-impl<G, O, P> TDQueryServer<Timestamp, Weight> for Server<G, O, P>
+impl<G, O, P, const BCC_CORE: bool, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool> TDQueryServer<Timestamp, Weight>
+    for Server<G, O, P, BCC_CORE, SKIP_DEG_2, SKIP_DEG_3>
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
@@ -303,7 +303,7 @@ where
     type P<'s>
     where
         Self: 's,
-    = PathServerWrapper<'s, G, O, P, TDQuery<Timestamp>>;
+    = PathServerWrapper<'s, G, O, P, TDQuery<Timestamp>, BCC_CORE, SKIP_DEG_2, SKIP_DEG_3>;
 
     fn td_query(&mut self, query: TDQuery<Timestamp>) -> Option<QueryResult<Self::P<'_>, Weight>> {
         self.distance(query, |_, _, _, _| ())
@@ -311,7 +311,7 @@ where
     }
 }
 
-impl<G, O, P> QueryServer for Server<G, O, P>
+impl<G, O, P, const BCC_CORE: bool, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool> QueryServer for Server<G, O, P, BCC_CORE, SKIP_DEG_2, SKIP_DEG_3>
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
@@ -320,7 +320,7 @@ where
     type P<'s>
     where
         Self: 's,
-    = PathServerWrapper<'s, G, O, P, Query>;
+    = PathServerWrapper<'s, G, O, P, Query, BCC_CORE, SKIP_DEG_2, SKIP_DEG_3>;
 
     fn query(&mut self, query: Query) -> Option<QueryResult<Self::P<'_>, Weight>> {
         self.distance(query, |_, _, _, _| ())
@@ -349,7 +349,7 @@ where
     }
 }
 
-pub struct SkipLowDegServer<Graph = OwnedGraph, Ops = DefaultOps, P = ZeroPotential>
+pub struct SkipLowDegServer<Graph, Ops, P, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool>
 where
     Ops: DijkstraOps<Graph>,
 {
@@ -362,7 +362,8 @@ where
     visited: FastClearBitVec,
 }
 
-impl<Graph, Ops: DijkstraOps<Graph, Label = Timestamp>, P: Potential> SkipLowDegServer<Graph, Ops, P>
+impl<Graph, Ops: DijkstraOps<Graph, Label = Timestamp>, P: Potential, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool>
+    SkipLowDegServer<Graph, Ops, P, SKIP_DEG_2, SKIP_DEG_3>
 where
     Graph: LinkIterable<NodeId> + LinkIterable<Ops::Arc> + SymmetricDegreeGraph,
 {
@@ -397,7 +398,7 @@ where
         &mut self,
         query: Q,
         cap: Weight,
-    ) -> Option<QueryResult<BiconnectedPathServerWrapper<Graph, Ops, P, Q>, Weight>> {
+    ) -> Option<QueryResult<BiconnectedPathServerWrapper<Graph, Ops, P, Q, SKIP_DEG_2, SKIP_DEG_3>, Weight>> {
         self.distance(query, |_, _, _| (), cap)
             .map(move |distance| QueryResult::new(distance, BiconnectedPathServerWrapper(self, query)))
     }
@@ -405,7 +406,7 @@ where
     fn distance(
         &mut self,
         query: impl GenQuery<Timestamp> + Copy,
-        inspect: impl FnMut(NodeId, &TopoDijkstraRun<Graph, Ops>, &mut P),
+        inspect: impl FnMut(NodeId, &TopoDijkstraRun<Graph, Ops, SKIP_DEG_2, SKIP_DEG_3>, &mut P),
         cap: Weight,
     ) -> Option<Weight> {
         let mut dijkstra = TopoDijkstraRun::query(&self.graph, &mut self.dijkstra_data, &mut self.ops, query);
@@ -414,12 +415,12 @@ where
     }
 
     fn distance_manually_initialized(
-        dijkstra: &mut TopoDijkstraRun<Graph, Ops>,
+        dijkstra: &mut TopoDijkstraRun<Graph, Ops, SKIP_DEG_2, SKIP_DEG_3>,
         query: impl GenQuery<Timestamp> + Copy,
         potential: &mut P,
         visited: &mut FastClearBitVec,
         reversed: &UnweightedOwnedGraph,
-        mut inspect: impl FnMut(NodeId, &TopoDijkstraRun<Graph, Ops>, &mut P),
+        mut inspect: impl FnMut(NodeId, &TopoDijkstraRun<Graph, Ops, SKIP_DEG_2, SKIP_DEG_3>, &mut P),
         cap: Weight,
     ) -> Option<Weight> {
         report!("algo", "Virtual Topocore Core Query");
@@ -529,9 +530,12 @@ where
     }
 }
 
-pub struct BiconnectedPathServerWrapper<'s, G, O: DijkstraOps<G>, P, Q>(&'s mut SkipLowDegServer<G, O, P>, Q);
+pub struct BiconnectedPathServerWrapper<'s, G, O: DijkstraOps<G>, P, Q, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool>(
+    &'s mut SkipLowDegServer<G, O, P, SKIP_DEG_2, SKIP_DEG_3>,
+    Q,
+);
 
-impl<'s, G, O, P, Q> PathServer for BiconnectedPathServerWrapper<'s, G, O, P, Q>
+impl<'s, G, O, P, Q, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool> PathServer for BiconnectedPathServerWrapper<'s, G, O, P, Q, SKIP_DEG_2, SKIP_DEG_3>
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
@@ -545,7 +549,7 @@ where
     }
 }
 
-impl<'s, G, O, P, Q> BiconnectedPathServerWrapper<'s, G, O, P, Q>
+impl<'s, G, O, P, Q, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool> BiconnectedPathServerWrapper<'s, G, O, P, Q, SKIP_DEG_2, SKIP_DEG_3>
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
@@ -588,7 +592,7 @@ where
     }
 }
 
-impl<G, O, P> TDQueryServer<Timestamp, Weight> for SkipLowDegServer<G, O, P>
+impl<G, O, P, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool> TDQueryServer<Timestamp, Weight> for SkipLowDegServer<G, O, P, SKIP_DEG_2, SKIP_DEG_3>
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
@@ -597,7 +601,7 @@ where
     type P<'s>
     where
         Self: 's,
-    = BiconnectedPathServerWrapper<'s, G, O, P, TDQuery<Timestamp>>;
+    = BiconnectedPathServerWrapper<'s, G, O, P, TDQuery<Timestamp>, SKIP_DEG_2, SKIP_DEG_3>;
 
     fn td_query(&mut self, query: TDQuery<Timestamp>) -> Option<QueryResult<Self::P<'_>, Weight>> {
         self.distance(query, |_, _, _| (), INFINITY)
@@ -605,7 +609,7 @@ where
     }
 }
 
-impl<G, O, P> QueryServer for SkipLowDegServer<G, O, P>
+impl<G, O, P, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool> QueryServer for SkipLowDegServer<G, O, P, SKIP_DEG_2, SKIP_DEG_3>
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
@@ -614,7 +618,7 @@ where
     type P<'s>
     where
         Self: 's,
-    = BiconnectedPathServerWrapper<'s, G, O, P, Query>;
+    = BiconnectedPathServerWrapper<'s, G, O, P, Query, SKIP_DEG_2, SKIP_DEG_3>;
 
     fn query(&mut self, query: Query) -> Option<QueryResult<Self::P<'_>, Weight>> {
         self.distance(query, |_, _, _| (), INFINITY)

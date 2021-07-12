@@ -7,8 +7,8 @@ use crate::datastr::rank_select_map::*;
 
 pub struct Penalty<P> {
     virtual_topocore: VirtualTopocore,
-    shortest_path_penalized: query::SkipLowDegServer<VirtualTopocoreGraph<OwnedGraph>, DefaultOps, PotentialForPermutated<P>>,
-    alternative_graph_dijkstra: query::SkipLowDegServer<AlternativeGraph<VirtualTopocoreGraph<OwnedGraph>>>,
+    shortest_path_penalized: query::SkipLowDegServer<VirtualTopocoreGraph<OwnedGraph>, DefaultOps, PotentialForPermutated<P>, true, true>,
+    alternative_graph_dijkstra: query::SkipLowDegServer<AlternativeGraph<VirtualTopocoreGraph<OwnedGraph>>, DefaultOps, ZeroPotential, true, true>,
     reversed: ReversedGraphWithEdgeIds,
     edge_penelized: BitVec,
     edges_to_reset: Vec<EdgeId>,

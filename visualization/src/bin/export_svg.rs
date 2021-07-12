@@ -189,7 +189,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let (core, _comp, topocore) = VirtualTopocoreGraph::<OwnedGraph>::new_topo_dijkstra_graphs(&graph);
     let mut data = DijkstraData::new(graph.num_nodes());
     let mut ops = DefaultOps::default();
-    let mut dijk_run = TopoDijkstraRun::query(
+    let mut dijk_run = TopoDijkstraRun::<_, _, true, true>::query(
         &core,
         &mut data,
         &mut ops,
