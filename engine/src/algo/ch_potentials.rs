@@ -90,6 +90,7 @@ impl<'a> Potential for CCHPotential<'a> {
     }
 }
 
+#[derive(Clone)]
 pub struct CHPotential<GF, GB> {
     order: NodeOrder,
     potentials: TimestampedVector<InRangeOption<Weight>>,

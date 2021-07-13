@@ -9,7 +9,6 @@ use time::Duration;
 
 use crate::{algo::*, datastr::graph::*, report::*};
 
-pub mod a_star;
 pub mod catchup;
 pub mod chpot;
 

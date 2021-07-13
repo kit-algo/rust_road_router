@@ -6,7 +6,7 @@ use std::ops::{Index, IndexMut};
 /// When only few entries are modified, a clearlist based approach may actually be preferable
 /// The elements can be modified through the index traits.
 /// Other modifications are not permitted.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TimestampedVector<T> {
     data: Vec<T>,
     // timestamp for current iteration. Up to date values will have this one

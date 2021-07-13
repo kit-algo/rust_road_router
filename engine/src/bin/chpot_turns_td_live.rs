@@ -4,8 +4,6 @@ use std::{env, error::Error, path::Path};
 
 #[macro_use]
 extern crate rust_road_router;
-#[cfg(feature = "chpot-cch")]
-use rust_road_router::{algo::customizable_contraction_hierarchy::*, datastr::node_order::NodeOrder};
 use rust_road_router::{
     algo::{
         a_star::*,
@@ -63,31 +61,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let now = 12 * 3600 * 1000;
     let soon = now + 3600 * 1000;
 
-    #[cfg(feature = "chpot-cch")]
-    let cch = {
-        let _blocked = block_reporting();
-        let order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm"))?);
-        CCH::fix_order_and_build(&graph, order)
-    };
-
-    let potential = TurnExpandedPotential::new(&graph, {
-        #[cfg(feature = "chpot-only-topo")]
-        {
-            ZeroPotential()
-        }
-        #[cfg(not(feature = "chpot-only-topo"))]
-        {
-            #[cfg(feature = "chpot-cch")]
-            {
-                let _potential_ctxt = algo_runs_ctxt.push_collection_item();
-                CCHPotential::new(&cch, &FirstOutGraph::new(graph.first_out(), graph.head(), lower_bound))
-            }
-            #[cfg(not(feature = "chpot-cch"))]
-            {
-                CHPotential::reconstruct_from(&path.join("lower_bound_ch"))?
-            }
-        }
-    });
+    let potential = TurnExpandedPotential::new(&graph, CHPotential::reconstruct_from(&path.join("lower_bound_ch"))?);
 
     let graph = LiveTDGraph::new(graph, soon, live);
 
@@ -143,7 +117,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         let (mut res, time) = measure(|| server.td_query(TDQuery { from, to, departure: now }));
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         report!("result", res.as_ref().map(|res| res.distance()));
-        #[cfg(all(not(feature = "chpot-only-topo"), not(feature = "chpot-alt")))]
         report!(
             "num_pot_computations",
             res.as_mut().map(|res| res.data().potential().inner().num_pot_computations()).unwrap_or(0)

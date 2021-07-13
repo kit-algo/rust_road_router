@@ -66,6 +66,7 @@ impl Label for Weight {
     }
 }
 
+#[derive(Clone)]
 pub struct DijkstraData<L: Label> {
     pub distances: TimestampedVector<L>,
     pub predecessors: Vec<NodeId>,

@@ -1,7 +1,5 @@
 #[macro_use]
 extern crate rust_road_router;
-#[cfg(feature = "chpot-cch")]
-use rust_road_router::{algo::customizable_contraction_hierarchy::*, datastr::node_order::NodeOrder};
 use rust_road_router::{
     algo::{
         ch_potentials::{query::Server as TopoServer, *},
@@ -36,31 +34,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[0]);
 
-    #[cfg(feature = "chpot-cch")]
-    let cch = {
-        let _blocked = block_reporting();
-        let order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm"))?);
-        CCH::fix_order_and_build(&graph, order)
-    };
-
-    let potential = {
-        #[cfg(feature = "chpot-only-topo")]
-        {
-            ZeroPotential()
-        }
-        #[cfg(not(feature = "chpot-only-topo"))]
-        {
-            #[cfg(feature = "chpot-cch")]
-            {
-                let _potential_ctxt = algo_runs_ctxt.push_collection_item();
-                CCHPotential::new(&cch, &graph)
-            }
-            #[cfg(not(feature = "chpot-cch"))]
-            {
-                CHPotential::reconstruct_from(&path.join("lower_bound_ch"))?
-            }
-        }
-    };
+    let potential = CHPotential::reconstruct_from(&path.join("lower_bound_ch"))?;
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
     let mut topocore: TopoServer<OwnedGraph, _, _, true, true, true> = TopoServer::new(&modified_graph, potential, DefaultOps::default());
@@ -84,7 +58,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             let dist = res.as_ref().map(|res| res.distance());
             report!("result", dist);
             res.as_mut().map(|res| res.path());
-            #[cfg(all(not(feature = "chpot-only-topo"), not(feature = "chpot-alt")))]
             report!(
                 "num_pot_computations",
                 res.as_mut().map(|res| res.data().potential().num_pot_computations()).unwrap_or(0)
