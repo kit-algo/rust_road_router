@@ -239,7 +239,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                         let mut server = server.lock().unwrap();
                         let result = report_time("cch query", || {
-                            server.query(Query { from, to }).as_mut().map(|result| {
+                            server.query(Query { from, to }).found().map(|mut result| {
                                 let distance = result.distance();
                                 let path = result.path().iter().map(|&node| coords(node)).collect();
                                 GeoResponse { distance, path }
@@ -271,7 +271,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                         let mut server = server.lock().unwrap();
                         let result = report_time("cch query", || {
-                            server.query(Query { from, to }).as_mut().map(|result| {
+                            server.query(Query { from, to }).found().map(|mut result| {
                                 let distance = result.distance()
                                     + (from_link_fraction * from_link.weight as f32) as u32
                                     + (to_link_fraction * to_link.weight as f32) as u32;

@@ -92,7 +92,7 @@ pub fn run_queries<S: QueryServer>(
 
         let (res, time) = measure(|| server.query(Query { from, to }));
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-        let dist = res.as_ref().map(|res| res.distance());
+        let dist = res.distance();
         report!("result", dist);
 
         if let Some(gt) = ground_truth(from, to) {

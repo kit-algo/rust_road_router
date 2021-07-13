@@ -106,8 +106,7 @@ impl<'a, CCH: CCHT> QueryServer for Server<'a, CCH> {
         Self: 's,
     = PathServerWrapper<'s, 'a, CCH>;
 
-    fn query(&mut self, query: Query) -> Option<QueryResult<Self::P<'_>, Weight>> {
-        self.distance(query.from, query.to)
-            .map(move |distance| QueryResult::new(distance, PathServerWrapper(self)))
+    fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight> {
+        QueryResult::new(self.distance(query.from, query.to), PathServerWrapper(self))
     }
 }

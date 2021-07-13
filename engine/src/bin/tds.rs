@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let cch = customizable_contraction_hierarchy::contract(&graph, NodeOrder::from_node_order(cch_order));
     let mut server = Server::new(graph, &cch);
-    println!("{:?}", server.td_query(TDQuery { from: 0, to: 1, departure: 42 }).map(|res| res.distance()));
+    println!("{:?}", server.td_query(TDQuery { from: 0, to: 1, departure: 42 }).distance());
 
     Ok(())
 }

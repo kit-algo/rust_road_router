@@ -55,14 +55,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             report!("to", to);
             report!("rank", rank);
             report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-            let dist = res.as_ref().map(|res| res.distance());
+            let dist = res.distance();
             report!("result", dist);
-            res.as_mut().map(|res| res.path());
-            report!(
-                "num_pot_computations",
-                res.as_mut().map(|res| res.data().potential().num_pot_computations()).unwrap_or(0)
-            );
-            report!("lower_bound", res.as_mut().map(|res| res.data().lower_bound(from)).flatten());
+            res.path().expect("Dijkstra Rank Query should always have a path");
+            report!("num_pot_computations", res.data().potential().num_pot_computations());
+            report!("lower_bound", res.data().lower_bound(from));
         });
     }
 

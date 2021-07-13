@@ -182,9 +182,8 @@ impl<G: LinkIterable<O::Arc>, O: DijkstraOps<G, Label = Weight> + Default, P: Po
         Self: 's,
     = PathServerWrapper<'s, Query, G, O, P, B>;
 
-    fn query(&mut self, query: Query) -> Option<QueryResult<Self::P<'_>, Weight>> {
-        self.distance(query)
-            .map(move |distance| QueryResult::new(distance, PathServerWrapper(self, query)))
+    fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight> {
+        QueryResult::new(self.distance(query), PathServerWrapper(self, query))
     }
 }
 
@@ -194,8 +193,7 @@ impl<G: LinkIterable<O::Arc>, O: DijkstraOps<G, Label = Weight> + Default, P: Po
         Self: 's,
     = PathServerWrapper<'s, TDQuery<Timestamp>, G, O, P, B>;
 
-    fn td_query(&mut self, query: TDQuery<Timestamp>) -> Option<QueryResult<Self::P<'_>, Weight>> {
-        self.distance(query)
-            .map(move |distance| QueryResult::new(distance, PathServerWrapper(self, query)))
+    fn td_query(&mut self, query: TDQuery<Timestamp>) -> QueryResult<Self::P<'_>, Weight> {
+        QueryResult::new(self.distance(query), PathServerWrapper(self, query))
     }
 }

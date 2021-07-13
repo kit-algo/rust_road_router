@@ -57,7 +57,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 report!("departure_time", f64::from(at));
                 report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
                 tdcch_time = tdcch_time + time;
-                if let Some(mut result) = result {
+                if let Some(mut result) = result.found() {
                     report!("earliest_arrival", f64::from(result.distance() + at));
                     let (path, unpacking_duration) = measure(|| result.path());
                     report!("num_nodes_on_shortest_path", path.len());

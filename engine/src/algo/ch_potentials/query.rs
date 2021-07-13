@@ -305,9 +305,8 @@ where
         Self: 's,
     = PathServerWrapper<'s, G, O, P, TDQuery<Timestamp>, BCC_CORE, SKIP_DEG_2, SKIP_DEG_3>;
 
-    fn td_query(&mut self, query: TDQuery<Timestamp>) -> Option<QueryResult<Self::P<'_>, Weight>> {
-        self.distance(query, |_, _, _, _| ())
-            .map(move |distance| QueryResult::new(distance, PathServerWrapper(self, query)))
+    fn td_query(&mut self, query: TDQuery<Timestamp>) -> QueryResult<Self::P<'_>, Weight> {
+        QueryResult::new(self.distance(query, |_, _, _, _| ()), PathServerWrapper(self, query))
     }
 }
 
@@ -322,9 +321,8 @@ where
         Self: 's,
     = PathServerWrapper<'s, G, O, P, Query, BCC_CORE, SKIP_DEG_2, SKIP_DEG_3>;
 
-    fn query(&mut self, query: Query) -> Option<QueryResult<Self::P<'_>, Weight>> {
-        self.distance(query, |_, _, _, _| ())
-            .map(move |distance| QueryResult::new(distance, PathServerWrapper(self, query)))
+    fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight> {
+        QueryResult::new(self.distance(query, |_, _, _, _| ()), PathServerWrapper(self, query))
     }
 }
 
@@ -398,9 +396,8 @@ where
         &mut self,
         query: Q,
         cap: Weight,
-    ) -> Option<QueryResult<BiconnectedPathServerWrapper<Graph, Ops, P, Q, SKIP_DEG_2, SKIP_DEG_3>, Weight>> {
-        self.distance(query, |_, _, _| (), cap)
-            .map(move |distance| QueryResult::new(distance, BiconnectedPathServerWrapper(self, query)))
+    ) -> QueryResult<BiconnectedPathServerWrapper<Graph, Ops, P, Q, SKIP_DEG_2, SKIP_DEG_3>, Weight> {
+        QueryResult::new(self.distance(query, |_, _, _| (), cap), BiconnectedPathServerWrapper(self, query))
     }
 
     fn distance(
@@ -603,9 +600,8 @@ where
         Self: 's,
     = BiconnectedPathServerWrapper<'s, G, O, P, TDQuery<Timestamp>, SKIP_DEG_2, SKIP_DEG_3>;
 
-    fn td_query(&mut self, query: TDQuery<Timestamp>) -> Option<QueryResult<Self::P<'_>, Weight>> {
-        self.distance(query, |_, _, _| (), INFINITY)
-            .map(move |distance| QueryResult::new(distance, BiconnectedPathServerWrapper(self, query)))
+    fn td_query(&mut self, query: TDQuery<Timestamp>) -> QueryResult<Self::P<'_>, Weight> {
+        QueryResult::new(self.distance(query, |_, _, _| (), INFINITY), BiconnectedPathServerWrapper(self, query))
     }
 }
 
@@ -620,8 +616,7 @@ where
         Self: 's,
     = BiconnectedPathServerWrapper<'s, G, O, P, Query, SKIP_DEG_2, SKIP_DEG_3>;
 
-    fn query(&mut self, query: Query) -> Option<QueryResult<Self::P<'_>, Weight>> {
-        self.distance(query, |_, _, _| (), INFINITY)
-            .map(move |distance| QueryResult::new(distance, BiconnectedPathServerWrapper(self, query)))
+    fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight> {
+        QueryResult::new(self.distance(query, |_, _, _| (), INFINITY), BiconnectedPathServerWrapper(self, query))
     }
 }

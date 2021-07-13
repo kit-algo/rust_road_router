@@ -51,9 +51,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let mut check_segment = |start: Timestamp, end: Timestamp, path: &[EdgeId]| {
                     let _blocked = block_reporting();
                     let at = start + 0.5 * (end - start);
-                    let mut result = ea_server.td_query(TDQuery { from, to, departure: at }).unwrap();
-                    assert!(PeriodicPiecewiseLinearFunction::new(&tt).evaluate(at).fuzzy_eq(result.distance()));
-                    let gt_path = result.path();
+                    let mut result = ea_server.td_query(TDQuery { from, to, departure: at });
+                    assert!(PeriodicPiecewiseLinearFunction::new(&tt).evaluate(at).fuzzy_eq(result.distance().unwrap()));
+                    let gt_path = result.path().unwrap();
                     g.check_path(&gt_path);
                     g.check_path(&g.get_path_with_times(at, &path));
                 };

@@ -580,8 +580,7 @@ impl<'a> TDQueryServer<Timestamp, FlWeight> for Server<'a> {
         Self: 's,
     = PathServerWrapper<'s, 'a>;
 
-    fn td_query(&mut self, query: TDQuery<Timestamp>) -> Option<QueryResult<Self::P<'_>, FlWeight>> {
-        self.distance(query.from, query.to, query.departure)
-            .map(move |distance| QueryResult::new(distance, PathServerWrapper(self)))
+    fn td_query(&mut self, query: TDQuery<Timestamp>) -> QueryResult<Self::P<'_>, FlWeight> {
+        QueryResult::new(self.distance(query.from, query.to, query.departure), PathServerWrapper(self))
     }
 }

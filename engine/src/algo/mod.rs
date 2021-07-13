@@ -92,11 +92,11 @@ impl<T: Copy> GenQuery<T> for TDQuery<T> {
 /// ```
 /// # use rust_road_router::algo::*;
 /// fn fine(mut server: impl QueryServer) {
-///     let mut result = server.query(Query { from: 0, to: 1 }).unwrap();
+///     let mut result = server.query(Query { from: 0, to: 1 }).found().unwrap();
 ///     dbg!(result.distance());
 ///     dbg!(result.path().len());
 ///     std::mem::drop(result);
-///     let mut result2 = server.query(Query { from: 1, to: 0 }).unwrap();
+///     let mut result2 = server.query(Query { from: 1, to: 0 }).found().unwrap();
 ///     dbg!(result2.distance());
 ///     dbg!(result2.path().len());
 /// }
@@ -107,9 +107,9 @@ impl<T: Copy> GenQuery<T> for TDQuery<T> {
 /// ```compile_fail
 /// # use rust_road_router::algo::*;
 /// fn fine(mut server: impl for QueryServer) {
-///     let mut result = server.query(Query { from: 0, to: 1 }).unwrap();
+///     let mut result = server.query(Query { from: 0, to: 1 }).found().unwrap();
 ///     dbg!(result.distance());
-///     let mut result2 = server.query(Query { from: 1, to: 0 }).unwrap();
+///     let mut result2 = server.query(Query { from: 1, to: 0 }).found().unwrap();
 ///     dbg!(result.path().len());
 /// }
 /// ```
@@ -117,7 +117,7 @@ impl<T: Copy> GenQuery<T> for TDQuery<T> {
 pub struct QueryResult<P, W> {
     // just the plain distance
     // the infinity case is ignored here, in that case, there will be no query result at all
-    distance: W,
+    distance: Option<W>,
     // Reference to some object - usually a proxy around the query server to lazily retrieve the path
     // Usually this will borrow the server, but the type checker does not know this in a generic context
     path_server: P,
@@ -127,23 +127,57 @@ impl<P, W: Copy> QueryResult<P, W>
 where
     P: PathServer,
 {
-    fn new(distance: W, path_server: P) -> Self {
+    fn new(distance: Option<W>, path_server: P) -> Self {
         Self { distance, path_server }
     }
 
     /// Retrieve shortest distance of a query
-    pub fn distance(&self) -> W {
+    pub fn distance(&self) -> Option<W> {
         self.distance
     }
 
     /// Retrieve shortest path (usually lazily) for a query
-    pub fn path(&mut self) -> Vec<P::NodeInfo> {
-        self.path_server.path()
+    pub fn path(&mut self) -> Option<Vec<P::NodeInfo>> {
+        if self.distance.is_some() {
+            Some(self.path_server.path())
+        } else {
+            None
+        }
     }
 
     /// Get reference to object which allows to access additional query specific data
     pub fn data(&mut self) -> &mut P {
         &mut self.path_server
+    }
+
+    pub fn found(self) -> Option<ConnectedQueryResult<P, W>> {
+        if self.distance.is_some() {
+            Some(ConnectedQueryResult(self))
+        } else {
+            None
+        }
+    }
+}
+
+pub struct ConnectedQueryResult<P, W>(QueryResult<P, W>);
+
+impl<P, W: Copy> ConnectedQueryResult<P, W>
+where
+    P: PathServer,
+{
+    /// Retrieve shortest distance of a query
+    pub fn distance(&self) -> W {
+        self.0.distance.unwrap()
+    }
+
+    /// Retrieve shortest path (usually lazily) for a query
+    pub fn path(&mut self) -> Vec<P::NodeInfo> {
+        self.0.path().unwrap()
+    }
+
+    /// Get reference to object which allows to access additional query specific data
+    pub fn data(&mut self) -> &mut P {
+        &mut self.0.path_server
     }
 }
 
@@ -155,7 +189,7 @@ pub trait QueryServer {
         Self: 's;
     /// Calculate the shortest distance from a given source to target.
     /// Will return None if source and target are not connected.
-    fn query(&mut self, query: Query) -> Option<QueryResult<Self::P<'_>, Weight>>;
+    fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight>;
 }
 
 /// Trait for time-dependent query algorithm servers.
@@ -167,7 +201,7 @@ pub trait TDQueryServer<T: Copy, W> {
         Self: 's;
     /// Calculate the shortest distance from a given source to target.
     /// Will return None if source and target are not connected.
-    fn td_query(&mut self, query: TDQuery<T>) -> Option<QueryResult<Self::P<'_>, W>>;
+    fn td_query(&mut self, query: TDQuery<T>) -> QueryResult<Self::P<'_>, W>;
 }
 
 /// Just for internal use.

@@ -55,8 +55,8 @@ impl<P: Potential> Penalty<P> {
         let query = Query { from: core_from, to: core_to };
         self.alternative_graph_dijkstra.graph_mut().clear();
 
-        if let Some(mut result) = self.shortest_path_penalized.query(query) {
-            let base_dist = result.distance;
+        if let Some(mut result) = self.shortest_path_penalized.query(query).found() {
+            let base_dist = result.distance();
             report!("base_dist", base_dist);
 
             let max_orig_dist = base_dist * 11 / 10;
@@ -129,7 +129,7 @@ impl<P: Potential> Penalty<P> {
 
                 let (result, time) = measure(|| shortest_path_penalized.distance_with_cap(query, max_penalized_dist));
                 report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-                let mut result = if let Some(result) = result {
+                let mut result = if let Some(result) = result.found() {
                     result
                 } else {
                     dbg!("search pruned to death");
@@ -174,7 +174,8 @@ impl<P: Potential> Penalty<P> {
                                     from: part_start,
                                     to: part_end,
                                 })
-                                .map(|r| r.distance * 11)
+                                .distance()
+                                .map(|d| d * 11)
                                 .unwrap_or(INFINITY)
                         {
                             feasable = true;

@@ -57,12 +57,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         report!("at", at);
         let (mut res, time) = measure(|| server.td_query(TDQuery { from, to, departure: at }));
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-        report!("result", res.as_ref().map(|res| res.distance()));
-        report!(
-            "num_pot_computations",
-            res.as_mut().map(|res| res.data().potential().num_pot_computations()).unwrap_or(0)
-        );
-        report!("lower_bound", res.as_mut().map(|res| res.data().lower_bound(from)).flatten());
+        report!("result", res.distance());
+        report!("num_pot_computations", res.data().potential().num_pot_computations());
+        report!("lower_bound", res.data().lower_bound(from));
         astar_time = astar_time + time;
     }
     eprintln!("A* {}", astar_time / (num_queries as i32));
@@ -82,7 +79,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         report!("from", from);
         report!("to", to);
         report!("at", at);
-        let (ea, time) = measure(|| server.td_query(TDQuery { from, to, departure: at }).map(|res| res.distance()));
+        let (ea, time) = measure(|| server.td_query(TDQuery { from, to, departure: at }).distance());
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         report!("result", ea);
         dijkstra_time = dijkstra_time + time;

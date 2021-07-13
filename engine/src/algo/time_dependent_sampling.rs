@@ -71,9 +71,9 @@ impl<'a> Server<'a> {
 
         // query each window independently and mark edges
         for server in &mut self.samples {
-            let result = server.query(Query { from, to });
-            if let Some(mut result) = result {
-                for edge in result.path().windows(2) {
+            let mut result = server.query(Query { from, to });
+            if let Some(path) = result.path() {
+                for edge in path.windows(2) {
                     self.active_edges[self.graph.edge_index(edge[0], edge[1]).unwrap() as usize] = true;
                 }
             }
@@ -124,8 +124,7 @@ impl<'a> TDQueryServer<Timestamp, Weight> for Server<'a> {
         Self: 's,
     = PathServerWrapper<'s, 'a>;
 
-    fn td_query(&mut self, query: TDQuery<Timestamp>) -> Option<QueryResult<Self::P<'_>, Weight>> {
-        self.distance(query.from, query.to, query.departure)
-            .map(move |distance| QueryResult::new(distance, PathServerWrapper(self, query)))
+    fn td_query(&mut self, query: TDQuery<Timestamp>) -> QueryResult<Self::P<'_>, Weight> {
+        QueryResult::new(self.distance(query.from, query.to, query.departure), PathServerWrapper(self, query))
     }
 }
