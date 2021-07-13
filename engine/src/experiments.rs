@@ -4,7 +4,7 @@ pub fn num_dijkstra_queries() -> usize {
     std::env::var("NUM_DIJKSTRA_QUERIES").map_or(1000, |num| num.parse().unwrap())
 }
 
-use rand::prelude::*;
+use rand::{distributions::uniform::SampleUniform, prelude::*};
 use time::Duration;
 
 use crate::{algo::*, datastr::graph::*, report::*};
@@ -91,6 +91,81 @@ pub fn run_queries<S: QueryServer>(
         pre_query(from, to, server);
 
         let (res, time) = measure(|| server.query(Query { from, to }));
+        report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        let dist = res.distance();
+        report!("result", dist);
+
+        if let Some(gt) = ground_truth(from, to) {
+            assert_eq!(dist, gt);
+        }
+
+        // with_result(res.as_mut());
+
+        total_query_time = total_query_time + time;
+    }
+
+    if num_queries > 0 {
+        eprintln!("Avg. query time {}", total_query_time / (num_queries as i32))
+    };
+}
+
+pub fn run_random_td_queries<
+    T: Copy + serde::ser::Serialize + SampleUniform + Eq + PartialOrd,
+    W: Copy + Eq + std::fmt::Debug + serde::ser::Serialize,
+    S: TDQueryServer<T, W>,
+>(
+    num_nodes: usize,
+    departure_range: std::ops::Range<T>,
+    server: &mut S,
+    rng: &mut StdRng,
+    reporting_context: &mut CollectionContextGuard,
+    num_queries: usize,
+    pre_query: impl FnMut(NodeId, NodeId, &mut S),
+    // mut with_result: impl for<'a> FnMut(Option<&mut QueryResult<S::P<'a>, W>>),
+    ground_truth: impl FnMut(NodeId, NodeId) -> Option<Option<W>>,
+) {
+    run_td_queries(
+        std::iter::from_fn(move || {
+            Some((
+                rng.gen_range(0..num_nodes as NodeId),
+                rng.gen_range(0..num_nodes as NodeId),
+                rng.gen_range(departure_range.clone()),
+            ))
+        })
+        .take(num_queries),
+        server,
+        Some(reporting_context),
+        pre_query,
+        // with_result,
+        ground_truth,
+    );
+}
+
+pub fn run_td_queries<T: Copy + serde::ser::Serialize, W: Copy + Eq + std::fmt::Debug + serde::ser::Serialize, S: TDQueryServer<T, W>>(
+    query_iter: impl Iterator<Item = (NodeId, NodeId, T)>,
+    server: &mut S,
+    mut reporting_context: Option<&mut CollectionContextGuard>,
+    mut pre_query: impl FnMut(NodeId, NodeId, &mut S),
+    // mut with_result: impl for<'a> FnMut(Option<&mut QueryResult<S::P<'a>, W>>),
+    mut ground_truth: impl FnMut(NodeId, NodeId) -> Option<Option<W>>,
+) {
+    let core_ids = core_affinity::get_core_ids().unwrap();
+    core_affinity::set_for_current(core_ids[0]);
+
+    let mut total_query_time = Duration::zero();
+    let mut num_queries = 0;
+
+    for (from, to, at) in query_iter {
+        num_queries += 1;
+        let _query_ctxt = reporting_context.as_mut().map(|ctxt| ctxt.push_collection_item());
+
+        report!("from", from);
+        report!("to", to);
+        report!("at", at);
+
+        pre_query(from, to, server);
+
+        let (res, time) = measure(|| server.td_query(TDQuery { from, to, departure: at }));
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         let dist = res.distance();
         report!("result", dist);

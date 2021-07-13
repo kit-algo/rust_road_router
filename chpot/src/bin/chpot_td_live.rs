@@ -8,7 +8,6 @@ use rust_road_router::{
     algo::{
         ch_potentials::{query::Server, *},
         dijkstra::query::{dijkstra::Server as DijkServer, td_dijkstra::LiveTDDijkstraOps},
-        *,
     },
     cli::CliErr,
     datastr::graph::{time_dependent::*, *},
@@ -17,9 +16,6 @@ use rust_road_router::{
     report::*,
     util::in_range_option::*,
 };
-
-use rand::prelude::*;
-use time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting("chpot_td_live");
@@ -72,49 +68,34 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut server = Server::new(&graph, potential, LiveTDDijkstraOps::default());
     drop(virtual_topocore_ctxt);
 
-    let num_queries = experiments::chpot::num_queries();
-
-    let mut astar_time = Duration::zero();
-
-    for _i in 0..num_queries {
-        let _query_ctxt = algo_runs_ctxt.push_collection_item();
-        let from: NodeId = rng.gen_range(0..n as NodeId);
-        let to: NodeId = rng.gen_range(0..n as NodeId);
-        // let at: NodeId = rng.gen_range(0..period() as Timestamp);
-
-        report!("from", from);
-        report!("to", to);
-        report!("at", now);
-        let (mut res, time) = measure(|| server.td_query(TDQuery { from, to, departure: now }));
-        report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-        report!("result", res.distance());
-        report!("num_pot_computations", res.data().potential().num_pot_computations());
-        report!("lower_bound", res.data().lower_bound(from));
-        astar_time = astar_time + time;
-    }
-    eprintln!("A* {}", astar_time / (num_queries as i32));
-
-    let num_queries = experiments::num_dijkstra_queries();
+    experiments::run_random_td_queries(
+        n,
+        now..now + 1,
+        &mut server,
+        &mut rng,
+        &mut algo_runs_ctxt,
+        experiments::chpot::num_queries(),
+        |_, _, _| (),
+        // |res| {
+        //     report!("num_pot_computations", res.data().potential().num_pot_computations());
+        //     report!("lower_bound", res.data().lower_bound(from));
+        // },
+        |_, _| None,
+    );
 
     let mut server = DijkServer::<_, LiveTDDijkstraOps>::new(graph);
 
-    let mut dijkstra_time = Duration::zero();
-
-    for _i in 0..num_queries {
-        let _query_ctxt = algo_runs_ctxt.push_collection_item();
-        let from: NodeId = rng.gen_range(0..n as NodeId);
-        let to: NodeId = rng.gen_range(0..n as NodeId);
-        let at: NodeId = rng.gen_range(0..period() as Timestamp);
-
-        report!("from", from);
-        report!("to", to);
-        report!("at", at);
-        let (ea, time) = measure(|| server.td_query(TDQuery { from, to, departure: at }).distance());
-        report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-        report!("result", ea);
-        dijkstra_time = dijkstra_time + time;
-    }
-    eprintln!("Dijk* {}", dijkstra_time / (num_queries as i32));
+    experiments::run_random_td_queries(
+        n,
+        now..now + 1,
+        &mut server,
+        &mut rng,
+        &mut algo_runs_ctxt,
+        experiments::num_dijkstra_queries(),
+        |_, _, _| (),
+        // |_| (),
+        |_, _| None,
+    );
 
     Ok(())
 }

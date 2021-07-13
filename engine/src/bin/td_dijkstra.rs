@@ -1,21 +1,14 @@
 // TD Dijkstra baseline.
 
-use std::{env, error::Error, path::Path};
-#[macro_use]
-extern crate rust_road_router;
 use rust_road_router::{
-    algo::{
-        dijkstra::query::{dijkstra::Server, td_dijkstra::TDDijkstraOps},
-        *,
-    },
+    algo::dijkstra::query::{dijkstra::Server, td_dijkstra::TDDijkstraOps},
     cli::CliErr,
     datastr::graph::time_dependent::*,
-    datastr::graph::*,
+    experiments,
     io::*,
     report::*,
 };
-
-use time::Duration;
+use std::{env, error::Error, path::Path};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting("td_dijkstra");
@@ -49,20 +42,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         let at = Vec::<u32>::load_from(path.join("source_time"))?;
         let to = Vec::load_from(path.join("target_node"))?;
 
-        let num_queries = 1000;
-
-        let mut total_time = Duration::zero();
-
-        for ((from, to), at) in from.into_iter().zip(to.into_iter()).zip(at.into_iter()).take(num_queries) {
-            let _query_ctxt = algo_runs_ctxt.push_collection_item();
-            report!("from", from);
-            report!("to", to);
-            let (ea, time) = measure(|| server.td_query(TDQuery { from, to, departure: at }).distance().map(|d| d + at));
-            report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-            report!("result", ea.unwrap_or(INFINITY));
-            total_time = total_time + time;
-        }
-        eprintln!("TD Dijkstra {}", total_time / (num_queries as i32));
+        let iter = from.into_iter().zip(to.into_iter()).zip(at.into_iter()).map(|((s, t), a)| (s, t, a)).take(1000);
+        experiments::run_td_queries(iter, &mut server, Some(&mut algo_runs_ctxt), |_, _, _| (), |_, _| None);
     }
 
     Ok(())
