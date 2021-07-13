@@ -675,9 +675,8 @@ impl<P: Potential> BiDirSkipLowDegServer<P> {
         query: Q,
         cap: Weight,
         pot_cap: Weight,
-    ) -> Option<QueryResult<BiDirCorePathServerWrapper<P, Q>, Weight>> {
-        self.distance(query, cap, pot_cap)
-            .map(move |distance| QueryResult::new(distance, BiDirCorePathServerWrapper(self, query)))
+    ) -> QueryResult<BiDirCorePathServerWrapper<P, Q>, Weight> {
+        QueryResult::new(self.distance(query, cap, pot_cap), BiDirCorePathServerWrapper(self, query))
     }
 
     pub fn distance(&mut self, query: impl GenQuery<Timestamp> + Copy, cap: Weight, pot_cap: Weight) -> Option<Weight> {
@@ -685,9 +684,9 @@ impl<P: Potential> BiDirSkipLowDegServer<P> {
         self.tentative_distance = INFINITY;
 
         let mut ops = DefaultOps::default();
-        let mut forward_dijkstra = TopoDijkstraRun::query(&self.forward_graph, &mut self.forward_dijkstra_data, &mut ops, query);
+        let mut forward_dijkstra = TopoDijkstraRun::<_, _, true, true>::query(&self.forward_graph, &mut self.forward_dijkstra_data, &mut ops, query);
         let mut ops = DefaultOps::default();
-        let mut backward_dijkstra = TopoDijkstraRun::query(
+        let mut backward_dijkstra = TopoDijkstraRun::<_, _, true, true>::query(
             &self.backward_graph,
             &mut self.backward_dijkstra_data,
             &mut ops,
@@ -869,7 +868,7 @@ where
 {
     type NodeInfo = NodeId;
 
-    fn path(&mut self) -> Vec<Self::NodeInfo> {
+    fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo> {
         BiDirSkipLowDegServer::path(self.0, self.1)
     }
 }
@@ -883,8 +882,7 @@ where
         Self: 's,
     = BiDirCorePathServerWrapper<'s, P, Query>;
 
-    fn query(&mut self, query: Query) -> Option<QueryResult<Self::P<'_>, Weight>> {
-        self.distance(query, INFINITY, INFINITY)
-            .map(move |distance| QueryResult::new(distance, BiDirCorePathServerWrapper(self, query)))
+    fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight> {
+        QueryResult::new(self.distance(query, INFINITY, INFINITY), BiDirCorePathServerWrapper(self, query))
     }
 }
