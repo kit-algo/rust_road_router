@@ -202,7 +202,7 @@ pub struct PathServerWrapper<'s, G: LinkIterGraph, H: LinkIterGraph, P>(&'s Serv
 impl<'s, G: LinkIterGraph, H: LinkIterGraph, P: Potential> PathServer for PathServerWrapper<'s, G, H, P> {
     type NodeInfo = NodeId;
 
-    fn path(&mut self) -> Vec<Self::NodeInfo> {
+    fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo> {
         Server::path(self.0, self.1)
     }
 }

@@ -569,7 +569,7 @@ pub struct PathServerWrapper<'s, 'a>(&'s Server<'a>);
 impl<'s, 'a> PathServer for PathServerWrapper<'s, 'a> {
     type NodeInfo = (NodeId, Timestamp);
 
-    fn path(&mut self) -> Vec<Self::NodeInfo> {
+    fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo> {
         Server::path(self.0)
     }
 }

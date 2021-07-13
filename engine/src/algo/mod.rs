@@ -139,7 +139,7 @@ where
     /// Retrieve shortest path (usually lazily) for a query
     pub fn path(&mut self) -> Option<Vec<P::NodeInfo>> {
         if self.distance.is_some() {
-            Some(self.path_server.path())
+            Some(self.path_server.reconstruct_path())
         } else {
             None
         }
@@ -210,5 +210,5 @@ pub trait PathServer {
     /// Information for each node in the path.
     type NodeInfo;
     /// Fetch the shortest path.
-    fn path(&mut self) -> Vec<Self::NodeInfo>;
+    fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo>;
 }

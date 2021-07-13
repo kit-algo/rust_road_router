@@ -95,7 +95,7 @@ pub struct PathServerWrapper<'s, 'a, CCH>(&'s mut Server<'a, CCH>);
 impl<'s, 'a, CCH: CCHT> PathServer for PathServerWrapper<'s, 'a, CCH> {
     type NodeInfo = NodeId;
 
-    fn path(&mut self) -> Vec<Self::NodeInfo> {
+    fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo> {
         Server::path(self.0)
     }
 }

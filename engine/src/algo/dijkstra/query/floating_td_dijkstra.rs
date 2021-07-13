@@ -76,7 +76,7 @@ pub struct PathServerWrapper<'s>(&'s Server, TDQuery<Timestamp>);
 impl<'s> PathServer for PathServerWrapper<'s> {
     type NodeInfo = (NodeId, Timestamp);
 
-    fn path(&mut self) -> Vec<Self::NodeInfo> {
+    fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo> {
         Server::path(self.0, self.1)
     }
 }

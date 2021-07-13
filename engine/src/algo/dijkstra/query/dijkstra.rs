@@ -132,7 +132,7 @@ where
 {
     type NodeInfo = NodeId;
 
-    fn path(&mut self) -> Vec<Self::NodeInfo> {
+    fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo> {
         Server::path(self.0, self.1)
     }
 }
@@ -147,7 +147,7 @@ where
 {
     /// Print path with debug info as js to stdout.
     pub fn debug_path(&mut self, lat: &[f32], lng: &[f32]) {
-        for node in self.path() {
+        for node in self.reconstruct_path() {
             println!(
                 "var marker = L.marker([{}, {}], {{ icon: blueIcon }}).addTo(map);",
                 lat[node as usize], lng[node as usize]
