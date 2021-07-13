@@ -1,0 +1,23 @@
+[package]
+name = "chpot"
+version = "0.1.0"
+edition = "2018"
+authors = ["Tim 'tim3z' Zeitz <mail@tim3z.net>"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rust_road_router = { path = "../engine" }
+rand = "^0.8.4"
+time = "^0.1.40"
+core_affinity = "^0.5.9"
+
+[features]
+chpot-only-topo = []
+chpot-no-deg2 = []
+chpot-no-deg3 = []
+chpot-no-bcc = []
+chpot-no-reorder = ["chpot-no-bcc", "chpot-no-deg2", "chpot-no-deg3"]
+chpot-cch = []
+chpot-alt = []
+chpot-oracle = ['rust_road_router/report-allow-override']
