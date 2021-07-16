@@ -59,10 +59,10 @@ impl<P: Potential> Penalty<P> {
             let base_dist = result.distance();
             report!("base_dist", base_dist);
 
-            let max_orig_dist = base_dist * 11 / 10;
+            let max_orig_dist = base_dist * 25 / 20;
             let rejoin_penalty = base_dist / 500;
 
-            let max_penalized_dist = max_orig_dist * 11 / 10 + 2 * rejoin_penalty;
+            let max_penalized_dist = max_orig_dist * 25 / 20 + 2 * rejoin_penalty;
 
             let mut path = result.path();
             let shortest_path_penalized = &mut self.shortest_path_penalized;
@@ -168,14 +168,14 @@ impl<P: Potential> Penalty<P> {
 
                     if part_dist * 10 > base_dist {
                         let _blocked = block_reporting();
-                        if part_dist * 10
+                        if part_dist * 20
                             <= alternative_graph_dijkstra
                                 .query(Query {
                                     from: part_start,
                                     to: part_end,
                                 })
                                 .distance()
-                                .map(|d| d * 11)
+                                .map(|d| d * 25)
                                 .unwrap_or(INFINITY)
                         {
                             feasable = true;
