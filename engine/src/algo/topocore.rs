@@ -43,7 +43,7 @@ impl<'b, L, G: LinkIterable<L>, H: LinkIterable<L>> LinkIterable<L> for Undirect
 }
 
 #[allow(clippy::cognitive_complexity)]
-pub fn preprocess<'c, Graph: LinkIterGraph + LinkIterable<NodeId>, ReorderBCC: Bool, Deg1: Bool, Deg2: Bool, Deg3: Bool>(graph: &Graph) -> Topocore {
+pub fn preprocess<'c, Graph: LinkIterGraph + LinkIterable<NodeIdT>, ReorderBCC: Bool, Deg1: Bool, Deg2: Bool, Deg3: Bool>(graph: &Graph) -> Topocore {
     let order = dfs_pre_order(graph);
 
     let n = graph.num_nodes();
@@ -481,7 +481,7 @@ impl VirtualTopocore {
 }
 
 #[allow(clippy::cognitive_complexity)]
-pub fn virtual_topocore<'c, Graph: LinkIterable<NodeId>>(graph: &Graph) -> VirtualTopocore {
+pub fn virtual_topocore<'c, Graph: LinkIterable<NodeIdT>>(graph: &Graph) -> VirtualTopocore {
     let order = dfs_pre_order(graph);
     let n = graph.num_nodes();
 
@@ -492,7 +492,7 @@ pub fn virtual_topocore<'c, Graph: LinkIterable<NodeId>>(graph: &Graph) -> Virtu
             graph
                 .link_iter(node as NodeId)
                 .chain(reversed.link_iter(node as NodeId))
-                .collect::<Vec<NodeId>>()
+                .collect::<Vec<NodeIdT>>()
                 .tap(|neighbors| neighbors.sort_unstable())
                 .tap(|neighbors| neighbors.dedup())
                 .len() as u8
@@ -520,7 +520,7 @@ pub fn virtual_topocore<'c, Graph: LinkIterable<NodeId>>(graph: &Graph) -> Virtu
             queue.push_back(node);
             components[node] = component_idx;
             while let Some(node) = queue.pop_front() {
-                for neighbor in (UndirectedGraph { ins: &reversed, outs: graph }).link_iter(node as NodeId) {
+                for NodeIdT(neighbor) in (UndirectedGraph { ins: &reversed, outs: graph }).link_iter(node as NodeId) {
                     if biggest_bcc.get(neighbor as usize) {
                         if bridge.len() < component_idx as usize {
                             bridge.push(InRangeOption::new(Some(neighbor)));
@@ -605,7 +605,7 @@ pub struct VirtualTopocoreGraph<G> {
 impl<Graph> VirtualTopocoreGraph<Graph> {
     pub fn new<G>(graph: &G) -> (Self, Self, VirtualTopocore)
     where
-        G: LinkIterable<NodeId>,
+        G: LinkIterable<NodeIdT>,
         Graph: BuildPermutated<G>,
     {
         let topocore = virtual_topocore(graph);
@@ -624,7 +624,7 @@ impl<Graph> VirtualTopocoreGraph<Graph> {
 
     pub fn new_topo_dijkstra_graphs<G>(graph: &G) -> (Self, Self, VirtualTopocore)
     where
-        G: LinkIterable<NodeId>,
+        G: LinkIterable<NodeIdT>,
         Graph: BuildPermutated<G>,
     {
         let topocore = virtual_topocore(graph);
@@ -710,7 +710,7 @@ impl<G: RandomLinkAccessGraph> RandomLinkAccessGraph for VirtualTopocoreGraph<G>
     }
 }
 
-fn dfs_pre_order<Graph: LinkIterable<NodeId>>(graph: &Graph) -> NodeOrder {
+fn dfs_pre_order<Graph: LinkIterable<NodeIdT>>(graph: &Graph) -> NodeOrder {
     let mut order = Vec::with_capacity(graph.num_nodes());
     dfs(graph, &mut |node| {
         order.push(node);
@@ -718,7 +718,7 @@ fn dfs_pre_order<Graph: LinkIterable<NodeId>>(graph: &Graph) -> NodeOrder {
     NodeOrder::from_node_order(order)
 }
 
-fn dfs<Graph: LinkIterable<NodeId>>(graph: &Graph, visit: &mut impl FnMut(NodeId)) {
+fn dfs<Graph: LinkIterable<NodeIdT>>(graph: &Graph, visit: &mut impl FnMut(NodeId)) {
     let mut visited = BitVec::new(graph.num_nodes());
     let mut stack = Vec::new();
     for node in 0..graph.num_nodes() {
@@ -733,7 +733,7 @@ fn dfs<Graph: LinkIterable<NodeId>>(graph: &Graph, visit: &mut impl FnMut(NodeId
             visit(node);
             visited.set(node as usize);
 
-            for head in graph.link_iter(node) {
+            for NodeIdT(head) in graph.link_iter(node) {
                 if !visited.get(head as usize) {
                     stack.push(head);
                 }
@@ -742,7 +742,7 @@ fn dfs<Graph: LinkIterable<NodeId>>(graph: &Graph, visit: &mut impl FnMut(NodeId
     }
 }
 
-fn biconnected<Graph: LinkIterable<NodeId>>(graph: &Graph) -> Vec<Vec<(NodeId, NodeId)>> {
+fn biconnected<Graph: LinkIterable<NodeIdT>>(graph: &Graph) -> Vec<Vec<(NodeId, NodeId)>> {
     let mut stack = Vec::new();
 
     let mut dfs_num_counter = 0;
@@ -769,7 +769,7 @@ fn biconnected<Graph: LinkIterable<NodeId>>(graph: &Graph) -> Vec<Vec<(NodeId, N
                 dfs_num_counter += 1;
             }
 
-            if let Some(neighbor) = neighbors.next() {
+            if let Some(NodeIdT(neighbor)) = neighbors.next() {
                 if let Some(neighbor_dfs_num) = dfs_num[neighbor as usize].value() {
                     if neighbor_dfs_num < dfs_num[node].value().unwrap() && (neighbor as usize) != dfs_parent[node] {
                         edge_stack.push((node as NodeId, neighbor));

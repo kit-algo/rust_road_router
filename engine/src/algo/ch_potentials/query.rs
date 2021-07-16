@@ -18,11 +18,11 @@ where
 
 impl<Graph, Ops: DijkstraOps<Graph, Label = Timestamp>, P: Potential> Server<Graph, Ops, P, true, true, true>
 where
-    Graph: LinkIterable<NodeId> + LinkIterable<Ops::Arc>,
+    Graph: LinkIterable<NodeIdT> + LinkIterable<Ops::Arc>,
 {
     pub fn new<G>(graph: &G, potential: P, ops: Ops) -> Self
     where
-        G: LinkIterable<NodeId>,
+        G: LinkIterable<NodeIdT>,
         Graph: BuildPermutated<G>,
     {
         Self::new_custom(graph, potential, ops)
@@ -32,11 +32,11 @@ where
 impl<Graph, Ops: DijkstraOps<Graph, Label = Timestamp>, P: Potential, const BCC_CORE: bool, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool>
     Server<Graph, Ops, P, BCC_CORE, SKIP_DEG_2, SKIP_DEG_3>
 where
-    Graph: LinkIterable<NodeId> + LinkIterable<Ops::Arc>,
+    Graph: LinkIterable<NodeIdT> + LinkIterable<Ops::Arc>,
 {
     pub fn new_custom<G>(graph: &G, potential: P, ops: Ops) -> Self
     where
-        G: LinkIterable<NodeId>,
+        G: LinkIterable<NodeIdT>,
         Graph: BuildPermutated<G>,
     {
         report_time_with_key("TopoDijkstra preprocessing", "topo_dijk_prepro", move || {
@@ -236,7 +236,7 @@ impl<'s, G, O, P, Q, const BCC_CORE: bool, const SKIP_DEG_2: bool, const SKIP_DE
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
-    G: LinkIterable<NodeId> + LinkIterable<O::Arc>,
+    G: LinkIterable<NodeIdT> + LinkIterable<O::Arc>,
     Q: GenQuery<Timestamp> + Copy,
 {
     type NodeInfo = NodeId;
@@ -250,7 +250,7 @@ impl<'s, G, O, P, Q, const BCC_CORE: bool, const SKIP_DEG_2: bool, const SKIP_DE
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
-    G: LinkIterable<NodeId> + LinkIterable<O::Arc>,
+    G: LinkIterable<NodeIdT> + LinkIterable<O::Arc>,
     Q: GenQuery<Timestamp> + Copy,
 {
     /// Print path with debug info as js to stdout.
@@ -298,7 +298,7 @@ impl<G, O, P, const BCC_CORE: bool, const SKIP_DEG_2: bool, const SKIP_DEG_3: bo
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
-    G: LinkIterable<NodeId> + LinkIterable<O::Arc>,
+    G: LinkIterable<NodeIdT> + LinkIterable<O::Arc>,
 {
     type P<'s>
     where
@@ -314,7 +314,7 @@ impl<G, O, P, const BCC_CORE: bool, const SKIP_DEG_2: bool, const SKIP_DEG_3: bo
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
-    G: LinkIterable<NodeId> + LinkIterable<O::Arc>,
+    G: LinkIterable<NodeIdT> + LinkIterable<O::Arc>,
 {
     type P<'s>
     where
@@ -363,7 +363,7 @@ where
 impl<Graph, Ops: DijkstraOps<Graph, Label = Timestamp>, P: Potential, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool>
     SkipLowDegServer<Graph, Ops, P, SKIP_DEG_2, SKIP_DEG_3>
 where
-    Graph: LinkIterable<NodeId> + LinkIterable<Ops::Arc> + SymmetricDegreeGraph,
+    Graph: LinkIterable<NodeIdT> + LinkIterable<Ops::Arc> + SymmetricDegreeGraph,
 {
     pub fn new(graph: Graph, potential: P, ops: Ops) -> Self {
         let n = graph.num_nodes();
@@ -387,7 +387,7 @@ where
         if in_core(node) {
             return;
         }
-        for head in graph.link_iter(node) {
+        for NodeIdT(head) in graph.link_iter(node) {
             Self::dfs(graph, head, visited, in_core);
         }
     }
@@ -536,7 +536,7 @@ impl<'s, G, O, P, Q, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool> PathServer 
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
-    G: LinkIterable<NodeId> + LinkIterable<O::Arc> + SymmetricDegreeGraph,
+    G: LinkIterable<NodeIdT> + LinkIterable<O::Arc> + SymmetricDegreeGraph,
     Q: GenQuery<Timestamp> + Copy,
 {
     type NodeInfo = NodeId;
@@ -550,7 +550,7 @@ impl<'s, G, O, P, Q, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool> Biconnected
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
-    G: LinkIterable<NodeId> + LinkIterable<O::Arc> + SymmetricDegreeGraph,
+    G: LinkIterable<NodeIdT> + LinkIterable<O::Arc> + SymmetricDegreeGraph,
     Q: GenQuery<Timestamp> + Copy,
 {
     /// Print path with debug info as js to stdout.
@@ -593,7 +593,7 @@ impl<G, O, P, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool> TDQueryServer<Time
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
-    G: LinkIterable<NodeId> + LinkIterable<O::Arc> + SymmetricDegreeGraph,
+    G: LinkIterable<NodeIdT> + LinkIterable<O::Arc> + SymmetricDegreeGraph,
 {
     type P<'s>
     where
@@ -609,7 +609,7 @@ impl<G, O, P, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool> QueryServer for Sk
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
-    G: LinkIterable<NodeId> + LinkIterable<O::Arc> + SymmetricDegreeGraph,
+    G: LinkIterable<NodeIdT> + LinkIterable<O::Arc> + SymmetricDegreeGraph,
 {
     type P<'s>
     where

@@ -84,7 +84,7 @@ impl<'a> Server<'a> {
         let mut dijkstra = DijkstraRun::query(&self.graph, &mut self.dijkstra_data, &mut ops, TDQuery { from, to, departure });
 
         let active_edges = &self.active_edges;
-        while let Some(node) = dijkstra.next_filtered_edges(|&(_, edge_id)| active_edges[edge_id as usize]) {
+        while let Some(node) = dijkstra.next_filtered_edges(|&(_, edge_id)| active_edges[edge_id.0 as usize]) {
             if node == to {
                 return Some(dijkstra.tentative_distance(node) - departure);
             }

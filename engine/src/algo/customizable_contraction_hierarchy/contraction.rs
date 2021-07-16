@@ -85,7 +85,7 @@ pub struct ContractionGraph<'a, Graph: 'a> {
     original_graph: &'a Graph,
 }
 
-impl<'a, Graph: LinkIterable<NodeId>> ContractionGraph<'a, Graph> {
+impl<'a, Graph: LinkIterable<NodeIdT>> ContractionGraph<'a, Graph> {
     /// Preprocessing preparation
     pub fn new(graph: &'a Graph, node_order: NodeOrder) -> ContractionGraph<'a, Graph> {
         let n = graph.num_nodes() as NodeId;
@@ -96,10 +96,10 @@ impl<'a, Graph: LinkIterable<NodeId>> ContractionGraph<'a, Graph> {
                 let old_node_id = node_order.node(node);
                 let edges = graph
                     .link_iter(old_node_id)
-                    .filter(|neighbor| old_node_id != *neighbor)
+                    .filter(|neighbor| old_node_id != neighbor.0)
                     .map(|neighbor| {
-                        debug_assert_ne!(old_node_id, neighbor);
-                        node_order.rank(neighbor)
+                        debug_assert_ne!(old_node_id, neighbor.0);
+                        node_order.rank(neighbor.0)
                     })
                     .collect();
                 Node { edges }

@@ -94,11 +94,11 @@ struct FlTDDijkstraOps();
 impl DijkstraOps<TDGraph> for FlTDDijkstraOps {
     type Label = Timestamp;
     type LinkResult = Timestamp;
-    type Arc = (NodeId, EdgeId);
+    type Arc = (NodeIdT, EdgeIdT);
 
     #[inline(always)]
     fn link(&mut self, graph: &TDGraph, label: &Timestamp, link: &Self::Arc) -> Self::LinkResult {
-        *label + graph.travel_time_function(link.1).evaluate(*label)
+        *label + graph.travel_time_function(link.1 .0).evaluate(*label)
     }
 
     #[inline(always)]

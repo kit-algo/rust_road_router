@@ -203,16 +203,16 @@ where
     }
 }
 
-impl<FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<NodeId> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+impl<FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<NodeIdT> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
     WeightContainer: AsRef<[Weight]>,
 {
-    type Iter<'a> = std::iter::Cloned<std::slice::Iter<'a, NodeId>>;
+    type Iter<'a> = impl Iterator<Item = NodeIdT> + 'a;
 
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
-        self.head()[SlcsIdx(self.first_out()).range(node as usize)].iter().cloned()
+        self.head()[SlcsIdx(self.first_out()).range(node as usize)].iter().copied().map(NodeIdT)
     }
 }
 
@@ -267,21 +267,21 @@ where
     }
 }
 
-impl<FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<LinkWithId> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+impl<FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<(NodeIdT, EdgeIdT)> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
     WeightContainer: AsRef<[Weight]>,
 {
     #[allow(clippy::type_complexity)]
-    type Iter<'a> = std::iter::Map<std::iter::Zip<std::slice::Iter<'a, NodeId>, std::ops::Range<usize>>, fn((&NodeId, usize)) -> LinkWithId>;
+    type Iter<'a> = std::iter::Map<std::iter::Zip<std::slice::Iter<'a, NodeId>, std::ops::Range<usize>>, fn((&NodeId, usize)) -> (NodeIdT, EdgeIdT)>;
 
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         let range = SlcsIdx(self.first_out()).range(node as usize);
         self.head()[range.clone()]
             .iter()
             .zip(range)
-            .map(|(&node, e)| LinkWithId { node, edge_id: e as EdgeId })
+            .map(|(&node, e)| (NodeIdT(node), EdgeIdT(e as EdgeId)))
     }
 }
 
@@ -346,15 +346,15 @@ where
     }
 }
 
-impl<FirstOutContainer, HeadContainer> LinkIterable<NodeId> for UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
+impl<FirstOutContainer, HeadContainer> LinkIterable<NodeIdT> for UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
 {
-    type Iter<'a> = std::iter::Cloned<std::slice::Iter<'a, NodeId>>;
+    type Iter<'a> = impl Iterator<Item = NodeIdT>;
 
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
-        self.head()[self.neighbor_edge_indices_usize(node)].iter().cloned()
+        self.head()[self.neighbor_edge_indices_usize(node)].iter().copied().map(NodeIdT)
     }
 }
 
@@ -399,14 +399,14 @@ impl UnweightedOwnedGraph {
     }
 }
 
-impl<G: LinkIterable<NodeId>> BuildReversed<G> for UnweightedOwnedGraph {
+impl<G: LinkIterable<NodeIdT>> BuildReversed<G> for UnweightedOwnedGraph {
     fn reversed(graph: &G) -> Self {
         // vector of adjacency lists for the reverse graph
         let mut reversed: Vec<Vec<NodeId>> = (0..graph.num_nodes()).map(|_| Vec::<NodeId>::new()).collect();
 
         // iterate over all edges and insert them in the reversed structure
         for node in 0..(graph.num_nodes() as NodeId) {
-            for neighbor in graph.link_iter(node) {
+            for NodeIdT(neighbor) in graph.link_iter(node) {
                 reversed[neighbor as usize].push(node);
             }
         }
@@ -429,14 +429,14 @@ pub struct ReversedGraphWithEdgeIds {
     edge_ids: Vec<EdgeId>,
 }
 
-impl<G: LinkIterable<LinkWithId>> BuildReversed<G> for ReversedGraphWithEdgeIds {
+impl<G: LinkIterable<(NodeIdT, EdgeIdT)>> BuildReversed<G> for ReversedGraphWithEdgeIds {
     fn reversed(graph: &G) -> Self {
         // vector of adjacency lists for the reverse graph
         let mut reversed: Vec<Vec<Link>> = (0..graph.num_nodes()).map(|_| Vec::<Link>::new()).collect();
 
         // iterate over all edges and insert them in the reversed structure
         for node in 0..(graph.num_nodes() as NodeId) {
-            for LinkWithId { node: neighbor, edge_id } in graph.link_iter(node) {
+            for (NodeIdT(neighbor), EdgeIdT(edge_id)) in graph.link_iter(node) {
                 reversed[neighbor as usize].push(Link { node, weight: edge_id });
             }
         }

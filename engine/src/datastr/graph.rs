@@ -24,6 +24,11 @@ pub type Weight = u32;
 /// Set to `u32::MAX / 2` so that `INFINITY + x` for `x <= INFINITY` does not overflow.
 pub const INFINITY: Weight = std::u32::MAX / 2;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct NodeIdT(pub NodeId);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct EdgeIdT(pub EdgeId);
+
 pub trait Arc {
     fn head(&self) -> NodeId;
 }
@@ -43,23 +48,17 @@ impl Arc for Link {
     }
 }
 
-impl Arc for (NodeId, EdgeId) {
+impl Arc for NodeIdT {
     #[inline(always)]
     fn head(&self) -> NodeId {
         self.0
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub struct LinkWithId {
-    pub node: NodeId,
-    pub edge_id: EdgeId,
-}
-
-impl Arc for LinkWithId {
+impl<T> Arc for (NodeIdT, T) {
     #[inline(always)]
     fn head(&self) -> NodeId {
-        self.node
+        self.0 .0
     }
 }
 
@@ -218,10 +217,10 @@ impl<G: LinkIterable<Link>> LinkIterable<Link> for InfinityFilteringGraph<G> {
     }
 }
 
-impl<G: LinkIterable<Link>> LinkIterable<NodeId> for InfinityFilteringGraph<G> {
-    type Iter<'a> = std::iter::Map<<Self as LinkIterable<Link>>::Iter<'a>, fn(Link) -> NodeId>;
+impl<G: LinkIterable<Link>> LinkIterable<NodeIdT> for InfinityFilteringGraph<G> {
+    type Iter<'a> = std::iter::Map<<Self as LinkIterable<Link>>::Iter<'a>, fn(Link) -> NodeIdT>;
 
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
-        LinkIterable::<Link>::link_iter(self, node).map(|l| l.node)
+        LinkIterable::<Link>::link_iter(self, node).map(|l| NodeIdT(l.node))
     }
 }

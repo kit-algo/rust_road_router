@@ -17,7 +17,7 @@ pub struct Penalty<P> {
 impl<P: Potential> Penalty<P> {
     pub fn new<G>(graph: &G, potential: P) -> Self
     where
-        G: LinkIterable<NodeId>,
+        G: LinkIterable<NodeIdT>,
         OwnedGraph: BuildPermutated<G>,
     {
         let (main_graph, _, virtual_topocore) = VirtualTopocoreGraph::new_topo_dijkstra_graphs(graph);
@@ -113,9 +113,7 @@ impl<P: Potential> Penalty<P> {
                         }
                     }
 
-                    for (edge_head, edge) in LinkIterable::<NodeId>::link_iter(&alternative_graph_dijkstra.graph().graph, tail)
-                        .zip(alternative_graph_dijkstra.graph().graph.neighbor_edge_indices(tail))
-                    {
+                    for (NodeIdT(edge_head), EdgeIdT(edge)) in LinkIterable::<(NodeIdT, EdgeIdT)>::link_iter(&alternative_graph_dijkstra.graph().graph, tail) {
                         if edge_head != head {
                             let weight = &mut shortest_path_penalized.graph_mut().graph.weights_mut()[edge as usize];
                             *weight += rejoin_penalty * tail_dist / total_penalized_dist;

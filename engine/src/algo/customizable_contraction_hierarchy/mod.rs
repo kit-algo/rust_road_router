@@ -21,7 +21,7 @@ pub use reorder::*;
 pub mod query;
 
 /// Execute first phase, that is metric independent preprocessing.
-pub fn contract<Graph: LinkIterable<NodeId> + RandomLinkAccessGraph>(graph: &Graph, node_order: NodeOrder) -> CCH {
+pub fn contract<Graph: LinkIterable<NodeIdT> + RandomLinkAccessGraph>(graph: &Graph, node_order: NodeOrder) -> CCH {
     CCH::new(ContractionGraph::new(graph, node_order).contract())
 }
 
@@ -60,7 +60,7 @@ impl<'g, Graph: RandomLinkAccessGraph> ReconstructPrepared<CCH> for CCHReconstrc
 }
 
 impl CCH {
-    pub fn fix_order_and_build(graph: &(impl LinkIterable<NodeId> + RandomLinkAccessGraph), order: NodeOrder) -> Self {
+    pub fn fix_order_and_build(graph: &(impl LinkIterable<NodeIdT> + RandomLinkAccessGraph), order: NodeOrder) -> Self {
         let cch = contract(graph, order);
         let order = CCHReordering {
             cch: &cch,
@@ -86,7 +86,7 @@ impl CCH {
         let cch_edge_to_orig_arc = (0..n)
             .flat_map(|node| {
                 let node_order = &node_order;
-                LinkIterable::<NodeId>::link_iter(&contracted_graph, node).map(move |neighbor| {
+                LinkIterable::<NodeIdT>::link_iter(&contracted_graph, node).map(move |NodeIdT(neighbor)| {
                     (
                         original_graph
                             .neighbor_edge_indices(node_order.node(node))
@@ -128,7 +128,7 @@ impl CCH {
 
     fn build_elimination_tree(graph: &UnweightedOwnedGraph) -> Vec<InRangeOption<NodeId>> {
         (0..graph.num_nodes())
-            .map(|node_id| LinkIterable::<NodeId>::link_iter(graph, node_id as NodeId).min())
+            .map(|node_id| LinkIterable::<NodeIdT>::link_iter(graph, node_id as NodeId).map(|NodeIdT(n)| n).min())
             .map(InRangeOption::new)
             .collect()
     }
@@ -268,10 +268,10 @@ impl Graph for CCH {
     }
 }
 
-fn inverted_with_orig_edge_ids_as_weights(graph: &(impl RandomLinkAccessGraph + LinkIterable<NodeId>)) -> OwnedGraph {
+fn inverted_with_orig_edge_ids_as_weights(graph: &(impl RandomLinkAccessGraph + LinkIterable<NodeIdT>)) -> OwnedGraph {
     let mut inverted = vec![Vec::new(); graph.num_nodes()];
     for current_node in 0..(graph.num_nodes() as NodeId) {
-        for (node, edge_id) in graph.link_iter(current_node).zip(graph.neighbor_edge_indices(current_node)) {
+        for (NodeIdT(node), edge_id) in graph.link_iter(current_node).zip(graph.neighbor_edge_indices(current_node)) {
             // the heads of inverted will be sorted ascending for each node, because current node goes from 0 to n
             inverted[node as usize].push((current_node, edge_id));
         }

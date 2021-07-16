@@ -7,11 +7,11 @@ pub struct TDDijkstraOps();
 impl DijkstraOps<TDGraph> for TDDijkstraOps {
     type Label = Weight;
     type LinkResult = Weight;
-    type Arc = (NodeId, EdgeId);
+    type Arc = (NodeIdT, EdgeIdT);
 
     #[inline(always)]
     fn link(&mut self, graph: &TDGraph, label: &Weight, link: &Self::Arc) -> Self::LinkResult {
-        label + graph.travel_time_function(link.1).eval(*label)
+        label + graph.travel_time_function(link.1 .0).eval(*label)
     }
 
     #[inline(always)]
@@ -35,11 +35,11 @@ pub struct LiveTDDijkstraOps();
 impl DijkstraOps<LiveTDGraph> for LiveTDDijkstraOps {
     type Label = Weight;
     type LinkResult = Weight;
-    type Arc = (NodeId, EdgeId);
+    type Arc = (NodeIdT, EdgeIdT);
 
     #[inline(always)]
     fn link(&mut self, graph: &LiveTDGraph, label: &Weight, link: &Self::Arc) -> Self::LinkResult {
-        label + graph.eval(link.1, *label)
+        label + graph.eval(link.1 .0, *label)
     }
 
     #[inline(always)]
