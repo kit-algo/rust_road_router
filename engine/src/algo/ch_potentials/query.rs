@@ -662,8 +662,8 @@ impl<P: Potential> BiDirSkipLowDegServer<P> {
             backward_graph: reversed,
             forward_dijkstra_data: DijkstraData::new(n),
             backward_dijkstra_data: DijkstraData::new(n),
-            forward_potential: forward_potential,
-            backward_potential: backward_potential,
+            forward_potential,
+            backward_potential,
             meeting_node: n as NodeId,
             forward_to_backward_edge_ids: forward_to_backward,
         }
