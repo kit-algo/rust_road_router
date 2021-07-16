@@ -7,14 +7,15 @@ use crate::datastr::rank_select_map::*;
 
 pub struct Penalty<P> {
     virtual_topocore: VirtualTopocore,
-    shortest_path_penalized: query::BiDirSkipLowDegServer<PotentialForPermutated<P>>,
+    // shortest_path_penalized: query::BiDirSkipLowDegServer<PotentialForPermutated<P>>,
+    shortest_path_penalized: query::MultiThreadedBiDirSkipLowDegServer<PotentialForPermutated<P>>,
     alternative_graph_dijkstra: query::SkipLowDegServer<AlternativeGraph<VirtualTopocoreGraph<OwnedGraph>>, DefaultOps, ZeroPotential, true, true>,
     reversed: ReversedGraphWithEdgeIds,
     edge_penelized: BitVec,
     edges_to_reset: Vec<EdgeId>,
 }
 
-impl<P: Potential> Penalty<P> {
+impl<P: Potential + Send + Clone> Penalty<P> {
     pub fn new<G>(graph: &G, forward_potential: P, backward_potential: P) -> Self
     where
         G: LinkIterable<NodeId>,
@@ -25,7 +26,8 @@ impl<P: Potential> Penalty<P> {
 
         let reversed = ReversedGraphWithEdgeIds::reversed(&main_graph);
         Self {
-            shortest_path_penalized: query::BiDirSkipLowDegServer::new(
+            // shortest_path_penalized: query::BiDirSkipLowDegServer::new(
+            shortest_path_penalized: query::MultiThreadedBiDirSkipLowDegServer::new(
                 main_graph.clone(),
                 PotentialForPermutated {
                     order: virtual_topocore.order.clone(),
@@ -58,7 +60,7 @@ impl<P: Potential> Penalty<P> {
         let query = Query { from: core_from, to: core_to };
         self.alternative_graph_dijkstra.graph_mut().clear();
 
-        if let Some(mut result) = self.shortest_path_penalized.query(query).found() {
+        if let Some(mut result) = report_time_with_key("initial_query", "initial_query", || self.shortest_path_penalized.query(query)).found() {
             let base_dist = result.distance();
             report!("base_dist", base_dist);
 
@@ -217,12 +219,8 @@ impl<P: Potential> Penalty<P> {
         }
     }
 
-    pub fn forward_potential(&self) -> std::cell::Ref<P> {
-        std::cell::Ref::map(self.shortest_path_penalized.forward_potential(), |p| p.inner())
-    }
-
-    pub fn backward_potential(&self) -> std::cell::Ref<P> {
-        std::cell::Ref::map(self.shortest_path_penalized.backward_potential(), |p| p.inner())
+    pub fn potentials(&self) -> impl Iterator<Item = &PotentialForPermutated<P>> {
+        self.shortest_path_penalized.potentials()
     }
 }
 

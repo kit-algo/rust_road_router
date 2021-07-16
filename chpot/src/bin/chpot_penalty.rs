@@ -25,9 +25,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
 
-    let core_ids = core_affinity::get_core_ids().unwrap();
-    core_affinity::set_for_current(core_ids[0]);
-
     let chpot_data = CHPotLoader::reconstruct_from(&path.join("lower_bound_ch"))?;
     let (forward_pot, backward_pot) = chpot_data.potentials();
     let (forward_pot, backward_pot) = (RecyclingPotential::new(forward_pot), RecyclingPotential::new(backward_pot));
@@ -53,7 +50,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         report!(
             "pot_evals",
-            penalty_server.forward_potential().inner().num_pot_computations() + penalty_server.backward_potential().inner().num_pot_computations()
+            penalty_server.potentials().map(|p| p.inner().inner().num_pot_computations()).sum::<usize>()
         );
         eprintln!();
 

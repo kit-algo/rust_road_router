@@ -192,6 +192,7 @@ version = "0.1.0"
 dependencies = [
  "core_affinity",
  "rand 0.8.4",
+ "rayon",
  "rust_road_router",
  "time",
 ]

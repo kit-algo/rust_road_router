@@ -82,3 +82,65 @@ impl<T: Clone> IndexMut<usize> for TimestampedVector<T> {
         &mut self.data[index]
     }
 }
+
+use crate::datastr::graph::*;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+#[derive(Debug)]
+pub struct AtomicDists {
+    data: Box<[std::sync::atomic::AtomicU64]>,
+    current: u32,
+}
+
+impl AtomicDists {
+    pub fn new(size: usize) -> Self {
+        AtomicDists {
+            data: (0..size).map(|_| AtomicU64::new(from_pair((INFINITY, 0)))).collect(),
+            current: 0,
+        }
+    }
+
+    /// Reset all elements to the default.
+    /// Amortized O(1).
+    pub fn reset(&mut self) {
+        let (new, overflow) = self.current.overflowing_add(1);
+        self.current = new;
+
+        // we have to reset all values manually on overflow, because we now might encounter old timestamps again
+        if overflow {
+            for element in &self.data[..] {
+                element.store(from_pair((INFINITY, 0)), Ordering::Relaxed);
+            }
+        }
+    }
+
+    pub fn set(&self, index: usize, value: Weight) {
+        self.data[index].store(from_pair((value, self.current)), Ordering::Relaxed);
+    }
+
+    pub fn get(&self, index: usize) -> Weight {
+        let (w, ts) = to_pair(self.data[index].load(Ordering::Relaxed));
+        if ts == self.current {
+            w
+        } else {
+            INFINITY
+        }
+    }
+
+    /// Number of elements in the data structure
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    /// Are there no elements in the data structure
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+fn from_pair((w, ts): (Weight, u32)) -> u64 {
+    unsafe { std::mem::transmute((w, ts)) }
+}
+fn to_pair(combined: u64) -> (Weight, u32) {
+    unsafe { std::mem::transmute(combined) }
+}

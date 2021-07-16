@@ -82,3 +82,19 @@ impl<L: Label> DijkstraData<L> {
         }
     }
 }
+
+pub struct SyncDijkstraData {
+    pub distances: AtomicDists,
+    pub predecessors: Vec<NodeId>,
+    pub queue: IndexdMinHeap<State<Weight>>,
+}
+
+impl SyncDijkstraData {
+    pub fn new(n: usize) -> Self {
+        Self {
+            distances: AtomicDists::new(n),
+            predecessors: vec![n as NodeId; n],
+            queue: IndexdMinHeap::new(n),
+        }
+    }
+}

@@ -432,9 +432,9 @@ pub struct VirtualTopocore {
     biggest_bcc: usize,
     deg2: usize,
     deg3: usize,
-    symmetric_degrees: std::rc::Rc<[u8]>,
-    bcc: std::rc::Rc<[u32]>,
-    bridge: std::rc::Rc<[InRangeOption<NodeId>]>,
+    symmetric_degrees: std::sync::Arc<[u8]>,
+    bcc: std::sync::Arc<[u32]>,
+    bridge: std::sync::Arc<[InRangeOption<NodeId>]>,
 }
 
 #[derive(Debug, PartialEq)]
