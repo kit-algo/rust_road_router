@@ -7,7 +7,7 @@ use crate::datastr::rank_select_map::*;
 
 pub struct Penalty<P> {
     virtual_topocore: VirtualTopocore,
-    shortest_path_penalized: query::SkipLowDegServer<VirtualTopocoreGraph<OwnedGraph>, DefaultOps, PotentialForPermutated<P>, true, true>,
+    shortest_path_penalized: query::SkipLowDegServer<VirtualTopocoreGraph<OwnedGraph>, DefaultOpsWithLinkPath, PotentialForPermutated<P>, true, true>,
     alternative_graph_dijkstra: query::SkipLowDegServer<AlternativeGraph<VirtualTopocoreGraph<OwnedGraph>>, DefaultOps, ZeroPotential, true, true>,
     reversed: ReversedGraphWithEdgeIds,
     edge_penelized: BitVec,
@@ -31,7 +31,7 @@ impl<P: Potential> Penalty<P> {
                     order: virtual_topocore.order.clone(),
                     potential,
                 },
-                DefaultOps::default(),
+                DefaultOpsWithLinkPath::default(),
             ),
             alternative_graph_dijkstra: query::SkipLowDegServer::new(
                 AlternativeGraph {
@@ -65,16 +65,13 @@ impl<P: Potential> Penalty<P> {
             let max_penalized_dist = max_orig_dist * 25 / 20 + 2 * rejoin_penalty;
 
             let mut path = result.node_path();
+            let mut path_edges = result.edge_path();
             let shortest_path_penalized = &mut self.shortest_path_penalized;
             let alternative_graph_dijkstra = &mut self.alternative_graph_dijkstra;
-            let mut path_edges: Vec<_> = path
-                .array_windows::<2>()
-                .map(|&[tail, head]| shortest_path_penalized.graph().graph.edge_index(tail, head).unwrap())
-                .collect();
             alternative_graph_dijkstra.graph_mut().add_edges(&path_edges);
             let path_orig_len: Weight = path_edges
                 .iter()
-                .map(|&e| alternative_graph_dijkstra.graph().graph.graph.weight()[e as usize])
+                .map(|&EdgeIdT(e)| alternative_graph_dijkstra.graph().graph.graph.weight()[e as usize])
                 .sum();
             debug_assert_eq!(base_dist, path_orig_len);
 
@@ -86,7 +83,7 @@ impl<P: Potential> Penalty<P> {
                 i += 1;
                 let _iteration_ctxt = iterations_ctxt.push_collection_item();
                 report!("iteration", i);
-                for &edge in &path_edges {
+                for &EdgeIdT(edge) in &path_edges {
                     let weight = &mut shortest_path_penalized.graph_mut().graph.weights_mut()[edge as usize];
                     *weight = *weight * 11 / 10;
                     if !self.edge_penelized.get(edge as usize) {
@@ -95,7 +92,7 @@ impl<P: Potential> Penalty<P> {
                     }
                 }
                 let dists: Vec<_> = std::iter::once(0)
-                    .chain(path_edges.iter().scan(0, |state, &edge| {
+                    .chain(path_edges.iter().scan(0, |state, &EdgeIdT(edge)| {
                         *state += shortest_path_penalized.graph().graph.weight()[edge as usize];
                         Some(*state)
                     }))
@@ -135,33 +132,30 @@ impl<P: Potential> Penalty<P> {
                 };
                 let penalty_dist = result.distance();
                 report!("penalty_dist", penalty_dist);
-                // TODO refactor get path edges
+
                 path = result.node_path();
-                path_edges = path
-                    .array_windows::<2>()
-                    .map(|&[tail, head]| alternative_graph_dijkstra.graph().graph.graph.edge_index(tail, head).unwrap())
-                    .collect();
+                path_edges = result.edge_path();
                 let path_orig_len: Weight = path_edges
                     .iter()
-                    .map(|&e| alternative_graph_dijkstra.graph().graph.graph.weight()[e as usize])
+                    .map(|&EdgeIdT(e)| alternative_graph_dijkstra.graph().graph.graph.weight()[e as usize])
                     .sum();
                 report!("orig_dist", path_orig_len);
                 debug_assert!(path_orig_len >= base_dist);
 
                 let mut feasable = false;
                 let new_parts: Vec<_> = path_edges
-                    .split(|&edge| alternative_graph_dijkstra.graph().contained_edges.get(edge as usize))
+                    .split(|&EdgeIdT(edge)| alternative_graph_dijkstra.graph().contained_edges.get(edge as usize))
                     .filter(|part| !part.is_empty())
                     .collect();
 
                 for new_part in new_parts {
                     let part_start = result
                         .data()
-                        .predecessor(alternative_graph_dijkstra.graph().graph.graph.head()[new_part[0] as usize]);
-                    let part_end = alternative_graph_dijkstra.graph().graph.graph.head()[*new_part.last().unwrap() as usize];
+                        .predecessor(alternative_graph_dijkstra.graph().graph.graph.head()[new_part[0].0 as usize]);
+                    let part_end = alternative_graph_dijkstra.graph().graph.graph.head()[new_part.last().unwrap().0 as usize];
                     let part_dist: Weight = new_part
                         .iter()
-                        .map(|&e| alternative_graph_dijkstra.graph().graph.graph.weight()[e as usize])
+                        .map(|&EdgeIdT(e)| alternative_graph_dijkstra.graph().graph.graph.weight()[e as usize])
                         .sum();
 
                     if part_dist * 10 > base_dist {
@@ -225,8 +219,8 @@ struct AlternativeGraph<G> {
 }
 
 impl<G> AlternativeGraph<G> {
-    fn add_edges(&mut self, edges: &[EdgeId]) {
-        for &edge in edges {
+    fn add_edges(&mut self, edges: &[EdgeIdT]) {
+        for &EdgeIdT(edge) in edges {
             self.contained_edges.set(edge as usize);
         }
     }

@@ -165,9 +165,9 @@ impl Default for DefaultOps {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct DefaultLinkPathOps();
+pub struct DefaultOpsWithLinkPath();
 
-impl<G: RandomLinkAccessGraph> DijkstraOps<G> for DefaultLinkPathOps {
+impl<G: RandomLinkAccessGraph> DijkstraOps<G> for DefaultOpsWithLinkPath {
     type Label = Weight;
     type Arc = (NodeIdT, (Weight, EdgeIdT));
     type LinkResult = Weight;
@@ -193,7 +193,7 @@ impl<G: RandomLinkAccessGraph> DijkstraOps<G> for DefaultLinkPathOps {
     }
 }
 
-impl Default for DefaultLinkPathOps {
+impl Default for DefaultOpsWithLinkPath {
     fn default() -> Self {
         Self()
     }

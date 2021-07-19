@@ -274,14 +274,36 @@ where
     WeightContainer: AsRef<[Weight]>,
 {
     #[allow(clippy::type_complexity)]
-    type Iter<'a> = std::iter::Map<std::iter::Zip<std::slice::Iter<'a, NodeId>, std::ops::Range<usize>>, fn((&NodeId, usize)) -> (NodeIdT, EdgeIdT)>;
+    type Iter<'a> = impl Iterator<Item = (NodeIdT, EdgeIdT)> + 'a;
 
+    #[inline]
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         let range = SlcsIdx(self.first_out()).range(node as usize);
         self.head()[range.clone()]
             .iter()
             .zip(range)
             .map(|(&node, e)| (NodeIdT(node), EdgeIdT(e as EdgeId)))
+    }
+}
+
+impl<FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<(NodeIdT, (Weight, EdgeIdT))>
+    for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+where
+    FirstOutContainer: AsRef<[EdgeId]>,
+    HeadContainer: AsRef<[NodeId]>,
+    WeightContainer: AsRef<[Weight]>,
+{
+    #[allow(clippy::type_complexity)]
+    type Iter<'a> = impl Iterator<Item = (NodeIdT, (Weight, EdgeIdT))> + 'a;
+
+    #[inline]
+    fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
+        let range = SlcsIdx(self.first_out()).range(node as usize);
+        self.head()[range.clone()]
+            .iter()
+            .zip(self.weight()[range.clone()].iter())
+            .zip(range)
+            .map(|((&node, &weight), e)| (NodeIdT(node), (weight, EdgeIdT(e as EdgeId))))
     }
 }
 
