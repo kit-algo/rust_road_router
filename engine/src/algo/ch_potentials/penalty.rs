@@ -64,7 +64,7 @@ impl<P: Potential> Penalty<P> {
 
             let max_penalized_dist = max_orig_dist * 25 / 20 + 2 * rejoin_penalty;
 
-            let mut path = result.path();
+            let mut path = result.node_path();
             let shortest_path_penalized = &mut self.shortest_path_penalized;
             let alternative_graph_dijkstra = &mut self.alternative_graph_dijkstra;
             let mut path_edges: Vec<_> = path
@@ -136,7 +136,7 @@ impl<P: Potential> Penalty<P> {
                 let penalty_dist = result.distance();
                 report!("penalty_dist", penalty_dist);
                 // TODO refactor get path edges
-                path = result.path();
+                path = result.node_path();
                 path_edges = path
                     .array_windows::<2>()
                     .map(|&[tail, head]| alternative_graph_dijkstra.graph().graph.graph.edge_index(tail, head).unwrap())

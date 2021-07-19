@@ -53,7 +53,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let at = start + 0.5 * (end - start);
                     let mut result = ea_server.td_query(TDQuery { from, to, departure: at }).found().unwrap();
                     assert!(PartialPiecewiseLinearFunction::new(&tt).eval(at).fuzzy_eq(result.distance()));
-                    let gt_path = result.path();
+                    let gt_path = result.node_path();
                     g.check_path(&gt_path);
                     g.check_path(&g.get_path_with_times(at, &path));
                 };

@@ -218,7 +218,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         })
         .found()
         .unwrap();
-    let fifth = node_order.rank(res.path()[5]);
+    let fifth = node_order.rank(res.node_path()[5]);
 
     foo(
         fifth,

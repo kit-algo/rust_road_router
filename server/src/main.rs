@@ -241,7 +241,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         let result = report_time("cch query", || {
                             server.query(Query { from, to }).found().map(|mut result| {
                                 let distance = result.distance();
-                                let path = result.path().iter().map(|&node| coords(node)).collect();
+                                let path = result.node_path().iter().map(|&node| coords(node)).collect();
                                 GeoResponse { distance, path }
                             })
                         });
@@ -276,7 +276,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     + (from_link_fraction * from_link.weight as f32) as u32
                                     + (to_link_fraction * to_link.weight as f32) as u32;
 
-                                let path = result.path();
+                                let path = result.node_path();
                                 let path_iter = path.iter();
                                 let mut second_node_iter = path_iter.clone();
                                 second_node_iter.next();

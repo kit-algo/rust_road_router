@@ -46,7 +46,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                 assert!(ea_ground_truth.fuzzy_eq(ea), "{} {} {:?}", from, to, at);
 
-                let (path, unpacking_duration) = measure(|| result.path());
+                let (path, unpacking_duration) = measure(|| result.node_path());
                 report!(
                     "unpacking_running_time_ms",
                     unpacking_duration.to_std().unwrap().as_nanos() as f64 / 1_000_000.0

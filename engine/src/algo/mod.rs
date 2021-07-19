@@ -137,9 +137,18 @@ where
     }
 
     /// Retrieve shortest path (usually lazily) for a query
-    pub fn path(&mut self) -> Option<Vec<P::NodeInfo>> {
+    pub fn node_path(&mut self) -> Option<Vec<P::NodeInfo>> {
         if self.distance.is_some() {
-            Some(self.path_server.reconstruct_path())
+            Some(self.path_server.reconstruct_node_path())
+        } else {
+            None
+        }
+    }
+
+    /// Retrieve shortest path as edge list (usually lazily) for a query
+    pub fn edge_path(&mut self) -> Option<Vec<P::EdgeInfo>> {
+        if self.distance.is_some() {
+            Some(self.path_server.reconstruct_edge_path())
         } else {
             None
         }
@@ -171,8 +180,13 @@ where
     }
 
     /// Retrieve shortest path (usually lazily) for a query
-    pub fn path(&mut self) -> Vec<P::NodeInfo> {
-        self.0.path().unwrap()
+    pub fn node_path(&mut self) -> Vec<P::NodeInfo> {
+        self.0.node_path().unwrap()
+    }
+
+    /// Retrieve shortest path as edge list (usually lazily) for a query
+    pub fn edge_path(&mut self) -> Vec<P::EdgeInfo> {
+        self.0.edge_path().unwrap()
     }
 
     /// Get reference to object which allows to access additional query specific data
@@ -212,7 +226,7 @@ pub trait PathServer {
     /// Information for each edge in the path.
     type EdgeInfo;
     /// Fetch the shortest path.
-    fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo>;
+    fn reconstruct_node_path(&mut self) -> Vec<Self::NodeInfo>;
     /// Fetch the shortest path as edges.
     fn reconstruct_edge_path(&mut self) -> Vec<Self::EdgeInfo>;
 }

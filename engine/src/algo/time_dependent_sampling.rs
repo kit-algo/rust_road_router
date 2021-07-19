@@ -72,7 +72,7 @@ impl<'a> Server<'a> {
         // query each window independently and mark edges
         for server in &mut self.samples {
             let mut result = server.query(Query { from, to });
-            if let Some(path) = result.path() {
+            if let Some(path) = result.node_path() {
                 for edge in path.windows(2) {
                     self.active_edges[self.graph.edge_index(edge[0], edge[1]).unwrap() as usize] = true;
                 }
@@ -104,7 +104,7 @@ impl<'s, 'a> PathServer for PathServerWrapper<'s, 'a> {
     type NodeInfo = NodeId;
     type EdgeInfo = ();
 
-    fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo> {
+    fn reconstruct_node_path(&mut self) -> Vec<Self::NodeInfo> {
         Server::path(self.0, self.1)
     }
     fn reconstruct_edge_path(&mut self) -> Vec<Self::EdgeInfo> {

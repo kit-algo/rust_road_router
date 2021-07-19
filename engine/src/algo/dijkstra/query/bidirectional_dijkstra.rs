@@ -203,11 +203,11 @@ impl<'s, G: LinkIterGraph, H: LinkIterGraph, P: Potential> PathServer for PathSe
     type NodeInfo = NodeId;
     type EdgeInfo = ();
 
-    fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo> {
+    fn reconstruct_node_path(&mut self) -> Vec<Self::NodeInfo> {
         Server::node_path(self.0, self.1)
     }
     fn reconstruct_edge_path(&mut self) -> Vec<Self::EdgeInfo> {
-        vec![(); self.reconstruct_path().len() - 1]
+        vec![(); self.reconstruct_node_path().len() - 1]
     }
 }
 

@@ -570,11 +570,11 @@ impl<'s, 'a> PathServer for PathServerWrapper<'s, 'a> {
     type NodeInfo = (NodeId, Timestamp);
     type EdgeInfo = ();
 
-    fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo> {
+    fn reconstruct_node_path(&mut self) -> Vec<Self::NodeInfo> {
         Server::path(self.0)
     }
     fn reconstruct_edge_path(&mut self) -> Vec<Self::EdgeInfo> {
-        vec![(); self.reconstruct_path().len() - 1]
+        vec![(); self.reconstruct_node_path().len() - 1]
     }
 }
 

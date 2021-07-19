@@ -240,7 +240,7 @@ where
     type NodeInfo = NodeId;
     type EdgeInfo = O::PredecessorLink;
 
-    fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo> {
+    fn reconstruct_node_path(&mut self) -> Vec<Self::NodeInfo> {
         Server::node_path(self.0, self.1)
     }
     fn reconstruct_edge_path(&mut self) -> Vec<Self::EdgeInfo> {
@@ -257,7 +257,7 @@ where
 {
     /// Print path with debug info as js to stdout.
     pub fn debug_path(&mut self, lat: &[f32], lng: &[f32]) {
-        for node in self.reconstruct_path() {
+        for node in self.reconstruct_node_path() {
             println!(
                 "var marker = L.marker([{}, {}], {{ icon: blackIcon }}).addTo(map);",
                 lat[node as usize], lng[node as usize]
@@ -544,7 +544,7 @@ where
     type NodeInfo = NodeId;
     type EdgeInfo = O::PredecessorLink;
 
-    fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo> {
+    fn reconstruct_node_path(&mut self) -> Vec<Self::NodeInfo> {
         SkipLowDegServer::node_path(self.0, self.1)
     }
     fn reconstruct_edge_path(&mut self) -> Vec<Self::EdgeInfo> {
@@ -561,7 +561,7 @@ where
 {
     /// Print path with debug info as js to stdout.
     pub fn debug_path(&mut self, lat: &[f32], lng: &[f32]) {
-        for node in self.reconstruct_path() {
+        for node in self.reconstruct_node_path() {
             println!(
                 "var marker = L.marker([{}, {}], {{ icon: blackIcon }}).addTo(map);",
                 lat[node as usize], lng[node as usize]
