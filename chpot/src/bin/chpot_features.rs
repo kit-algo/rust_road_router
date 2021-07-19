@@ -7,7 +7,7 @@ use rust_road_router::{
         alt::ALTPotential,
         ch_potentials::{query::Server as TopoServer, *},
         customizable_contraction_hierarchy::*,
-        dijkstra::{generic_dijkstra::DefaultOps, query::dijkstra::Server as DijkServer},
+        dijkstra::{query::dijkstra::Server as DijkServer, DefaultOps},
         *,
     },
     cli::CliErr,

@@ -4,52 +4,6 @@ use super::*;
 use crate::algo::dijkstra::gen_topo_dijkstra::Neutral;
 use std::borrow::Borrow;
 
-pub trait DijkstraOps<Graph> {
-    type Label: super::Label;
-    type Arc: Arc;
-    type LinkResult;
-    type PredecessorLink: Default + Clone;
-
-    fn link(&mut self, graph: &Graph, label: &Self::Label, link: &Self::Arc) -> Self::LinkResult;
-    fn merge(&mut self, label: &mut Self::Label, linked: Self::LinkResult) -> bool;
-    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink;
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct DefaultOps();
-
-impl<G> DijkstraOps<G> for DefaultOps {
-    type Label = Weight;
-    type Arc = Link;
-    type LinkResult = Weight;
-    type PredecessorLink = ();
-
-    #[inline(always)]
-    fn link(&mut self, _graph: &G, label: &Weight, link: &Link) -> Self::LinkResult {
-        label + link.weight
-    }
-
-    #[inline(always)]
-    fn merge(&mut self, label: &mut Weight, linked: Self::LinkResult) -> bool {
-        if linked < *label {
-            *label = linked;
-            return true;
-        }
-        false
-    }
-
-    #[inline(always)]
-    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {
-        ()
-    }
-}
-
-impl Default for DefaultOps {
-    fn default() -> Self {
-        DefaultOps()
-    }
-}
-
 pub struct DijkstraRun<'a, Graph = OwnedGraph, Ops = DefaultOps>
 where
     Ops: DijkstraOps<Graph>,

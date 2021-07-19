@@ -1,6 +1,5 @@
 //! Dijkstras algorithm with optimization for degree 2 chains
 
-use super::generic_dijkstra::*;
 use super::*;
 
 pub struct TopoDijkstraRun<'a, Graph, Ops, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool>

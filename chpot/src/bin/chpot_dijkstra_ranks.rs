@@ -3,7 +3,7 @@ extern crate rust_road_router;
 use rust_road_router::{
     algo::{
         ch_potentials::{query::Server as TopoServer, *},
-        dijkstra::{generic_dijkstra::DefaultOps, query::dijkstra::Server as DijkServer},
+        dijkstra::{query::dijkstra::Server as DijkServer, DefaultOps},
         *,
     },
     cli::CliErr,

@@ -7,7 +7,7 @@ pub mod gen_topo_dijkstra;
 pub mod generic_dijkstra;
 pub mod query;
 
-pub use generic_dijkstra::{DefaultOps, DijkstraOps, DijkstraRun};
+pub use generic_dijkstra::DijkstraRun;
 pub use query::dijkstra::Server;
 
 /// Result of a single iteration
@@ -87,5 +87,51 @@ impl<L: Label, PredLink: Clone> DijkstraData<L, PredLink> {
             predecessors: vec![(n as NodeId, pred_link_init); n],
             queue: IndexdMinHeap::new(n),
         }
+    }
+}
+
+pub trait DijkstraOps<Graph> {
+    type Label: Label;
+    type Arc: Arc;
+    type LinkResult;
+    type PredecessorLink: Default + Clone;
+
+    fn link(&mut self, graph: &Graph, label: &Self::Label, link: &Self::Arc) -> Self::LinkResult;
+    fn merge(&mut self, label: &mut Self::Label, linked: Self::LinkResult) -> bool;
+    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink;
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct DefaultOps();
+
+impl<G> DijkstraOps<G> for DefaultOps {
+    type Label = Weight;
+    type Arc = Link;
+    type LinkResult = Weight;
+    type PredecessorLink = ();
+
+    #[inline(always)]
+    fn link(&mut self, _graph: &G, label: &Weight, link: &Link) -> Self::LinkResult {
+        label + link.weight
+    }
+
+    #[inline(always)]
+    fn merge(&mut self, label: &mut Weight, linked: Self::LinkResult) -> bool {
+        if linked < *label {
+            *label = linked;
+            return true;
+        }
+        false
+    }
+
+    #[inline(always)]
+    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {
+        ()
+    }
+}
+
+impl Default for DefaultOps {
+    fn default() -> Self {
+        DefaultOps()
     }
 }

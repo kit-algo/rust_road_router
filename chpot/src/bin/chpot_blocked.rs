@@ -4,7 +4,7 @@ use rand::prelude::*;
 use rust_road_router::{
     algo::{
         ch_potentials::{query::Server as TopoServer, *},
-        dijkstra::{generic_dijkstra::DefaultOps, query::dijkstra::Server as DijkServer},
+        dijkstra::{query::dijkstra::Server as DijkServer, DefaultOps},
     },
     cli::CliErr,
     datastr::graph::*,

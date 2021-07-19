@@ -4,8 +4,8 @@ use rust_road_router::{
     algo::{
         contraction_hierarchy::{self, query::Server as CHServer, ContractionHierarchy},
         dijkstra::{
-            generic_dijkstra::DefaultOps,
             query::{bidirectional_dijkstra::Server as BiDijkServer, dijkstra::Server as DijkServer},
+            DefaultOps,
         },
         *,
     },
