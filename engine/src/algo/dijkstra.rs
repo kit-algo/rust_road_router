@@ -132,6 +132,41 @@ impl<G> DijkstraOps<G> for DefaultOps {
 
 impl Default for DefaultOps {
     fn default() -> Self {
-        DefaultOps()
+        Self()
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct DefaultLinkPathOps();
+
+impl<G: RandomLinkAccessGraph> DijkstraOps<G> for DefaultLinkPathOps {
+    type Label = Weight;
+    type Arc = (NodeIdT, (Weight, EdgeIdT));
+    type LinkResult = Weight;
+    type PredecessorLink = EdgeIdT;
+
+    #[inline(always)]
+    fn link(&mut self, _graph: &G, label: &Weight, (_, (weight, _)): &Self::Arc) -> Self::LinkResult {
+        label + weight
+    }
+
+    #[inline(always)]
+    fn merge(&mut self, label: &mut Weight, linked: Self::LinkResult) -> bool {
+        if linked < *label {
+            *label = linked;
+            return true;
+        }
+        false
+    }
+
+    #[inline(always)]
+    fn predecessor_link(&self, &(_, (_, edge_id)): &Self::Arc) -> Self::PredecessorLink {
+        edge_id
+    }
+}
+
+impl Default for DefaultLinkPathOps {
+    fn default() -> Self {
+        Self()
     }
 }

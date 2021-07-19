@@ -29,6 +29,12 @@ pub struct NodeIdT(pub NodeId);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct EdgeIdT(pub EdgeId);
 
+impl Default for EdgeIdT {
+    fn default() -> Self {
+        EdgeIdT(u32::MAX)
+    }
+}
+
 pub trait Arc {
     fn head(&self) -> NodeId;
 }
