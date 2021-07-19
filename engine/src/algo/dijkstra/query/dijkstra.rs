@@ -70,18 +70,12 @@ where
         result
     }
 
-    fn path(&self, query: impl GenQuery<Weight>) -> Vec<NodeId> {
-        let mut path = Vec::new();
-        path.push(query.to());
+    fn node_path(&self, query: impl GenQuery<Weight>) -> Vec<NodeId> {
+        self.dijkstra.node_path(query.from(), query.to())
+    }
 
-        while *path.last().unwrap() != query.from() {
-            let next = self.dijkstra.predecessors[*path.last().unwrap() as usize].0;
-            path.push(next);
-        }
-
-        path.reverse();
-
-        path
+    fn edge_path(&self, query: impl GenQuery<Weight>) -> Vec<Ops::PredecessorLink> {
+        self.dijkstra.edge_path(query.from(), query.to())
     }
 
     pub fn ranks<F>(&mut self, from: NodeId, mut callback: F)
@@ -131,9 +125,13 @@ where
     B: Borrow<G>,
 {
     type NodeInfo = NodeId;
+    type EdgeInfo = O::PredecessorLink;
 
     fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo> {
-        Server::path(self.0, self.1)
+        Server::node_path(self.0, self.1)
+    }
+    fn reconstruct_edge_path(&mut self) -> Vec<Self::EdgeInfo> {
+        Server::edge_path(self.0, self.1)
     }
 }
 

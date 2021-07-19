@@ -197,22 +197,20 @@ where
         res
     }
 
-    fn path(&self, mut query: impl GenQuery<Timestamp>) -> Vec<NodeId> {
+    fn node_path(&self, mut query: impl GenQuery<Timestamp>) -> Vec<NodeId> {
         query.permutate(&self.virtual_topocore.order);
-        let mut path = Vec::new();
-        path.push(query.to());
+        let mut path = self.core_search.dijkstra_data.node_path(query.from(), query.to());
 
-        while *path.last().unwrap() != query.from() {
-            let next = self.core_search.dijkstra_data.predecessors[*path.last().unwrap() as usize].0;
-            path.push(next);
-        }
-
-        path.reverse();
         for node in &mut path {
             *node = self.virtual_topocore.order.node(*node);
         }
 
         path
+    }
+
+    fn edge_path(&self, mut query: impl GenQuery<Weight>) -> Vec<Ops::PredecessorLink> {
+        query.permutate(&self.virtual_topocore.order);
+        self.core_search.dijkstra_data.edge_path(query.from(), query.to())
     }
 
     fn tentative_distance(&self, node: NodeId) -> Weight {
@@ -240,9 +238,13 @@ where
     Q: GenQuery<Timestamp> + Copy,
 {
     type NodeInfo = NodeId;
+    type EdgeInfo = O::PredecessorLink;
 
     fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo> {
-        Server::path(self.0, self.1)
+        Server::node_path(self.0, self.1)
+    }
+    fn reconstruct_edge_path(&mut self) -> Vec<Self::EdgeInfo> {
+        Server::edge_path(self.0, self.1)
     }
 }
 
@@ -506,18 +508,12 @@ where
         res
     }
 
-    fn path(&self, query: impl GenQuery<Timestamp>) -> Vec<NodeId> {
-        let mut path = Vec::new();
-        path.push(query.to());
+    fn node_path(&self, query: impl GenQuery<Timestamp>) -> Vec<NodeId> {
+        self.dijkstra_data.node_path(query.from(), query.to())
+    }
 
-        while *path.last().unwrap() != query.from() {
-            let next = self.dijkstra_data.predecessors[*path.last().unwrap() as usize].0;
-            path.push(next);
-        }
-
-        path.reverse();
-
-        path
+    fn edge_path(&self, query: impl GenQuery<Timestamp>) -> Vec<Ops::PredecessorLink> {
+        self.dijkstra_data.edge_path(query.from(), query.to())
     }
 
     pub(super) fn graph(&self) -> &Graph {
@@ -546,9 +542,13 @@ where
     Q: GenQuery<Timestamp> + Copy,
 {
     type NodeInfo = NodeId;
+    type EdgeInfo = O::PredecessorLink;
 
     fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo> {
-        SkipLowDegServer::path(self.0, self.1)
+        SkipLowDegServer::node_path(self.0, self.1)
+    }
+    fn reconstruct_edge_path(&mut self) -> Vec<Self::EdgeInfo> {
+        SkipLowDegServer::edge_path(self.0, self.1)
     }
 }
 

@@ -209,6 +209,10 @@ pub trait TDQueryServer<T: Copy, W> {
 pub trait PathServer {
     /// Information for each node in the path.
     type NodeInfo;
+    /// Information for each edge in the path.
+    type EdgeInfo;
     /// Fetch the shortest path.
     fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo>;
+    /// Fetch the shortest path as edges.
+    fn reconstruct_edge_path(&mut self) -> Vec<Self::EdgeInfo>;
 }

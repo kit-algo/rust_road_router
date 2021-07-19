@@ -73,7 +73,7 @@ pub struct DijkstraData<L: Label, PredLink = ()> {
     pub queue: IndexdMinHeap<State<L::Key>>,
 }
 
-impl<L: Label, PredLink: Clone> DijkstraData<L, PredLink> {
+impl<L: Label, PredLink: Copy> DijkstraData<L, PredLink> {
     pub fn new(n: usize) -> Self
     where
         PredLink: Default,
@@ -88,13 +88,41 @@ impl<L: Label, PredLink: Clone> DijkstraData<L, PredLink> {
             queue: IndexdMinHeap::new(n),
         }
     }
+
+    pub fn node_path(&self, from: NodeId, to: NodeId) -> Vec<NodeId> {
+        let mut path = Vec::new();
+        path.push(to);
+
+        while *path.last().unwrap() != from {
+            let next = self.predecessors[*path.last().unwrap() as usize].0;
+            path.push(next);
+        }
+
+        path.reverse();
+
+        path
+    }
+
+    pub fn edge_path(&self, from: NodeId, to: NodeId) -> Vec<PredLink> {
+        let mut path = Vec::new();
+        let mut cur = to;
+
+        while cur != from {
+            path.push(self.predecessors[cur as usize].1);
+            cur = self.predecessors[cur as usize].0;
+        }
+
+        path.reverse();
+
+        path
+    }
 }
 
 pub trait DijkstraOps<Graph> {
     type Label: Label;
     type Arc: Arc;
     type LinkResult;
-    type PredecessorLink: Default + Clone;
+    type PredecessorLink: Default + Copy;
 
     fn link(&mut self, graph: &Graph, label: &Self::Label, link: &Self::Arc) -> Self::LinkResult;
     fn merge(&mut self, label: &mut Self::Label, linked: Self::LinkResult) -> bool;

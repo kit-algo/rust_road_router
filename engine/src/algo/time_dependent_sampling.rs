@@ -94,17 +94,7 @@ impl<'a> Server<'a> {
     }
 
     fn path(&self, query: TDQuery<Weight>) -> Vec<NodeId> {
-        let mut path = Vec::new();
-        path.push(query.to);
-
-        while *path.last().unwrap() != query.from {
-            let next = self.dijkstra_data.predecessors[*path.last().unwrap() as usize].0;
-            path.push(next);
-        }
-
-        path.reverse();
-
-        path
+        self.dijkstra_data.node_path(query.from, query.to)
     }
 }
 
@@ -112,9 +102,13 @@ pub struct PathServerWrapper<'s, 'a>(&'s Server<'a>, TDQuery<Weight>);
 
 impl<'s, 'a> PathServer for PathServerWrapper<'s, 'a> {
     type NodeInfo = NodeId;
+    type EdgeInfo = ();
 
     fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo> {
         Server::path(self.0, self.1)
+    }
+    fn reconstruct_edge_path(&mut self) -> Vec<Self::EdgeInfo> {
+        self.0.dijkstra_data.edge_path(self.1.from, self.1.to)
     }
 }
 
