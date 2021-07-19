@@ -8,9 +8,11 @@ pub trait DijkstraOps<Graph> {
     type Label: super::Label;
     type Arc: Arc;
     type LinkResult;
+    type PredecessorLink: Default + Clone;
 
     fn link(&mut self, graph: &Graph, label: &Self::Label, link: &Self::Arc) -> Self::LinkResult;
     fn merge(&mut self, label: &mut Self::Label, linked: Self::LinkResult) -> bool;
+    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -20,6 +22,7 @@ impl<G> DijkstraOps<G> for DefaultOps {
     type Label = Weight;
     type Arc = Link;
     type LinkResult = Weight;
+    type PredecessorLink = ();
 
     #[inline(always)]
     fn link(&mut self, _graph: &G, label: &Weight, link: &Link) -> Self::LinkResult {
@@ -33,6 +36,11 @@ impl<G> DijkstraOps<G> for DefaultOps {
             return true;
         }
         false
+    }
+
+    #[inline(always)]
+    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {
+        ()
     }
 }
 
@@ -49,7 +57,7 @@ where
     graph: &'a Graph,
 
     distances: &'a mut TimestampedVector<Ops::Label>,
-    predecessors: &'a mut Vec<NodeId>,
+    predecessors: &'a mut [(NodeId, Ops::PredecessorLink)],
     queue: &'a mut IndexdMinHeap<State<<Ops::Label as super::Label>::Key>>,
 
     ops: &'a mut Ops,
@@ -63,7 +71,7 @@ where
     Graph: LinkIterable<Ops::Arc>,
     Ops: DijkstraOps<Graph>,
 {
-    pub fn query(graph: &'b Graph, data: &'b mut DijkstraData<Ops::Label>, ops: &'b mut Ops, query: impl GenQuery<Ops::Label>) -> Self {
+    pub fn query(graph: &'b Graph, data: &'b mut DijkstraData<Ops::Label, Ops::PredecessorLink>, ops: &'b mut Ops, query: impl GenQuery<Ops::Label>) -> Self {
         let mut s = Self {
             graph,
             ops,
@@ -77,7 +85,7 @@ where
         s
     }
 
-    pub fn continue_query(graph: &'b Graph, data: &'b mut DijkstraData<Ops::Label>, ops: &'b mut Ops, node: NodeId) -> Self {
+    pub fn continue_query(graph: &'b Graph, data: &'b mut DijkstraData<Ops::Label, Ops::PredecessorLink>, ops: &'b mut Ops, node: NodeId) -> Self {
         let mut s = Self {
             graph,
             ops,
@@ -102,7 +110,7 @@ where
         let init = query.initial_state();
         self.queue.push(State { key: init.key(), node: from });
         self.distances[from as usize] = init;
-        self.predecessors[from as usize] = from;
+        self.predecessors[from as usize].0 = from;
     }
 
     fn reinit_queue(&mut self, node: NodeId) {
@@ -155,7 +163,7 @@ where
                     let linked = self.ops.link(self.graph.borrow(), &self.distances[node as usize], &link);
 
                     if self.ops.merge(&mut self.distances[link.head() as usize], linked) {
-                        self.predecessors[link.head() as usize] = node;
+                        self.predecessors[link.head() as usize] = (node, self.ops.predecessor_link(&link));
                         let next_distance = &self.distances[link.head() as usize];
 
                         if improve_callback(link.head(), next_distance) {
@@ -196,7 +204,7 @@ where
     }
 
     pub fn predecessor(&self, node: NodeId) -> NodeId {
-        self.predecessors[node as usize]
+        self.predecessors[node as usize].0
     }
 
     pub fn graph(&self) -> &Graph {

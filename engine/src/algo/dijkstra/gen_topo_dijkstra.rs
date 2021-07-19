@@ -10,7 +10,7 @@ where
     graph: &'a Graph,
 
     distances: &'a mut TimestampedVector<Ops::Label>,
-    predecessors: &'a mut [NodeId],
+    predecessors: &'a mut [(NodeId, Ops::PredecessorLink)],
     queue: &'a mut IndexdMinHeap<State<<Ops::Label as super::Label>::Key>>,
 
     num_relaxed_arcs: usize,
@@ -24,7 +24,7 @@ where
     Ops: DijkstraOps<Graph>,
     Graph: LinkIterable<NodeIdT> + LinkIterable<Ops::Arc> + SymmetricDegreeGraph,
 {
-    pub fn query(graph: &'b Graph, data: &'b mut DijkstraData<Ops::Label>, ops: &'b mut Ops, query: impl GenQuery<Ops::Label>) -> Self {
+    pub fn query(graph: &'b Graph, data: &'b mut DijkstraData<Ops::Label, Ops::PredecessorLink>, ops: &'b mut Ops, query: impl GenQuery<Ops::Label>) -> Self {
         let mut s = Self {
             graph,
             ops,
@@ -38,7 +38,7 @@ where
         s
     }
 
-    pub fn continue_query(graph: &'b Graph, data: &'b mut DijkstraData<Ops::Label>, ops: &'b mut Ops, node: NodeId) -> Self {
+    pub fn continue_query(graph: &'b Graph, data: &'b mut DijkstraData<Ops::Label, Ops::PredecessorLink>, ops: &'b mut Ops, node: NodeId) -> Self {
         let mut s = Self {
             graph,
             ops,
@@ -63,7 +63,7 @@ where
         let init = query.initial_state();
         self.queue.push(State { key: init.key(), node: from });
         self.distances[from as usize] = init;
-        self.predecessors[from as usize] = from;
+        self.predecessors[from as usize].0 = from;
     }
 
     fn reinit_queue(&mut self, node: NodeId) {
@@ -107,7 +107,7 @@ where
             for edge in LinkIterable::<Ops::Arc>::link_iter(self.graph, node) {
                 edge_callback(&edge);
                 let mut chain = Some(ChainStep {
-                    prev_node: node,
+                    prev_node: (node, self.ops.predecessor_link(&edge)),
                     next_node: edge.head(),
                     next_distance: self.ops.link(&self.graph, &self.distances[node as usize], &edge),
                 });
@@ -134,7 +134,7 @@ where
                                     endpoint = true;
                                 } else {
                                     for edge in LinkIterable::<Ops::Arc>::link_iter(self.graph, next_node) {
-                                        if edge.head() != prev_node {
+                                        if edge.head() != prev_node.0 {
                                             next_edge = Some(edge);
                                         }
                                     }
@@ -155,7 +155,7 @@ where
                                 } else {
                                     had_deg_three = true;
                                     for edge in LinkIterable::<Ops::Arc>::link_iter(self.graph, next_node) {
-                                        if edge.head() != prev_node {
+                                        if edge.head() != prev_node.0 {
                                             if next_edge.is_none() {
                                                 next_edge = Some(edge);
                                             } else {
@@ -175,7 +175,7 @@ where
                         if let Some(next_edge) = next_edge {
                             edge_callback(&next_edge);
                             chain = Some(ChainStep {
-                                prev_node: next_node,
+                                prev_node: (next_node, self.ops.predecessor_link(&next_edge)),
                                 next_node: next_edge.head(),
                                 next_distance: self.ops.link(&self.graph, next_distance, &next_edge),
                             });
@@ -197,7 +197,7 @@ where
                         if let Some((deg_three_node, edge)) = deg_three.take() {
                             edge_callback(&edge);
                             chain = Some(ChainStep {
-                                prev_node: deg_three_node,
+                                prev_node: (deg_three_node, self.ops.predecessor_link(&edge)),
                                 next_distance: self.ops.link(&self.graph, &self.distances[deg_three_node as usize], &edge),
                                 next_node: edge.head(),
                             });
@@ -215,7 +215,7 @@ where
     }
 
     pub fn predecessor(&self, node: NodeId) -> NodeId {
-        self.predecessors[node as usize]
+        self.predecessors[node as usize].0
     }
 
     pub fn queue(&self) -> &IndexdMinHeap<State<<Ops::Label as super::Label>::Key>> {
@@ -232,8 +232,8 @@ where
 }
 
 #[derive(Debug)]
-struct ChainStep<LinkResult> {
-    prev_node: NodeId,
+struct ChainStep<LinkResult, PredecessorLink> {
+    prev_node: (NodeId, PredecessorLink),
     next_node: NodeId,
     next_distance: LinkResult,
 }

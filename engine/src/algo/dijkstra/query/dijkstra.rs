@@ -10,7 +10,7 @@ where
     Ops: DijkstraOps<Graph>,
 {
     graph: GraphBorrow,
-    dijkstra: DijkstraData<Ops::Label>,
+    dijkstra: DijkstraData<Ops::Label, Ops::PredecessorLink>,
     potential: P,
 }
 
@@ -75,7 +75,7 @@ where
         path.push(query.to());
 
         while *path.last().unwrap() != query.from() {
-            let next = self.dijkstra.predecessors[*path.last().unwrap() as usize];
+            let next = self.dijkstra.predecessors[*path.last().unwrap() as usize].0;
             path.push(next);
         }
 
@@ -172,7 +172,7 @@ impl<'s, G: LinkIterable<O::Arc>, O: DijkstraOps<G, Label = Weight>, P: Potentia
     }
 
     pub fn predecessor(&self, node: NodeId) -> NodeId {
-        self.0.dijkstra.predecessors[node as usize]
+        self.0.dijkstra.predecessors[node as usize].0
     }
 }
 

@@ -67,17 +67,24 @@ impl Label for Weight {
 }
 
 #[derive(Clone)]
-pub struct DijkstraData<L: Label> {
+pub struct DijkstraData<L: Label, PredLink = ()> {
     pub distances: TimestampedVector<L>,
-    pub predecessors: Vec<NodeId>,
+    pub predecessors: Vec<(NodeId, PredLink)>,
     pub queue: IndexdMinHeap<State<L::Key>>,
 }
 
-impl<L: Label> DijkstraData<L> {
-    pub fn new(n: usize) -> Self {
+impl<L: Label, PredLink: Clone> DijkstraData<L, PredLink> {
+    pub fn new(n: usize) -> Self
+    where
+        PredLink: Default,
+    {
+        Self::new_with_pred_link(n, Default::default())
+    }
+
+    pub fn new_with_pred_link(n: usize, pred_link_init: PredLink) -> Self {
         Self {
             distances: TimestampedVector::new(n, L::neutral()),
-            predecessors: vec![n as NodeId; n],
+            predecessors: vec![(n as NodeId, pred_link_init); n],
             queue: IndexdMinHeap::new(n),
         }
     }

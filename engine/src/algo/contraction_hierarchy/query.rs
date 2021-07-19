@@ -101,11 +101,11 @@ impl Server {
         forwad_path.push_front(self.meeting_node);
 
         while *forwad_path.front().unwrap() != query.from {
-            let next = self.forward_data.predecessors[*forwad_path.front().unwrap() as usize];
+            let next = self.forward_data.predecessors[*forwad_path.front().unwrap() as usize].0;
             let mut shortcut_stack = vec![next];
 
             while let Some(node) = shortcut_stack.pop() {
-                let next = self.forward_data.predecessors[*forwad_path.front().unwrap() as usize];
+                let next = self.forward_data.predecessors[*forwad_path.front().unwrap() as usize].0;
                 let middle = forward_middle_nodes[self.forward.edge_index(node, next).unwrap() as usize];
                 if middle < self.forward.num_nodes() as NodeId {
                     shortcut_stack.push(node);
@@ -120,11 +120,11 @@ impl Server {
         backward_path.push_back(self.meeting_node);
 
         while *backward_path.back().unwrap() != query.to {
-            let next = self.backward_data.predecessors[*backward_path.back().unwrap() as usize];
+            let next = self.backward_data.predecessors[*backward_path.back().unwrap() as usize].0;
             let mut shortcut_stack = vec![next];
 
             while let Some(node) = shortcut_stack.pop() {
-                let next = self.backward_data.predecessors[*backward_path.back().unwrap() as usize];
+                let next = self.backward_data.predecessors[*backward_path.back().unwrap() as usize].0;
                 let middle = backward_middle_nodes[self.backward.edge_index(node, next).unwrap() as usize];
                 if middle < self.backward.num_nodes() as NodeId {
                     shortcut_stack.push(node);

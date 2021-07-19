@@ -203,7 +203,7 @@ where
         path.push(query.to());
 
         while *path.last().unwrap() != query.from() {
-            let next = self.core_search.dijkstra_data.predecessors[*path.last().unwrap() as usize];
+            let next = self.core_search.dijkstra_data.predecessors[*path.last().unwrap() as usize].0;
             path.push(next);
         }
 
@@ -222,7 +222,7 @@ where
 
     fn predecessor(&self, node: NodeId) -> NodeId {
         let rank = self.virtual_topocore.order.rank(node);
-        self.core_search.dijkstra_data.predecessors[rank as usize]
+        self.core_search.dijkstra_data.predecessors[rank as usize].0
     }
 }
 
@@ -335,6 +335,7 @@ where
     type Label = O::Label;
     type Arc = O::Arc;
     type LinkResult = O::LinkResult;
+    type PredecessorLink = O::PredecessorLink;
 
     #[inline(always)]
     fn link(&mut self, graph: &VirtualTopocoreGraph<G>, label: &Self::Label, link: &Self::Arc) -> Self::LinkResult {
@@ -345,6 +346,11 @@ where
     fn merge(&mut self, label: &mut Self::Label, linked: Self::LinkResult) -> bool {
         self.0.merge(label, linked)
     }
+
+    #[inline(always)]
+    fn predecessor_link(&self, link: &Self::Arc) -> Self::PredecessorLink {
+        self.0.predecessor_link(link)
+    }
 }
 
 pub struct SkipLowDegServer<Graph, Ops, P, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool>
@@ -352,7 +358,7 @@ where
     Ops: DijkstraOps<Graph>,
 {
     graph: Graph,
-    dijkstra_data: DijkstraData<Ops::Label>,
+    dijkstra_data: DijkstraData<Ops::Label, Ops::PredecessorLink>,
     ops: Ops,
     potential: P,
 
@@ -505,7 +511,7 @@ where
         path.push(query.to());
 
         while *path.last().unwrap() != query.from() {
-            let next = self.dijkstra_data.predecessors[*path.last().unwrap() as usize];
+            let next = self.dijkstra_data.predecessors[*path.last().unwrap() as usize].0;
             path.push(next);
         }
 
@@ -577,7 +583,7 @@ where
     }
 
     pub fn predecessor(&self, node: NodeId) -> NodeId {
-        self.0.dijkstra_data.predecessors[node as usize]
+        self.0.dijkstra_data.predecessors[node as usize].0
     }
 
     pub fn potential(&self) -> &P {

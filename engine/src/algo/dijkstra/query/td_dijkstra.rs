@@ -8,6 +8,7 @@ impl DijkstraOps<TDGraph> for TDDijkstraOps {
     type Label = Weight;
     type LinkResult = Weight;
     type Arc = (NodeIdT, EdgeIdT);
+    type PredecessorLink = ();
 
     #[inline(always)]
     fn link(&mut self, graph: &TDGraph, label: &Weight, link: &Self::Arc) -> Self::LinkResult {
@@ -21,6 +22,11 @@ impl DijkstraOps<TDGraph> for TDDijkstraOps {
             return true;
         }
         false
+    }
+
+    #[inline(always)]
+    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {
+        ()
     }
 }
 
@@ -36,6 +42,7 @@ impl DijkstraOps<LiveTDGraph> for LiveTDDijkstraOps {
     type Label = Weight;
     type LinkResult = Weight;
     type Arc = (NodeIdT, EdgeIdT);
+    type PredecessorLink = ();
 
     #[inline(always)]
     fn link(&mut self, graph: &LiveTDGraph, label: &Weight, link: &Self::Arc) -> Self::LinkResult {
@@ -49,6 +56,11 @@ impl DijkstraOps<LiveTDGraph> for LiveTDDijkstraOps {
             return true;
         }
         false
+    }
+
+    #[inline(always)]
+    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {
+        ()
     }
 }
 

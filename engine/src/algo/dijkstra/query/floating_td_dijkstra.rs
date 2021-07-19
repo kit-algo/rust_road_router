@@ -5,7 +5,7 @@ use crate::report::*;
 
 pub struct Server {
     graph: TDGraph,
-    data: DijkstraData<Timestamp>,
+    data: DijkstraData<Timestamp, ()>,
 }
 
 impl Server {
@@ -61,7 +61,7 @@ impl Server {
         path.push((query.to, self.data.distances[query.to as usize]));
 
         while path.last().unwrap().0 != query.from {
-            let next = self.data.predecessors[path.last().unwrap().0 as usize];
+            let next = self.data.predecessors[path.last().unwrap().0 as usize].0;
             let t = self.data.distances[next as usize];
             path.push((next, t));
         }
@@ -95,6 +95,7 @@ impl DijkstraOps<TDGraph> for FlTDDijkstraOps {
     type Label = Timestamp;
     type LinkResult = Timestamp;
     type Arc = (NodeIdT, EdgeIdT);
+    type PredecessorLink = ();
 
     #[inline(always)]
     fn link(&mut self, graph: &TDGraph, label: &Timestamp, link: &Self::Arc) -> Self::LinkResult {
@@ -108,6 +109,11 @@ impl DijkstraOps<TDGraph> for FlTDDijkstraOps {
             return true;
         }
         false
+    }
+
+    #[inline(always)]
+    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {
+        ()
     }
 }
 

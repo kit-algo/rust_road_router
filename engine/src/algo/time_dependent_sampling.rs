@@ -98,7 +98,7 @@ impl<'a> Server<'a> {
         path.push(query.to);
 
         while *path.last().unwrap() != query.from {
-            let next = self.dijkstra_data.predecessors[*path.last().unwrap() as usize];
+            let next = self.dijkstra_data.predecessors[*path.last().unwrap() as usize].0;
             path.push(next);
         }
 

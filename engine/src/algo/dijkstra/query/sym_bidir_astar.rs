@@ -187,14 +187,14 @@ impl<G: LinkIterGraph, H: LinkIterGraph, P: Potential> Server<G, H, P> {
         path.push(self.meeting_node);
 
         while *path.last().unwrap() != query.from {
-            let next = self.forward_data.predecessors[*path.last().unwrap() as usize];
+            let next = self.forward_data.predecessors[*path.last().unwrap() as usize].0;
             path.push(next);
         }
 
         path.reverse();
 
         while *path.last().unwrap() != query.to {
-            let next = self.backward_data.predecessors[*path.last().unwrap() as usize];
+            let next = self.backward_data.predecessors[*path.last().unwrap() as usize].0;
             path.push(next);
         }
 
