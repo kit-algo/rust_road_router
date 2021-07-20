@@ -221,12 +221,9 @@ impl EdgeIdGraph for Graph {
     }
 }
 
-impl EdgeRandomAccessGraph for Graph {
-    fn link(&self, edge_id: EdgeId) -> Link {
-        Link {
-            node: self.head[edge_id as usize],
-            weight: 0,
-        }
+impl EdgeRandomAccessGraph<NodeIdT> for Graph {
+    fn link(&self, edge_id: EdgeId) -> NodeIdT {
+        NodeIdT(self.head[edge_id as usize])
     }
 }
 

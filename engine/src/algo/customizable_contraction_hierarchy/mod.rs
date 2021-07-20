@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::{
-    datastr::{graph::first_out_graph::degrees_to_first_out, node_order::NodeOrder},
+    datastr::node_order::NodeOrder,
     io::*,
     report::benchmark::*,
     util::{in_range_option::InRangeOption, *},
@@ -28,7 +28,6 @@ pub fn contract<Graph: LinkIterable<NodeIdT> + EdgeIdGraph>(graph: &Graph, node_
 /// A struct containing all metric independent preprocessing data of CCHs.
 /// This includes on top of the chordal supergraph (the "contracted" graph),
 /// several other structures like the elimination tree, a mapping from cch edge ids to original edge ids and the inverted graph.
-#[derive(Debug)]
 pub struct CCH {
     first_out: Vec<EdgeId>,
     head: Vec<NodeId>,
@@ -36,7 +35,7 @@ pub struct CCH {
     node_order: NodeOrder,
     cch_edge_to_orig_arc: Vec<(Vec<EdgeIdT>, Vec<EdgeIdT>)>,
     elimination_tree: Vec<InRangeOption<NodeId>>,
-    inverted: OwnedGraph,
+    inverted: ReversedGraphWithEdgeIds,
 }
 
 impl Deconstruct for CCH {
@@ -101,7 +100,7 @@ impl CCH {
                 .for_each(|tail| *tail = node);
         }
 
-        let inverted = inverted_with_orig_edge_ids_as_weights(&contracted_graph);
+        let inverted = ReversedGraphWithEdgeIds::reversed(&contracted_graph);
         let (first_out, head) = contracted_graph.decompose();
 
         CCH {
@@ -227,8 +226,8 @@ impl CCH {
                 .for_each(|tail| *tail = node);
         }
 
-        let forward_inverted = inverted_with_orig_edge_ids_as_weights(&FirstOutGraph::new(&forward_first_out[..], &forward_head[..], &forward_head[..]));
-        let backward_inverted = inverted_with_orig_edge_ids_as_weights(&FirstOutGraph::new(&backward_first_out[..], &backward_head[..], &backward_head[..]));
+        let forward_inverted = ReversedGraphWithEdgeIds::reversed(&UnweightedFirstOutGraph::new(&forward_first_out[..], &forward_head[..]));
+        let backward_inverted = ReversedGraphWithEdgeIds::reversed(&UnweightedFirstOutGraph::new(&backward_first_out[..], &backward_head[..]));
 
         DirectedCCH {
             forward_first_out,
@@ -262,34 +261,14 @@ impl Graph for CCH {
     }
 }
 
-fn inverted_with_orig_edge_ids_as_weights(graph: &(impl EdgeRandomAccessGraph + LinkIterable<NodeIdT>)) -> OwnedGraph {
-    let mut inverted = vec![Vec::new(); graph.num_nodes()];
-    for current_node in 0..(graph.num_nodes() as NodeId) {
-        for (NodeIdT(node), edge_id) in graph.link_iter(current_node).zip(graph.neighbor_edge_indices(current_node)) {
-            // the heads of inverted will be sorted ascending for each node, because current node goes from 0 to n
-            inverted[node as usize].push((current_node, edge_id));
-        }
-    }
-
-    let down_first_out: Vec<EdgeId> = {
-        let degrees = inverted.iter().map(|neighbors| neighbors.len() as EdgeId);
-        degrees_to_first_out(degrees).collect()
-    };
-    debug_assert_eq!(down_first_out.len(), graph.num_nodes() as usize + 1);
-
-    let (down_head, down_up_edge_ids): (Vec<_>, Vec<_>) = inverted.into_iter().flat_map(|neighbors| neighbors.into_iter()).unzip();
-
-    OwnedGraph::new(down_first_out, down_head, down_up_edge_ids)
-}
-
 /// Trait for directed and undirected CCHs
 pub trait CCHT {
     fn forward_first_out(&self) -> &[EdgeId];
     fn backward_first_out(&self) -> &[EdgeId];
     fn forward_head(&self) -> &[NodeId];
     fn backward_head(&self) -> &[NodeId];
-    fn forward_inverted(&self) -> &OwnedGraph;
-    fn backward_inverted(&self) -> &OwnedGraph;
+    fn forward_inverted(&self) -> &ReversedGraphWithEdgeIds;
+    fn backward_inverted(&self) -> &ReversedGraphWithEdgeIds;
 
     /// Get elimination tree (actually forest).
     /// The tree is represented as a slice of length `n`.
@@ -306,18 +285,12 @@ pub trait CCHT {
         // `inverted` contains the downward neighbors sorted ascending.
         // We do a coordinated linear sweep over both neighborhoods.
         // Whenever we find a common neighbor, we have a lower triangle.
-        let mut current_iter = LinkIterable::<Link>::link_iter(self.backward_inverted(), from).peekable();
-        let mut other_iter = LinkIterable::<Link>::link_iter(self.forward_inverted(), to).peekable();
+        let mut current_iter = self.backward_inverted().link_iter(from).peekable();
+        let mut other_iter = self.forward_inverted().link_iter(to).peekable();
 
         while let (
-            Some(&Link {
-                node: lower_from_first,
-                weight: edge_from_first_id,
-            }),
-            Some(&Link {
-                node: lower_from_second,
-                weight: edge_from_second_id,
-            }),
+            Some(&(NodeIdT(lower_from_first), Reversed(EdgeIdT(edge_from_first_id)))),
+            Some(&(NodeIdT(lower_from_second), Reversed(EdgeIdT(edge_from_second_id)))),
         ) = (current_iter.peek(), other_iter.peek())
         {
             match lower_from_first.cmp(&lower_from_second) {
@@ -354,10 +327,10 @@ impl CCHT for CCH {
     fn backward_head(&self) -> &[NodeId] {
         &self.head[..]
     }
-    fn forward_inverted(&self) -> &OwnedGraph {
+    fn forward_inverted(&self) -> &ReversedGraphWithEdgeIds {
         &self.inverted
     }
-    fn backward_inverted(&self) -> &OwnedGraph {
+    fn backward_inverted(&self) -> &ReversedGraphWithEdgeIds {
         &self.inverted
     }
 
@@ -394,7 +367,6 @@ impl<'c, CCH: CCHT> Customized<'c, CCH> {
     }
 }
 
-#[derive(Debug)]
 pub struct DirectedCCH {
     forward_first_out: Vec<EdgeId>,
     forward_head: Vec<NodeId>,
@@ -406,8 +378,8 @@ pub struct DirectedCCH {
     forward_cch_edge_to_orig_arc: Vec<Vec<EdgeIdT>>,
     backward_cch_edge_to_orig_arc: Vec<Vec<EdgeIdT>>,
     elimination_tree: Vec<InRangeOption<NodeId>>,
-    forward_inverted: OwnedGraph,
-    backward_inverted: OwnedGraph,
+    forward_inverted: ReversedGraphWithEdgeIds,
+    backward_inverted: ReversedGraphWithEdgeIds,
 }
 
 impl DirectedCCH {
@@ -442,10 +414,10 @@ impl CCHT for DirectedCCH {
     fn backward_head(&self) -> &[NodeId] {
         &self.backward_head[..]
     }
-    fn forward_inverted(&self) -> &OwnedGraph {
+    fn forward_inverted(&self) -> &ReversedGraphWithEdgeIds {
         &self.forward_inverted
     }
-    fn backward_inverted(&self) -> &OwnedGraph {
+    fn backward_inverted(&self) -> &ReversedGraphWithEdgeIds {
         &self.backward_inverted
     }
 

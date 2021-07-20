@@ -14,7 +14,6 @@ use crate::{
 pub mod penalty;
 pub mod query;
 
-#[derive(Debug)]
 pub struct CCHPotential<'a> {
     cch: &'a CCH,
     stack: Vec<NodeId>,
@@ -27,7 +26,7 @@ pub struct CCHPotential<'a> {
 impl<'a> CCHPotential<'a> {
     pub fn new<Graph>(cch: &'a CCH, lower_bound: &Graph) -> Self
     where
-        Graph: LinkIterGraph + EdgeRandomAccessGraph + Sync,
+        Graph: LinkIterGraph + EdgeRandomAccessGraph<Link> + Sync,
     {
         let customized = customize(cch, lower_bound);
         let (forward_up_graph, backward_up_graph) = customized.into_ch_graphs();

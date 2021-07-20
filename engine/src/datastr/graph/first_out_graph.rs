@@ -261,7 +261,7 @@ where
     }
 }
 
-impl<FirstOutContainer, HeadContainer, WeightContainer> EdgeRandomAccessGraph for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+impl<FirstOutContainer, HeadContainer, WeightContainer> EdgeRandomAccessGraph<Link> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
@@ -282,7 +282,6 @@ where
     HeadContainer: AsRef<[NodeId]>,
     WeightContainer: AsRef<[Weight]>,
 {
-    #[allow(clippy::type_complexity)]
     type Iter<'a> = impl Iterator<Item = (NodeIdT, EdgeIdT)> + 'a;
 
     #[inline]
@@ -389,6 +388,23 @@ where
     }
 }
 
+impl<FirstOutContainer, HeadContainer> LinkIterable<(NodeIdT, EdgeIdT)> for UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
+where
+    FirstOutContainer: AsRef<[EdgeId]>,
+    HeadContainer: AsRef<[NodeId]>,
+{
+    type Iter<'a> = impl Iterator<Item = (NodeIdT, EdgeIdT)> + 'a;
+
+    #[inline]
+    fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
+        let range = SlcsIdx(self.first_out()).range(node as usize);
+        self.head()[range.clone()]
+            .iter()
+            .zip(range)
+            .map(|(&node, e)| (NodeIdT(node), EdgeIdT(e as EdgeId)))
+    }
+}
+
 impl<FirstOutContainer, HeadContainer> EdgeIdGraph for UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
@@ -408,17 +424,14 @@ where
     }
 }
 
-impl<FirstOutContainer, HeadContainer> EdgeRandomAccessGraph for UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
+impl<FirstOutContainer, HeadContainer> EdgeRandomAccessGraph<NodeIdT> for UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
 {
     #[inline]
-    fn link(&self, edge_id: EdgeId) -> Link {
-        Link {
-            node: self.head()[edge_id as usize],
-            weight: 0,
-        }
+    fn link(&self, edge_id: EdgeId) -> NodeIdT {
+        NodeIdT(self.head()[edge_id as usize])
     }
 }
 

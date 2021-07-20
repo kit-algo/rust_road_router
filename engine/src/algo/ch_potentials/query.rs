@@ -395,7 +395,7 @@ where
         if in_core(node) {
             return;
         }
-        for NodeIdT(head) in graph.link_iter(node) {
+        for NodeIdT(head) in LinkIterable::<NodeIdT>::link_iter(graph, node) {
             Self::dfs(graph, head, visited, in_core);
         }
     }

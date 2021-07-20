@@ -491,7 +491,7 @@ pub fn virtual_topocore<'c, Graph: LinkIterable<NodeIdT>>(graph: &Graph) -> Virt
         .map(|node| {
             graph
                 .link_iter(node as NodeId)
-                .chain(reversed.link_iter(node as NodeId))
+                .chain(LinkIterable::<NodeIdT>::link_iter(&reversed, node as NodeId))
                 .collect::<Vec<NodeIdT>>()
                 .tap(|neighbors| neighbors.sort_unstable())
                 .tap(|neighbors| neighbors.dedup())
@@ -711,8 +711,8 @@ impl<G: EdgeIdGraph> EdgeIdGraph for VirtualTopocoreGraph<G> {
     }
 }
 
-impl<G: EdgeRandomAccessGraph> EdgeRandomAccessGraph for VirtualTopocoreGraph<G> {
-    fn link(&self, edge_id: EdgeId) -> Link {
+impl<E, G: EdgeRandomAccessGraph<E>> EdgeRandomAccessGraph<E> for VirtualTopocoreGraph<G> {
+    fn link(&self, edge_id: EdgeId) -> E {
         self.graph.link(edge_id)
     }
 }

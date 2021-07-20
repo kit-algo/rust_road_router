@@ -116,7 +116,7 @@ impl Graph {
 
         for edge_id in 0..self.num_arcs() {
             let link = self.link(edge_id as EdgeId);
-            for next_link_id in self.neighbor_edge_indices(link.node) {
+            for next_link_id in self.neighbor_edge_indices(link.0) {
                 if let Some(turn_cost) = turn_costs(edge_id as EdgeId, next_link_id) {
                     head.push(next_link_id);
 
@@ -182,12 +182,9 @@ impl EdgeIdGraph for Graph {
     }
 }
 
-impl EdgeRandomAccessGraph for Graph {
-    fn link(&self, edge_id: EdgeId) -> Link {
-        Link {
-            node: self.head[edge_id as usize],
-            weight: 0,
-        }
+impl EdgeRandomAccessGraph<NodeIdT> for Graph {
+    fn link(&self, edge_id: EdgeId) -> NodeIdT {
+        NodeIdT(self.head[edge_id as usize])
     }
 }
 

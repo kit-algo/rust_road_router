@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut iter = forbidden_turn_from_arc.iter().zip(forbidden_turn_to_arc.iter()).peekable();
 
-    let exp_graph = graph.line_graph(|edge1_idx, edge2_idx| {
+    let exp_graph = line_graph(&graph, |edge1_idx, edge2_idx| {
         while let Some((&from_arc, &to_arc)) = iter.peek() {
             if from_arc < edge1_idx || (from_arc == edge1_idx && to_arc < edge2_idx) {
                 iter.next();
