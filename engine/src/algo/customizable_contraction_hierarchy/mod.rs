@@ -214,28 +214,14 @@ impl CCH {
             backward_first_out.push(backward_edge_counter);
         }
 
-        let mut forward_tail = vec![0; forward_head.len()];
-        let mut backward_tail = vec![0; backward_head.len()];
-
-        for node in 0..(self.num_nodes() as NodeId) {
-            forward_tail[SlcsIdx(&forward_first_out).range(node as usize)]
-                .iter_mut()
-                .for_each(|tail| *tail = node);
-            backward_tail[SlcsIdx(&backward_first_out).range(node as usize)]
-                .iter_mut()
-                .for_each(|tail| *tail = node);
-        }
-
         let forward_inverted = ReversedGraphWithEdgeIds::reversed(&UnweightedFirstOutGraph::new(&forward_first_out[..], &forward_head[..]));
         let backward_inverted = ReversedGraphWithEdgeIds::reversed(&UnweightedFirstOutGraph::new(&backward_first_out[..], &backward_head[..]));
 
         DirectedCCH {
             forward_first_out,
             forward_head,
-            forward_tail,
             backward_first_out,
             backward_head,
-            backward_tail,
             node_order: self.node_order,
             forward_cch_edge_to_orig_arc,
             backward_cch_edge_to_orig_arc,
@@ -370,10 +356,8 @@ impl<'c, CCH: CCHT> Customized<'c, CCH> {
 pub struct DirectedCCH {
     forward_first_out: Vec<EdgeId>,
     forward_head: Vec<NodeId>,
-    forward_tail: Vec<NodeId>,
     backward_first_out: Vec<EdgeId>,
     backward_head: Vec<NodeId>,
-    backward_tail: Vec<NodeId>,
     node_order: NodeOrder,
     forward_cch_edge_to_orig_arc: Vec<Vec<EdgeIdT>>,
     backward_cch_edge_to_orig_arc: Vec<Vec<EdgeIdT>>,
