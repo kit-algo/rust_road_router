@@ -106,7 +106,7 @@ impl Server {
 
             while let Some(node) = shortcut_stack.pop() {
                 let next = self.forward_data.predecessors[*forwad_path.front().unwrap() as usize].0;
-                let middle = forward_middle_nodes[self.forward.edge_index(node, next).unwrap() as usize];
+                let middle = forward_middle_nodes[self.forward.edge_indices(node, next).next().unwrap().0 as usize];
                 if middle < self.forward.num_nodes() as NodeId {
                     shortcut_stack.push(node);
                     shortcut_stack.push(middle);
@@ -125,7 +125,7 @@ impl Server {
 
             while let Some(node) = shortcut_stack.pop() {
                 let next = self.backward_data.predecessors[*backward_path.back().unwrap() as usize].0;
-                let middle = backward_middle_nodes[self.backward.edge_index(node, next).unwrap() as usize];
+                let middle = backward_middle_nodes[self.backward.edge_indices(node, next).next().unwrap().0 as usize];
                 if middle < self.backward.num_nodes() as NodeId {
                     shortcut_stack.push(node);
                     shortcut_stack.push(middle);

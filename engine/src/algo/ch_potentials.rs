@@ -27,7 +27,7 @@ pub struct CCHPotential<'a> {
 impl<'a> CCHPotential<'a> {
     pub fn new<Graph>(cch: &'a CCH, lower_bound: &Graph) -> Self
     where
-        Graph: LinkIterGraph + RandomLinkAccessGraph + Sync,
+        Graph: LinkIterGraph + EdgeRandomAccessGraph + Sync,
     {
         let customized = customize(cch, lower_bound);
         let (forward_up_graph, backward_up_graph) = customized.into_ch_graphs();

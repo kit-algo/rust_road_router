@@ -43,10 +43,10 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
             .for_each(|((up_weight, down_weight), (up_arcs, down_arcs))| {
                 assert!(up_arcs.len() <= 1);
                 assert!(down_arcs.len() <= 1);
-                for &up_arc in up_arcs {
+                for &EdgeIdT(up_arc) in up_arcs {
                     *up_weight = Shortcut::new(Some(up_arc), metric);
                 }
-                for &down_arc in down_arcs {
+                for &EdgeIdT(down_arc) in down_arcs {
                     *down_weight = Shortcut::new(Some(down_arc), metric);
                 }
             });
@@ -657,10 +657,10 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
             .for_each(|((up_weight, down_weight), (up_arcs, down_arcs))| {
                 assert!(up_arcs.len() <= 1);
                 assert!(down_arcs.len() <= 1);
-                for &up_arc in up_arcs {
+                for &EdgeIdT(up_arc) in up_arcs {
                     *up_weight = LiveShortcut::new(Some(up_arc), &metric);
                 }
-                for &down_arc in down_arcs {
+                for &EdgeIdT(down_arc) in down_arcs {
                     *down_weight = LiveShortcut::new(Some(down_arc), &metric);
                 }
             });

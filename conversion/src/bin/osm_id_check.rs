@@ -55,7 +55,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             if let (Some(from), Some(to)) = (id_map.get(from), id_map.get(to)) {
                 nodes_found_count += 1;
 
-                if graph.edge_index(from as NodeId, to as NodeId).is_some() {
+                if graph.edge_indices(from as NodeId, to as NodeId).next().is_some() {
                     arc_found_count += 1;
                 }
             }

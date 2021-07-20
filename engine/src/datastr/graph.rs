@@ -35,6 +35,9 @@ impl Default for EdgeIdT {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Reversed(pub EdgeIdT);
+
 pub trait Arc {
     fn head(&self) -> NodeId;
 }
@@ -136,12 +139,13 @@ pub fn unify_parallel_edges<G: for<'a> MutLinkIterable<'a, (&'a NodeId, &'a mut 
     }
 }
 
-/// Trait for graph types which allow random access to links based on edge ids.
-pub trait RandomLinkAccessGraph: Graph {
-    /// Get the link with the given id.
-    fn link(&self, edge_id: EdgeId) -> Link;
+pub trait EdgeIdGraph: Graph {
+    type IdxIter<'a>: Iterator<Item = EdgeIdT> + 'a
+    where
+        Self: 'a;
+
     /// Find the id of the edge from `from` to `to` if it exists.
-    fn edge_index(&self, from: NodeId, to: NodeId) -> Option<EdgeId>;
+    fn edge_indices(&self, from: NodeId, to: NodeId) -> Self::IdxIter<'_>;
     /// Get the range of edge ids which make up the outgoing edges of `node`
     fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId>;
 
@@ -154,6 +158,12 @@ pub trait RandomLinkAccessGraph: Graph {
             end: range.end as usize,
         }
     }
+}
+
+/// Trait for graph types which allow random access to links based on edge ids.
+pub trait EdgeRandomAccessGraph: EdgeIdGraph {
+    /// Get the link with the given id.
+    fn link(&self, edge_id: EdgeId) -> Link;
 
     /// Build the line graph (the turn expanded graph).
     /// The callback should return the turn costs between the two links

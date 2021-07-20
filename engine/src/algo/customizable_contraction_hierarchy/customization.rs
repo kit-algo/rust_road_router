@@ -18,7 +18,7 @@ scoped_thread_local!(static DOWNWARD_WORKSPACE: RefCell<Vec<Weight>>);
 /// This may lead to wrong query results.
 pub fn customize<'c, Graph>(cch: &'c CCH, metric: &Graph) -> Customized<'c, CCH>
 where
-    Graph: LinkIterGraph + RandomLinkAccessGraph + Sync,
+    Graph: LinkIterGraph + EdgeRandomAccessGraph + Sync,
 {
     let m = cch.num_arcs();
     // buffers for the customized weights
@@ -35,7 +35,7 @@ where
 /// Same as [customize], except with a `DirectedCCH`
 pub fn customize_directed<'c, Graph>(cch: &'c DirectedCCH, metric: &Graph) -> Customized<'c, DirectedCCH>
 where
-    Graph: LinkIterGraph + RandomLinkAccessGraph + Sync,
+    Graph: LinkIterGraph + EdgeRandomAccessGraph + Sync,
 {
     // buffers for the customized weights
     let mut upward_weights = vec![INFINITY; cch.forward_head.len()];
@@ -64,7 +64,7 @@ pub fn always_infinity(cch: &CCH) -> Customized<CCH> {
 
 fn prepare_weights<Graph>(cch: &CCH, upward_weights: &mut [Weight], downward_weights: &mut [Weight], metric: &Graph)
 where
-    Graph: LinkIterGraph + RandomLinkAccessGraph + Sync,
+    Graph: LinkIterGraph + EdgeRandomAccessGraph + Sync,
 {
     report_time_with_key("CCH apply weights", "respecting", || {
         upward_weights
@@ -72,10 +72,10 @@ where
             .zip(downward_weights.par_iter_mut())
             .zip(cch.cch_edge_to_orig_arc.par_iter())
             .for_each(|((up_weight, down_weight), (up_arcs, down_arcs))| {
-                for &up_arc in up_arcs {
+                for &EdgeIdT(up_arc) in up_arcs {
                     *up_weight = std::cmp::min(metric.link(up_arc).weight, *up_weight);
                 }
-                for &down_arc in down_arcs {
+                for &EdgeIdT(down_arc) in down_arcs {
                     *down_weight = std::cmp::min(metric.link(down_arc).weight, *down_weight);
                 }
             });
@@ -84,14 +84,14 @@ where
 
 fn prepare_weights_directed<Graph>(cch: &DirectedCCH, upward_weights: &mut [Weight], downward_weights: &mut [Weight], metric: &Graph)
 where
-    Graph: LinkIterGraph + RandomLinkAccessGraph + Sync,
+    Graph: LinkIterGraph + EdgeRandomAccessGraph + Sync,
 {
     report_time_with_key("CCH apply weights", "respecting", || {
         upward_weights
             .par_iter_mut()
             .zip(cch.forward_cch_edge_to_orig_arc.par_iter())
             .for_each(|(up_weight, up_arcs)| {
-                for &up_arc in up_arcs {
+                for &EdgeIdT(up_arc) in up_arcs {
                     *up_weight = std::cmp::min(metric.link(up_arc).weight, *up_weight);
                 }
             });
@@ -99,7 +99,7 @@ where
             .par_iter_mut()
             .zip(cch.backward_cch_edge_to_orig_arc.par_iter())
             .for_each(|(down_weight, down_arcs)| {
-                for &down_arc in down_arcs {
+                for &EdgeIdT(down_arc) in down_arcs {
                     *down_weight = std::cmp::min(metric.link(down_arc).weight, *down_weight);
                 }
             });

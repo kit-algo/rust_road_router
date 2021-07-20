@@ -54,7 +54,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let speed = record[2].parse::<u32>()?;
 
             if let (Some(from), Some(to)) = (id_map.get(from), id_map.get(to)) {
-                if let Some(edge_idx) = graph.edge_index(from as NodeId, to as NodeId) {
+                if let Some(EdgeIdT(edge_idx)) = graph.edge_indices(from as NodeId, to as NodeId).next() {
                     found += 1;
                     let edge_idx = edge_idx as usize;
 

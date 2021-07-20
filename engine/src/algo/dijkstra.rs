@@ -167,7 +167,7 @@ impl Default for DefaultOps {
 #[derive(Debug, Clone, Copy)]
 pub struct DefaultOpsWithLinkPath();
 
-impl<G: RandomLinkAccessGraph> DijkstraOps<G> for DefaultOpsWithLinkPath {
+impl<G: EdgeIdGraph> DijkstraOps<G> for DefaultOpsWithLinkPath {
     type Label = Weight;
     type Arc = (NodeIdT, (Weight, EdgeIdT));
     type LinkResult = Weight;

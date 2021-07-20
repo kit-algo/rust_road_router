@@ -14,7 +14,7 @@ use crate::{
         customizable_contraction_hierarchy::{customize, query::Server as CCHServer, CCH},
         dijkstra::{generic_dijkstra::*, query::td_dijkstra::TDDijkstraOps, *},
     },
-    datastr::{graph::time_dependent::*, graph::RandomLinkAccessGraph, timestamped_vector::TimestampedVector},
+    datastr::{graph::time_dependent::*, timestamped_vector::TimestampedVector},
 };
 
 use std::ops::Range;
@@ -73,8 +73,10 @@ impl<'a> Server<'a> {
         for server in &mut self.samples {
             let mut result = server.query(Query { from, to });
             if let Some(path) = result.node_path() {
-                for edge in path.windows(2) {
-                    self.active_edges[self.graph.edge_index(edge[0], edge[1]).unwrap() as usize] = true;
+                for &[tail, head] in path.array_windows::<2>() {
+                    for EdgeIdT(edge) in self.graph.edge_indices(tail, head) {
+                        self.active_edges[edge as usize] = true;
+                    }
                 }
             }
         }

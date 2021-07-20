@@ -21,7 +21,7 @@ pub use reorder::*;
 pub mod query;
 
 /// Execute first phase, that is metric independent preprocessing.
-pub fn contract<Graph: LinkIterable<NodeIdT> + RandomLinkAccessGraph>(graph: &Graph, node_order: NodeOrder) -> CCH {
+pub fn contract<Graph: LinkIterable<NodeIdT> + EdgeIdGraph>(graph: &Graph, node_order: NodeOrder) -> CCH {
     CCH::new(ContractionGraph::new(graph, node_order).contract())
 }
 
@@ -34,7 +34,7 @@ pub struct CCH {
     head: Vec<NodeId>,
     tail: Vec<NodeId>,
     node_order: NodeOrder,
-    cch_edge_to_orig_arc: Vec<(Vec<EdgeId>, Vec<EdgeId>)>,
+    cch_edge_to_orig_arc: Vec<(Vec<EdgeIdT>, Vec<EdgeIdT>)>,
     elimination_tree: Vec<InRangeOption<NodeId>>,
     inverted: OwnedGraph,
 }
@@ -49,7 +49,7 @@ impl Deconstruct for CCH {
 
 pub struct CCHReconstrctor<'g, Graph>(pub &'g Graph);
 
-impl<'g, Graph: RandomLinkAccessGraph> ReconstructPrepared<CCH> for CCHReconstrctor<'g, Graph> {
+impl<'g, Graph: EdgeIdGraph> ReconstructPrepared<CCH> for CCHReconstrctor<'g, Graph> {
     fn reconstruct_with(self, loader: Loader) -> std::io::Result<CCH> {
         let node_order = NodeOrder::reconstruct_from(&loader.path())?;
         let head: Vec<NodeId> = loader.load("cch_head")?;
@@ -60,7 +60,7 @@ impl<'g, Graph: RandomLinkAccessGraph> ReconstructPrepared<CCH> for CCHReconstrc
 }
 
 impl CCH {
-    pub fn fix_order_and_build(graph: &(impl LinkIterable<NodeIdT> + RandomLinkAccessGraph), order: NodeOrder) -> Self {
+    pub fn fix_order_and_build(graph: &(impl LinkIterable<NodeIdT> + EdgeIdGraph), order: NodeOrder) -> Self {
         let cch = contract(graph, order);
         let order = CCHReordering {
             cch: &cch,
@@ -71,13 +71,13 @@ impl CCH {
         contract(graph, order)
     }
 
-    fn new<Graph: RandomLinkAccessGraph>(contracted_graph: ContractedGraph<Graph>) -> CCH {
+    fn new<Graph: EdgeIdGraph>(contracted_graph: ContractedGraph<Graph>) -> CCH {
         let (cch, order, orig) = contracted_graph.decompose();
         Self::new_from(orig, order, cch)
     }
 
     // this method creates all the other structures from the contracted graph
-    fn new_from<Graph: RandomLinkAccessGraph>(original_graph: &Graph, node_order: NodeOrder, contracted_graph: UnweightedOwnedGraph) -> Self {
+    fn new_from<Graph: EdgeIdGraph>(original_graph: &Graph, node_order: NodeOrder, contracted_graph: UnweightedOwnedGraph) -> Self {
         let elimination_tree = Self::build_elimination_tree(&contracted_graph);
         let n = contracted_graph.num_nodes() as NodeId;
         let m = contracted_graph.num_arcs();
@@ -88,14 +88,8 @@ impl CCH {
                 let node_order = &node_order;
                 LinkIterable::<NodeIdT>::link_iter(&contracted_graph, node).map(move |NodeIdT(neighbor)| {
                     (
-                        original_graph
-                            .neighbor_edge_indices(node_order.node(node))
-                            .filter(|&head| original_graph.link(head).node == node_order.node(neighbor))
-                            .collect(),
-                        original_graph
-                            .neighbor_edge_indices(node_order.node(neighbor))
-                            .filter(|&head| original_graph.link(head).node == node_order.node(node))
-                            .collect(),
+                        original_graph.edge_indices(node_order.node(node), node_order.node(neighbor)).collect(),
+                        original_graph.edge_indices(node_order.node(neighbor), node_order.node(node)).collect(),
                     )
                 })
             })
@@ -268,7 +262,7 @@ impl Graph for CCH {
     }
 }
 
-fn inverted_with_orig_edge_ids_as_weights(graph: &(impl RandomLinkAccessGraph + LinkIterable<NodeIdT>)) -> OwnedGraph {
+fn inverted_with_orig_edge_ids_as_weights(graph: &(impl EdgeRandomAccessGraph + LinkIterable<NodeIdT>)) -> OwnedGraph {
     let mut inverted = vec![Vec::new(); graph.num_nodes()];
     for current_node in 0..(graph.num_nodes() as NodeId) {
         for (NodeIdT(node), edge_id) in graph.link_iter(current_node).zip(graph.neighbor_edge_indices(current_node)) {
@@ -409,8 +403,8 @@ pub struct DirectedCCH {
     backward_head: Vec<NodeId>,
     backward_tail: Vec<NodeId>,
     node_order: NodeOrder,
-    forward_cch_edge_to_orig_arc: Vec<Vec<EdgeId>>,
-    backward_cch_edge_to_orig_arc: Vec<Vec<EdgeId>>,
+    forward_cch_edge_to_orig_arc: Vec<Vec<EdgeIdT>>,
+    backward_cch_edge_to_orig_arc: Vec<Vec<EdgeIdT>>,
     elimination_tree: Vec<InRangeOption<NodeId>>,
     forward_inverted: OwnedGraph,
     backward_inverted: OwnedGraph,

@@ -698,15 +698,22 @@ impl<G: BuildReversed<G>> BuildReversed<VirtualTopocoreGraph<G>> for VirtualTopo
     }
 }
 
-impl<G: RandomLinkAccessGraph> RandomLinkAccessGraph for VirtualTopocoreGraph<G> {
-    fn link(&self, edge_id: EdgeId) -> Link {
-        self.graph.link(edge_id)
-    }
-    fn edge_index(&self, from: NodeId, to: NodeId) -> Option<EdgeId> {
-        self.graph.edge_index(from, to)
+impl<G: EdgeIdGraph> EdgeIdGraph for VirtualTopocoreGraph<G> {
+    // https://github.com/rust-lang/rustfmt/issues/4911
+    #[rustfmt::skip]
+    type IdxIter<'a> where Self: 'a = G::IdxIter<'a>;
+
+    fn edge_indices(&self, from: NodeId, to: NodeId) -> Self::IdxIter<'_> {
+        self.graph.edge_indices(from, to)
     }
     fn neighbor_edge_indices(&self, node: NodeId) -> std::ops::Range<EdgeId> {
         self.graph.neighbor_edge_indices(node)
+    }
+}
+
+impl<G: EdgeRandomAccessGraph> EdgeRandomAccessGraph for VirtualTopocoreGraph<G> {
+    fn link(&self, edge_id: EdgeId) -> Link {
+        self.graph.link(edge_id)
     }
 }
 

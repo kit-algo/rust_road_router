@@ -167,23 +167,27 @@ impl LinkIterable<NodeIdT> for Graph {
     }
 }
 
-impl RandomLinkAccessGraph for Graph {
-    fn link(&self, edge_id: EdgeId) -> Link {
-        Link {
-            node: self.head[edge_id as usize],
-            weight: 0,
-        }
-    }
+impl EdgeIdGraph for Graph {
+    // https://github.com/rust-lang/rustfmt/issues/4911
+    #[rustfmt::skip]
+    type IdxIter<'a> where Self: 'a = impl Iterator<Item = EdgeIdT> + 'a;
 
-    fn edge_index(&self, from: NodeId, to: NodeId) -> Option<EdgeId> {
-        let first_out = self.first_out[from as usize];
-        let range = self.neighbor_edge_indices_usize(from);
-        self.head[range].iter().position(|&head| head == to).map(|pos| pos as EdgeId + first_out)
+    fn edge_indices(&self, from: NodeId, to: NodeId) -> Self::IdxIter<'_> {
+        self.neighbor_edge_indices(from).filter(move |&e| self.head[e as usize] == to).map(EdgeIdT)
     }
 
     #[inline(always)]
     fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {
         (self.first_out[node as usize] as EdgeId)..(self.first_out[(node + 1) as usize] as EdgeId)
+    }
+}
+
+impl EdgeRandomAccessGraph for Graph {
+    fn link(&self, edge_id: EdgeId) -> Link {
+        Link {
+            node: self.head[edge_id as usize],
+            weight: 0,
+        }
     }
 }
 

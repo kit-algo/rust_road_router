@@ -99,7 +99,7 @@ impl<P: Potential> Penalty<P> {
                     .collect();
                 let total_penalized_dist = dists.last().unwrap();
                 for (&[tail, head], &[tail_dist, head_dist]) in path.array_windows::<2>().zip(dists.array_windows::<2>()) {
-                    for (rev_head, edge) in LinkIterable::<(NodeId, EdgeId)>::link_iter(&self.reversed, head) {
+                    for (NodeIdT(rev_head), Reversed(EdgeIdT(edge))) in self.reversed.link_iter(head) {
                         if rev_head != tail {
                             let weight = &mut shortest_path_penalized.graph_mut().graph.weights_mut()[edge as usize];
                             *weight += rejoin_penalty * head_dist / total_penalized_dist;
@@ -242,7 +242,7 @@ impl<G: Graph> Graph for AlternativeGraph<G> {
     }
 }
 
-impl<G: LinkIterable<L> + RandomLinkAccessGraph, L> LinkIterable<L> for AlternativeGraph<G> {
+impl<G: LinkIterable<L> + EdgeIdGraph, L> LinkIterable<L> for AlternativeGraph<G> {
     type Iter<'a> = FilteredLinkIter<'a, <G as LinkIterable<L>>::Iter<'a>>;
 
     #[inline(always)]

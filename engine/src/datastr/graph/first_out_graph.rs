@@ -241,7 +241,27 @@ where
     }
 }
 
-impl<FirstOutContainer, HeadContainer, WeightContainer> RandomLinkAccessGraph for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+impl<FirstOutContainer, HeadContainer, WeightContainer> EdgeIdGraph for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+where
+    FirstOutContainer: AsRef<[EdgeId]>,
+    HeadContainer: AsRef<[NodeId]>,
+    WeightContainer: AsRef<[Weight]>,
+{
+    // https://github.com/rust-lang/rustfmt/issues/4911
+    #[rustfmt::skip]
+    type IdxIter<'a> where Self: 'a = impl Iterator<Item = EdgeIdT> + 'a;
+
+    fn edge_indices(&self, from: NodeId, to: NodeId) -> Self::IdxIter<'_> {
+        self.neighbor_edge_indices(from).filter(move |&e| self.head()[e as usize] == to).map(EdgeIdT)
+    }
+
+    #[inline]
+    fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {
+        (self.first_out()[node as usize] as EdgeId)..(self.first_out()[(node + 1) as usize] as EdgeId)
+    }
+}
+
+impl<FirstOutContainer, HeadContainer, WeightContainer> EdgeRandomAccessGraph for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
@@ -253,17 +273,6 @@ where
             node: self.head()[edge_id as usize],
             weight: self.weight()[edge_id as usize],
         }
-    }
-
-    fn edge_index(&self, from: NodeId, to: NodeId) -> Option<EdgeId> {
-        let first_out = self.first_out()[from as usize];
-        let range = self.neighbor_edge_indices_usize(from);
-        self.head()[range].iter().position(|&head| head == to).map(|pos| pos as EdgeId + first_out)
-    }
-
-    #[inline]
-    fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {
-        (self.first_out()[node as usize] as EdgeId)..(self.first_out()[(node + 1) as usize] as EdgeId)
     }
 }
 
@@ -380,7 +389,26 @@ where
     }
 }
 
-impl<FirstOutContainer, HeadContainer> RandomLinkAccessGraph for UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
+impl<FirstOutContainer, HeadContainer> EdgeIdGraph for UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
+where
+    FirstOutContainer: AsRef<[EdgeId]>,
+    HeadContainer: AsRef<[NodeId]>,
+{
+    // https://github.com/rust-lang/rustfmt/issues/4911
+    #[rustfmt::skip]
+    type IdxIter<'a> where Self: 'a = impl Iterator<Item = EdgeIdT> + 'a;
+
+    fn edge_indices(&self, from: NodeId, to: NodeId) -> Self::IdxIter<'_> {
+        self.neighbor_edge_indices(from).filter(move |&e| self.head()[e as usize] == to).map(EdgeIdT)
+    }
+
+    #[inline]
+    fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {
+        (self.first_out()[node as usize] as EdgeId)..(self.first_out()[(node + 1) as usize] as EdgeId)
+    }
+}
+
+impl<FirstOutContainer, HeadContainer> EdgeRandomAccessGraph for UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
@@ -391,17 +419,6 @@ where
             node: self.head()[edge_id as usize],
             weight: 0,
         }
-    }
-
-    fn edge_index(&self, from: NodeId, to: NodeId) -> Option<EdgeId> {
-        let first_out = self.first_out()[from as usize];
-        let range = self.neighbor_edge_indices_usize(from);
-        self.head()[range].iter().position(|&head| head == to).map(|pos| pos as EdgeId + first_out)
-    }
-
-    #[inline]
-    fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {
-        (self.first_out()[node as usize] as EdgeId)..(self.first_out()[(node + 1) as usize] as EdgeId)
     }
 }
 
@@ -480,12 +497,16 @@ impl Graph for ReversedGraphWithEdgeIds {
     }
 }
 
-impl LinkIterable<(NodeId, EdgeId)> for ReversedGraphWithEdgeIds {
-    type Iter<'a> = std::iter::Zip<std::iter::Cloned<std::slice::Iter<'a, NodeId>>, std::iter::Cloned<std::slice::Iter<'a, EdgeId>>>;
+impl LinkIterable<(NodeIdT, Reversed)> for ReversedGraphWithEdgeIds {
+    type Iter<'a> = impl Iterator<Item = (NodeIdT, Reversed)> + 'a;
 
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         let range = SlcsIdx(&self.first_out).range(node as usize);
-        self.head[range.clone()].iter().cloned().zip(self.edge_ids[range.clone()].iter().cloned())
+        self.head[range.clone()]
+            .iter()
+            .copied()
+            .map(NodeIdT)
+            .zip(self.edge_ids[range.clone()].iter().copied().map(EdgeIdT).map(Reversed))
     }
 }
 
