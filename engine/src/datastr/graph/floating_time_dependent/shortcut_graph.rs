@@ -38,37 +38,37 @@ impl Ord for ShortcutId {
 }
 
 impl ShortcutId {
-    fn discriminant(&self) -> u32 {
+    pub fn discriminant(&self) -> u32 {
         match self {
             Self::Incoming(_) => 1,
             Self::Outgoing(_) => 0,
         }
     }
 
-    fn edge_id(&self) -> EdgeId {
+    pub fn edge_id(&self) -> EdgeId {
         match *self {
             Self::Incoming(id) => id,
             Self::Outgoing(id) => id,
         }
     }
 
-    fn get_from<'a, T>(self, incoming: &'a [T], outgoing: &'a [T]) -> &'a T {
+    pub fn get_from<'a, T>(self, incoming: &'a [T], outgoing: &'a [T]) -> &'a T {
         match self {
             Self::Incoming(id) => &incoming[id as usize],
             Self::Outgoing(id) => &outgoing[id as usize],
         }
     }
 
-    fn get_mut_from<'a, T>(self, incoming: &'a mut [T], outgoing: &'a mut [T]) -> &'a mut T {
+    pub fn get_mut_from<'a, T>(self, incoming: &'a mut [T], outgoing: &'a mut [T]) -> &'a mut T {
         match self {
             Self::Incoming(id) => &mut incoming[id as usize],
             Self::Outgoing(id) => &mut outgoing[id as usize],
         }
     }
 
-    fn get_with<T, F, O>(self, incoming: T, outgoing: T, f: F) -> O
+    pub fn get_with<T, F, O>(self, incoming: T, outgoing: T, f: F) -> O
     where
-        F: FnOnce(T, NodeId) -> O,
+        F: FnOnce(T, EdgeId) -> O,
     {
         match self {
             Self::Incoming(id) => f(incoming, id),
@@ -316,8 +316,6 @@ struct ShortcutGraph<'a> {
 #[derive(Debug)]
 pub struct CustomizedGraph<'a> {
     pub original_graph: &'a TDGraph,
-    first_out: &'a [EdgeId],
-    head: &'a [NodeId],
     pub outgoing: CustomizedSingleDirGraph,
     pub incoming: CustomizedSingleDirGraph,
 }
@@ -406,8 +404,6 @@ impl<'a> From<ShortcutGraph<'a>> for CustomizedGraph<'a> {
 
         CustomizedGraph {
             original_graph: shortcut_graph.original_graph,
-            first_out: shortcut_graph.first_out,
-            head: shortcut_graph.head,
 
             outgoing: CustomizedSingleDirGraph {
                 first_out: outgoing_first_out,
@@ -565,12 +561,7 @@ impl<'a> Deconstruct for CustomizedGraph<'a> {
 }
 
 /// Additional data to load CATCHUp customization results back from disk.
-#[derive(Debug)]
-pub struct CustomizedGraphReconstrctor<'a> {
-    pub original_graph: &'a TDGraph,
-    pub first_out: &'a [EdgeId],
-    pub head: &'a [NodeId],
-}
+pub struct CustomizedGraphReconstrctor<'a>(pub &'a TDGraph);
 
 impl<'a> ReconstructPrepared<CustomizedGraph<'a>> for CustomizedGraphReconstrctor<'a> {
     fn reconstruct_with(self, loader: Loader) -> std::io::Result<CustomizedGraph<'a>> {
@@ -594,9 +585,7 @@ impl<'a> ReconstructPrepared<CustomizedGraph<'a>> for CustomizedGraphReconstrcto
         }
 
         Ok(CustomizedGraph {
-            original_graph: self.original_graph,
-            first_out: self.first_out,
-            head: self.head,
+            original_graph: self.0,
 
             outgoing: CustomizedSingleDirGraph {
                 first_out: outgoing_first_out,

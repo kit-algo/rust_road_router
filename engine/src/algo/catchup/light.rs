@@ -1,41 +1,35 @@
 //! CATCHUp query algorithm.
 
-use super::*;
-use crate::report::*;
-use crate::util::*;
-use std::cmp::*;
-
-pub use crate::algo::customizable_contraction_hierarchy::ftd_cch::customize;
-
-mod floating_td_stepped_elimination_tree;
-pub mod light;
-pub mod partial_profiles;
-pub mod profiles;
-pub mod profiles_naive;
-mod td_stepped_elimination_tree;
-use floating_td_stepped_elimination_tree::{QueryProgress, *};
-
 use crate::algo::customizable_contraction_hierarchy::*;
+use crate::algo::{dijkstra::State, *};
 use crate::datastr::clearlist_vector::ClearlistVector;
-use crate::datastr::graph::floating_time_dependent::*;
+use crate::datastr::graph::floating_time_dependent::ShortcutId;
+use crate::datastr::graph::time_dependent::*;
 use crate::datastr::index_heap::{IndexdMinHeap, Indexing};
 use crate::datastr::rank_select_map::{BitVec, FastClearBitVec};
 #[cfg(feature = "tdcch-query-detailed-timing")]
 use crate::report::benchmark::Timer;
 
+pub use crate::algo::customizable_contraction_hierarchy::catchup_light::*;
+
+use super::td_stepped_elimination_tree::{QueryProgress, *};
+
+use crate::report::*;
+use std::cmp::*;
+
 /// Query server struct for CATCHUp.
 /// Implements the common query trait.
 pub struct Server<'a> {
     // Corridor elimination tree query
-    forward: FloatingTDSteppedEliminationTree<'a, 'a>,
-    backward: FloatingTDSteppedEliminationTree<'a, 'a>,
+    forward: TDSteppedEliminationTree<'a, 'a>,
+    backward: TDSteppedEliminationTree<'a, 'a>,
     // static CCH stuff
     cch_graph: &'a CCH,
     // CATCHUp preprocessing
     customized_graph: &'a CustomizedGraph<'a>,
 
     // Middle nodes in corridor
-    meeting_nodes: Vec<(NodeId, FlWeight)>,
+    meeting_nodes: Vec<(NodeId, Weight)>,
 
     // For storing the paths through the elimination tree from the root to source/destination.
     // Because elimination only allows us to efficiently walk from node to root, but not the other way around
@@ -48,13 +42,16 @@ pub struct Server<'a> {
     // Distances for Dijkstra/A* phase
     distances: ClearlistVector<Timestamp>,
     // Distances estimates to target used as A* potentials
-    lower_bounds_to_target: ClearlistVector<FlWeight>,
+    lower_bounds_to_target: ClearlistVector<Weight>,
+    upper_bounds_from_source: ClearlistVector<Weight>,
     // Parent pointers for path retrieval, including edge id for easier shortcut unpacking
     parents: Vec<(NodeId, EdgeId)>,
     // Priority queue for Dijkstra/A* phase
     closest_node_priority_queue: IndexdMinHeap<State<Timestamp>>,
     // Bitset to mark all (upward) edges in the search space
     relevant_upward: FastClearBitVec,
+
+    down_relaxed: FastClearBitVec,
 
     from: NodeId,
     to: NodeId,
@@ -65,20 +62,22 @@ impl<'a> Server<'a> {
         let n = customized_graph.original_graph.num_nodes();
         let m = cch_graph.num_arcs();
         Self {
-            forward: FloatingTDSteppedEliminationTree::new(customized_graph.upward_bounds_graph(), cch_graph.elimination_tree()),
-            backward: FloatingTDSteppedEliminationTree::new(customized_graph.downward_bounds_graph(), cch_graph.elimination_tree()),
+            forward: TDSteppedEliminationTree::new(customized_graph.upward_bounds_graph(), cch_graph.elimination_tree()),
+            backward: TDSteppedEliminationTree::new(customized_graph.downward_bounds_graph(), cch_graph.elimination_tree()),
             cch_graph,
             meeting_nodes: Vec::new(),
             customized_graph,
             forward_tree_path: Vec::new(),
             backward_tree_path: Vec::new(),
-            distances: ClearlistVector::new(n, Timestamp::NEVER),
-            lower_bounds_to_target: ClearlistVector::new(n, FlWeight::INFINITY),
+            distances: ClearlistVector::new(n, INFINITY),
+            lower_bounds_to_target: ClearlistVector::new(n, INFINITY),
+            upper_bounds_from_source: ClearlistVector::new(n, INFINITY),
             parents: vec![(std::u32::MAX, std::u32::MAX); n],
             forward_tree_mask: BitVec::new(n),
             backward_tree_mask: BitVec::new(n),
             closest_node_priority_queue: IndexdMinHeap::new(n),
             relevant_upward: FastClearBitVec::new(m),
+            down_relaxed: FastClearBitVec::new(m),
             from: 0,
             to: 0,
         }
@@ -86,8 +85,8 @@ impl<'a> Server<'a> {
 
     #[allow(clippy::collapsible_if)]
     #[allow(clippy::cognitive_complexity)]
-    fn distance(&mut self, from_node: NodeId, to_node: NodeId, departure_time: Timestamp) -> Option<FlWeight> {
-        report!("algo", "Floating TDCCH Query");
+    fn distance(&mut self, from_node: NodeId, to_node: NodeId, departure_time: Timestamp) -> Option<Weight> {
+        report!("algo", "CATCHUp light Query");
 
         #[cfg(feature = "tdcch-query-detailed-timing")]
         let timer = Timer::new();
@@ -98,10 +97,11 @@ impl<'a> Server<'a> {
         let n = self.customized_graph.original_graph.num_nodes();
 
         // initialize
-        let mut tentative_distance = (FlWeight::INFINITY, FlWeight::INFINITY);
+        let mut tentative_distance = (INFINITY, INFINITY);
         self.distances.reset();
         self.distances[self.from as usize] = departure_time;
         self.lower_bounds_to_target.reset();
+        self.upper_bounds_from_source.reset();
         self.meeting_nodes.clear();
         self.forward.initialize_query(self.from);
         self.backward.initialize_query(self.to);
@@ -155,7 +155,7 @@ impl<'a> Server<'a> {
                         nodes_in_elimination_tree_search_space += 1;
                     }
                     if cfg!(feature = "detailed-stats") {
-                        relaxed_elimination_tree_arcs += self.customized_graph.outgoing.degree(node);
+                        relaxed_elimination_tree_arcs += self.customized_graph.upward_bounds_graph().degree(node);
                     }
 
                     // push node to tree path so we can efficiently walk back down later
@@ -167,13 +167,13 @@ impl<'a> Server<'a> {
                     // we use this distance later for some pruning
                     // so here, we already store upper_bound + epsilon as a distance
                     // this allows for pruning but guarantees that we will later improve it with a real distance, even if its exactly upper_bound
-                    self.distances[node as usize] = min(self.distances[node as usize], departure_time + upper_bound + FlWeight::new(EPSILON));
+                    self.distances[node as usize] = min(self.distances[node as usize], (departure_time + 1).saturating_add(upper_bound));
 
                     // improve tentative distance if possible
-                    if !tentative_distance.1.fuzzy_lt(lower_bound) {
+                    if lower_bound <= tentative_distance.1 {
                         tentative_distance.0 = min(tentative_distance.0, lower_bound);
                         tentative_distance.1 = min(tentative_distance.1, upper_bound);
-                        debug_assert!(!tentative_distance.1.fuzzy_lt(tentative_distance.0), "{:?}", tentative_distance);
+                        debug_assert!(tentative_distance.0 <= tentative_distance.1, "{:?}", tentative_distance);
                         self.meeting_nodes.push((node, lower_bound));
                     }
                 } else {
@@ -193,7 +193,7 @@ impl<'a> Server<'a> {
                         nodes_in_elimination_tree_search_space += 1;
                     }
                     if cfg!(feature = "detailed-stats") {
-                        relaxed_elimination_tree_arcs += self.customized_graph.incoming.degree(node);
+                        relaxed_elimination_tree_arcs += self.customized_graph.downward_bounds_graph().degree(node);
                     }
 
                     // push node to tree path so we can efficiently walk back down later
@@ -201,13 +201,13 @@ impl<'a> Server<'a> {
 
                     // improve tentative distance if possible
                     let lower_bound = self.forward.node_data(node).lower_bound + self.backward.node_data(node).lower_bound;
-                    if !tentative_distance.1.fuzzy_lt(lower_bound) {
+                    if lower_bound <= tentative_distance.1 {
                         tentative_distance.0 = min(tentative_distance.0, lower_bound);
                         tentative_distance.1 = min(
                             tentative_distance.1,
                             self.forward.node_data(node).upper_bound + self.backward.node_data(node).upper_bound,
                         );
-                        debug_assert!(!tentative_distance.1.fuzzy_lt(tentative_distance.0), "{:?}", tentative_distance);
+                        debug_assert!(tentative_distance.0 <= tentative_distance.1, "{:?}", tentative_distance);
                         self.meeting_nodes.push((node, lower_bound));
                     }
                 } else {
@@ -234,14 +234,14 @@ impl<'a> Server<'a> {
         for &(node, _) in self
             .meeting_nodes
             .iter()
-            .filter(|(_, lower_bound)| !tentative_upper_bound.fuzzy_lt(*lower_bound) && lower_bound.fuzzy_lt(FlWeight::INFINITY))
+            .filter(|&&(_, lower_bound)| lower_bound <= tentative_upper_bound && lower_bound < INFINITY)
         {
             self.forward_tree_mask.set(node as usize);
             self.backward_tree_mask.set(node as usize);
         }
 
         // for all nodes on the path from root to target
-        while let Some(node) = self.backward_tree_path.pop() {
+        for &node in self.backward_tree_path.iter().rev() {
             // if the node is in the corridor
             if self.backward_tree_mask.get(node as usize) {
                 // set lower bound to target for the A* potentials later on
@@ -255,7 +255,7 @@ impl<'a> Server<'a> {
                     .labels
                     .iter()
                     // lazy label filtering
-                    .filter(|label| !upper_bound.fuzzy_lt(label.lower_bound))
+                    .filter(|label| label.lower_bound <= upper_bound)
                 {
                     // mark parent as in corridor
                     self.backward_tree_mask.set(label.parent as usize);
@@ -273,6 +273,7 @@ impl<'a> Server<'a> {
                 // we are going to propagate this downward the corridor towards the source and all nodes on the way
                 let reverse_lower = self.lower_bounds_to_target[node as usize];
                 let upper_bound = self.forward.node_data(node).upper_bound;
+                self.upper_bounds_from_source[node as usize] = upper_bound + departure_time;
 
                 // for all labels (parent points)
                 for label in self
@@ -281,20 +282,13 @@ impl<'a> Server<'a> {
                     .labels
                     .iter()
                     // lazy label filtering
-                    .filter(|label| !upper_bound.fuzzy_lt(label.lower_bound))
+                    .filter(|label| label.lower_bound <= upper_bound)
                 {
-                    if cfg!(feature = "tdcch-query-corridor") {
-                        debug_assert!(self.customized_graph.outgoing.bounds()[label.shortcut_id as usize]
-                            .0
-                            .fuzzy_eq(label.lower_bound - self.forward.node_data(label.parent).lower_bound));
-                        // update (relax) parent lower bound to target
-                        self.lower_bounds_to_target[label.parent as usize] = min(
-                            self.lower_bounds_to_target[label.parent as usize],
-                            reverse_lower + label.lower_bound - self.forward.node_data(label.parent).lower_bound,
-                        );
-                    } else {
-                        self.lower_bounds_to_target[label.parent as usize] = FlWeight::ZERO;
-                    }
+                    // update (relax) parent lower bound to target
+                    self.lower_bounds_to_target[label.parent as usize] = min(
+                        self.lower_bounds_to_target[label.parent as usize],
+                        reverse_lower + label.lower_bound - self.forward.node_data(label.parent).lower_bound,
+                    );
                     // mark parent as in corridor
                     self.forward_tree_mask.set(label.parent as usize);
                     // mark edge as in search space
@@ -302,6 +296,30 @@ impl<'a> Server<'a> {
                 }
             }
         }
+
+        for &node in self.backward_tree_path.iter().rev() {
+            // if the node is in the corridor
+            if self.backward_tree_mask.get(node as usize) {
+                let reverse_upper = self.upper_bounds_from_source[node as usize];
+                let upper_bound = self.backward.node_data(node).upper_bound;
+
+                // for all labels (parent pointers)
+                for label in self
+                    .backward
+                    .node_data(node)
+                    .labels
+                    .iter()
+                    // lazy label filtering
+                    .filter(|label| label.lower_bound <= upper_bound)
+                {
+                    self.upper_bounds_from_source[label.parent as usize] = min(
+                        self.upper_bounds_from_source[label.parent as usize],
+                        reverse_upper + self.customized_graph.downward_bounds_graph().bounds[label.shortcut_id as usize].1,
+                    );
+                }
+            }
+        }
+        self.backward_tree_path.clear();
 
         // now we have the corridor so we proceed to the Dijkstra/A* phase
 
@@ -315,24 +333,30 @@ impl<'a> Server<'a> {
         //     dbg_each!(tentative_distance, self.lower_bounds_to_target[self.from as usize])
         // );
         debug_assert!(
-            FlWeight::ZERO.fuzzy_eq(self.lower_bounds_to_target[self.to as usize]) || tentative_distance.0.fuzzy_eq(FlWeight::INFINITY),
+            self.lower_bounds_to_target[self.to as usize] == 0 || tentative_distance.0 == INFINITY,
             "{:?}",
             dbg_each!(self.lower_bounds_to_target[self.to as usize])
         );
         let lower_bounds_to_target = &mut self.lower_bounds_to_target;
+        let upper_bounds_from_source = &mut self.upper_bounds_from_source;
+        let distances = &mut self.distances;
+        let closest_node_priority_queue = &mut self.closest_node_priority_queue;
+        let parents = &mut self.parents;
 
-        self.closest_node_priority_queue.push(State {
+        closest_node_priority_queue.push(State {
             key: departure_time + tentative_distance.0,
             node: self.from,
         });
 
         // while there is a node in the queue
-        while let Some(State { node, .. }) = self.closest_node_priority_queue.pop() {
+        while let Some(State { node, .. }) = closest_node_priority_queue.pop() {
+            self.down_relaxed.clear();
+            // dbg!(node);
             if cfg!(feature = "detailed-stats") {
                 num_settled_nodes += 1;
             }
 
-            let distance = self.distances[node as usize];
+            let distance = distances[node as usize];
 
             if node == self.to {
                 break;
@@ -342,70 +366,42 @@ impl<'a> Server<'a> {
             for ((target, shortcut_id), (shortcut_lower_bound, _shortcut_upper_bound)) in self.customized_graph.upward_bounds_graph().neighbor_iter(node) {
                 // if its in the search space
                 // and can improve the distance of the target according to the bounds
-                if relevant_upward.get(shortcut_id as usize)
-                    && !min(tentative_latest_arrival, self.distances[target as usize]).fuzzy_lt(distance + shortcut_lower_bound)
-                {
-                    if cfg!(feature = "detailed-stats") {
-                        relaxed_shortcut_arcs += 1;
-                    }
+                if relevant_upward.get(shortcut_id as usize) && distance + shortcut_lower_bound <= min(tentative_latest_arrival, distances[target as usize]) {
+                    self.customized_graph.evaluate_next_segment_at(
+                        ShortcutId::Outgoing(shortcut_id),
+                        distance,
+                        lower_bounds_to_target,
+                        upper_bounds_from_source,
+                        &mut self.down_relaxed,
+                        &mut |edge_id| relevant_upward.set(edge_id as usize),
+                        &mut |tt, NodeIdT(next_on_path), evaled_shortcut_id, lower| {
+                            if cfg!(feature = "detailed-stats") {
+                                relaxed_shortcut_arcs += 1;
+                            }
 
-                    let lower_bound_target = lower_bounds_to_target[target as usize];
+                            let next_ea = distance + tt;
+                            let next = State {
+                                key: next_ea + lower,
+                                node: next_on_path,
+                            };
 
-                    let (time, next_on_path, evaled_edge_id) = if cfg!(feature = "tdcch-query-lazy") {
-                        // partially relax the edge
-                        // that means actually relax the first real edge that is on the path that the shortcut represents.
-                        // doing so requires to recursively unpack the first edge of each triangle.
-                        // while doing that we mark the second edge as contained in the search space
-                        // and update the lower bound to target for the middle node.
-                        // this all happens in this method
-                        self.customized_graph
-                            .outgoing
-                            .evaluate_next_segment_at::<True, _>(
-                                shortcut_id,
-                                distance,
-                                lower_bound_target,
-                                self.customized_graph,
-                                lower_bounds_to_target,
-                                &mut |edge_id| relevant_upward.set(edge_id as usize),
-                            )
-                            .unwrap()
-                    } else {
-                        let val = if cfg!(feature = "detailed-stats") {
-                            let (val, len) = self.customized_graph.evaluate_and_path_length(ShortcutId::Outgoing(shortcut_id), distance);
-                            relaxed_shortcut_arcs += len - 1;
-                            val
-                        } else {
-                            self.customized_graph.evaluate(ShortcutId::Outgoing(shortcut_id), distance)
-                        };
-                        (val, self.customized_graph.outgoing.head()[shortcut_id as usize], shortcut_id)
-                    };
-                    let lower = if cfg!(feature = "tdcch-query-astar") {
-                        lower_bounds_to_target[next_on_path as usize]
-                    } else {
-                        FlWeight::ZERO
-                    };
-
-                    let next_ea = distance + time;
-                    let next = State {
-                        key: next_ea + lower,
-                        node: next_on_path,
-                    };
-
-                    // actual distance relaxation for `next_on_path`
-                    // we need to call decrease_key when either the lower bound or the distance was improved
-                    if next_ea < self.distances[next.node as usize] {
-                        self.distances[next.node as usize] = next_ea;
-                        self.parents[next.node as usize] = (node, evaled_edge_id);
-                        if self.closest_node_priority_queue.contains_index(next.as_index()) {
-                            self.closest_node_priority_queue.decrease_key(next);
-                        } else {
-                            self.closest_node_priority_queue.push(next);
-                        }
-                    } else if let Some(label) = self.closest_node_priority_queue.get(next.as_index()) {
-                        if next < *label {
-                            self.closest_node_priority_queue.decrease_key(next);
-                        }
-                    }
+                            // actual distance relaxation for `next_on_path`
+                            // we need to call decrease_key when either the lower bound or the distance was improved
+                            if next_ea < distances[next.node as usize] {
+                                distances[next.node as usize] = next_ea;
+                                parents[next.node as usize] = (node, evaled_shortcut_id.edge_id());
+                                if closest_node_priority_queue.contains_index(next.as_index()) {
+                                    closest_node_priority_queue.decrease_key(next);
+                                } else {
+                                    closest_node_priority_queue.push(next);
+                                }
+                            } else if let Some(label) = closest_node_priority_queue.get(next.as_index()) {
+                                if next < *label {
+                                    closest_node_priority_queue.decrease_key(next);
+                                }
+                            }
+                        },
+                    );
                 }
             }
 
@@ -415,72 +411,46 @@ impl<'a> Server<'a> {
                 let upper_bound = self.backward.node_data(node).upper_bound;
 
                 // for all labels
-                for label in self
-                    .backward
-                    .node_data(node)
-                    .labels
-                    .iter()
-                    .filter(|label| !upper_bound.fuzzy_lt(label.lower_bound))
-                {
+                for label in self.backward.node_data(node).labels.iter().filter(|label| label.lower_bound <= upper_bound) {
                     // check by bounds if we need the edge
-                    if !min(tentative_latest_arrival, self.distances[label.parent as usize])
-                        .fuzzy_lt(distance + self.customized_graph.incoming.bounds()[label.shortcut_id as usize].0)
+                    if distance + self.customized_graph.downward_bounds_graph().bounds[label.shortcut_id as usize].0
+                        <= min(tentative_latest_arrival, distances[label.parent as usize])
                     {
-                        if cfg!(feature = "detailed-stats") {
-                            relaxed_shortcut_arcs += 1;
-                        }
+                        self.customized_graph.evaluate_next_segment_at(
+                            ShortcutId::Incoming(label.shortcut_id),
+                            distance,
+                            lower_bounds_to_target,
+                            upper_bounds_from_source,
+                            &mut self.down_relaxed,
+                            &mut |edge_id| relevant_upward.set(edge_id as usize),
+                            &mut |tt, NodeIdT(next_on_path), evaled_shortcut_id, lower| {
+                                if cfg!(feature = "detailed-stats") {
+                                    relaxed_shortcut_arcs += 1;
+                                }
 
-                        let lower_bound_target = lower_bounds_to_target[label.parent as usize];
-                        let (time, next_on_path, evaled_edge_id) = if cfg!(feature = "tdcch-query-lazy") {
-                            // if so do the same crazy relaxation as for upward edges
-                            self.customized_graph
-                                .incoming
-                                .evaluate_next_segment_at::<False, _>(
-                                    label.shortcut_id,
-                                    distance,
-                                    lower_bound_target,
-                                    self.customized_graph,
-                                    lower_bounds_to_target,
-                                    &mut |edge_id| relevant_upward.set(edge_id as usize),
-                                )
-                                .unwrap()
-                        } else {
-                            let val = if cfg!(feature = "detailed-stats") {
-                                let (val, len) = self
-                                    .customized_graph
-                                    .evaluate_and_path_length(ShortcutId::Incoming(label.shortcut_id), distance);
-                                relaxed_shortcut_arcs += len - 1;
-                                val
-                            } else {
-                                self.customized_graph.evaluate(ShortcutId::Incoming(label.shortcut_id), distance)
-                            };
-                            (val, label.parent, label.shortcut_id)
-                        };
-                        let lower = if cfg!(feature = "tdcch-query-astar") {
-                            lower_bounds_to_target[next_on_path as usize]
-                        } else {
-                            FlWeight::ZERO
-                        };
+                                let next_ea = distance + tt;
+                                let next = State {
+                                    key: next_ea + lower,
+                                    node: next_on_path,
+                                };
 
-                        let next_ea = distance + time;
-                        let next = State {
-                            key: next_ea + lower,
-                            node: next_on_path,
-                        };
-
-                        if next_ea < self.distances[next.node as usize] {
-                            self.distances[next.node as usize] = next_ea;
-                            self.parents[next.node as usize] = (node, evaled_edge_id);
-                            if self.closest_node_priority_queue.contains_index(next.as_index()) {
-                                self.closest_node_priority_queue.decrease_key(next);
-                            } else {
-                                self.closest_node_priority_queue.push(next);
-                            }
-                        } else if let Some(label) = self.closest_node_priority_queue.get(next.as_index()) {
-                            if next < *label {
-                                self.closest_node_priority_queue.decrease_key(next);
-                            }
-                        }
+                                // actual distance relaxation for `next_on_path`
+                                // we need to call decrease_key when either the lower bound or the distance was improved
+                                if next_ea < distances[next.node as usize] {
+                                    distances[next.node as usize] = next_ea;
+                                    parents[next.node as usize] = (node, evaled_shortcut_id.edge_id());
+                                    if closest_node_priority_queue.contains_index(next.as_index()) {
+                                        closest_node_priority_queue.decrease_key(next);
+                                    } else {
+                                        closest_node_priority_queue.push(next);
+                                    }
+                                } else if let Some(label) = closest_node_priority_queue.get(next.as_index()) {
+                                    if next < *label {
+                                        closest_node_priority_queue.decrease_key(next);
+                                    }
+                                }
+                            },
+                        );
                     }
                 }
             }
@@ -513,7 +483,7 @@ impl<'a> Server<'a> {
             );
         }
 
-        if self.distances[self.to as usize] < Timestamp::NEVER {
+        if self.distances[self.to as usize] < INFINITY {
             Some(self.distances[self.to as usize] - departure_time)
         } else {
             None
@@ -521,47 +491,48 @@ impl<'a> Server<'a> {
     }
 
     fn path(&self) -> Vec<(NodeId, Timestamp)> {
-        let mut path = Vec::new();
-        path.push((self.to, self.distances[self.to as usize]));
+        unimplemented!()
+        // let mut path = Vec::new();
+        // path.push((self.to, self.distances[self.to as usize]));
 
-        while let Some((rank, t_prev)) = path.pop() {
-            debug_assert_eq!(t_prev, self.distances[rank as usize]);
-            if rank == self.from {
-                path.push((rank, t_prev));
-                break;
-            }
+        // while let Some((rank, t_prev)) = path.pop() {
+        //     debug_assert_eq!(t_prev, self.distances[rank as usize]);
+        //     if rank == self.from {
+        //         path.push((rank, t_prev));
+        //         break;
+        //     }
 
-            let (parent, shortcut_id) = self.parents[rank as usize];
-            let t_parent = self.distances[parent as usize];
+        //     let (parent, shortcut_id) = self.parents[rank as usize];
+        //     let t_parent = self.distances[parent as usize];
 
-            let mut shortcut_path = Vec::new();
-            if parent > rank {
-                self.customized_graph
-                    .incoming
-                    .unpack_at(shortcut_id, t_parent, &self.customized_graph, &mut shortcut_path);
-            } else {
-                self.customized_graph
-                    .outgoing
-                    .unpack_at(shortcut_id, t_parent, &self.customized_graph, &mut shortcut_path);
-            };
+        //     let mut shortcut_path = Vec::new();
+        //     if parent > rank {
+        //         self.customized_graph
+        //             .incoming
+        //             .unpack_at(shortcut_id, t_parent, &self.customized_graph, &mut shortcut_path);
+        //     } else {
+        //         self.customized_graph
+        //             .outgoing
+        //             .unpack_at(shortcut_id, t_parent, &self.customized_graph, &mut shortcut_path);
+        //     };
 
-            for (edge, arrival) in shortcut_path.into_iter().rev() {
-                path.push((
-                    self.cch_graph.node_order().rank(self.customized_graph.original_graph.head()[edge as usize]),
-                    arrival,
-                ));
-            }
+        //     for (edge, arrival) in shortcut_path.into_iter().rev() {
+        //         path.push((
+        //             self.cch_graph.node_order().rank(self.customized_graph.original_graph.head()[edge as usize]),
+        //             arrival,
+        //         ));
+        //     }
 
-            path.push((parent, t_parent));
-        }
+        //     path.push((parent, t_parent));
+        // }
 
-        path.reverse();
+        // path.reverse();
 
-        for (rank, _) in &mut path {
-            *rank = self.cch_graph.node_order().node(*rank);
-        }
+        // for (rank, _) in &mut path {
+        //     *rank = self.cch_graph.node_order().node(*rank);
+        // }
 
-        path
+        // path
     }
 }
 
@@ -579,13 +550,13 @@ impl<'s, 'a> PathServer for PathServerWrapper<'s, 'a> {
     }
 }
 
-impl<'a> TDQueryServer<Timestamp, FlWeight> for Server<'a> {
+impl<'a> TDQueryServer<Timestamp, Weight> for Server<'a> {
     type P<'s>
     where
         Self: 's,
     = PathServerWrapper<'s, 'a>;
 
-    fn td_query(&mut self, query: TDQuery<Timestamp>) -> QueryResult<Self::P<'_>, FlWeight> {
+    fn td_query(&mut self, query: TDQuery<Timestamp>) -> QueryResult<Self::P<'_>, Weight> {
         QueryResult::new(self.distance(query.from, query.to, query.departure), PathServerWrapper(self))
     }
 }

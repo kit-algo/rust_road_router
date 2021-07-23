@@ -54,6 +54,11 @@ impl<'a> PiecewiseLinearFunction<'a> {
         *self.travel_time.iter().min().unwrap()
     }
 
+    /// Find the lowest value of the function
+    pub fn upper_bound(&self) -> Weight {
+        *self.travel_time.iter().max().unwrap()
+    }
+
     /// Evaluate for a point in time within period!
     #[inline(always)]
     pub(super) fn evaluate(&self, departure: Timestamp) -> Weight {

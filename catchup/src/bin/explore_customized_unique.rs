@@ -4,7 +4,6 @@
 use std::{env, error::Error, path::Path};
 
 use rust_road_router::{
-    algo::customizable_contraction_hierarchy::*,
     cli::CliErr,
     datastr::graph::floating_time_dependent::{shortcut_graph::CustomizedGraphReconstrctor, *},
     io::*,
@@ -16,17 +15,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let graph = TDGraph::reconstruct_from(&path)?;
 
-    let cch_folder = path.join("cch");
-    let cch = CCHReconstrctor(&graph).reconstruct_from(&cch_folder)?;
-
     let customized_folder = path.join("customized");
 
-    let td_cch_graph = CustomizedGraphReconstrctor {
-        original_graph: &graph,
-        first_out: cch.first_out(),
-        head: cch.head(),
-    }
-    .reconstruct_from(&customized_folder)?;
+    let td_cch_graph = CustomizedGraphReconstrctor(&graph).reconstruct_from(&customized_folder)?;
 
     let (unique_down, unique_up) = td_cch_graph.unique_path_edges();
     eprintln!("down: {}/{}", unique_down.count_ones(), unique_down.len());

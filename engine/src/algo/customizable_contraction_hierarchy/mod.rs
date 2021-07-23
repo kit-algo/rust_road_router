@@ -12,6 +12,7 @@ use std::{cmp::Ordering, ops::Range};
 mod contraction;
 use contraction::*;
 mod customization;
+pub use customization::catchup_light;
 pub use customization::ftd as ftd_cch;
 pub use customization::{customize, customize_directed};
 pub mod separator_decomposition;
@@ -139,6 +140,11 @@ impl CCH {
     /// Get chordal supergraph `head` as slice
     pub fn head(&self) -> &[NodeId] {
         &self.head
+    }
+
+    /// Get chordal supergraph `tail` as slice
+    pub fn tail(&self) -> &[NodeId] {
+        &self.tail
     }
 
     #[inline]

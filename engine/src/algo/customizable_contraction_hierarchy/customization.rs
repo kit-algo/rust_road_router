@@ -4,6 +4,7 @@ use std::cell::RefCell;
 
 mod parallelization;
 use parallelization::*;
+pub mod catchup_light;
 pub mod ftd;
 
 // One mapping of node id to weight for each thread during the scope of the customization.

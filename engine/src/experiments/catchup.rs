@@ -27,12 +27,7 @@ pub fn setup(path: &Path, run: impl FnOnce(&TDGraph, &mut StdRng, &CCH, &Customi
 
     let customized_folder = path.join("customized");
 
-    let td_cch_graph = CustomizedGraphReconstrctor {
-        original_graph: &graph,
-        first_out: cch.first_out(),
-        head: cch.head(),
-    }
-    .reconstruct_from(&customized_folder)?;
+    let td_cch_graph = CustomizedGraphReconstrctor(&graph).reconstruct_from(&customized_folder)?;
 
     run(&graph, &mut rng, &cch, &td_cch_graph)
 }
