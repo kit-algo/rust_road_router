@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::datastr::{index_heap::*, timestamped_vector::*};
+use crate::report::*;
 
 pub mod gen_topo_dijkstra;
 pub mod generic_dijkstra;
@@ -201,6 +202,10 @@ impl Default for DefaultOpsWithLinkPath {
 
 pub trait BidirChooseDir: Default {
     fn choose(&mut self, fw_min_key: Weight, bw_min_key: Weight) -> bool;
+    fn strategy_key() -> &'static str;
+    fn report() {
+        report!("choose_direction_strategy", Self::strategy_key());
+    }
 }
 
 pub struct ChooseMinKeyDir();
@@ -214,6 +219,9 @@ impl Default for ChooseMinKeyDir {
 impl BidirChooseDir for ChooseMinKeyDir {
     fn choose(&mut self, fw_min_key: Weight, bw_min_key: Weight) -> bool {
         fw_min_key <= bw_min_key
+    }
+    fn strategy_key() -> &'static str {
+        "min_key"
     }
 }
 
@@ -231,5 +239,8 @@ impl BidirChooseDir for AlternatingDirs {
     fn choose(&mut self, _fw_min_key: Weight, _bw_min_key: Weight) -> bool {
         self.prev = !self.prev;
         self.prev
+    }
+    fn strategy_key() -> &'static str {
+        "min_key"
     }
 }

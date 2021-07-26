@@ -1,6 +1,5 @@
 use super::*;
 use crate::algo::{a_star::*, dijkstra::generic_dijkstra::*};
-use crate::report::*;
 
 use std::cell::RefCell;
 
@@ -50,6 +49,7 @@ impl<G: LinkIterGraph, H: LinkIterGraph, P: Potential, D: BidirChooseDir> Server
         mut inspect: impl FnMut(NodeId, Weight, &mut AveragePotential<P, P>, i32),
     ) -> Option<Weight> {
         report!("algo", "Bidrectional Dijkstra Query");
+        D::report();
         // initialize
         let mut tentative_distance = INFINITY;
 

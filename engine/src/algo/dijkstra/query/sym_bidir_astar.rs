@@ -1,6 +1,5 @@
 use super::*;
 use crate::algo::{a_star::*, dijkstra::generic_dijkstra::*};
-use crate::report::*;
 
 use std::cell::RefCell;
 
@@ -46,6 +45,7 @@ impl<G: LinkIterGraph, H: LinkIterGraph, P: Potential, D: BidirChooseDir> Server
 
     pub fn distance_with_cap(&mut self, from: NodeId, to: NodeId, maximum_distance: Weight, mut inspect: impl FnMut(NodeId, Weight, &mut P)) -> Option<Weight> {
         report!("algo", "Symmetric Bidrectional A* Query");
+        D::report();
         // initialize
         let mut tentative_distance = INFINITY;
 
