@@ -4,22 +4,23 @@ use crate::report::*;
 
 use std::cell::RefCell;
 
-pub struct Server<G, H, P> {
+pub struct Server<G, H, P, D = ChooseMinKeyDir> {
     pub forward: G,
     pub backward: H,
     pub forward_data: DijkstraData<Weight>,
     pub backward_data: DijkstraData<Weight>,
     pub meeting_node: NodeId,
-    pub potential: RefCell<AveragePotential<P, P>>,
+    pub potential: AveragePotential<P, P>,
+    pub dir_chooser: D,
 }
 
-impl<G: LinkIterGraph> Server<G, OwnedGraph, ZeroPotential> {
+impl<G: LinkIterGraph, D: BidirChooseDir> Server<G, OwnedGraph, ZeroPotential, D> {
     pub fn new(graph: G) -> Self {
         Self::new_with_potentials(graph, ZeroPotential(), ZeroPotential())
     }
 }
 
-impl<G: LinkIterGraph, P: Potential> Server<G, OwnedGraph, P> {
+impl<G: LinkIterGraph, P: Potential, D: BidirChooseDir> Server<G, OwnedGraph, P, D> {
     pub fn new_with_potentials(graph: G, forward_pot: P, backward_pot: P) -> Self {
         let n = graph.num_nodes();
         let reversed = OwnedGraph::reversed(&graph);
@@ -30,12 +31,13 @@ impl<G: LinkIterGraph, P: Potential> Server<G, OwnedGraph, P> {
             forward_data: DijkstraData::new(n),
             backward_data: DijkstraData::new(n),
             meeting_node: 0,
-            potential: RefCell::new(AveragePotential::new(forward_pot, backward_pot)),
+            potential: AveragePotential::new(forward_pot, backward_pot),
+            dir_chooser: Default::default(),
         }
     }
 }
 
-impl<G: LinkIterGraph, H: LinkIterGraph, P: Potential> Server<G, H, P> {
+impl<G: LinkIterGraph, H: LinkIterGraph, P: Potential, D: BidirChooseDir> Server<G, H, P, D> {
     fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
         self.distance_with_cap(from, to, INFINITY, |_, _, _, _| ())
     }
@@ -56,22 +58,26 @@ impl<G: LinkIterGraph, H: LinkIterGraph, P: Potential> Server<G, H, P> {
         let mut forward_dijkstra = DijkstraRun::query(&self.forward, &mut self.forward_data, &mut fw_ops, Query { from, to });
         let mut backward_dijkstra = DijkstraRun::query(&self.backward, &mut self.backward_data, &mut bw_ops, Query { from: to, to: from });
 
-        self.potential.borrow_mut().init(from, to);
+        self.potential.init(from, to);
+
+        let forward_add = (self.potential.backward_potential(to)? / 2) as i32;
+        let backward_add = (self.potential.forward_potential(from)? / 2) as i32;
+        let mu_add = (self.potential.potential(from)? + forward_add) as Weight;
 
         let mut num_queue_pops = 0;
         let meeting_node = &mut self.meeting_node;
-        let potential = &self.potential;
-
-        let forward_add = (self.potential.borrow_mut().backward_potential(to)? / 2) as i32;
-        let backward_add = (self.potential.borrow_mut().forward_potential(from)? / 2) as i32;
-        let mu_add = (self.potential.borrow_mut().potential(from)? + forward_add) as Weight;
+        let potential = RefCell::new(&mut self.potential);
+        let dir_chooser = &mut self.dir_chooser;
 
         let result = (|| {
             while forward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY) + backward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY)
                 < std::cmp::min(tentative_distance, maximum_distance) + mu_add
             {
                 let searches_met = tentative_distance < INFINITY;
-                if forward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY) <= backward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY) {
+                if dir_chooser.choose(
+                    forward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY),
+                    backward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY),
+                ) {
                     if let Some(node) = forward_dijkstra.next_with_improve_callback_and_potential(
                         |head, &dist| {
                             if searches_met && dist + potential.borrow_mut().forward_potential(head).unwrap_or(INFINITY) >= tentative_distance {
@@ -197,9 +203,9 @@ impl<G: LinkIterGraph, H: LinkIterGraph, P: Potential> Server<G, H, P> {
     }
 }
 
-pub struct PathServerWrapper<'s, G: LinkIterGraph, H: LinkIterGraph, P>(&'s Server<G, H, P>, Query);
+pub struct PathServerWrapper<'s, G: LinkIterGraph, H: LinkIterGraph, P, D>(&'s Server<G, H, P, D>, Query);
 
-impl<'s, G: LinkIterGraph, H: LinkIterGraph, P: Potential> PathServer for PathServerWrapper<'s, G, H, P> {
+impl<'s, G: LinkIterGraph, H: LinkIterGraph, P: Potential, D: BidirChooseDir> PathServer for PathServerWrapper<'s, G, H, P, D> {
     type NodeInfo = NodeId;
     type EdgeInfo = ();
 
@@ -211,11 +217,11 @@ impl<'s, G: LinkIterGraph, H: LinkIterGraph, P: Potential> PathServer for PathSe
     }
 }
 
-impl<G: LinkIterGraph, H: LinkIterGraph, P: Potential> QueryServer for Server<G, H, P> {
+impl<G: LinkIterGraph, H: LinkIterGraph, P: Potential, D: BidirChooseDir> QueryServer for Server<G, H, P, D> {
     type P<'s>
     where
         Self: 's,
-    = PathServerWrapper<'s, G, H, P>;
+    = PathServerWrapper<'s, G, H, P, D>;
 
     fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight> {
         QueryResult::new(self.distance(query.from, query.to), PathServerWrapper(self, query))

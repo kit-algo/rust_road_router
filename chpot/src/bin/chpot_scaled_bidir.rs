@@ -5,7 +5,7 @@ use rust_road_router::{
         ch_potentials::*,
         dijkstra::{
             query::{bidirectional_dijkstra::Server as BiDir, dijkstra::Server as UniDir, sym_bidir_astar::Server as SymBiDir},
-            DefaultOps,
+            AlternatingDirs, DefaultOps,
         },
     },
     cli::CliErr,
@@ -46,7 +46,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
 
         let (forward_pot, backward_pot) = chpot_data.potentials();
-        let mut server = BiDir::new_with_potentials(modified_graph.clone(), forward_pot, backward_pot);
+        let mut server = BiDir::<_, _, _>::new_with_potentials(modified_graph.clone(), forward_pot, backward_pot);
         experiments::run_random_queries(
             graph.num_nodes(),
             &mut server,
@@ -56,7 +56,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
 
         let (forward_pot, backward_pot) = chpot_data.potentials();
-        let mut server = SymBiDir::new_with_potentials(modified_graph, forward_pot, backward_pot);
+        let mut server = SymBiDir::<_, _, _, AlternatingDirs>::new_with_potentials(modified_graph, forward_pot, backward_pot);
         experiments::run_random_queries(
             graph.num_nodes(),
             &mut server,

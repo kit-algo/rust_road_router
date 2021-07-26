@@ -281,7 +281,8 @@ impl<'a> PartialContractionGraph<'a> {
             forward_data: recycled.0,
             backward_data: recycled.1,
             meeting_node: 0,
-            potential: std::cell::RefCell::new(AveragePotential::new(ZeroPotential(), ZeroPotential())),
+            potential: AveragePotential::new(ZeroPotential(), ZeroPotential()),
+            dir_chooser: ChooseMinKeyDir::default(),
         };
 
         // witness search is a bidirection dijkstra capped to the length of the path over the contracted node

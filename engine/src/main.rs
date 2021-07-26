@@ -25,7 +25,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
     let mut simple_server = DijkServer::<_, DefaultOps>::new(graph.borrowed());
-    let mut bi_dir_server = BiDijkServer::new(graph.borrowed());
+    let mut bi_dir_server = BiDijkServer::<_, _, _>::new(graph.borrowed());
 
     let ch_first_out = Vec::load_from(path.join("travel_time_ch/first_out"))?;
     let ch_head = Vec::load_from(path.join("travel_time_ch/head"))?;

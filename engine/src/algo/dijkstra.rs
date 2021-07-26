@@ -198,3 +198,38 @@ impl Default for DefaultOpsWithLinkPath {
         Self()
     }
 }
+
+pub trait BidirChooseDir: Default {
+    fn choose(&mut self, fw_min_key: Weight, bw_min_key: Weight) -> bool;
+}
+
+pub struct ChooseMinKeyDir();
+
+impl Default for ChooseMinKeyDir {
+    fn default() -> Self {
+        Self()
+    }
+}
+
+impl BidirChooseDir for ChooseMinKeyDir {
+    fn choose(&mut self, fw_min_key: Weight, bw_min_key: Weight) -> bool {
+        fw_min_key <= bw_min_key
+    }
+}
+
+pub struct AlternatingDirs {
+    prev: bool,
+}
+
+impl Default for AlternatingDirs {
+    fn default() -> Self {
+        Self { prev: false }
+    }
+}
+
+impl BidirChooseDir for AlternatingDirs {
+    fn choose(&mut self, _fw_min_key: Weight, _bw_min_key: Weight) -> bool {
+        self.prev = !self.prev;
+        self.prev
+    }
+}
