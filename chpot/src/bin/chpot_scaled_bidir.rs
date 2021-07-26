@@ -56,6 +56,26 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
 
         let (forward_pot, backward_pot) = chpot_data.potentials();
+        let mut server = BiDir::<_, _, _, AlternatingDirs>::new_with_potentials(modified_graph.clone(), forward_pot, backward_pot);
+        experiments::run_random_queries(
+            graph.num_nodes(),
+            &mut server,
+            &mut rng.clone(),
+            &mut algo_runs_ctxt,
+            experiments::chpot::num_queries(),
+        );
+
+        let (forward_pot, backward_pot) = chpot_data.potentials();
+        let mut server = SymBiDir::<_, _, _>::new_with_potentials(modified_graph.clone(), forward_pot, backward_pot);
+        experiments::run_random_queries(
+            graph.num_nodes(),
+            &mut server,
+            &mut rng.clone(),
+            &mut algo_runs_ctxt,
+            experiments::chpot::num_queries(),
+        );
+
+        let (forward_pot, backward_pot) = chpot_data.potentials();
         let mut server = SymBiDir::<_, _, _, AlternatingDirs>::new_with_potentials(modified_graph, forward_pot, backward_pot);
         experiments::run_random_queries(
             graph.num_nodes(),
