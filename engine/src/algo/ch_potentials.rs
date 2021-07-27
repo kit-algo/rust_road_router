@@ -14,40 +14,70 @@ use crate::{
 pub mod penalty;
 pub mod query;
 
-pub struct CCHPotential<'a> {
-    cch: &'a CCH,
-    stack: Vec<NodeId>,
-    potentials: TimestampedVector<InRangeOption<Weight>>,
-    forward_cch_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], Vec<Weight>>,
-    backward_elimination_tree: SteppedEliminationTree<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], Vec<Weight>>>,
-    num_pot_computations: usize,
+pub struct CCHPotData<'a> {
+    customized: Customized<'a, CCH>,
 }
 
-impl<'a> CCHPotential<'a> {
+impl<'a> CCHPotData<'a> {
     pub fn new<Graph>(cch: &'a CCH, lower_bound: &Graph) -> Self
     where
         Graph: LinkIterGraph + EdgeRandomAccessGraph<Link> + Sync,
     {
         let customized = customize(cch, lower_bound);
-        let (forward_up_graph, backward_up_graph) = customized.into_ch_graphs();
-        let backward_elimination_tree = SteppedEliminationTree::new(backward_up_graph, cch.elimination_tree());
+        Self { customized }
+    }
 
-        Self {
-            cch,
+    pub fn forward_potential(
+        &self,
+    ) -> CCHPotential<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'_ [Weight]>, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'_ [Weight]>> {
+        let backward_elimination_tree = SteppedEliminationTree::new(self.customized.backward_graph(), self.customized.cch().elimination_tree());
+
+        CCHPotential {
+            cch: self.customized.cch(),
             stack: Vec::new(),
-            forward_cch_graph: forward_up_graph,
+            forward_cch_graph: self.customized.forward_graph(),
             backward_elimination_tree,
-            potentials: TimestampedVector::new(cch.num_nodes(), InRangeOption::new(None)),
+            potentials: TimestampedVector::new(self.customized.cch().num_nodes(), InRangeOption::new(None)),
             num_pot_computations: 0,
         }
     }
 
+    pub fn backward_potential(
+        &self,
+    ) -> CCHPotential<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'_ [Weight]>, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'_ [Weight]>> {
+        let backward_elimination_tree = SteppedEliminationTree::new(self.customized.forward_graph(), self.customized.cch().elimination_tree());
+
+        CCHPotential {
+            cch: self.customized.cch(),
+            stack: Vec::new(),
+            forward_cch_graph: self.customized.backward_graph(),
+            backward_elimination_tree,
+            potentials: TimestampedVector::new(self.customized.cch().num_nodes(), InRangeOption::new(None)),
+            num_pot_computations: 0,
+        }
+    }
+}
+
+pub struct CCHPotential<'a, GF, GB> {
+    cch: &'a CCH,
+    stack: Vec<NodeId>,
+    potentials: TimestampedVector<InRangeOption<Weight>>,
+    forward_cch_graph: GF,
+    backward_elimination_tree: SteppedEliminationTree<'a, GB>,
+    num_pot_computations: usize,
+}
+
+impl<'a, GF, GB> CCHPotential<'a, GF, GB> {
     pub fn num_pot_computations(&self) -> usize {
         self.num_pot_computations
     }
 }
 
-impl<'a> Potential for CCHPotential<'a> {
+impl<'a, GF, GB> Potential for CCHPotential<'a, GF, GB>
+where
+    GF: LinkIterGraph,
+    GB: LinkIterGraph,
+{
     fn init(&mut self, target: NodeId) {
         self.potentials.reset();
         self.backward_elimination_tree.initialize_query(self.cch.node_order().rank(target));

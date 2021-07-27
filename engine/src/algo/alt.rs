@@ -9,15 +9,13 @@ use crate::{
 };
 use rand::prelude::*;
 
-#[derive(Debug)]
-pub struct ALTPotential {
+pub struct ALTPotData {
     landmark_forward_distances: Vec<Weight>,
     landmark_backward_distances: Vec<Weight>,
     num_landmarks: usize,
-    target: NodeId,
 }
 
-impl ALTPotential {
+impl ALTPotData {
     pub fn new<G>(graph: &G, landmarks: Vec<NodeId>) -> Self
     where
         G: LinkIterable<Link>,
@@ -64,7 +62,6 @@ impl ALTPotential {
             landmark_forward_distances,
             landmark_backward_distances,
             num_landmarks: k,
-            target: n as NodeId,
         }
     }
 
@@ -212,6 +209,33 @@ impl ALTPotential {
         landmarks
     }
 
+    pub fn forward_potential(&self) -> ALTPotential {
+        ALTPotential {
+            num_landmarks: self.num_landmarks,
+            target: u32::MAX as NodeId,
+            landmark_forward_distances: &self.landmark_forward_distances,
+            landmark_backward_distances: &self.landmark_backward_distances,
+        }
+    }
+
+    pub fn backward_potential(&self) -> ALTPotential {
+        ALTPotential {
+            num_landmarks: self.num_landmarks,
+            target: u32::MAX as NodeId,
+            landmark_forward_distances: &self.landmark_backward_distances,
+            landmark_backward_distances: &self.landmark_forward_distances,
+        }
+    }
+}
+
+pub struct ALTPotential<'a> {
+    landmark_forward_distances: &'a [Weight],
+    landmark_backward_distances: &'a [Weight],
+    num_landmarks: usize,
+    target: NodeId,
+}
+
+impl ALTPotential<'_> {
     fn landmark_dists_to(&self, node: NodeId) -> &[Weight] {
         let begin = node as usize * self.num_landmarks;
         &self.landmark_forward_distances[begin..begin + self.num_landmarks]
@@ -223,7 +247,7 @@ impl ALTPotential {
     }
 }
 
-impl Potential for ALTPotential {
+impl Potential for ALTPotential<'_> {
     fn init(&mut self, target: NodeId) {
         self.target = target;
     }

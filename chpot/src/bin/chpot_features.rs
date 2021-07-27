@@ -4,7 +4,7 @@ extern crate rust_road_router;
 use rust_road_router::{
     algo::{
         a_star::*,
-        alt::ALTPotential,
+        alt::*,
         ch_potentials::{query::Server as TopoServer, *},
         customizable_contraction_hierarchy::*,
         dijkstra::{query::dijkstra::Server as DijkServer, DefaultOps},
@@ -32,6 +32,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     for weight in &mut modified_travel_time {
         *weight = (*weight as f64 * 1.05) as Weight;
     }
+
+    let mut rng = experiments::rng(Default::default());
     report!("experiment", "weight_scale");
     report!("factor", "1.05");
     let modified_graph = FirstOutGraph::new(graph.first_out(), graph.head(), &modified_travel_time[..]);
@@ -42,8 +44,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         let order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm"))?);
         CCH::fix_order_and_build(&graph, order)
     };
-
-    let mut rng = experiments::rng(Default::default());
+    #[cfg(feature = "chpot-cch")]
+    let cch_pot_data = {
+        let _blocked = block_reporting();
+        CCHPotData::new(&cch, &graph)
+    };
+    #[cfg(feature = "chpot-alt")]
+    let alt_pot_data = {
+        let _ = block_reporting();
+        ALTPotData::new_with_avoid(&graph, 16, &mut rng)
+    };
 
     #[allow(unused_mut)]
     let mut pot_name;
@@ -59,14 +69,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             #[cfg(feature = "chpot-cch")]
             {
                 pot_name = "CCH";
-                let _ = block_reporting();
-                CCHPotential::new(&cch, &graph)
+                cch_pot_data.forward_potential()
             }
             #[cfg(feature = "chpot-alt")]
             {
                 pot_name = "ALT";
-                let _ = block_reporting();
-                ALTPotential::new_with_avoid(&graph, 16, &mut rng)
+                alt_pot_data.forward_potential()
             }
             #[cfg(all(not(feature = "chpot-cch"), not(feature = "chpot-alt")))]
             {

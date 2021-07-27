@@ -351,6 +351,18 @@ impl<'c, CCH: CCHT> Customized<'c, CCH> {
             FirstOutGraph::new(self.cch.backward_first_out(), &self.cch.backward_head(), self.downward),
         )
     }
+
+    pub fn forward_graph(&self) -> FirstOutGraph<&'c [EdgeId], &'c [NodeId], &'_ [Weight]> {
+        FirstOutGraph::new(self.cch.forward_first_out(), self.cch.forward_head(), &self.upward)
+    }
+
+    pub fn backward_graph(&self) -> FirstOutGraph<&'c [EdgeId], &'c [NodeId], &'_ [Weight]> {
+        FirstOutGraph::new(self.cch.backward_first_out(), self.cch.backward_head(), &self.downward)
+    }
+
+    pub fn cch(&self) -> &'c CCH {
+        self.cch
+    }
 }
 
 pub struct DirectedCCH {

@@ -29,12 +29,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     core_affinity::set_for_current(core_ids[0]);
 
     let chpot_data = CHPotLoader::reconstruct_from(&path.join("lower_bound_ch"))?;
-    let (forward_pot, backward_pot) = chpot_data.potentials();
-    let (forward_pot, backward_pot) = (RecyclingPotential::new(forward_pot), RecyclingPotential::new(backward_pot));
 
     let mut penalty_server = {
         let _prepro_ctxt = algo_runs_ctxt.push_collection_item();
-        penalty::Penalty::new(&graph, forward_pot)
+        penalty::Penalty::new(&graph, RecyclingPotential::new(chpot_data.potentials().0))
     };
 
     let mut total_query_time = Duration::zero();
