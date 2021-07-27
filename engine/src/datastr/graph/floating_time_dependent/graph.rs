@@ -104,14 +104,17 @@ impl Graph {
         let mut prev = *iter.next().unwrap();
         for &(node, t) in iter {
             let (prev_node, prev_t) = prev;
-            let edge = self.edge_index(prev_node, node).expect("path contained nonexisting edge");
-            let evaled = prev_t + self.travel_time_function(edge).evaluate(prev_t);
+            let evaled = prev_t
+                + self
+                    .edge_indices(prev_node, node)
+                    .map(|EdgeIdT(edge)| self.travel_time_function(edge).evaluate(prev_t))
+                    .min()
+                    .expect("path contained nonexisting edge");
             assert!(
                 t.fuzzy_eq(evaled),
-                "expected {:?} - got {:?} at edge {} from {} (at {:?}) to {}",
+                "expected {:?} - got {:?} from {} (at {:?}) to {}",
                 evaled,
                 t,
-                edge,
                 prev_node,
                 prev_t,
                 node
@@ -204,18 +207,13 @@ impl GraphTrait for Graph {
     }
 }
 
-impl RandomLinkAccessGraph for Graph {
-    fn link(&self, edge_id: EdgeId) -> Link {
-        Link {
-            node: self.head[edge_id as usize],
-            weight: 0,
-        }
-    }
+impl EdgeIdGraph for Graph {
+    // https://github.com/rust-lang/rustfmt/issues/4911
+    #[rustfmt::skip]
+    type IdxIter<'a> where Self: 'a = impl Iterator<Item = EdgeIdT> + 'a;
 
-    fn edge_index(&self, from: NodeId, to: NodeId) -> Option<EdgeId> {
-        let first_out = self.first_out[from as usize];
-        let range = self.neighbor_edge_indices_usize(from);
-        self.head[range].iter().position(|&head| head == to).map(|pos| pos as EdgeId + first_out)
+    fn edge_indices(&self, from: NodeId, to: NodeId) -> Self::IdxIter<'_> {
+        self.neighbor_edge_indices(from).filter(move |&e| self.head[e as usize] == to).map(EdgeIdT)
     }
 
     fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {
@@ -223,12 +221,19 @@ impl RandomLinkAccessGraph for Graph {
     }
 }
 
-impl LinkIterable<(NodeId, EdgeId)> for Graph {
-    type Iter<'a> = std::iter::Zip<std::iter::Cloned<std::slice::Iter<'a, NodeId>>, std::ops::Range<EdgeId>>;
+impl EdgeRandomAccessGraph<NodeIdT> for Graph {
+    fn link(&self, edge_id: EdgeId) -> NodeIdT {
+        NodeIdT(self.head[edge_id as usize])
+    }
+}
+
+impl LinkIterable<(NodeIdT, EdgeIdT)> for Graph {
+    type Iter<'a> = impl Iterator<Item = (NodeIdT, EdgeIdT)> + 'a;
+
     #[inline(always)]
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         let range = self.neighbor_edge_indices_usize(node);
-        self.head[range].iter().cloned().zip(self.neighbor_edge_indices(node))
+        self.head[range].iter().copied().map(NodeIdT).zip(self.neighbor_edge_indices(node).map(EdgeIdT))
     }
 }
 

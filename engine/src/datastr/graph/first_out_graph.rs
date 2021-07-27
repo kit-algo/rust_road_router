@@ -203,16 +203,16 @@ where
     }
 }
 
-impl<FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<NodeId> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+impl<FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<NodeIdT> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
     WeightContainer: AsRef<[Weight]>,
 {
-    type Iter<'a> = std::iter::Cloned<std::slice::Iter<'a, NodeId>>;
+    type Iter<'a> = impl Iterator<Item = NodeIdT> + 'a;
 
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
-        self.head()[SlcsIdx(self.first_out()).range(node as usize)].iter().cloned()
+        self.head()[SlcsIdx(self.first_out()).range(node as usize)].iter().copied().map(NodeIdT)
     }
 }
 
@@ -241,7 +241,27 @@ where
     }
 }
 
-impl<FirstOutContainer, HeadContainer, WeightContainer> RandomLinkAccessGraph for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+impl<FirstOutContainer, HeadContainer, WeightContainer> EdgeIdGraph for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+where
+    FirstOutContainer: AsRef<[EdgeId]>,
+    HeadContainer: AsRef<[NodeId]>,
+    WeightContainer: AsRef<[Weight]>,
+{
+    // https://github.com/rust-lang/rustfmt/issues/4911
+    #[rustfmt::skip]
+    type IdxIter<'a> where Self: 'a = impl Iterator<Item = EdgeIdT> + 'a;
+
+    fn edge_indices(&self, from: NodeId, to: NodeId) -> Self::IdxIter<'_> {
+        self.neighbor_edge_indices(from).filter(move |&e| self.head()[e as usize] == to).map(EdgeIdT)
+    }
+
+    #[inline]
+    fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {
+        (self.first_out()[node as usize] as EdgeId)..(self.first_out()[(node + 1) as usize] as EdgeId)
+    }
+}
+
+impl<FirstOutContainer, HeadContainer, WeightContainer> EdgeRandomAccessGraph<Link> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
@@ -254,34 +274,44 @@ where
             weight: self.weight()[edge_id as usize],
         }
     }
+}
 
-    fn edge_index(&self, from: NodeId, to: NodeId) -> Option<EdgeId> {
-        let first_out = self.first_out()[from as usize];
-        let range = self.neighbor_edge_indices_usize(from);
-        self.head()[range].iter().position(|&head| head == to).map(|pos| pos as EdgeId + first_out)
-    }
+impl<FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<(NodeIdT, EdgeIdT)> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+where
+    FirstOutContainer: AsRef<[EdgeId]>,
+    HeadContainer: AsRef<[NodeId]>,
+    WeightContainer: AsRef<[Weight]>,
+{
+    type Iter<'a> = impl Iterator<Item = (NodeIdT, EdgeIdT)> + 'a;
 
     #[inline]
-    fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {
-        (self.first_out()[node as usize] as EdgeId)..(self.first_out()[(node + 1) as usize] as EdgeId)
+    fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
+        let range = SlcsIdx(self.first_out()).range(node as usize);
+        self.head()[range.clone()]
+            .iter()
+            .zip(range)
+            .map(|(&node, e)| (NodeIdT(node), EdgeIdT(e as EdgeId)))
     }
 }
 
-impl<FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<LinkWithId> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+impl<FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<(NodeIdT, (Weight, EdgeIdT))>
+    for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
     WeightContainer: AsRef<[Weight]>,
 {
     #[allow(clippy::type_complexity)]
-    type Iter<'a> = std::iter::Map<std::iter::Zip<std::slice::Iter<'a, NodeId>, std::ops::Range<usize>>, fn((&NodeId, usize)) -> LinkWithId>;
+    type Iter<'a> = impl Iterator<Item = (NodeIdT, (Weight, EdgeIdT))> + 'a;
 
+    #[inline]
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         let range = SlcsIdx(self.first_out()).range(node as usize);
         self.head()[range.clone()]
             .iter()
+            .zip(self.weight()[range.clone()].iter())
             .zip(range)
-            .map(|(&node, e)| LinkWithId { node, edge_id: e as EdgeId })
+            .map(|((&node, &weight), e)| (NodeIdT(node), (weight, EdgeIdT(e as EdgeId))))
     }
 }
 
@@ -346,40 +376,62 @@ where
     }
 }
 
-impl<FirstOutContainer, HeadContainer> LinkIterable<NodeId> for UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
+impl<FirstOutContainer, HeadContainer> LinkIterable<NodeIdT> for UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
 {
-    type Iter<'a> = std::iter::Cloned<std::slice::Iter<'a, NodeId>>;
+    type Iter<'a> = impl Iterator<Item = NodeIdT>;
 
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
-        self.head()[self.neighbor_edge_indices_usize(node)].iter().cloned()
+        self.head()[self.neighbor_edge_indices_usize(node)].iter().copied().map(NodeIdT)
     }
 }
 
-impl<FirstOutContainer, HeadContainer> RandomLinkAccessGraph for UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
+impl<FirstOutContainer, HeadContainer> LinkIterable<(NodeIdT, EdgeIdT)> for UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
 {
-    #[inline]
-    fn link(&self, edge_id: EdgeId) -> Link {
-        Link {
-            node: self.head()[edge_id as usize],
-            weight: 0,
-        }
-    }
+    type Iter<'a> = impl Iterator<Item = (NodeIdT, EdgeIdT)> + 'a;
 
-    fn edge_index(&self, from: NodeId, to: NodeId) -> Option<EdgeId> {
-        let first_out = self.first_out()[from as usize];
-        let range = self.neighbor_edge_indices_usize(from);
-        self.head()[range].iter().position(|&head| head == to).map(|pos| pos as EdgeId + first_out)
+    #[inline]
+    fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
+        let range = SlcsIdx(self.first_out()).range(node as usize);
+        self.head()[range.clone()]
+            .iter()
+            .zip(range)
+            .map(|(&node, e)| (NodeIdT(node), EdgeIdT(e as EdgeId)))
+    }
+}
+
+impl<FirstOutContainer, HeadContainer> EdgeIdGraph for UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
+where
+    FirstOutContainer: AsRef<[EdgeId]>,
+    HeadContainer: AsRef<[NodeId]>,
+{
+    // https://github.com/rust-lang/rustfmt/issues/4911
+    #[rustfmt::skip]
+    type IdxIter<'a> where Self: 'a = impl Iterator<Item = EdgeIdT> + 'a;
+
+    fn edge_indices(&self, from: NodeId, to: NodeId) -> Self::IdxIter<'_> {
+        self.neighbor_edge_indices(from).filter(move |&e| self.head()[e as usize] == to).map(EdgeIdT)
     }
 
     #[inline]
     fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {
         (self.first_out()[node as usize] as EdgeId)..(self.first_out()[(node + 1) as usize] as EdgeId)
+    }
+}
+
+impl<FirstOutContainer, HeadContainer> EdgeRandomAccessGraph<NodeIdT> for UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
+where
+    FirstOutContainer: AsRef<[EdgeId]>,
+    HeadContainer: AsRef<[NodeId]>,
+{
+    #[inline]
+    fn link(&self, edge_id: EdgeId) -> NodeIdT {
+        NodeIdT(self.head()[edge_id as usize])
     }
 }
 
@@ -399,14 +451,14 @@ impl UnweightedOwnedGraph {
     }
 }
 
-impl<G: LinkIterable<NodeId>> BuildReversed<G> for UnweightedOwnedGraph {
+impl<G: LinkIterable<NodeIdT>> BuildReversed<G> for UnweightedOwnedGraph {
     fn reversed(graph: &G) -> Self {
         // vector of adjacency lists for the reverse graph
         let mut reversed: Vec<Vec<NodeId>> = (0..graph.num_nodes()).map(|_| Vec::<NodeId>::new()).collect();
 
         // iterate over all edges and insert them in the reversed structure
         for node in 0..(graph.num_nodes() as NodeId) {
-            for neighbor in graph.link_iter(node) {
+            for NodeIdT(neighbor) in graph.link_iter(node) {
                 reversed[neighbor as usize].push(node);
             }
         }
@@ -429,14 +481,14 @@ pub struct ReversedGraphWithEdgeIds {
     edge_ids: Vec<EdgeId>,
 }
 
-impl<G: LinkIterable<LinkWithId>> BuildReversed<G> for ReversedGraphWithEdgeIds {
+impl<G: LinkIterable<(NodeIdT, EdgeIdT)>> BuildReversed<G> for ReversedGraphWithEdgeIds {
     fn reversed(graph: &G) -> Self {
         // vector of adjacency lists for the reverse graph
         let mut reversed: Vec<Vec<Link>> = (0..graph.num_nodes()).map(|_| Vec::<Link>::new()).collect();
 
         // iterate over all edges and insert them in the reversed structure
         for node in 0..(graph.num_nodes() as NodeId) {
-            for LinkWithId { node: neighbor, edge_id } in graph.link_iter(node) {
+            for (NodeIdT(neighbor), EdgeIdT(edge_id)) in graph.link_iter(node) {
                 reversed[neighbor as usize].push(Link { node, weight: edge_id });
             }
         }
@@ -458,12 +510,16 @@ impl Graph for ReversedGraphWithEdgeIds {
     }
 }
 
-impl LinkIterable<(NodeId, EdgeId)> for ReversedGraphWithEdgeIds {
-    type Iter<'a> = std::iter::Zip<std::iter::Cloned<std::slice::Iter<'a, NodeId>>, std::iter::Cloned<std::slice::Iter<'a, EdgeId>>>;
+impl LinkIterable<(NodeIdT, Reversed)> for ReversedGraphWithEdgeIds {
+    type Iter<'a> = impl Iterator<Item = (NodeIdT, Reversed)> + 'a;
 
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         let range = SlcsIdx(&self.first_out).range(node as usize);
-        self.head[range.clone()].iter().cloned().zip(self.edge_ids[range.clone()].iter().cloned())
+        self.head[range.clone()]
+            .iter()
+            .copied()
+            .map(NodeIdT)
+            .zip(self.edge_ids[range.clone()].iter().copied().map(EdgeIdT).map(Reversed))
     }
 }
 

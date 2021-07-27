@@ -1,6 +1,5 @@
 use super::*;
 use crate::datastr::graph::time_dependent::Timestamp;
-use crate::report::*;
 use a_star::{Potential, ZeroPotential};
 use generic_dijkstra::*;
 use std::borrow::Borrow;
@@ -10,7 +9,7 @@ where
     Ops: DijkstraOps<Graph>,
 {
     graph: GraphBorrow,
-    dijkstra: DijkstraData<Ops::Label>,
+    dijkstra: DijkstraData<Ops::Label, Ops::PredecessorLink>,
     potential: P,
 }
 
@@ -70,18 +69,12 @@ where
         result
     }
 
-    fn path(&self, query: impl GenQuery<Weight>) -> Vec<NodeId> {
-        let mut path = Vec::new();
-        path.push(query.to());
+    fn node_path(&self, query: impl GenQuery<Weight>) -> Vec<NodeId> {
+        self.dijkstra.node_path(query.from(), query.to())
+    }
 
-        while *path.last().unwrap() != query.from() {
-            let next = self.dijkstra.predecessors[*path.last().unwrap() as usize];
-            path.push(next);
-        }
-
-        path.reverse();
-
-        path
+    fn edge_path(&self, query: impl GenQuery<Weight>) -> Vec<Ops::PredecessorLink> {
+        self.dijkstra.edge_path(query.from(), query.to())
     }
 
     pub fn ranks<F>(&mut self, from: NodeId, mut callback: F)
@@ -131,9 +124,13 @@ where
     B: Borrow<G>,
 {
     type NodeInfo = NodeId;
+    type EdgeInfo = O::PredecessorLink;
 
-    fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo> {
-        Server::path(self.0, self.1)
+    fn reconstruct_node_path(&mut self) -> Vec<Self::NodeInfo> {
+        Server::node_path(self.0, self.1)
+    }
+    fn reconstruct_edge_path(&mut self) -> Vec<Self::EdgeInfo> {
+        Server::edge_path(self.0, self.1)
     }
 }
 
@@ -147,7 +144,7 @@ where
 {
     /// Print path with debug info as js to stdout.
     pub fn debug_path(&mut self, lat: &[f32], lng: &[f32]) {
-        for node in self.reconstruct_path() {
+        for node in self.reconstruct_node_path() {
             println!(
                 "var marker = L.marker([{}, {}], {{ icon: blueIcon }}).addTo(map);",
                 lat[node as usize], lng[node as usize]
@@ -172,7 +169,7 @@ impl<'s, G: LinkIterable<O::Arc>, O: DijkstraOps<G, Label = Weight>, P: Potentia
     }
 
     pub fn predecessor(&self, node: NodeId) -> NodeId {
-        self.0.dijkstra.predecessors[node as usize]
+        self.0.dijkstra.predecessors[node as usize].0
     }
 }
 

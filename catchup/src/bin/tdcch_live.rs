@@ -52,7 +52,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         if speed == 0 || duration > 3600 * 5 {
             continue;
         }
-        if let Some(edge_idx) = graph.edge_index(from, to) {
+        if let Some(EdgeIdT(edge_idx)) = graph.edge_indices(from, to).next() {
             let edge_idx = edge_idx as usize;
 
             let new_tt = 100 * 36 * distance / speed;

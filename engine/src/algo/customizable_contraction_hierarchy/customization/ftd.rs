@@ -43,10 +43,10 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
             .for_each(|((up_weight, down_weight), (up_arcs, down_arcs))| {
                 assert!(up_arcs.len() <= 1);
                 assert!(down_arcs.len() <= 1);
-                for &up_arc in up_arcs {
+                for &EdgeIdT(up_arc) in up_arcs {
                     *up_weight = Shortcut::new(Some(up_arc), metric);
                 }
-                for &down_arc in down_arcs {
+                for &EdgeIdT(down_arc) in down_arcs {
                     *down_weight = Shortcut::new(Some(down_arc), metric);
                 }
             });
@@ -76,11 +76,7 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
                         node_outgoing_weights[node as usize] = (up.lower_bound, up.upper_bound);
                     }
 
-                    for Link {
-                        node: low_node,
-                        weight: first_edge_id,
-                    } in LinkIterable::<Link>::link_iter(&cch.inverted, current_node)
-                    {
+                    for (NodeIdT(low_node), Reversed(EdgeIdT(first_edge_id))) in cch.inverted.link_iter(current_node) {
                         let first_down_weight: &Shortcut = &downward_weights[first_edge_id as usize - offset];
                         let first_up_weight: &Shortcut = &upward_weights[first_edge_id as usize - offset];
                         let mut low_up_edges = cch.neighbor_edge_indices_usize(low_node);
@@ -501,18 +497,12 @@ where
                         let mut triangles = Vec::new();
 
                         // downward edges from both endpoints of the current edge
-                        let mut current_iter = LinkIterable::<Link>::link_iter(&cch.inverted, current_node as NodeId).peekable();
-                        let mut other_iter = LinkIterable::<Link>::link_iter(&cch.inverted, node as NodeId).peekable();
+                        let mut current_iter = cch.inverted.link_iter(current_node as NodeId).peekable();
+                        let mut other_iter = cch.inverted.link_iter(node as NodeId).peekable();
 
                         while let (
-                            Some(Link {
-                                node: lower_from_current,
-                                weight: edge_from_cur_id,
-                            }),
-                            Some(Link {
-                                node: lower_from_other,
-                                weight: edge_from_oth_id,
-                            }),
+                            Some((NodeIdT(lower_from_current), Reversed(EdgeIdT(edge_from_cur_id)))),
+                            Some((NodeIdT(lower_from_other), Reversed(EdgeIdT(edge_from_oth_id)))),
                         ) = (current_iter.peek(), other_iter.peek())
                         {
                             debug_assert_eq!(cch.head()[*edge_from_cur_id as usize], current_node as NodeId);
@@ -566,7 +556,7 @@ where
             );
 
             // free up space - we will never need the explicit functions again during customization
-            for Link { weight: edge_id, .. } in LinkIterable::<Link>::link_iter(&cch.inverted, current_node as NodeId) {
+            for (_, Reversed(EdgeIdT(edge_id))) in cch.inverted.link_iter(current_node as NodeId) {
                 upward[edge_id as usize - edge_offset].clear_plf();
                 downward[edge_id as usize - edge_offset].clear_plf();
             }
@@ -657,10 +647,10 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
             .for_each(|((up_weight, down_weight), (up_arcs, down_arcs))| {
                 assert!(up_arcs.len() <= 1);
                 assert!(down_arcs.len() <= 1);
-                for &up_arc in up_arcs {
+                for &EdgeIdT(up_arc) in up_arcs {
                     *up_weight = LiveShortcut::new(Some(up_arc), &metric);
                 }
-                for &down_arc in down_arcs {
+                for &EdgeIdT(down_arc) in down_arcs {
                     *down_weight = LiveShortcut::new(Some(down_arc), &metric);
                 }
             });
@@ -691,11 +681,7 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
                         node_outgoing_weights[node as usize] = *up;
                     }
 
-                    for Link {
-                        node: low_node,
-                        weight: first_edge_id,
-                    } in LinkIterable::<Link>::link_iter(&cch.inverted, current_node)
-                    {
+                    for (NodeIdT(low_node), Reversed(EdgeIdT(first_edge_id))) in cch.inverted.link_iter(current_node) {
                         let first_down_weight: &PreLiveShortcut = &downward_weights[first_edge_id as usize - offset];
                         let first_up_weight: &PreLiveShortcut = &upward_weights[first_edge_id as usize - offset];
                         let mut low_up_edges = cch.neighbor_edge_indices_usize(low_node);
@@ -720,11 +706,7 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
                         }
                     }
 
-                    for Link {
-                        node: low_node,
-                        weight: first_edge_id,
-                    } in LinkIterable::<Link>::link_iter(&cch.inverted, current_node)
-                    {
+                    for (NodeIdT(low_node), Reversed(EdgeIdT(first_edge_id))) in cch.inverted.link_iter(current_node) {
                         let first_down_weight: &PreLiveShortcut = &downward_weights[first_edge_id as usize - offset];
                         let first_up_weight: &PreLiveShortcut = &upward_weights[first_edge_id as usize - offset];
                         let mut low_up_edges = cch.neighbor_edge_indices_usize(low_node);
@@ -1143,18 +1125,12 @@ where
                         let mut triangles = Vec::new();
 
                         // downward edges from both endpoints of the current edge
-                        let mut current_iter = LinkIterable::<Link>::link_iter(&cch.inverted, current_node as NodeId).peekable();
-                        let mut other_iter = LinkIterable::<Link>::link_iter(&cch.inverted, node as NodeId).peekable();
+                        let mut current_iter = cch.inverted.link_iter(current_node as NodeId).peekable();
+                        let mut other_iter = cch.inverted.link_iter(node as NodeId).peekable();
 
                         while let (
-                            Some(Link {
-                                node: lower_from_current,
-                                weight: edge_from_cur_id,
-                            }),
-                            Some(Link {
-                                node: lower_from_other,
-                                weight: edge_from_oth_id,
-                            }),
+                            Some((NodeIdT(lower_from_current), Reversed(EdgeIdT(edge_from_cur_id)))),
+                            Some((NodeIdT(lower_from_other), Reversed(EdgeIdT(edge_from_oth_id)))),
                         ) = (current_iter.peek(), other_iter.peek())
                         {
                             debug_assert_eq!(cch.head()[*edge_from_cur_id as usize], current_node as NodeId);
@@ -1198,7 +1174,7 @@ where
             );
 
             // free up space - we will never need the explicit functions again during customization
-            for Link { weight: edge_id, .. } in LinkIterable::<Link>::link_iter(&cch.inverted, current_node as NodeId) {
+            for (_, Reversed(EdgeIdT(edge_id))) in cch.inverted.link_iter(current_node as NodeId) {
                 upward[edge_id as usize - edge_offset].clear_plf();
                 downward[edge_id as usize - edge_offset].clear_plf();
             }

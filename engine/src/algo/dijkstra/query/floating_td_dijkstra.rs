@@ -1,11 +1,10 @@
 use super::*;
 use crate::algo::dijkstra::generic_dijkstra::*;
 use crate::datastr::graph::floating_time_dependent::*;
-use crate::report::*;
 
 pub struct Server {
     graph: TDGraph,
-    data: DijkstraData<Timestamp>,
+    data: DijkstraData<Timestamp, ()>,
 }
 
 impl Server {
@@ -61,7 +60,7 @@ impl Server {
         path.push((query.to, self.data.distances[query.to as usize]));
 
         while path.last().unwrap().0 != query.from {
-            let next = self.data.predecessors[path.last().unwrap().0 as usize];
+            let next = self.data.predecessors[path.last().unwrap().0 as usize].0;
             let t = self.data.distances[next as usize];
             path.push((next, t));
         }
@@ -75,9 +74,13 @@ pub struct PathServerWrapper<'s>(&'s Server, TDQuery<Timestamp>);
 
 impl<'s> PathServer for PathServerWrapper<'s> {
     type NodeInfo = (NodeId, Timestamp);
+    type EdgeInfo = ();
 
-    fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo> {
+    fn reconstruct_node_path(&mut self) -> Vec<Self::NodeInfo> {
         Server::path(self.0, self.1)
+    }
+    fn reconstruct_edge_path(&mut self) -> Vec<Self::EdgeInfo> {
+        self.0.data.edge_path(self.1.from, self.1.to)
     }
 }
 
@@ -94,11 +97,12 @@ struct FlTDDijkstraOps();
 impl DijkstraOps<TDGraph> for FlTDDijkstraOps {
     type Label = Timestamp;
     type LinkResult = Timestamp;
-    type Arc = (NodeId, EdgeId);
+    type Arc = (NodeIdT, EdgeIdT);
+    type PredecessorLink = ();
 
     #[inline(always)]
     fn link(&mut self, graph: &TDGraph, label: &Timestamp, link: &Self::Arc) -> Self::LinkResult {
-        *label + graph.travel_time_function(link.1).evaluate(*label)
+        *label + graph.travel_time_function(link.1 .0).evaluate(*label)
     }
 
     #[inline(always)]
@@ -108,6 +112,11 @@ impl DijkstraOps<TDGraph> for FlTDDijkstraOps {
             return true;
         }
         false
+    }
+
+    #[inline(always)]
+    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {
+        ()
     }
 }
 

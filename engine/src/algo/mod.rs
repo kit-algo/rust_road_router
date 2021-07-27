@@ -94,11 +94,11 @@ impl<T: Copy> GenQuery<T> for TDQuery<T> {
 /// fn fine(mut server: impl QueryServer) {
 ///     let mut result = server.query(Query { from: 0, to: 1 }).found().unwrap();
 ///     dbg!(result.distance());
-///     dbg!(result.path().len());
+///     dbg!(result.node_path().len());
 ///     std::mem::drop(result);
 ///     let mut result2 = server.query(Query { from: 1, to: 0 }).found().unwrap();
 ///     dbg!(result2.distance());
-///     dbg!(result2.path().len());
+///     dbg!(result2.node_path().len());
 /// }
 /// ```
 ///
@@ -106,11 +106,11 @@ impl<T: Copy> GenQuery<T> for TDQuery<T> {
 ///
 /// ```compile_fail
 /// # use rust_road_router::algo::*;
-/// fn fine(mut server: impl for QueryServer) {
+/// fn fine(mut server: impl QueryServer) {
 ///     let mut result = server.query(Query { from: 0, to: 1 }).found().unwrap();
 ///     dbg!(result.distance());
 ///     let mut result2 = server.query(Query { from: 1, to: 0 }).found().unwrap();
-///     dbg!(result.path().len());
+///     dbg!(result.node_path().len());
 /// }
 /// ```
 #[derive(Debug)]
@@ -137,9 +137,18 @@ where
     }
 
     /// Retrieve shortest path (usually lazily) for a query
-    pub fn path(&mut self) -> Option<Vec<P::NodeInfo>> {
+    pub fn node_path(&mut self) -> Option<Vec<P::NodeInfo>> {
         if self.distance.is_some() {
-            Some(self.path_server.reconstruct_path())
+            Some(self.path_server.reconstruct_node_path())
+        } else {
+            None
+        }
+    }
+
+    /// Retrieve shortest path as edge list (usually lazily) for a query
+    pub fn edge_path(&mut self) -> Option<Vec<P::EdgeInfo>> {
+        if self.distance.is_some() {
+            Some(self.path_server.reconstruct_edge_path())
         } else {
             None
         }
@@ -171,8 +180,13 @@ where
     }
 
     /// Retrieve shortest path (usually lazily) for a query
-    pub fn path(&mut self) -> Vec<P::NodeInfo> {
-        self.0.path().unwrap()
+    pub fn node_path(&mut self) -> Vec<P::NodeInfo> {
+        self.0.node_path().unwrap()
+    }
+
+    /// Retrieve shortest path as edge list (usually lazily) for a query
+    pub fn edge_path(&mut self) -> Vec<P::EdgeInfo> {
+        self.0.edge_path().unwrap()
     }
 
     /// Get reference to object which allows to access additional query specific data
@@ -209,6 +223,10 @@ pub trait TDQueryServer<T: Copy, W> {
 pub trait PathServer {
     /// Information for each node in the path.
     type NodeInfo;
+    /// Information for each edge in the path.
+    type EdgeInfo;
     /// Fetch the shortest path.
-    fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo>;
+    fn reconstruct_node_path(&mut self) -> Vec<Self::NodeInfo>;
+    /// Fetch the shortest path as edges.
+    fn reconstruct_edge_path(&mut self) -> Vec<Self::EdgeInfo>;
 }

@@ -57,7 +57,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 if let Some(mut result) = result.found() {
                     report!("earliest_arrival", f64::from(result.distance() + at));
 
-                    let (path, unpacking_duration) = measure(|| result.path());
+                    let (path, unpacking_duration) = measure(|| result.node_path());
                     report!("num_nodes_on_shortest_path", path.len());
                     report!(
                         "unpacking_running_time_ms",

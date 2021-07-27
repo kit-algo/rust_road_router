@@ -241,7 +241,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         let result = report_time("cch query", || {
                             server.query(Query { from, to }).found().map(|mut result| {
                                 let distance = result.distance();
-                                let path = result.path().iter().map(|&node| coords(node)).collect();
+                                let path = result.node_path().iter().map(|&node| coords(node)).collect();
                                 GeoResponse { distance, path }
                             })
                         });
@@ -276,7 +276,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     + (from_link_fraction * from_link.weight as f32) as u32
                                     + (to_link_fraction * to_link.weight as f32) as u32;
 
-                                let path = result.path();
+                                let path = result.node_path();
                                 let path_iter = path.iter();
                                 let mut second_node_iter = path_iter.clone();
                                 second_node_iter.next();
@@ -285,8 +285,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     .chain(
                                         path_iter
                                             .zip(second_node_iter)
-                                            .map(|(first_node, second_node)| graph.edge_index(*first_node, *second_node).unwrap())
-                                            .map(|link_id| {
+                                            .map(|(first_node, second_node)| {
+                                                graph
+                                                    .edge_indices(*first_node, *second_node)
+                                                    .min_by_key(|&EdgeIdT(edge)| graph.weight()[edge as usize])
+                                                    .unwrap()
+                                            })
+                                            .map(|EdgeIdT(link_id)| {
                                                 let (id, dir) = id_mapper.local_to_here_link_id(link_id);
                                                 (id, dir == LinkDirection::FromRef)
                                             }),

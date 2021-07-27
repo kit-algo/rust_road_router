@@ -54,7 +54,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let to = records.next().unwrap().parse()?;
 
             if let (Some(from), Some(to)) = (id_map.get(from), id_map.get(to)) {
-                if let Some(edge_idx) = graph.edge_index(from as NodeId, to as NodeId) {
+                for EdgeIdT(edge_idx) in graph.edge_indices(from as NodeId, to as NodeId) {
                     let edge_idx = edge_idx as usize;
                     if geo_distance[edge_idx] == 0 {
                         continue;
@@ -119,6 +119,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                     profile_idx[edge_idx] = Some(profiles.len());
                     profiles.push(profile);
+
+                    break;
                 }
             }
         }

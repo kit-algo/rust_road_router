@@ -23,7 +23,6 @@ use crate::report::benchmark::Timer;
 
 /// Query server struct for CATCHUp.
 /// Implements the common query trait.
-#[derive(Debug)]
 pub struct Server<'a> {
     // Corridor elimination tree query
     forward: FloatingTDSteppedEliminationTree<'a, 'a>,
@@ -568,9 +567,13 @@ pub struct PathServerWrapper<'s, 'a>(&'s Server<'a>);
 
 impl<'s, 'a> PathServer for PathServerWrapper<'s, 'a> {
     type NodeInfo = (NodeId, Timestamp);
+    type EdgeInfo = ();
 
-    fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo> {
+    fn reconstruct_node_path(&mut self) -> Vec<Self::NodeInfo> {
         Server::path(self.0)
+    }
+    fn reconstruct_edge_path(&mut self) -> Vec<Self::EdgeInfo> {
+        vec![(); self.reconstruct_node_path().len() - 1]
     }
 }
 

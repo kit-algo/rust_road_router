@@ -101,12 +101,12 @@ impl Server {
         forwad_path.push_front(self.meeting_node);
 
         while *forwad_path.front().unwrap() != query.from {
-            let next = self.forward_data.predecessors[*forwad_path.front().unwrap() as usize];
+            let next = self.forward_data.predecessors[*forwad_path.front().unwrap() as usize].0;
             let mut shortcut_stack = vec![next];
 
             while let Some(node) = shortcut_stack.pop() {
-                let next = self.forward_data.predecessors[*forwad_path.front().unwrap() as usize];
-                let middle = forward_middle_nodes[self.forward.edge_index(node, next).unwrap() as usize];
+                let next = self.forward_data.predecessors[*forwad_path.front().unwrap() as usize].0;
+                let middle = forward_middle_nodes[self.forward.edge_indices(node, next).next().unwrap().0 as usize];
                 if middle < self.forward.num_nodes() as NodeId {
                     shortcut_stack.push(node);
                     shortcut_stack.push(middle);
@@ -120,12 +120,12 @@ impl Server {
         backward_path.push_back(self.meeting_node);
 
         while *backward_path.back().unwrap() != query.to {
-            let next = self.backward_data.predecessors[*backward_path.back().unwrap() as usize];
+            let next = self.backward_data.predecessors[*backward_path.back().unwrap() as usize].0;
             let mut shortcut_stack = vec![next];
 
             while let Some(node) = shortcut_stack.pop() {
-                let next = self.backward_data.predecessors[*backward_path.back().unwrap() as usize];
-                let middle = backward_middle_nodes[self.backward.edge_index(node, next).unwrap() as usize];
+                let next = self.backward_data.predecessors[*backward_path.back().unwrap() as usize].0;
+                let middle = backward_middle_nodes[self.backward.edge_indices(node, next).next().unwrap().0 as usize];
                 if middle < self.backward.num_nodes() as NodeId {
                     shortcut_stack.push(node);
                     shortcut_stack.push(middle);
@@ -150,9 +150,13 @@ pub struct PathServerWrapper<'s>(&'s Server, Query);
 
 impl<'s> PathServer for PathServerWrapper<'s> {
     type NodeInfo = NodeId;
+    type EdgeInfo = ();
 
-    fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo> {
+    fn reconstruct_node_path(&mut self) -> Vec<Self::NodeInfo> {
         Server::path(self.0, self.1)
+    }
+    fn reconstruct_edge_path(&mut self) -> Vec<Self::EdgeInfo> {
+        vec![(); self.reconstruct_node_path().len() - 1]
     }
 }
 

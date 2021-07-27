@@ -3,10 +3,7 @@
 use std::{env, error::Error, path::Path};
 
 use rust_road_router::{
-    algo::{
-        dijkstra::{generic_dijkstra::*, DijkstraData},
-        Query,
-    },
+    algo::{dijkstra::*, Query},
     cli::CliErr,
     datastr::graph::*,
     io::*,

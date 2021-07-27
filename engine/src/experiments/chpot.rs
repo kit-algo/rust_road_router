@@ -1,7 +1,7 @@
 use crate::{
     algo::{
         ch_potentials::{query::Server as TopoServer, *},
-        dijkstra::{generic_dijkstra::DefaultOps, query::dijkstra::Server as DijkServer},
+        dijkstra::{query::dijkstra::Server as DijkServer, DefaultOps},
     },
     datastr::graph::*,
     io::*,

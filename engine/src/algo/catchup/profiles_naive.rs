@@ -18,7 +18,6 @@ use time::Duration;
 
 /// Query server struct for CATCHUp.
 /// Implements the common query trait.
-#[derive(Debug)]
 pub struct Server<'a> {
     // Corridor elimination tree query
     forward: FloatingTDSteppedEliminationTree<'a, 'a>,

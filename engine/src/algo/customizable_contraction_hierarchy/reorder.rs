@@ -7,7 +7,6 @@ use super::*;
 use crate::util::NonNan;
 
 /// Supplemental data for reordering operations
-#[derive(Debug)]
 pub struct CCHReordering<'a, 'c> {
     pub cch: &'c CCH,
     pub latitude: &'a [f32],

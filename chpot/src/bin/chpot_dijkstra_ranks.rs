@@ -3,7 +3,7 @@ extern crate rust_road_router;
 use rust_road_router::{
     algo::{
         ch_potentials::{query::Server as TopoServer, *},
-        dijkstra::{generic_dijkstra::DefaultOps, query::dijkstra::Server as DijkServer},
+        dijkstra::{query::dijkstra::Server as DijkServer, DefaultOps},
         *,
     },
     cli::CliErr,
@@ -57,7 +57,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
             let dist = res.distance();
             report!("result", dist);
-            res.path().expect("Dijkstra Rank Query should always have a path");
+            res.node_path().expect("Dijkstra Rank Query should always have a path");
             report!("num_pot_computations", res.data().potential().num_pot_computations());
             report!("lower_bound", res.data().lower_bound(from));
         });

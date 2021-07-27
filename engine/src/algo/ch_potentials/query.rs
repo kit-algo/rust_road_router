@@ -18,11 +18,11 @@ where
 
 impl<Graph, Ops: DijkstraOps<Graph, Label = Timestamp>, P: Potential> Server<Graph, Ops, P, true, true, true>
 where
-    Graph: LinkIterable<NodeId> + LinkIterable<Ops::Arc>,
+    Graph: LinkIterable<NodeIdT> + LinkIterable<Ops::Arc>,
 {
     pub fn new<G>(graph: &G, potential: P, ops: Ops) -> Self
     where
-        G: LinkIterable<NodeId>,
+        G: LinkIterable<NodeIdT>,
         Graph: BuildPermutated<G>,
     {
         Self::new_custom(graph, potential, ops)
@@ -32,11 +32,11 @@ where
 impl<Graph, Ops: DijkstraOps<Graph, Label = Timestamp>, P: Potential, const BCC_CORE: bool, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool>
     Server<Graph, Ops, P, BCC_CORE, SKIP_DEG_2, SKIP_DEG_3>
 where
-    Graph: LinkIterable<NodeId> + LinkIterable<Ops::Arc>,
+    Graph: LinkIterable<NodeIdT> + LinkIterable<Ops::Arc>,
 {
     pub fn new_custom<G>(graph: &G, potential: P, ops: Ops) -> Self
     where
-        G: LinkIterable<NodeId>,
+        G: LinkIterable<NodeIdT>,
         Graph: BuildPermutated<G>,
     {
         report_time_with_key("TopoDijkstra preprocessing", "topo_dijk_prepro", move || {
@@ -197,22 +197,20 @@ where
         res
     }
 
-    fn path(&self, mut query: impl GenQuery<Timestamp>) -> Vec<NodeId> {
+    fn node_path(&self, mut query: impl GenQuery<Timestamp>) -> Vec<NodeId> {
         query.permutate(&self.virtual_topocore.order);
-        let mut path = Vec::new();
-        path.push(query.to());
+        let mut path = self.core_search.dijkstra_data.node_path(query.from(), query.to());
 
-        while *path.last().unwrap() != query.from() {
-            let next = self.core_search.dijkstra_data.predecessors[*path.last().unwrap() as usize];
-            path.push(next);
-        }
-
-        path.reverse();
         for node in &mut path {
             *node = self.virtual_topocore.order.node(*node);
         }
 
         path
+    }
+
+    fn edge_path(&self, mut query: impl GenQuery<Weight>) -> Vec<Ops::PredecessorLink> {
+        query.permutate(&self.virtual_topocore.order);
+        self.core_search.dijkstra_data.edge_path(query.from(), query.to())
     }
 
     fn tentative_distance(&self, node: NodeId) -> Weight {
@@ -222,7 +220,7 @@ where
 
     fn predecessor(&self, node: NodeId) -> NodeId {
         let rank = self.virtual_topocore.order.rank(node);
-        self.core_search.dijkstra_data.predecessors[rank as usize]
+        self.core_search.dijkstra_data.predecessors[rank as usize].0
     }
 }
 
@@ -236,13 +234,17 @@ impl<'s, G, O, P, Q, const BCC_CORE: bool, const SKIP_DEG_2: bool, const SKIP_DE
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
-    G: LinkIterable<NodeId> + LinkIterable<O::Arc>,
+    G: LinkIterable<NodeIdT> + LinkIterable<O::Arc>,
     Q: GenQuery<Timestamp> + Copy,
 {
     type NodeInfo = NodeId;
+    type EdgeInfo = O::PredecessorLink;
 
-    fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo> {
-        Server::path(self.0, self.1)
+    fn reconstruct_node_path(&mut self) -> Vec<Self::NodeInfo> {
+        Server::node_path(self.0, self.1)
+    }
+    fn reconstruct_edge_path(&mut self) -> Vec<Self::EdgeInfo> {
+        Server::edge_path(self.0, self.1)
     }
 }
 
@@ -250,12 +252,12 @@ impl<'s, G, O, P, Q, const BCC_CORE: bool, const SKIP_DEG_2: bool, const SKIP_DE
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
-    G: LinkIterable<NodeId> + LinkIterable<O::Arc>,
+    G: LinkIterable<NodeIdT> + LinkIterable<O::Arc>,
     Q: GenQuery<Timestamp> + Copy,
 {
     /// Print path with debug info as js to stdout.
     pub fn debug_path(&mut self, lat: &[f32], lng: &[f32]) {
-        for node in self.reconstruct_path() {
+        for node in self.reconstruct_node_path() {
             println!(
                 "var marker = L.marker([{}, {}], {{ icon: blackIcon }}).addTo(map);",
                 lat[node as usize], lng[node as usize]
@@ -298,7 +300,7 @@ impl<G, O, P, const BCC_CORE: bool, const SKIP_DEG_2: bool, const SKIP_DEG_3: bo
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
-    G: LinkIterable<NodeId> + LinkIterable<O::Arc>,
+    G: LinkIterable<NodeIdT> + LinkIterable<O::Arc>,
 {
     type P<'s>
     where
@@ -314,7 +316,7 @@ impl<G, O, P, const BCC_CORE: bool, const SKIP_DEG_2: bool, const SKIP_DEG_3: bo
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
-    G: LinkIterable<NodeId> + LinkIterable<O::Arc>,
+    G: LinkIterable<NodeIdT> + LinkIterable<O::Arc>,
 {
     type P<'s>
     where
@@ -335,6 +337,7 @@ where
     type Label = O::Label;
     type Arc = O::Arc;
     type LinkResult = O::LinkResult;
+    type PredecessorLink = O::PredecessorLink;
 
     #[inline(always)]
     fn link(&mut self, graph: &VirtualTopocoreGraph<G>, label: &Self::Label, link: &Self::Arc) -> Self::LinkResult {
@@ -345,6 +348,11 @@ where
     fn merge(&mut self, label: &mut Self::Label, linked: Self::LinkResult) -> bool {
         self.0.merge(label, linked)
     }
+
+    #[inline(always)]
+    fn predecessor_link(&self, link: &Self::Arc) -> Self::PredecessorLink {
+        self.0.predecessor_link(link)
+    }
 }
 
 pub struct SkipLowDegServer<Graph, Ops, P, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool>
@@ -352,7 +360,7 @@ where
     Ops: DijkstraOps<Graph>,
 {
     graph: Graph,
-    dijkstra_data: DijkstraData<Ops::Label>,
+    dijkstra_data: DijkstraData<Ops::Label, Ops::PredecessorLink>,
     ops: Ops,
     potential: P,
 
@@ -363,7 +371,7 @@ where
 impl<Graph, Ops: DijkstraOps<Graph, Label = Timestamp>, P: Potential, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool>
     SkipLowDegServer<Graph, Ops, P, SKIP_DEG_2, SKIP_DEG_3>
 where
-    Graph: LinkIterable<NodeId> + LinkIterable<Ops::Arc> + SymmetricDegreeGraph,
+    Graph: LinkIterable<NodeIdT> + LinkIterable<Ops::Arc> + SymmetricDegreeGraph,
 {
     pub fn new(graph: Graph, potential: P, ops: Ops) -> Self {
         let n = graph.num_nodes();
@@ -387,7 +395,7 @@ where
         if in_core(node) {
             return;
         }
-        for head in graph.link_iter(node) {
+        for NodeIdT(head) in LinkIterable::<NodeIdT>::link_iter(graph, node) {
             Self::dfs(graph, head, visited, in_core);
         }
     }
@@ -500,18 +508,12 @@ where
         res
     }
 
-    fn path(&self, query: impl GenQuery<Timestamp>) -> Vec<NodeId> {
-        let mut path = Vec::new();
-        path.push(query.to());
+    fn node_path(&self, query: impl GenQuery<Timestamp>) -> Vec<NodeId> {
+        self.dijkstra_data.node_path(query.from(), query.to())
+    }
 
-        while *path.last().unwrap() != query.from() {
-            let next = self.dijkstra_data.predecessors[*path.last().unwrap() as usize];
-            path.push(next);
-        }
-
-        path.reverse();
-
-        path
+    fn edge_path(&self, query: impl GenQuery<Timestamp>) -> Vec<Ops::PredecessorLink> {
+        self.dijkstra_data.edge_path(query.from(), query.to())
     }
 
     pub fn graph(&self) -> &Graph {
@@ -536,13 +538,17 @@ impl<'s, G, O, P, Q, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool> PathServer 
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
-    G: LinkIterable<NodeId> + LinkIterable<O::Arc> + SymmetricDegreeGraph,
+    G: LinkIterable<NodeIdT> + LinkIterable<O::Arc> + SymmetricDegreeGraph,
     Q: GenQuery<Timestamp> + Copy,
 {
     type NodeInfo = NodeId;
+    type EdgeInfo = O::PredecessorLink;
 
-    fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo> {
-        SkipLowDegServer::path(self.0, self.1)
+    fn reconstruct_node_path(&mut self) -> Vec<Self::NodeInfo> {
+        SkipLowDegServer::node_path(self.0, self.1)
+    }
+    fn reconstruct_edge_path(&mut self) -> Vec<Self::EdgeInfo> {
+        SkipLowDegServer::edge_path(self.0, self.1)
     }
 }
 
@@ -550,12 +556,12 @@ impl<'s, G, O, P, Q, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool> Biconnected
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
-    G: LinkIterable<NodeId> + LinkIterable<O::Arc> + SymmetricDegreeGraph,
+    G: LinkIterable<NodeIdT> + LinkIterable<O::Arc> + SymmetricDegreeGraph,
     Q: GenQuery<Timestamp> + Copy,
 {
     /// Print path with debug info as js to stdout.
     pub fn debug_path(&mut self, lat: &[f32], lng: &[f32]) {
-        for node in self.reconstruct_path() {
+        for node in self.reconstruct_node_path() {
             println!(
                 "var marker = L.marker([{}, {}], {{ icon: blackIcon }}).addTo(map);",
                 lat[node as usize], lng[node as usize]
@@ -577,7 +583,7 @@ where
     }
 
     pub fn predecessor(&self, node: NodeId) -> NodeId {
-        self.0.dijkstra_data.predecessors[node as usize]
+        self.0.dijkstra_data.predecessors[node as usize].0
     }
 
     pub fn potential(&self) -> &P {
@@ -593,7 +599,7 @@ impl<G, O, P, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool> TDQueryServer<Time
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
-    G: LinkIterable<NodeId> + LinkIterable<O::Arc> + SymmetricDegreeGraph,
+    G: LinkIterable<NodeIdT> + LinkIterable<O::Arc> + SymmetricDegreeGraph,
 {
     type P<'s>
     where
@@ -609,7 +615,7 @@ impl<G, O, P, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool> QueryServer for Sk
 where
     P: Potential,
     O: DijkstraOps<G, Label = Timestamp>,
-    G: LinkIterable<NodeId> + LinkIterable<O::Arc> + SymmetricDegreeGraph,
+    G: LinkIterable<NodeIdT> + LinkIterable<O::Arc> + SymmetricDegreeGraph,
 {
     type P<'s>
     where
@@ -626,13 +632,14 @@ use std::sync::atomic::AtomicU32;
 
 pub struct BiDirSkipLowDegServer<P = ZeroPotential> {
     forward_graph: VirtualTopocoreGraph<OwnedGraph>,
-    forward_dijkstra_data: DijkstraData<Weight>,
+    forward_dijkstra_data: DijkstraData<Weight, EdgeIdT>,
     backward_graph: VirtualTopocoreGraph<OwnedGraph>,
-    backward_dijkstra_data: DijkstraData<Weight>,
+    backward_dijkstra_data: DijkstraData<Weight, EdgeIdT>,
     meeting_node: NodeId,
     forward_potential: P,
     backward_potential: P,
     forward_to_backward_edge_ids: Vec<EdgeId>,
+    backward_to_forward_edge_ids: Vec<EdgeId>,
 }
 
 impl<P: Potential> BiDirSkipLowDegServer<P> {
@@ -643,16 +650,18 @@ impl<P: Potential> BiDirSkipLowDegServer<P> {
         let mut reversed_edge_ids = vec![Vec::new(); n];
         let mut edge_id: EdgeId = 0;
         for tail in 0..n {
-            for head in LinkIterable::<NodeId>::link_iter(&graph, tail as NodeId) {
+            for NodeIdT(head) in LinkIterable::<NodeIdT>::link_iter(&graph, tail as NodeId) {
                 reversed_edge_ids[head as usize].push(edge_id);
                 edge_id += 1;
             }
         }
         let mut forward_to_backward = vec![edge_id; edge_id as usize];
+        let mut backward_to_forward = vec![edge_id; edge_id as usize];
         let mut backward_id = 0;
         for forward_ids in reversed_edge_ids {
             for forward_id in forward_ids {
                 forward_to_backward[forward_id as usize] = backward_id;
+                backward_to_forward[backward_id as usize] = forward_id;
                 backward_id += 1;
             }
         }
@@ -666,6 +675,7 @@ impl<P: Potential> BiDirSkipLowDegServer<P> {
             backward_potential,
             meeting_node: n as NodeId,
             forward_to_backward_edge_ids: forward_to_backward,
+            backward_to_forward_edge_ids: backward_to_forward,
         }
     }
 
@@ -683,9 +693,9 @@ impl<P: Potential> BiDirSkipLowDegServer<P> {
 
         report!("algo", "Virtual Topocore Bidirectional Core Query");
 
-        let mut ops = DefaultOps::default();
+        let mut ops = DefaultOpsWithLinkPath::default();
         let mut forward_dijkstra = TopoDijkstraRun::<_, _, true, true>::query(&self.forward_graph, &mut self.forward_dijkstra_data, &mut ops, query);
-        let mut ops = DefaultOps::default();
+        let mut ops = DefaultOpsWithLinkPath::default();
         let mut backward_dijkstra = TopoDijkstraRun::<_, _, true, true>::query(
             &self.backward_graph,
             &mut self.backward_dijkstra_data,
@@ -823,15 +833,37 @@ impl<P: Potential> BiDirSkipLowDegServer<P> {
         path.push(self.meeting_node);
 
         while *path.last().unwrap() != query.from() {
-            let next = self.forward_dijkstra_data.predecessors[*path.last().unwrap() as usize];
+            let next = self.forward_dijkstra_data.predecessors[*path.last().unwrap() as usize].0;
             path.push(next);
         }
 
         path.reverse();
 
         while *path.last().unwrap() != query.to() {
-            let next = self.backward_dijkstra_data.predecessors[*path.last().unwrap() as usize];
+            let next = self.backward_dijkstra_data.predecessors[*path.last().unwrap() as usize].0;
             path.push(next);
+        }
+
+        path
+    }
+
+    fn edge_path(&self, query: impl GenQuery<Timestamp>) -> Vec<EdgeIdT> {
+        let mut path = Vec::new();
+        let mut cur = self.meeting_node;
+
+        while cur != query.from() {
+            path.push(self.forward_dijkstra_data.predecessors[cur as usize].1);
+            cur = self.forward_dijkstra_data.predecessors[cur as usize].0;
+        }
+
+        path.reverse();
+        cur = self.meeting_node;
+
+        while cur != query.to() {
+            path.push(EdgeIdT(
+                self.backward_to_forward_edge_ids[self.backward_dijkstra_data.predecessors[cur as usize].1 .0 as usize],
+            ));
+            cur = self.backward_dijkstra_data.predecessors[cur as usize].0;
         }
 
         path
@@ -864,9 +896,13 @@ where
     Q: GenQuery<Timestamp> + Copy,
 {
     type NodeInfo = NodeId;
+    type EdgeInfo = EdgeIdT;
 
-    fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo> {
+    fn reconstruct_node_path(&mut self) -> Vec<Self::NodeInfo> {
         BiDirSkipLowDegServer::path(self.0, self.1)
+    }
+    fn reconstruct_edge_path(&mut self) -> Vec<Self::EdgeInfo> {
+        BiDirSkipLowDegServer::edge_path(self.0, self.1)
     }
 }
 
@@ -895,6 +931,7 @@ pub struct MultiThreadedBiDirSkipLowDegServer<P = ZeroPotential> {
     bw_forward_potential: P,
     bw_backward_potential: P,
     forward_to_backward_edge_ids: Vec<EdgeId>,
+    backward_to_forward_edge_ids: Vec<EdgeId>,
 }
 
 impl<P: Potential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
@@ -905,16 +942,18 @@ impl<P: Potential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
         let mut reversed_edge_ids = vec![Vec::new(); n];
         let mut edge_id: EdgeId = 0;
         for tail in 0..n {
-            for head in LinkIterable::<NodeId>::link_iter(&graph, tail as NodeId) {
+            for NodeIdT(head) in LinkIterable::<NodeIdT>::link_iter(&graph, tail as NodeId) {
                 reversed_edge_ids[head as usize].push(edge_id);
                 edge_id += 1;
             }
         }
         let mut forward_to_backward = vec![edge_id; edge_id as usize];
+        let mut backward_to_forward = vec![edge_id; edge_id as usize];
         let mut backward_id = 0;
         for forward_ids in reversed_edge_ids {
             for forward_id in forward_ids {
                 forward_to_backward[forward_id as usize] = backward_id;
+                backward_to_forward[backward_id as usize] = forward_id;
                 backward_id += 1;
             }
         }
@@ -930,6 +969,7 @@ impl<P: Potential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
             bw_backward_potential: backward_potential,
             meeting_node: n as NodeId,
             forward_to_backward_edge_ids: forward_to_backward,
+            backward_to_forward_edge_ids: backward_to_forward,
         }
     }
 
@@ -947,7 +987,7 @@ impl<P: Potential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
 
         report!("algo", "Virtual Topocore Parallel Bidirectional Core Query");
 
-        let mut ops = DefaultOps::default();
+        let mut ops = DefaultOpsWithLinkPath::default();
         self.forward_dijkstra_data.distances.reset();
         let mut forward_dijkstra = SendTopoDijkstraRun::<_, _, true, true>::query(
             &self.forward_graph,
@@ -957,7 +997,7 @@ impl<P: Potential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
             &mut ops,
             query,
         );
-        let mut ops = DefaultOps::default();
+        let mut ops = DefaultOpsWithLinkPath::default();
         self.backward_dijkstra_data.distances.reset();
         let mut backward_dijkstra = SendTopoDijkstraRun::<_, _, true, true>::query(
             &self.backward_graph,
@@ -1150,15 +1190,37 @@ impl<P: Potential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
         path.push(self.meeting_node);
 
         while *path.last().unwrap() != query.from() {
-            let next = self.forward_dijkstra_data.predecessors[*path.last().unwrap() as usize];
+            let next = self.forward_dijkstra_data.predecessors[*path.last().unwrap() as usize].0;
             path.push(next);
         }
 
         path.reverse();
 
         while *path.last().unwrap() != query.to() {
-            let next = self.backward_dijkstra_data.predecessors[*path.last().unwrap() as usize];
+            let next = self.backward_dijkstra_data.predecessors[*path.last().unwrap() as usize].0;
             path.push(next);
+        }
+
+        path
+    }
+
+    fn edge_path(&self, query: impl GenQuery<Timestamp>) -> Vec<EdgeIdT> {
+        let mut path = Vec::new();
+        let mut cur = self.meeting_node;
+
+        while cur != query.from() {
+            path.push(self.forward_dijkstra_data.predecessors[cur as usize].1);
+            cur = self.forward_dijkstra_data.predecessors[cur as usize].0;
+        }
+
+        path.reverse();
+        cur = self.meeting_node;
+
+        while cur != query.to() {
+            path.push(EdgeIdT(
+                self.backward_to_forward_edge_ids[self.backward_dijkstra_data.predecessors[cur as usize].1 .0 as usize],
+            ));
+            cur = self.backward_dijkstra_data.predecessors[cur as usize].0;
         }
 
         path
@@ -1196,9 +1258,13 @@ where
     Q: GenQuery<Timestamp> + Copy,
 {
     type NodeInfo = NodeId;
+    type EdgeInfo = EdgeIdT;
 
-    fn reconstruct_path(&mut self) -> Vec<Self::NodeInfo> {
+    fn reconstruct_node_path(&mut self) -> Vec<Self::NodeInfo> {
         MultiThreadedBiDirSkipLowDegServer::path(self.0, self.1)
+    }
+    fn reconstruct_edge_path(&mut self) -> Vec<Self::EdgeInfo> {
+        MultiThreadedBiDirSkipLowDegServer::edge_path(self.0, self.1)
     }
 }
 

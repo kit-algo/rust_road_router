@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let path = Path::new(arg);
 
     let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
-    let graph = graph.line_graph(|_edge1_idx, _edge2_idx| Some(0));
+    let graph = rust_road_router::datastr::graph::line_graph(&graph, |_edge1_idx, _edge2_idx| Some(0));
 
     // use InertialFlowCutter with edge order (cut based) and separator reordering to obtain
     let order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_exp_perm"))?);

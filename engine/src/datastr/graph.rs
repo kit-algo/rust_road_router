@@ -24,6 +24,20 @@ pub type Weight = u32;
 /// Set to `u32::MAX / 2` so that `INFINITY + x` for `x <= INFINITY` does not overflow.
 pub const INFINITY: Weight = std::u32::MAX / 2;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct NodeIdT(pub NodeId);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct EdgeIdT(pub EdgeId);
+
+impl Default for EdgeIdT {
+    fn default() -> Self {
+        EdgeIdT(u32::MAX)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Reversed(pub EdgeIdT);
+
 pub trait Arc {
     fn head(&self) -> NodeId;
 }
@@ -43,23 +57,17 @@ impl Arc for Link {
     }
 }
 
-impl Arc for (NodeId, EdgeId) {
+impl Arc for NodeIdT {
     #[inline(always)]
     fn head(&self) -> NodeId {
         self.0
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub struct LinkWithId {
-    pub node: NodeId,
-    pub edge_id: EdgeId,
-}
-
-impl Arc for LinkWithId {
+impl<T> Arc for (NodeIdT, T) {
     #[inline(always)]
     fn head(&self) -> NodeId {
-        self.node
+        self.0 .0
     }
 }
 
@@ -131,12 +139,13 @@ pub fn unify_parallel_edges<G: for<'a> MutLinkIterable<'a, (&'a NodeId, &'a mut 
     }
 }
 
-/// Trait for graph types which allow random access to links based on edge ids.
-pub trait RandomLinkAccessGraph: Graph {
-    /// Get the link with the given id.
-    fn link(&self, edge_id: EdgeId) -> Link;
+pub trait EdgeIdGraph: Graph {
+    type IdxIter<'a>: Iterator<Item = EdgeIdT> + 'a
+    where
+        Self: 'a;
+
     /// Find the id of the edge from `from` to `to` if it exists.
-    fn edge_index(&self, from: NodeId, to: NodeId) -> Option<EdgeId>;
+    fn edge_indices(&self, from: NodeId, to: NodeId) -> Self::IdxIter<'_>;
     /// Get the range of edge ids which make up the outgoing edges of `node`
     fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId>;
 
@@ -149,31 +158,37 @@ pub trait RandomLinkAccessGraph: Graph {
             end: range.end as usize,
         }
     }
+}
 
-    /// Build the line graph (the turn expanded graph).
-    /// The callback should return the turn costs between the two links
-    /// with the given ids and `None` if the turn is forbidden.
-    fn line_graph(&self, mut turn_costs: impl FnMut(EdgeId, EdgeId) -> Option<Weight>) -> OwnedGraph {
-        let mut first_out = Vec::with_capacity(self.num_arcs() + 1);
-        first_out.push(0);
-        let mut head = Vec::new();
-        let mut weight = Vec::new();
-        let mut num_turns = 0;
+/// Trait for graph types which allow random access to links based on edge ids.
+pub trait EdgeRandomAccessGraph<E>: EdgeIdGraph {
+    /// Get the link with the given id.
+    fn link(&self, edge_id: EdgeId) -> E;
+}
 
-        for edge_id in 0..self.num_arcs() {
-            let link = self.link(edge_id as EdgeId);
-            for next_link_id in self.neighbor_edge_indices(link.node) {
-                if let Some(turn_cost) = turn_costs(edge_id as EdgeId, next_link_id) {
-                    head.push(next_link_id);
-                    weight.push(link.weight + turn_cost);
-                    num_turns += 1;
-                }
+/// Build the line graph (the turn expanded graph).
+/// The callback should return the turn costs between the two links
+/// with the given ids and `None` if the turn is forbidden.
+pub fn line_graph(graph: &impl EdgeRandomAccessGraph<Link>, mut turn_costs: impl FnMut(EdgeId, EdgeId) -> Option<Weight>) -> OwnedGraph {
+    let mut first_out = Vec::with_capacity(graph.num_arcs() + 1);
+    first_out.push(0);
+    let mut head = Vec::new();
+    let mut weight = Vec::new();
+    let mut num_turns = 0;
+
+    for edge_id in 0..graph.num_arcs() {
+        let link = graph.link(edge_id as EdgeId);
+        for next_link_id in graph.neighbor_edge_indices(link.node) {
+            if let Some(turn_cost) = turn_costs(edge_id as EdgeId, next_link_id) {
+                head.push(next_link_id);
+                weight.push(link.weight + turn_cost);
+                num_turns += 1;
             }
-            first_out.push(num_turns as EdgeId);
         }
-
-        OwnedGraph::new(first_out, head, weight)
+        first_out.push(num_turns as EdgeId);
     }
+
+    OwnedGraph::new(first_out, head, weight)
 }
 
 /// Generic Trait for building reversed graphs.
@@ -218,10 +233,10 @@ impl<G: LinkIterable<Link>> LinkIterable<Link> for InfinityFilteringGraph<G> {
     }
 }
 
-impl<G: LinkIterable<Link>> LinkIterable<NodeId> for InfinityFilteringGraph<G> {
-    type Iter<'a> = std::iter::Map<<Self as LinkIterable<Link>>::Iter<'a>, fn(Link) -> NodeId>;
+impl<G: LinkIterable<Link>> LinkIterable<NodeIdT> for InfinityFilteringGraph<G> {
+    type Iter<'a> = std::iter::Map<<Self as LinkIterable<Link>>::Iter<'a>, fn(Link) -> NodeIdT>;
 
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
-        LinkIterable::<Link>::link_iter(self, node).map(|l| l.node)
+        LinkIterable::<Link>::link_iter(self, node).map(|l| NodeIdT(l.node))
     }
 }

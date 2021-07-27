@@ -1,5 +1,4 @@
 use super::*;
-use crate::algo::dijkstra::generic_dijkstra::*;
 use crate::datastr::graph::time_dependent::*;
 
 pub struct TDDijkstraOps();
@@ -7,11 +6,12 @@ pub struct TDDijkstraOps();
 impl DijkstraOps<TDGraph> for TDDijkstraOps {
     type Label = Weight;
     type LinkResult = Weight;
-    type Arc = (NodeId, EdgeId);
+    type Arc = (NodeIdT, EdgeIdT);
+    type PredecessorLink = ();
 
     #[inline(always)]
     fn link(&mut self, graph: &TDGraph, label: &Weight, link: &Self::Arc) -> Self::LinkResult {
-        label + graph.travel_time_function(link.1).eval(*label)
+        label + graph.travel_time_function(link.1 .0).eval(*label)
     }
 
     #[inline(always)]
@@ -21,6 +21,11 @@ impl DijkstraOps<TDGraph> for TDDijkstraOps {
             return true;
         }
         false
+    }
+
+    #[inline(always)]
+    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {
+        ()
     }
 }
 
@@ -35,11 +40,12 @@ pub struct LiveTDDijkstraOps();
 impl DijkstraOps<LiveTDGraph> for LiveTDDijkstraOps {
     type Label = Weight;
     type LinkResult = Weight;
-    type Arc = (NodeId, EdgeId);
+    type Arc = (NodeIdT, EdgeIdT);
+    type PredecessorLink = ();
 
     #[inline(always)]
     fn link(&mut self, graph: &LiveTDGraph, label: &Weight, link: &Self::Arc) -> Self::LinkResult {
-        label + graph.eval(link.1, *label)
+        label + graph.eval(link.1 .0, *label)
     }
 
     #[inline(always)]
@@ -49,6 +55,11 @@ impl DijkstraOps<LiveTDGraph> for LiveTDDijkstraOps {
             return true;
         }
         false
+    }
+
+    #[inline(always)]
+    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {
+        ()
     }
 }
 

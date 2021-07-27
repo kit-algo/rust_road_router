@@ -18,7 +18,7 @@ scoped_thread_local!(static DOWNWARD_WORKSPACE: RefCell<Vec<Weight>>);
 /// This may lead to wrong query results.
 pub fn customize<'c, Graph>(cch: &'c CCH, metric: &Graph) -> Customized<'c, CCH>
 where
-    Graph: LinkIterGraph + RandomLinkAccessGraph + Sync,
+    Graph: LinkIterGraph + EdgeRandomAccessGraph<Link> + Sync,
 {
     let m = cch.num_arcs();
     // buffers for the customized weights
@@ -35,7 +35,7 @@ where
 /// Same as [customize], except with a `DirectedCCH`
 pub fn customize_directed<'c, Graph>(cch: &'c DirectedCCH, metric: &Graph) -> Customized<'c, DirectedCCH>
 where
-    Graph: LinkIterGraph + RandomLinkAccessGraph + Sync,
+    Graph: LinkIterGraph + EdgeRandomAccessGraph<Link> + Sync,
 {
     // buffers for the customized weights
     let mut upward_weights = vec![INFINITY; cch.forward_head.len()];
@@ -64,7 +64,7 @@ pub fn always_infinity(cch: &CCH) -> Customized<CCH> {
 
 fn prepare_weights<Graph>(cch: &CCH, upward_weights: &mut [Weight], downward_weights: &mut [Weight], metric: &Graph)
 where
-    Graph: LinkIterGraph + RandomLinkAccessGraph + Sync,
+    Graph: LinkIterGraph + EdgeRandomAccessGraph<Link> + Sync,
 {
     report_time_with_key("CCH apply weights", "respecting", || {
         upward_weights
@@ -72,10 +72,10 @@ where
             .zip(downward_weights.par_iter_mut())
             .zip(cch.cch_edge_to_orig_arc.par_iter())
             .for_each(|((up_weight, down_weight), (up_arcs, down_arcs))| {
-                for &up_arc in up_arcs {
+                for &EdgeIdT(up_arc) in up_arcs {
                     *up_weight = std::cmp::min(metric.link(up_arc).weight, *up_weight);
                 }
-                for &down_arc in down_arcs {
+                for &EdgeIdT(down_arc) in down_arcs {
                     *down_weight = std::cmp::min(metric.link(down_arc).weight, *down_weight);
                 }
             });
@@ -84,14 +84,14 @@ where
 
 fn prepare_weights_directed<Graph>(cch: &DirectedCCH, upward_weights: &mut [Weight], downward_weights: &mut [Weight], metric: &Graph)
 where
-    Graph: LinkIterGraph + RandomLinkAccessGraph + Sync,
+    Graph: LinkIterGraph + EdgeRandomAccessGraph<Link> + Sync,
 {
     report_time_with_key("CCH apply weights", "respecting", || {
         upward_weights
             .par_iter_mut()
             .zip(cch.forward_cch_edge_to_orig_arc.par_iter())
             .for_each(|(up_weight, up_arcs)| {
-                for &up_arc in up_arcs {
+                for &EdgeIdT(up_arc) in up_arcs {
                     *up_weight = std::cmp::min(metric.link(up_arc).weight, *up_weight);
                 }
             });
@@ -99,7 +99,7 @@ where
             .par_iter_mut()
             .zip(cch.backward_cch_edge_to_orig_arc.par_iter())
             .for_each(|(down_weight, down_arcs)| {
-                for &down_arc in down_arcs {
+                for &EdgeIdT(down_arc) in down_arcs {
                     *down_weight = std::cmp::min(metric.link(down_arc).weight, *down_weight);
                 }
             });
@@ -164,11 +164,7 @@ fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weig
                     }
 
                     // for all downward edges of the current node
-                    for Link {
-                        node: low_node,
-                        weight: first_edge_id,
-                    } in LinkIterable::<Link>::link_iter(&cch.inverted, current_node)
-                    {
+                    for (NodeIdT(low_node), Reversed(EdgeIdT(first_edge_id))) in cch.inverted.link_iter(current_node) {
                         let first_down_weight = downward_weights[first_edge_id as usize - offset];
                         let first_up_weight = upward_weights[first_edge_id as usize - offset];
                         let mut low_up_edges = cch.neighbor_edge_indices_usize(low_node);
@@ -282,11 +278,7 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
                     }
 
                     // for all downward edges of the current node
-                    for Link {
-                        node: low_node,
-                        weight: first_edge_id,
-                    } in LinkIterable::<Link>::link_iter(&cch.backward_inverted, current_node)
-                    {
+                    for (NodeIdT(low_node), Reversed(EdgeIdT(first_edge_id))) in cch.backward_inverted.link_iter(current_node) {
                         let first_down_weight = downward_weights[first_edge_id as usize - downward_offset];
                         let mut low_up_edges = cch.forward().range(low_node as usize);
                         low_up_edges.start -= upward_offset;
@@ -319,11 +311,7 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
                     }
 
                     // for all downward edges of the current node
-                    for Link {
-                        node: low_node,
-                        weight: first_edge_id,
-                    } in LinkIterable::<Link>::link_iter(&cch.forward_inverted, current_node)
-                    {
+                    for (NodeIdT(low_node), Reversed(EdgeIdT(first_edge_id))) in cch.forward_inverted.link_iter(current_node) {
                         let first_up_weight = upward_weights[first_edge_id as usize - upward_offset];
                         let mut low_up_edges = cch.backward().range(low_node as usize);
                         low_up_edges.start -= downward_offset;

@@ -46,7 +46,7 @@ fn simple_dijkstra_correct_distances() {
 
 #[test]
 fn bidir_dijkstra_correct_distances() {
-    let mut server = BiDijkServer::new(graph());
+    let mut server = BiDijkServer::<_, _, _>::new(graph());
 
     assert_eq!(server.query(Query { from: 0, to: 1 }).distance(), Some(1));
     assert_eq!(server.query(Query { from: 0, to: 3 }).distance(), Some(3));
@@ -60,7 +60,7 @@ fn bidir_dijkstra_stopping_crit() {
     let first_out = vec![0, 3, 4, 5, 6, 6];
     let head = vec![1, 3, 4, 2, 4, 4];
     let weight = vec![4, 7, 13, 4, 4, 7];
-    let mut server = BiDijkServer::new(OwnedGraph::new(first_out, head, weight));
+    let mut server = BiDijkServer::<_, _, _>::new(OwnedGraph::new(first_out, head, weight));
 
     assert_eq!(server.query(Query { from: 0, to: 4 }).distance(), Some(12));
 }
