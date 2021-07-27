@@ -630,7 +630,7 @@ where
 use std::cell::*;
 use std::sync::atomic::AtomicU32;
 
-pub struct BiDirSkipLowDegServer<P = ZeroPotential> {
+pub struct BiDirSkipLowDegServer<P = ZeroPotential, D = ChooseMinKeyDir> {
     forward_graph: VirtualTopocoreGraph<OwnedGraph>,
     forward_dijkstra_data: DijkstraData<Weight, EdgeIdT>,
     backward_graph: VirtualTopocoreGraph<OwnedGraph>,
@@ -640,9 +640,10 @@ pub struct BiDirSkipLowDegServer<P = ZeroPotential> {
     backward_potential: P,
     forward_to_backward_edge_ids: Vec<EdgeId>,
     backward_to_forward_edge_ids: Vec<EdgeId>,
+    dir_chooser: D,
 }
 
-impl<P: Potential> BiDirSkipLowDegServer<P> {
+impl<P: Potential, D: BidirChooseDir> BiDirSkipLowDegServer<P, D> {
     pub fn new(graph: VirtualTopocoreGraph<OwnedGraph>, forward_potential: P, backward_potential: P) -> Self {
         let n = graph.num_nodes();
         let reversed = VirtualTopocoreGraph::<OwnedGraph>::reversed(&graph);
@@ -676,6 +677,7 @@ impl<P: Potential> BiDirSkipLowDegServer<P> {
             meeting_node: n as NodeId,
             forward_to_backward_edge_ids: forward_to_backward,
             backward_to_forward_edge_ids: backward_to_forward,
+            dir_chooser: Default::default(),
         }
     }
 
@@ -684,7 +686,7 @@ impl<P: Potential> BiDirSkipLowDegServer<P> {
         query: Q,
         cap: Weight,
         pot_cap: Weight,
-    ) -> QueryResult<BiDirCorePathServerWrapper<P, Q>, Weight> {
+    ) -> QueryResult<BiDirCorePathServerWrapper<P, D, Q>, Weight> {
         QueryResult::new(self.distance(query, cap, pot_cap), BiDirCorePathServerWrapper(self, query))
     }
 
@@ -715,8 +717,7 @@ impl<P: Potential> BiDirSkipLowDegServer<P> {
         let mut tentative_distance = INFINITY;
         let forward_potential = RefCell::new(&mut self.forward_potential);
         let backward_potential = RefCell::new(&mut self.backward_potential);
-
-        let mut dir_toggle = false;
+        let dir_chooser = &mut self.dir_chooser;
 
         let result = (|| {
             while forward_dijkstra.queue().peek().map_or(false, |q| q.key < min(tentative_distance, cap))
@@ -724,9 +725,10 @@ impl<P: Potential> BiDirSkipLowDegServer<P> {
             {
                 let stop_dist = min(tentative_distance, cap);
 
-                dir_toggle = !dir_toggle;
-
-                if dir_toggle {
+                if dir_chooser.choose(
+                    forward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY),
+                    backward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY),
+                ) {
                     if let Some(node) = forward_dijkstra.next_with_improve_callback_and_potential(
                         |head, &dist| {
                             // if dist + forward_potential.borrow_mut().potential(head).unwrap_or(INFINITY) > cap {
@@ -888,11 +890,12 @@ impl<P: Potential> BiDirSkipLowDegServer<P> {
     }
 }
 
-pub struct BiDirCorePathServerWrapper<'s, P, Q>(&'s mut BiDirSkipLowDegServer<P>, Q);
+pub struct BiDirCorePathServerWrapper<'s, P, D, Q>(&'s mut BiDirSkipLowDegServer<P, D>, Q);
 
-impl<'s, P, Q> PathServer for BiDirCorePathServerWrapper<'s, P, Q>
+impl<'s, P, D, Q> PathServer for BiDirCorePathServerWrapper<'s, P, D, Q>
 where
     P: Potential,
+    D: BidirChooseDir,
     Q: GenQuery<Timestamp> + Copy,
 {
     type NodeInfo = NodeId;
@@ -906,14 +909,15 @@ where
     }
 }
 
-impl<P> QueryServer for BiDirSkipLowDegServer<P>
+impl<P, D> QueryServer for BiDirSkipLowDegServer<P, D>
 where
     P: Potential,
+    D: BidirChooseDir,
 {
     type P<'s>
     where
         Self: 's,
-    = BiDirCorePathServerWrapper<'s, P, Query>;
+    = BiDirCorePathServerWrapper<'s, P, D, Query>;
 
     fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight> {
         QueryResult::new(self.distance(query, INFINITY, INFINITY), BiDirCorePathServerWrapper(self, query))
@@ -1234,6 +1238,7 @@ impl<P: Potential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
         self.backward_graph.graph.head()[self.forward_to_backward_edge_ids[edge as usize] as usize]
     }
 
+    #[allow(unused)]
     pub(super) fn set_edge_weight(&mut self, edge: EdgeId, weight: Weight) {
         self.forward_graph.graph.weights_mut()[edge as usize] = weight;
         self.backward_graph.graph.weights_mut()[self.forward_to_backward_edge_ids[edge as usize] as usize] = weight;
