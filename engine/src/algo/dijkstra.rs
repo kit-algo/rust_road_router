@@ -244,3 +244,19 @@ impl BidirChooseDir for AlternatingDirs {
         "min_key"
     }
 }
+
+pub struct SyncDijkstraData {
+    pub distances: AtomicDists,
+    pub predecessors: Vec<(NodeId, EdgeIdT)>,
+    pub queue: IndexdMinHeap<State<Weight>>,
+}
+
+impl SyncDijkstraData {
+    pub fn new(n: usize) -> Self {
+        Self {
+            distances: AtomicDists::new(n),
+            predecessors: vec![(n as NodeId, Default::default()); n],
+            queue: IndexdMinHeap::new(n),
+        }
+    }
+}

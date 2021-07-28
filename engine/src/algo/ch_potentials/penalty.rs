@@ -7,15 +7,18 @@ use crate::datastr::rank_select_map::*;
 
 pub struct Penalty<P> {
     virtual_topocore: VirtualTopocore,
-    shortest_path_penalized: query::SkipLowDegServer<VirtualTopocoreGraph<OwnedGraph>, DefaultOpsWithLinkPath, PotentialForPermutated<P>, true, true>,
+    // shortest_path_penalized: query::SkipLowDegServer<VirtualTopocoreGraph<OwnedGraph>, DefaultOpsWithLinkPath, PotentialForPermutated<P>, true, true>,
+    // shortest_path_penalized: query::BiDirSkipLowDegServer<PotentialForPermutated<P>>,
+    shortest_path_penalized: query::MultiThreadedBiDirSkipLowDegServer<PotentialForPermutated<P>>,
     alternative_graph_dijkstra: query::SkipLowDegServer<AlternativeGraph<VirtualTopocoreGraph<OwnedGraph>>, DefaultOps, ZeroPotential, true, true>,
     reversed: ReversedGraphWithEdgeIds,
+    tail: Vec<NodeId>,
     edge_penelized: BitVec,
     edges_to_reset: Vec<EdgeId>,
 }
 
-impl<P: Potential> Penalty<P> {
-    pub fn new<G>(graph: &G, potential: P) -> Self
+impl<P: Potential + Send + Clone> Penalty<P> {
+    pub fn new<G>(graph: &G, forward_potential: P, backward_potential: P) -> Self
     where
         G: LinkIterable<NodeIdT>,
         OwnedGraph: BuildPermutated<G>,
@@ -24,14 +27,28 @@ impl<P: Potential> Penalty<P> {
         let m = main_graph.num_arcs();
 
         let reversed = ReversedGraphWithEdgeIds::reversed(&main_graph);
+        let mut edge_id = 0;
+        let mut tail = vec![0; m];
+        for node in 0..main_graph.num_nodes() {
+            for _ in LinkIterable::<NodeIdT>::link_iter(&main_graph, node as NodeId) {
+                tail[edge_id] = node as NodeId;
+                edge_id += 1;
+            }
+        }
         Self {
-            shortest_path_penalized: query::SkipLowDegServer::new(
+            // shortest_path_penalized: query::SkipLowDegServer::new(
+            // shortest_path_penalized: query::BiDirSkipLowDegServer::new(
+            shortest_path_penalized: query::MultiThreadedBiDirSkipLowDegServer::new(
                 main_graph.clone(),
                 PotentialForPermutated {
                     order: virtual_topocore.order.clone(),
-                    potential,
+                    potential: forward_potential,
                 },
-                DefaultOpsWithLinkPath::default(),
+                PotentialForPermutated {
+                    order: virtual_topocore.order.clone(),
+                    potential: backward_potential,
+                },
+                // DefaultOpsWithLinkPath::default(),
             ),
             alternative_graph_dijkstra: query::SkipLowDegServer::new(
                 AlternativeGraph {
@@ -45,6 +62,7 @@ impl<P: Potential> Penalty<P> {
             reversed,
             edge_penelized: BitVec::new(m),
             edges_to_reset: Vec::new(),
+            tail,
         }
     }
 
@@ -55,7 +73,7 @@ impl<P: Potential> Penalty<P> {
         let query = Query { from: core_from, to: core_to };
         self.alternative_graph_dijkstra.graph_mut().clear();
 
-        if let Some(mut result) = self.shortest_path_penalized.query(query).found() {
+        if let Some(mut result) = report_time_with_key("initial_query", "initial_query", || self.shortest_path_penalized.query(query)).found() {
             let base_dist = result.distance();
             report!("base_dist", base_dist);
 
@@ -68,6 +86,7 @@ impl<P: Potential> Penalty<P> {
             let mut path_edges = result.edge_path();
             let shortest_path_penalized = &mut self.shortest_path_penalized;
             let alternative_graph_dijkstra = &mut self.alternative_graph_dijkstra;
+
             alternative_graph_dijkstra.graph_mut().add_edges(&path_edges);
             let path_orig_len: Weight = path_edges
                 .iter()
@@ -84,8 +103,8 @@ impl<P: Potential> Penalty<P> {
                 let _iteration_ctxt = iterations_ctxt.push_collection_item();
                 report!("iteration", i);
                 for &EdgeIdT(edge) in &path_edges {
-                    let weight = &mut shortest_path_penalized.graph_mut().graph.weights_mut()[edge as usize];
-                    *weight = *weight * 11 / 10;
+                    let weight = shortest_path_penalized.graph().graph.weight()[edge as usize];
+                    shortest_path_penalized.set_edge_weight(edge, weight * 11 / 10);
                     if !self.edge_penelized.get(edge as usize) {
                         self.edge_penelized.set(edge as usize);
                         self.edges_to_reset.push(edge);
@@ -101,8 +120,8 @@ impl<P: Potential> Penalty<P> {
                 for (&[tail, head], &[tail_dist, head_dist]) in path.array_windows::<2>().zip(dists.array_windows::<2>()) {
                     for (NodeIdT(rev_head), Reversed(EdgeIdT(edge))) in self.reversed.link_iter(head) {
                         if rev_head != tail {
-                            let weight = &mut shortest_path_penalized.graph_mut().graph.weights_mut()[edge as usize];
-                            *weight += rejoin_penalty * head_dist / total_penalized_dist;
+                            let weight = shortest_path_penalized.graph().graph.weight()[edge as usize];
+                            shortest_path_penalized.set_edge_weight(edge, weight + rejoin_penalty * head_dist / total_penalized_dist);
                             if !self.edge_penelized.get(edge as usize) {
                                 self.edge_penelized.set(edge as usize);
                                 self.edges_to_reset.push(edge);
@@ -112,8 +131,8 @@ impl<P: Potential> Penalty<P> {
 
                     for (NodeIdT(edge_head), EdgeIdT(edge)) in LinkIterable::<(NodeIdT, EdgeIdT)>::link_iter(&alternative_graph_dijkstra.graph().graph, tail) {
                         if edge_head != head {
-                            let weight = &mut shortest_path_penalized.graph_mut().graph.weights_mut()[edge as usize];
-                            *weight += rejoin_penalty * tail_dist / total_penalized_dist;
+                            let weight = shortest_path_penalized.graph().graph.weight()[edge as usize];
+                            shortest_path_penalized.set_edge_weight(edge, weight + rejoin_penalty * tail_dist / total_penalized_dist);
                             if !self.edge_penelized.get(edge as usize) {
                                 self.edge_penelized.set(edge as usize);
                                 self.edges_to_reset.push(edge);
@@ -122,7 +141,8 @@ impl<P: Potential> Penalty<P> {
                     }
                 }
 
-                let (result, time) = measure(|| shortest_path_penalized.distance_with_cap(query, max_penalized_dist));
+                let (result, time) = measure(|| shortest_path_penalized.distance_with_cap(query, max_penalized_dist, max_orig_dist));
+                // let (result, time) = measure(|| shortest_path_penalized.distance_with_cap(query, max_penalized_dist));
                 report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
                 let mut result = if let Some(result) = result.found() {
                     result
@@ -149,10 +169,9 @@ impl<P: Potential> Penalty<P> {
                     .collect();
 
                 for new_part in new_parts {
-                    let part_start = result
-                        .data()
-                        .predecessor(alternative_graph_dijkstra.graph().graph.graph.head()[new_part[0].0 as usize]);
+                    let part_start = self.tail[new_part[0].0 as usize];
                     let part_end = alternative_graph_dijkstra.graph().graph.graph.head()[new_part.last().unwrap().0 as usize];
+
                     let part_dist: Weight = new_part
                         .iter()
                         .map(|&EdgeIdT(e)| alternative_graph_dijkstra.graph().graph.graph.weight()[e as usize])
@@ -199,7 +218,7 @@ impl<P: Potential> Penalty<P> {
             for edge in self.edges_to_reset.drain(..) {
                 let e = edge as usize;
                 self.edge_penelized.unset_all_around(e as usize);
-                shortest_path_penalized.graph_mut().graph.weights_mut()[e as usize] = alternative_graph_dijkstra.graph().graph.graph.weight()[e as usize];
+                shortest_path_penalized.set_edge_weight(edge, alternative_graph_dijkstra.graph().graph.graph.weight()[e as usize]);
             }
 
             Some(())
@@ -208,8 +227,9 @@ impl<P: Potential> Penalty<P> {
         }
     }
 
-    pub fn potential(&self) -> &P {
-        self.shortest_path_penalized.potential().inner()
+    pub fn potentials(&self) -> impl Iterator<Item = &PotentialForPermutated<P>> {
+        // std::iter::once(self.shortest_path_penalized.potential())
+        self.shortest_path_penalized.potentials()
     }
 }
 

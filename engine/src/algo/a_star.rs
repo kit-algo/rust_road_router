@@ -81,7 +81,7 @@ impl Potential for BaselinePotential {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RecyclingPotential<Potential> {
     potential: Potential,
     target: Option<NodeId>,
@@ -152,7 +152,7 @@ impl<PF: Potential, PB: Potential> AveragePotential<PF, PB> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PotentialForPermutated<P> {
     pub potential: P,
     pub order: NodeOrder,

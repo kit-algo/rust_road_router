@@ -25,14 +25,15 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
 
-    let core_ids = core_affinity::get_core_ids().unwrap();
-    core_affinity::set_for_current(core_ids[0]);
-
     let chpot_data = CHPotLoader::reconstruct_from(&path.join("lower_bound_ch"))?;
 
     let mut penalty_server = {
         let _prepro_ctxt = algo_runs_ctxt.push_collection_item();
-        penalty::Penalty::new(&graph, RecyclingPotential::new(chpot_data.potentials().0))
+        penalty::Penalty::new(
+            &graph,
+            RecyclingPotential::new(chpot_data.potentials().0),
+            RecyclingPotential::new(chpot_data.potentials().1),
+        )
     };
 
     let mut total_query_time = Duration::zero();
@@ -49,7 +50,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let (_, time) = measure(|| penalty_server.alternatives(Query { from, to }));
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-        report!("pot_evals", penalty_server.potential().inner().num_pot_computations());
+        report!(
+            "pot_evals",
+            penalty_server.potentials().map(|p| p.inner().inner().num_pot_computations()).sum::<usize>()
+        );
         eprintln!();
 
         total_query_time = total_query_time + time;
