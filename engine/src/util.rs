@@ -46,6 +46,22 @@ impl Ord for NonNan {
     }
 }
 
+pub fn fl_min(x: f64, y: f64) -> f64 {
+    if x < y {
+        x
+    } else {
+        y
+    }
+}
+
+pub fn fl_max(x: f64, y: f64) -> f64 {
+    if x > y {
+        x
+    } else {
+        y
+    }
+}
+
 /// Util function to chain unchainable function calls.
 ///
 /// ```

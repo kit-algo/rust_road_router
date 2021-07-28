@@ -648,7 +648,7 @@ impl<P: Potential, D: BidirChooseDir> BiDirServer<P, D> {
     pub fn new<G>(graph: &G, forward_potential: P, backward_potential: P) -> Self
     where
         G: LinkIterable<NodeIdT>,
-        G: BuildReversed<G>,
+        OwnedGraph: BuildReversed<G>,
         OwnedGraph: BuildPermutated<G>,
     {
         let n = graph.num_nodes();

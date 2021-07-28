@@ -650,10 +650,11 @@ impl<Graph> VirtualTopocoreGraph<Graph> {
     pub fn new_bidir_graphs<G>(graph: &G) -> (Self, Self, VirtualTopocore)
     where
         G: LinkIterable<NodeIdT>,
-        G: BuildReversed<G>,
+        Graph: BuildReversed<G>,
         Graph: BuildPermutated<G>,
+        Graph: BuildPermutated<Graph>,
     {
-        let reversed = G::reversed(graph);
+        let reversed = Graph::reversed(graph);
         let topocore = virtual_topocore(graph);
         (
             VirtualTopocoreGraph {
@@ -664,7 +665,7 @@ impl<Graph> VirtualTopocoreGraph<Graph> {
                 virtual_topocore: topocore.clone(),
             },
             VirtualTopocoreGraph {
-                graph: <Graph as BuildPermutated<G>>::permutated_filtered(&reversed, &topocore.order, {
+                graph: <Graph as BuildPermutated<Graph>>::permutated_filtered(&reversed, &topocore.order, {
                     let topocore = topocore.clone();
                     Box::new(move |t, h| !(topocore.node_type(t).in_core() && !topocore.node_type(h).in_core()))
                 }),
