@@ -7,9 +7,9 @@ use crate::datastr::rank_select_map::*;
 
 pub struct Penalty<P> {
     virtual_topocore: VirtualTopocore,
-    // shortest_path_penalized: query::SkipLowDegServer<VirtualTopocoreGraph<OwnedGraph>, DefaultOpsWithLinkPath, PotentialForPermutated<P>, true, true>,
-    // shortest_path_penalized: query::BiDirCoreServer<PotentialForPermutated<P>, AlternatingDirs>,
-    shortest_path_penalized: query::MultiThreadedBiDirSkipLowDegServer<PotentialForPermutated<P>>,
+    // shortest_path_penalized: query::SkipLowDegServer<VirtualTopocoreGraph<OwnedGraph>, DefaultOpsWithLinkPath, RecyclingPotential<PotentialForPermutated<P>>, true, true>,
+    // shortest_path_penalized: query::BiDirCoreServer<RecyclingPotential<PotentialForPermutated<P>>, AlternatingDirs>,
+    shortest_path_penalized: query::MultiThreadedBiDirSkipLowDegServer<RecyclingPotential<PotentialForPermutated<P>>>,
     alternative_graph_dijkstra: query::SkipLowDegServer<AlternativeGraph<VirtualTopocoreGraph<OwnedGraph>>, DefaultOps, ZeroPotential, true, true>,
     reversed: ReversedGraphWithEdgeIds,
     tail: Vec<NodeId>,
@@ -40,14 +40,14 @@ impl<P: Potential + Send + Clone> Penalty<P> {
             // shortest_path_penalized: query::BiDirCoreServer::new(
             shortest_path_penalized: query::MultiThreadedBiDirSkipLowDegServer::new(
                 main_graph.clone(),
-                PotentialForPermutated {
+                RecyclingPotential::new(PotentialForPermutated {
                     order: virtual_topocore.order.clone(),
                     potential: forward_potential,
-                },
-                PotentialForPermutated {
+                }),
+                RecyclingPotential::new(PotentialForPermutated {
                     order: virtual_topocore.order.clone(),
                     potential: backward_potential,
-                },
+                }),
                 // DefaultOpsWithLinkPath::default(),
             ),
             alternative_graph_dijkstra: query::SkipLowDegServer::new(
@@ -227,7 +227,7 @@ impl<P: Potential + Send + Clone> Penalty<P> {
         }
     }
 
-    pub fn potentials(&self) -> impl Iterator<Item = &PotentialForPermutated<P>> {
+    pub fn potentials(&self) -> impl Iterator<Item = &RecyclingPotential<PotentialForPermutated<P>>> {
         // std::iter::once(self.shortest_path_penalized.potential())
         self.shortest_path_penalized.potentials()
     }

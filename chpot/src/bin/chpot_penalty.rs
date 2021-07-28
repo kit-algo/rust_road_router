@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate rust_road_router;
 use rust_road_router::{
-    algo::{a_star::RecyclingPotential, ch_potentials::*, *},
+    algo::{ch_potentials::*, *},
     cli::CliErr,
     datastr::graph::*,
     experiments,
@@ -29,11 +29,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut penalty_server = {
         let _prepro_ctxt = algo_runs_ctxt.push_collection_item();
-        penalty::Penalty::new(
-            &graph,
-            RecyclingPotential::new(chpot_data.potentials().0),
-            RecyclingPotential::new(chpot_data.potentials().1),
-        )
+        penalty::Penalty::new(&graph, chpot_data.potentials().0, chpot_data.potentials().1)
     };
 
     let mut total_query_time = Duration::zero();
