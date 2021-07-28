@@ -12,6 +12,7 @@ pub struct Penalty<P> {
     shortest_path_penalized: query::MultiThreadedBiDirSkipLowDegServer<PotentialForPermutated<P>>,
     alternative_graph_dijkstra: query::SkipLowDegServer<AlternativeGraph<VirtualTopocoreGraph<OwnedGraph>>, DefaultOps, ZeroPotential, true, true>,
     reversed: ReversedGraphWithEdgeIds,
+    tail: Vec<NodeId>,
     edge_penelized: BitVec,
     edges_to_reset: Vec<EdgeId>,
 }
@@ -26,7 +27,16 @@ impl<P: Potential + Send + Clone> Penalty<P> {
         let m = main_graph.num_arcs();
 
         let reversed = ReversedGraphWithEdgeIds::reversed(&main_graph);
+        let mut edge_id = 0;
+        let mut tail = vec![0; m];
+        for node in 0..main_graph.num_nodes() {
+            for _ in LinkIterable::<NodeIdT>::link_iter(&main_graph, node as NodeId) {
+                tail[edge_id] = node as NodeId;
+                edge_id += 1;
+            }
+        }
         Self {
+            // shortest_path_penalized: query::SkipLowDegServer::new(
             // shortest_path_penalized: query::BiDirSkipLowDegServer::new(
             shortest_path_penalized: query::MultiThreadedBiDirSkipLowDegServer::new(
                 main_graph.clone(),
@@ -52,6 +62,7 @@ impl<P: Potential + Send + Clone> Penalty<P> {
             reversed,
             edge_penelized: BitVec::new(m),
             edges_to_reset: Vec::new(),
+            tail,
         }
     }
 
@@ -92,7 +103,7 @@ impl<P: Potential + Send + Clone> Penalty<P> {
                 let _iteration_ctxt = iterations_ctxt.push_collection_item();
                 report!("iteration", i);
                 for &EdgeIdT(edge) in &path_edges {
-                    let weight = shortest_path_penalized.graph().weight()[edge as usize];
+                    let weight = shortest_path_penalized.graph().graph.weight()[edge as usize];
                     shortest_path_penalized.set_edge_weight(edge, weight * 11 / 10);
                     if !self.edge_penelized.get(edge as usize) {
                         self.edge_penelized.set(edge as usize);
@@ -101,7 +112,7 @@ impl<P: Potential + Send + Clone> Penalty<P> {
                 }
                 let dists: Vec<_> = std::iter::once(0)
                     .chain(path_edges.iter().scan(0, |state, &EdgeIdT(edge)| {
-                        *state += shortest_path_penalized.graph().weight()[edge as usize];
+                        *state += shortest_path_penalized.graph().graph.weight()[edge as usize];
                         Some(*state)
                     }))
                     .collect();
@@ -109,7 +120,7 @@ impl<P: Potential + Send + Clone> Penalty<P> {
                 for (&[tail, head], &[tail_dist, head_dist]) in path.array_windows::<2>().zip(dists.array_windows::<2>()) {
                     for (NodeIdT(rev_head), Reversed(EdgeIdT(edge))) in self.reversed.link_iter(head) {
                         if rev_head != tail {
-                            let weight = shortest_path_penalized.graph().weight()[edge as usize];
+                            let weight = shortest_path_penalized.graph().graph.weight()[edge as usize];
                             shortest_path_penalized.set_edge_weight(edge, weight + rejoin_penalty * head_dist / total_penalized_dist);
                             if !self.edge_penelized.get(edge as usize) {
                                 self.edge_penelized.set(edge as usize);
@@ -120,7 +131,7 @@ impl<P: Potential + Send + Clone> Penalty<P> {
 
                     for (NodeIdT(edge_head), EdgeIdT(edge)) in LinkIterable::<(NodeIdT, EdgeIdT)>::link_iter(&alternative_graph_dijkstra.graph().graph, tail) {
                         if edge_head != head {
-                            let weight = shortest_path_penalized.graph().weight()[edge as usize];
+                            let weight = shortest_path_penalized.graph().graph.weight()[edge as usize];
                             shortest_path_penalized.set_edge_weight(edge, weight + rejoin_penalty * tail_dist / total_penalized_dist);
                             if !self.edge_penelized.get(edge as usize) {
                                 self.edge_penelized.set(edge as usize);
@@ -131,6 +142,7 @@ impl<P: Potential + Send + Clone> Penalty<P> {
                 }
 
                 let (result, time) = measure(|| shortest_path_penalized.distance_with_cap(query, max_penalized_dist, max_orig_dist));
+                // let (result, time) = measure(|| shortest_path_penalized.distance_with_cap(query, max_penalized_dist));
                 report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
                 let mut result = if let Some(result) = result.found() {
                     result
@@ -157,7 +169,7 @@ impl<P: Potential + Send + Clone> Penalty<P> {
                     .collect();
 
                 for new_part in new_parts {
-                    let part_start = shortest_path_penalized.tail(new_part[0].0);
+                    let part_start = self.tail[new_part[0].0 as usize];
                     let part_end = alternative_graph_dijkstra.graph().graph.graph.head()[new_part.last().unwrap().0 as usize];
 
                     let part_dist: Weight = new_part
@@ -216,6 +228,7 @@ impl<P: Potential + Send + Clone> Penalty<P> {
     }
 
     pub fn potentials(&self) -> impl Iterator<Item = &PotentialForPermutated<P>> {
+        // std::iter::once(self.shortest_path_penalized.potential())
         self.shortest_path_penalized.potentials()
     }
 }

@@ -529,6 +529,15 @@ where
     }
 }
 
+impl<Ops: DijkstraOps<VirtualTopocoreGraph<OwnedGraph>, Label = Timestamp>, P, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool>
+    SkipLowDegServer<VirtualTopocoreGraph<OwnedGraph>, Ops, P, SKIP_DEG_2, SKIP_DEG_3>
+{
+    #[allow(unused)]
+    pub(super) fn set_edge_weight(&mut self, edge: EdgeId, weight: Weight) {
+        self.graph.graph.weights_mut()[edge as usize] = weight;
+    }
+}
+
 pub struct BiconnectedPathServerWrapper<'s, G, O: DijkstraOps<G>, P, Q, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool>(
     &'s mut SkipLowDegServer<G, O, P, SKIP_DEG_2, SKIP_DEG_3>,
     Q,
@@ -871,8 +880,8 @@ impl<P: Potential, D: BidirChooseDir> BiDirSkipLowDegServer<P, D> {
         path
     }
 
-    pub fn graph(&self) -> &OwnedGraph {
-        &self.forward_graph.graph
+    pub fn graph(&self) -> &VirtualTopocoreGraph<OwnedGraph> {
+        &self.forward_graph
     }
 
     pub fn tail(&self, edge: EdgeId) -> NodeId {
@@ -1230,8 +1239,8 @@ impl<P: Potential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
         path
     }
 
-    pub fn graph(&self) -> &OwnedGraph {
-        &self.forward_graph.graph
+    pub fn graph(&self) -> &VirtualTopocoreGraph<OwnedGraph> {
+        &self.forward_graph
     }
 
     pub fn tail(&self, edge: EdgeId) -> NodeId {
