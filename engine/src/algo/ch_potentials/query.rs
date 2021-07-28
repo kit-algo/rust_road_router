@@ -639,20 +639,83 @@ where
 use std::cell::*;
 use std::sync::atomic::AtomicU32;
 
-pub struct BiDirSkipLowDegServer<P = ZeroPotential, D = ChooseMinKeyDir> {
-    forward_graph: VirtualTopocoreGraph<OwnedGraph>,
-    forward_dijkstra_data: DijkstraData<Weight, EdgeIdT>,
-    backward_graph: VirtualTopocoreGraph<OwnedGraph>,
-    backward_dijkstra_data: DijkstraData<Weight, EdgeIdT>,
-    meeting_node: NodeId,
-    forward_potential: P,
-    backward_potential: P,
-    forward_to_backward_edge_ids: Vec<EdgeId>,
-    backward_to_forward_edge_ids: Vec<EdgeId>,
-    dir_chooser: D,
+pub struct BiDirServer<P = ZeroPotential, D = ChooseMinKeyDir> {
+    runner: BiDirSkipLowDegRunner<P, D>,
+    virtual_topocore: VirtualTopocore,
 }
 
-impl<P: Potential, D: BidirChooseDir> BiDirSkipLowDegServer<P, D> {
+impl<P: Potential, D: BidirChooseDir> BiDirServer<P, D> {
+    pub fn new<G>(graph: &G, forward_potential: P, backward_potential: P) -> Self
+    where
+        G: LinkIterable<NodeIdT>,
+        G: BuildReversed<G>,
+        OwnedGraph: BuildPermutated<G>,
+    {
+        let n = graph.num_nodes();
+        let (fw, bw, virtual_topocore) = VirtualTopocoreGraph::new_bidir_graphs(graph);
+        Self {
+            runner: BiDirSkipLowDegRunner {
+                forward_graph: fw,
+                backward_graph: bw,
+                forward_dijkstra_data: DijkstraData::new(n),
+                backward_dijkstra_data: DijkstraData::new(n),
+                forward_potential,
+                backward_potential,
+                meeting_node: n as NodeId,
+                dir_chooser: Default::default(),
+            },
+            virtual_topocore,
+        }
+    }
+
+    pub fn potentials(&self) -> impl Iterator<Item = &P> {
+        vec![&self.runner.forward_potential, &self.runner.backward_potential].into_iter()
+    }
+}
+
+pub struct BiDirPathServerWrapper<'s, P, D, Q>(&'s mut BiDirServer<P, D>, Q);
+
+impl<'s, P, D, Q> PathServer for BiDirPathServerWrapper<'s, P, D, Q>
+where
+    P: Potential,
+    D: BidirChooseDir,
+    Q: GenQuery<Timestamp> + Copy,
+{
+    type NodeInfo = NodeId;
+    type EdgeInfo = ();
+
+    fn reconstruct_node_path(&mut self) -> Vec<Self::NodeInfo> {
+        BiDirSkipLowDegRunner::path(&self.0.runner, self.1)
+    }
+    fn reconstruct_edge_path(&mut self) -> Vec<Self::EdgeInfo> {
+        vec![(); self.reconstruct_node_path().len() - 1]
+    }
+}
+
+impl<P, D> QueryServer for BiDirServer<P, D>
+where
+    P: Potential,
+    D: BidirChooseDir,
+{
+    type P<'s>
+    where
+        Self: 's,
+    = BiDirPathServerWrapper<'s, P, D, Query>;
+
+    fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight> {
+        let mut query = query.clone();
+        query.permutate(&self.virtual_topocore.order);
+        QueryResult::new(self.runner.distance(query, INFINITY, INFINITY), BiDirPathServerWrapper(self, query))
+    }
+}
+
+pub struct BiDirCoreServer<P = ZeroPotential, D = ChooseMinKeyDir> {
+    runner: BiDirSkipLowDegRunner<P, D>,
+    forward_to_backward_edge_ids: Vec<EdgeId>,
+    backward_to_forward_edge_ids: Vec<EdgeId>,
+}
+
+impl<P: Potential, D: BidirChooseDir> BiDirCoreServer<P, D> {
     pub fn new(graph: VirtualTopocoreGraph<OwnedGraph>, forward_potential: P, backward_potential: P) -> Self {
         let n = graph.num_nodes();
         let reversed = VirtualTopocoreGraph::<OwnedGraph>::reversed(&graph);
@@ -677,16 +740,18 @@ impl<P: Potential, D: BidirChooseDir> BiDirSkipLowDegServer<P, D> {
         }
 
         Self {
-            forward_graph: graph,
-            backward_graph: reversed,
-            forward_dijkstra_data: DijkstraData::new(n),
-            backward_dijkstra_data: DijkstraData::new(n),
-            forward_potential,
-            backward_potential,
-            meeting_node: n as NodeId,
+            runner: BiDirSkipLowDegRunner {
+                forward_graph: graph,
+                backward_graph: reversed,
+                forward_dijkstra_data: DijkstraData::new(n),
+                backward_dijkstra_data: DijkstraData::new(n),
+                forward_potential,
+                backward_potential,
+                meeting_node: n as NodeId,
+                dir_chooser: Default::default(),
+            },
             forward_to_backward_edge_ids: forward_to_backward,
             backward_to_forward_edge_ids: backward_to_forward,
-            dir_chooser: Default::default(),
         }
     }
 
@@ -696,10 +761,93 @@ impl<P: Potential, D: BidirChooseDir> BiDirSkipLowDegServer<P, D> {
         cap: Weight,
         pot_cap: Weight,
     ) -> QueryResult<BiDirCorePathServerWrapper<P, D, Q>, Weight> {
-        QueryResult::new(self.distance(query, cap, pot_cap), BiDirCorePathServerWrapper(self, query))
+        QueryResult::new(self.runner.distance(query, cap, pot_cap), BiDirCorePathServerWrapper(self, query))
     }
 
-    pub fn distance(&mut self, query: impl GenQuery<Timestamp> + Copy, cap: Weight, pot_cap: Weight) -> Option<Weight> {
+    fn edge_path(&self, query: impl GenQuery<Timestamp>) -> Vec<EdgeIdT> {
+        let mut path = Vec::new();
+        let mut cur = self.runner.meeting_node;
+
+        while cur != query.from() {
+            path.push(self.runner.forward_dijkstra_data.predecessors[cur as usize].1);
+            cur = self.runner.forward_dijkstra_data.predecessors[cur as usize].0;
+        }
+
+        path.reverse();
+        cur = self.runner.meeting_node;
+
+        while cur != query.to() {
+            path.push(EdgeIdT(
+                self.backward_to_forward_edge_ids[self.runner.backward_dijkstra_data.predecessors[cur as usize].1 .0 as usize],
+            ));
+            cur = self.runner.backward_dijkstra_data.predecessors[cur as usize].0;
+        }
+
+        path
+    }
+
+    pub fn graph(&self) -> &VirtualTopocoreGraph<OwnedGraph> {
+        &self.runner.forward_graph
+    }
+
+    #[allow(unused)]
+    pub(super) fn set_edge_weight(&mut self, edge: EdgeId, weight: Weight) {
+        self.runner.forward_graph.graph.weights_mut()[edge as usize] = weight;
+        self.runner.backward_graph.graph.weights_mut()[self.forward_to_backward_edge_ids[edge as usize] as usize] = weight;
+    }
+
+    pub fn potentials(&self) -> impl Iterator<Item = &P> {
+        vec![&self.runner.forward_potential, &self.runner.backward_potential].into_iter()
+    }
+}
+
+pub struct BiDirCorePathServerWrapper<'s, P, D, Q>(&'s mut BiDirCoreServer<P, D>, Q);
+
+impl<'s, P, D, Q> PathServer for BiDirCorePathServerWrapper<'s, P, D, Q>
+where
+    P: Potential,
+    D: BidirChooseDir,
+    Q: GenQuery<Timestamp> + Copy,
+{
+    type NodeInfo = NodeId;
+    type EdgeInfo = EdgeIdT;
+
+    fn reconstruct_node_path(&mut self) -> Vec<Self::NodeInfo> {
+        BiDirSkipLowDegRunner::path(&self.0.runner, self.1)
+    }
+    fn reconstruct_edge_path(&mut self) -> Vec<Self::EdgeInfo> {
+        BiDirCoreServer::edge_path(self.0, self.1)
+    }
+}
+
+impl<P, D> QueryServer for BiDirCoreServer<P, D>
+where
+    P: Potential,
+    D: BidirChooseDir,
+{
+    type P<'s>
+    where
+        Self: 's,
+    = BiDirCorePathServerWrapper<'s, P, D, Query>;
+
+    fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight> {
+        QueryResult::new(self.runner.distance(query, INFINITY, INFINITY), BiDirCorePathServerWrapper(self, query))
+    }
+}
+
+struct BiDirSkipLowDegRunner<P = ZeroPotential, D = ChooseMinKeyDir> {
+    forward_graph: VirtualTopocoreGraph<OwnedGraph>,
+    forward_dijkstra_data: DijkstraData<Weight, EdgeIdT>,
+    backward_graph: VirtualTopocoreGraph<OwnedGraph>,
+    backward_dijkstra_data: DijkstraData<Weight, EdgeIdT>,
+    meeting_node: NodeId,
+    forward_potential: P,
+    backward_potential: P,
+    dir_chooser: D,
+}
+
+impl<P: Potential, D: BidirChooseDir> BiDirSkipLowDegRunner<P, D> {
+    fn distance(&mut self, query: impl GenQuery<Timestamp> + Copy, cap: Weight, pot_cap: Weight) -> Option<Weight> {
         use std::cmp::min;
 
         report!("algo", "Virtual Topocore Bidirectional Core Query");
@@ -856,80 +1004,6 @@ impl<P: Potential, D: BidirChooseDir> BiDirSkipLowDegServer<P, D> {
         }
 
         path
-    }
-
-    fn edge_path(&self, query: impl GenQuery<Timestamp>) -> Vec<EdgeIdT> {
-        let mut path = Vec::new();
-        let mut cur = self.meeting_node;
-
-        while cur != query.from() {
-            path.push(self.forward_dijkstra_data.predecessors[cur as usize].1);
-            cur = self.forward_dijkstra_data.predecessors[cur as usize].0;
-        }
-
-        path.reverse();
-        cur = self.meeting_node;
-
-        while cur != query.to() {
-            path.push(EdgeIdT(
-                self.backward_to_forward_edge_ids[self.backward_dijkstra_data.predecessors[cur as usize].1 .0 as usize],
-            ));
-            cur = self.backward_dijkstra_data.predecessors[cur as usize].0;
-        }
-
-        path
-    }
-
-    pub fn graph(&self) -> &VirtualTopocoreGraph<OwnedGraph> {
-        &self.forward_graph
-    }
-
-    pub fn tail(&self, edge: EdgeId) -> NodeId {
-        self.backward_graph.graph.head()[self.forward_to_backward_edge_ids[edge as usize] as usize]
-    }
-
-    #[allow(unused)]
-    pub(super) fn set_edge_weight(&mut self, edge: EdgeId, weight: Weight) {
-        self.forward_graph.graph.weights_mut()[edge as usize] = weight;
-        self.backward_graph.graph.weights_mut()[self.forward_to_backward_edge_ids[edge as usize] as usize] = weight;
-    }
-
-    pub fn potentials(&self) -> impl Iterator<Item = &P> {
-        vec![&self.forward_potential, &self.backward_potential].into_iter()
-    }
-}
-
-pub struct BiDirCorePathServerWrapper<'s, P, D, Q>(&'s mut BiDirSkipLowDegServer<P, D>, Q);
-
-impl<'s, P, D, Q> PathServer for BiDirCorePathServerWrapper<'s, P, D, Q>
-where
-    P: Potential,
-    D: BidirChooseDir,
-    Q: GenQuery<Timestamp> + Copy,
-{
-    type NodeInfo = NodeId;
-    type EdgeInfo = EdgeIdT;
-
-    fn reconstruct_node_path(&mut self) -> Vec<Self::NodeInfo> {
-        BiDirSkipLowDegServer::path(self.0, self.1)
-    }
-    fn reconstruct_edge_path(&mut self) -> Vec<Self::EdgeInfo> {
-        BiDirSkipLowDegServer::edge_path(self.0, self.1)
-    }
-}
-
-impl<P, D> QueryServer for BiDirSkipLowDegServer<P, D>
-where
-    P: Potential,
-    D: BidirChooseDir,
-{
-    type P<'s>
-    where
-        Self: 's,
-    = BiDirCorePathServerWrapper<'s, P, D, Query>;
-
-    fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight> {
-        QueryResult::new(self.distance(query, INFINITY, INFINITY), BiDirCorePathServerWrapper(self, query))
     }
 }
 

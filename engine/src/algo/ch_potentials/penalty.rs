@@ -8,7 +8,7 @@ use crate::datastr::rank_select_map::*;
 pub struct Penalty<P> {
     virtual_topocore: VirtualTopocore,
     // shortest_path_penalized: query::SkipLowDegServer<VirtualTopocoreGraph<OwnedGraph>, DefaultOpsWithLinkPath, PotentialForPermutated<P>, true, true>,
-    // shortest_path_penalized: query::BiDirSkipLowDegServer<PotentialForPermutated<P>, AlternatingDirs>,
+    // shortest_path_penalized: query::BiDirCoreServer<PotentialForPermutated<P>, AlternatingDirs>,
     shortest_path_penalized: query::MultiThreadedBiDirSkipLowDegServer<PotentialForPermutated<P>>,
     alternative_graph_dijkstra: query::SkipLowDegServer<AlternativeGraph<VirtualTopocoreGraph<OwnedGraph>>, DefaultOps, ZeroPotential, true, true>,
     reversed: ReversedGraphWithEdgeIds,
@@ -37,7 +37,7 @@ impl<P: Potential + Send + Clone> Penalty<P> {
         }
         Self {
             // shortest_path_penalized: query::SkipLowDegServer::new(
-            // shortest_path_penalized: query::BiDirSkipLowDegServer::new(
+            // shortest_path_penalized: query::BiDirCoreServer::new(
             shortest_path_penalized: query::MultiThreadedBiDirSkipLowDegServer::new(
                 main_graph.clone(),
                 PotentialForPermutated {
