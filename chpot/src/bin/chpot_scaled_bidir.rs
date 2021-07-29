@@ -2,9 +2,10 @@
 extern crate rust_road_router;
 use rust_road_router::{
     algo::{
+        a_star::*,
         ch_potentials::*,
         dijkstra::{
-            query::{bidirectional_dijkstra::Server as BiDir, dijkstra::Server as UniDir, sym_bidir_astar::Server as SymBiDir},
+            query::{bidirectional_dijkstra::Server as BiDir, dijkstra::Server as UniDir},
             AlternatingDirs, DefaultOps,
         },
     },
@@ -38,19 +39,19 @@ fn main() -> Result<(), Box<dyn Error>> {
         run_random_queries(graph.num_nodes(), &mut server, &mut rng.clone(), &mut algo_runs_ctxt, chpot::num_queries());
 
         let (forward_pot, backward_pot) = chpot_data.potentials();
-        let mut server = BiDir::<_, _, _>::new_with_potentials(modified_graph.clone(), forward_pot, backward_pot);
+        let mut server = BiDir::<_, _, _>::new_with_potentials(modified_graph.clone(), AveragePotential::new(forward_pot, backward_pot));
         run_random_queries(graph.num_nodes(), &mut server, &mut rng.clone(), &mut algo_runs_ctxt, chpot::num_queries());
 
         let (forward_pot, backward_pot) = chpot_data.potentials();
-        let mut server = BiDir::<_, _, _, AlternatingDirs>::new_with_potentials(modified_graph.clone(), forward_pot, backward_pot);
+        let mut server = BiDir::<_, _, _, AlternatingDirs>::new_with_potentials(modified_graph.clone(), AveragePotential::new(forward_pot, backward_pot));
         run_random_queries(graph.num_nodes(), &mut server, &mut rng.clone(), &mut algo_runs_ctxt, chpot::num_queries());
 
         let (forward_pot, backward_pot) = chpot_data.potentials();
-        let mut server = SymBiDir::<_, _, _>::new_with_potentials(modified_graph.clone(), forward_pot, backward_pot);
+        let mut server = BiDir::<_, _, _>::new_with_potentials(modified_graph.clone(), SymmetricBiDirPotential::new(forward_pot, backward_pot));
         run_random_queries(graph.num_nodes(), &mut server, &mut rng.clone(), &mut algo_runs_ctxt, chpot::num_queries());
 
         let (forward_pot, backward_pot) = chpot_data.potentials();
-        let mut server = SymBiDir::<_, _, _, AlternatingDirs>::new_with_potentials(modified_graph, forward_pot, backward_pot);
+        let mut server = BiDir::<_, _, _, AlternatingDirs>::new_with_potentials(modified_graph, SymmetricBiDirPotential::new(forward_pot, backward_pot));
         run_random_queries(graph.num_nodes(), &mut server, &mut rng.clone(), &mut algo_runs_ctxt, chpot::num_queries());
     };
 
