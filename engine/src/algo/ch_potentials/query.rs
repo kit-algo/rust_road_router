@@ -875,16 +875,13 @@ impl<P: BiDirPotential, D: BidirChooseDir> BiDirSkipLowDegRunner<P, D> {
 
         let result = (|| {
             while !potential.get_mut().stop(
-                forward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY),
-                backward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY),
+                forward_dijkstra.queue().peek().map(|q| q.key),
+                backward_dijkstra.queue().peek().map(|q| q.key),
                 min(tentative_distance, cap),
             ) {
                 let stop_dist = min(tentative_distance, cap);
 
-                if dir_chooser.choose(
-                    forward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY),
-                    backward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY),
-                ) {
+                if dir_chooser.choose(forward_dijkstra.queue().peek().map(|q| q.key), backward_dijkstra.queue().peek().map(|q| q.key)) {
                     if let Some(node) = forward_dijkstra.next_with_improve_callback_and_potential(
                         |head, &dist| {
                             let mut pot = potential.borrow_mut();
@@ -1093,8 +1090,8 @@ impl<P: BiDirPotential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
                 let mut stop_dist = cap;
 
                 while !fw_potential.get_mut().stop_forward(
-                    forward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY),
-                    bw_progress.load(std::sync::atomic::Ordering::Relaxed),
+                    forward_dijkstra.queue().peek().map(|q| q.key),
+                    Some(bw_progress.load(std::sync::atomic::Ordering::Relaxed)),
                     stop_dist,
                 ) {
                     if let Some(node) = forward_dijkstra.next_with_improve_callback_and_potential(
@@ -1146,8 +1143,8 @@ impl<P: BiDirPotential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
                 let mut stop_dist = cap;
 
                 while !bw_potential.get_mut().stop_backward(
-                    fw_progress.load(std::sync::atomic::Ordering::Relaxed),
-                    backward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY),
+                    Some(fw_progress.load(std::sync::atomic::Ordering::Relaxed)),
+                    backward_dijkstra.queue().peek().map(|q| q.key),
                     stop_dist,
                 ) {
                     if let Some(node) = backward_dijkstra.next_with_improve_callback_and_potential(

@@ -201,7 +201,7 @@ impl Default for DefaultOpsWithLinkPath {
 }
 
 pub trait BidirChooseDir: Default {
-    fn choose(&mut self, fw_min_key: Weight, bw_min_key: Weight) -> bool;
+    fn choose(&mut self, fw_min_key: Option<Weight>, bw_min_key: Option<Weight>) -> bool;
     fn strategy_key() -> &'static str;
     fn report() {
         report!("choose_direction_strategy", Self::strategy_key());
@@ -217,8 +217,12 @@ impl Default for ChooseMinKeyDir {
 }
 
 impl BidirChooseDir for ChooseMinKeyDir {
-    fn choose(&mut self, fw_min_key: Weight, bw_min_key: Weight) -> bool {
-        fw_min_key <= bw_min_key
+    fn choose(&mut self, fw_min_key: Option<Weight>, bw_min_key: Option<Weight>) -> bool {
+        match (fw_min_key, bw_min_key) {
+            (Some(fw_min_key), Some(bw_min_key)) => fw_min_key <= bw_min_key,
+            (None, Some(_)) => false,
+            _ => true,
+        }
     }
     fn strategy_key() -> &'static str {
         "min_key"
@@ -236,9 +240,15 @@ impl Default for AlternatingDirs {
 }
 
 impl BidirChooseDir for AlternatingDirs {
-    fn choose(&mut self, _fw_min_key: Weight, _bw_min_key: Weight) -> bool {
-        self.prev = !self.prev;
-        self.prev
+    fn choose(&mut self, fw_min_key: Option<Weight>, bw_min_key: Option<Weight>) -> bool {
+        match (fw_min_key, bw_min_key) {
+            (Some(_), Some(_)) => {
+                self.prev = !self.prev;
+                self.prev
+            }
+            (None, Some(_)) => false,
+            _ => true,
+        }
     }
     fn strategy_key() -> &'static str {
         "min_key"

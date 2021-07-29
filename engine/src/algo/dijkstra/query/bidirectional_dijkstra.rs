@@ -62,14 +62,11 @@ impl<G: LinkIterGraph, H: LinkIterGraph, P: BiDirPotential, D: BidirChooseDir> S
 
         let result = (|| {
             while !potential.get_mut().stop(
-                forward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY),
-                backward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY),
+                forward_dijkstra.queue().peek().map(|q| q.key),
+                backward_dijkstra.queue().peek().map(|q| q.key),
                 min(tentative_distance, maximum_distance),
             ) {
-                if dir_chooser.choose(
-                    forward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY),
-                    backward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY),
-                ) {
+                if dir_chooser.choose(forward_dijkstra.queue().peek().map(|q| q.key), backward_dijkstra.queue().peek().map(|q| q.key)) {
                     if let Some(node) = forward_dijkstra.next_with_improve_callback_and_potential(
                         |head, &dist| {
                             if potential.borrow_mut().prune_forward(

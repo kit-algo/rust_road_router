@@ -151,11 +151,11 @@ pub trait BiDirPotential {
     fn backward_potential_raw(&mut self, node: NodeId) -> Option<Weight> {
         self.backward_potential(node)
     }
-    fn stop(&mut self, fw_min_queue: Weight, bw_min_queue: Weight, stop_dist: Weight) -> bool;
-    fn stop_forward(&mut self, fw_min_queue: Weight, bw_min_queue: Weight, stop_dist: Weight) -> bool {
+    fn stop(&mut self, fw_min_queue: Option<Weight>, bw_min_queue: Option<Weight>, stop_dist: Weight) -> bool;
+    fn stop_forward(&mut self, fw_min_queue: Option<Weight>, bw_min_queue: Option<Weight>, stop_dist: Weight) -> bool {
         self.stop(fw_min_queue, bw_min_queue, stop_dist)
     }
-    fn stop_backward(&mut self, fw_min_queue: Weight, bw_min_queue: Weight, stop_dist: Weight) -> bool {
+    fn stop_backward(&mut self, fw_min_queue: Option<Weight>, bw_min_queue: Option<Weight>, stop_dist: Weight) -> bool {
         self.stop(fw_min_queue, bw_min_queue, stop_dist)
     }
     fn prune_forward(&mut self, head: NodeIdT, fw_dist_head: Weight, reverse_min_queue: Weight, max_dist: Weight) -> bool;
@@ -171,8 +171,11 @@ pub struct BiDirZeroPot;
 
 impl BiDirPotential for BiDirZeroPot {
     fn init(&mut self, _source: NodeId, _target: NodeId) {}
-    fn stop(&mut self, fw_min_queue: Weight, bw_min_queue: Weight, stop_dist: Weight) -> bool {
-        fw_min_queue + bw_min_queue >= stop_dist
+    fn stop(&mut self, fw_min_queue: Option<Weight>, bw_min_queue: Option<Weight>, stop_dist: Weight) -> bool {
+        match (fw_min_queue, bw_min_queue) {
+            (Some(fw_min_queue), Some(bw_min_queue)) => fw_min_queue + bw_min_queue >= stop_dist,
+            _ => true,
+        }
     }
     fn forward_potential(&mut self, _node: NodeId) -> Option<Weight> {
         Some(0)
@@ -234,8 +237,11 @@ impl<PF: Potential, PB: Potential> BiDirPotential for AveragePotential<PF, PB> {
         self.bw_add = (self.forward_potential.potential(source).unwrap_or(INFINITY) / 2) as i32;
         self.mu_add = self.potential(source).map(|p| (p + self.fw_add) as Weight).unwrap_or(0);
     }
-    fn stop(&mut self, fw_min_queue: Weight, bw_min_queue: Weight, stop_dist: Weight) -> bool {
-        fw_min_queue + bw_min_queue >= stop_dist + self.mu_add
+    fn stop(&mut self, fw_min_queue: Option<Weight>, bw_min_queue: Option<Weight>, stop_dist: Weight) -> bool {
+        match (fw_min_queue, bw_min_queue) {
+            (Some(fw_min_queue), Some(bw_min_queue)) => fw_min_queue + bw_min_queue >= stop_dist + self.mu_add,
+            _ => true,
+        }
     }
     fn forward_potential(&mut self, node: NodeId) -> Option<Weight> {
         self.potential(node).map(|p| (p + self.fw_add) as Weight)
@@ -302,14 +308,14 @@ impl<PF: Potential, PB: Potential> BiDirPotential for SymmetricBiDirPotential<PF
         self.forward_potential.init(target);
         self.backward_potential.init(source);
     }
-    fn stop(&mut self, fw_min_queue: Weight, bw_min_queue: Weight, stop_dist: Weight) -> bool {
-        fw_min_queue >= stop_dist && bw_min_queue >= stop_dist
+    fn stop(&mut self, fw_min_queue: Option<Weight>, bw_min_queue: Option<Weight>, stop_dist: Weight) -> bool {
+        self.stop_forward(fw_min_queue, bw_min_queue, stop_dist) && self.stop_backward(fw_min_queue, bw_min_queue, stop_dist)
     }
-    fn stop_forward(&mut self, fw_min_queue: Weight, _bw_min_queue: Weight, stop_dist: Weight) -> bool {
-        fw_min_queue >= stop_dist
+    fn stop_forward(&mut self, fw_min_queue: Option<Weight>, _bw_min_queue: Option<Weight>, stop_dist: Weight) -> bool {
+        fw_min_queue.map(|key| key >= stop_dist).unwrap_or(true)
     }
-    fn stop_backward(&mut self, _fw_min_queue: Weight, bw_min_queue: Weight, stop_dist: Weight) -> bool {
-        bw_min_queue >= stop_dist
+    fn stop_backward(&mut self, _fw_min_queue: Option<Weight>, bw_min_queue: Option<Weight>, stop_dist: Weight) -> bool {
+        bw_min_queue.map(|key| key >= stop_dist).unwrap_or(true)
     }
     fn forward_potential(&mut self, node: NodeId) -> Option<Weight> {
         self.forward_potential.potential(node)
