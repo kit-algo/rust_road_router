@@ -251,7 +251,7 @@ impl BidirChooseDir for AlternatingDirs {
         }
     }
     fn strategy_key() -> &'static str {
-        "min_key"
+        "alternating"
     }
 }
 
