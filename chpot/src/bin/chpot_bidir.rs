@@ -106,11 +106,19 @@ fn main() -> Result<(), Box<dyn Error>> {
         run_random_queries(graph.num_nodes(), &mut server, &mut rng.clone(), &mut algo_runs_ctxt, chpot::num_queries());
 
         let (forward_pot, backward_pot) = potentials();
-        let mut server = BiDirServer::<_, ChooseMinKeyDir>::new(&modified_graph, forward_pot, backward_pot);
+        let mut server = BiDirServer::<_, ChooseMinKeyDir>::new(&modified_graph, SymmetricBiDirPotential::new(forward_pot, backward_pot));
         run_random_queries(graph.num_nodes(), &mut server, &mut rng.clone(), &mut algo_runs_ctxt, chpot::num_queries());
 
         let (forward_pot, backward_pot) = potentials();
-        let mut server = BiDirServer::<_, AlternatingDirs>::new(&modified_graph, forward_pot, backward_pot);
+        let mut server = BiDirServer::<_, AlternatingDirs>::new(&modified_graph, SymmetricBiDirPotential::new(forward_pot, backward_pot));
+        run_random_queries(graph.num_nodes(), &mut server, &mut rng.clone(), &mut algo_runs_ctxt, chpot::num_queries());
+
+        let (forward_pot, backward_pot) = potentials();
+        let mut server = BiDirServer::<_, ChooseMinKeyDir>::new(&modified_graph, AveragePotential::new(forward_pot, backward_pot));
+        run_random_queries(graph.num_nodes(), &mut server, &mut rng.clone(), &mut algo_runs_ctxt, chpot::num_queries());
+
+        let (forward_pot, backward_pot) = potentials();
+        let mut server = BiDirServer::<_, AlternatingDirs>::new(&modified_graph, AveragePotential::new(forward_pot, backward_pot));
         run_random_queries(graph.num_nodes(), &mut server, &mut rng.clone(), &mut algo_runs_ctxt, chpot::num_queries());
     };
 

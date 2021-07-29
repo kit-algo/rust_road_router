@@ -143,9 +143,21 @@ impl<P: Potential> Potential for PotentialForPermutated<P> {
 
 pub trait BiDirPotential {
     fn init(&mut self, source: NodeId, target: NodeId);
-    fn stop(&mut self, fw_min_queue: Weight, bw_min_queue: Weight, stop_dist: Weight) -> bool;
     fn forward_potential(&mut self, node: NodeId) -> Option<Weight>;
     fn backward_potential(&mut self, node: NodeId) -> Option<Weight>;
+    fn forward_potential_raw(&mut self, node: NodeId) -> Option<Weight> {
+        self.forward_potential(node)
+    }
+    fn backward_potential_raw(&mut self, node: NodeId) -> Option<Weight> {
+        self.backward_potential(node)
+    }
+    fn stop(&mut self, fw_min_queue: Weight, bw_min_queue: Weight, stop_dist: Weight) -> bool;
+    fn stop_forward(&mut self, fw_min_queue: Weight, bw_min_queue: Weight, stop_dist: Weight) -> bool {
+        self.stop(fw_min_queue, bw_min_queue, stop_dist)
+    }
+    fn stop_backward(&mut self, fw_min_queue: Weight, bw_min_queue: Weight, stop_dist: Weight) -> bool {
+        self.stop(fw_min_queue, bw_min_queue, stop_dist)
+    }
     fn prune_forward(&mut self, head: NodeIdT, fw_dist_head: Weight, reverse_min_queue: Weight, max_dist: Weight) -> bool;
     fn prune_backward(&mut self, head: NodeIdT, bw_dist_head: Weight, reverse_min_queue: Weight, max_dist: Weight) -> bool;
     fn bidir_pot_key() -> &'static str;
@@ -179,6 +191,7 @@ impl BiDirPotential for BiDirZeroPot {
     }
 }
 
+#[derive(Clone)]
 pub struct AveragePotential<PF, PB> {
     forward_potential: PF,
     backward_potential: PB,
@@ -230,6 +243,12 @@ impl<PF: Potential, PB: Potential> BiDirPotential for AveragePotential<PF, PB> {
     fn backward_potential(&mut self, node: NodeId) -> Option<Weight> {
         self.potential(node).map(|p| (self.bw_add - p) as Weight)
     }
+    fn forward_potential_raw(&mut self, node: NodeId) -> Option<Weight> {
+        self.forward_potential.potential(node)
+    }
+    fn backward_potential_raw(&mut self, node: NodeId) -> Option<Weight> {
+        self.backward_potential.potential(node)
+    }
     fn prune_forward(&mut self, head: NodeIdT, fw_dist_head: Weight, reverse_min_queue: Weight, max_dist: Weight) -> bool {
         prune_edge(
             &mut self.forward_potential,
@@ -255,6 +274,7 @@ impl<PF: Potential, PB: Potential> BiDirPotential for AveragePotential<PF, PB> {
     }
 }
 
+#[derive(Clone)]
 pub struct SymmetricBiDirPotential<PF, PB> {
     forward_potential: PF,
     backward_potential: PB,
@@ -267,6 +287,14 @@ impl<PF: Potential, PB: Potential> SymmetricBiDirPotential<PF, PB> {
             backward_potential,
         }
     }
+
+    pub fn forward(&self) -> &PF {
+        &self.forward_potential
+    }
+
+    pub fn backward(&self) -> &PB {
+        &self.backward_potential
+    }
 }
 
 impl<PF: Potential, PB: Potential> BiDirPotential for SymmetricBiDirPotential<PF, PB> {
@@ -276,6 +304,12 @@ impl<PF: Potential, PB: Potential> BiDirPotential for SymmetricBiDirPotential<PF
     }
     fn stop(&mut self, fw_min_queue: Weight, bw_min_queue: Weight, stop_dist: Weight) -> bool {
         fw_min_queue >= stop_dist && bw_min_queue >= stop_dist
+    }
+    fn stop_forward(&mut self, fw_min_queue: Weight, _bw_min_queue: Weight, stop_dist: Weight) -> bool {
+        fw_min_queue >= stop_dist
+    }
+    fn stop_backward(&mut self, _fw_min_queue: Weight, bw_min_queue: Weight, stop_dist: Weight) -> bool {
+        bw_min_queue >= stop_dist
     }
     fn forward_potential(&mut self, node: NodeId) -> Option<Weight> {
         self.forward_potential.potential(node)

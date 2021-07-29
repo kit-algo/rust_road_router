@@ -644,8 +644,8 @@ pub struct BiDirServer<P = ZeroPotential, D = ChooseMinKeyDir> {
     virtual_topocore: VirtualTopocore,
 }
 
-impl<P: Potential, D: BidirChooseDir> BiDirServer<P, D> {
-    pub fn new<G>(graph: &G, forward_potential: P, backward_potential: P) -> Self
+impl<P: BiDirPotential, D: BidirChooseDir> BiDirServer<P, D> {
+    pub fn new<G>(graph: &G, potential: P) -> Self
     where
         G: LinkIterable<NodeIdT>,
         OwnedGraph: BuildReversed<G>,
@@ -659,8 +659,7 @@ impl<P: Potential, D: BidirChooseDir> BiDirServer<P, D> {
                 backward_graph: bw,
                 forward_dijkstra_data: DijkstraData::new(n),
                 backward_dijkstra_data: DijkstraData::new(n),
-                forward_potential,
-                backward_potential,
+                potential,
                 meeting_node: n as NodeId,
                 dir_chooser: Default::default(),
             },
@@ -668,8 +667,8 @@ impl<P: Potential, D: BidirChooseDir> BiDirServer<P, D> {
         }
     }
 
-    pub fn potentials(&self) -> impl Iterator<Item = &P> {
-        vec![&self.runner.forward_potential, &self.runner.backward_potential].into_iter()
+    pub fn potentials(&self) -> &P {
+        &self.runner.potential
     }
 }
 
@@ -677,7 +676,7 @@ pub struct BiDirPathServerWrapper<'s, P, D, Q>(&'s mut BiDirServer<P, D>, Q);
 
 impl<'s, P, D, Q> PathServer for BiDirPathServerWrapper<'s, P, D, Q>
 where
-    P: Potential,
+    P: BiDirPotential,
     D: BidirChooseDir,
     Q: GenQuery<Timestamp> + Copy,
 {
@@ -694,7 +693,7 @@ where
 
 impl<P, D> QueryServer for BiDirServer<P, D>
 where
-    P: Potential,
+    P: BiDirPotential,
     D: BidirChooseDir,
 {
     type P<'s>
@@ -715,8 +714,8 @@ pub struct BiDirCoreServer<P = ZeroPotential, D = ChooseMinKeyDir> {
     backward_to_forward_edge_ids: Vec<EdgeId>,
 }
 
-impl<P: Potential, D: BidirChooseDir> BiDirCoreServer<P, D> {
-    pub fn new(graph: VirtualTopocoreGraph<OwnedGraph>, forward_potential: P, backward_potential: P) -> Self {
+impl<P: BiDirPotential, D: BidirChooseDir> BiDirCoreServer<P, D> {
+    pub fn new(graph: VirtualTopocoreGraph<OwnedGraph>, potential: P) -> Self {
         let n = graph.num_nodes();
         let reversed = VirtualTopocoreGraph::<OwnedGraph>::reversed(&graph);
 
@@ -745,8 +744,7 @@ impl<P: Potential, D: BidirChooseDir> BiDirCoreServer<P, D> {
                 backward_graph: reversed,
                 forward_dijkstra_data: DijkstraData::new(n),
                 backward_dijkstra_data: DijkstraData::new(n),
-                forward_potential,
-                backward_potential,
+                potential,
                 meeting_node: n as NodeId,
                 dir_chooser: Default::default(),
             },
@@ -796,8 +794,8 @@ impl<P: Potential, D: BidirChooseDir> BiDirCoreServer<P, D> {
         self.runner.backward_graph.graph.weights_mut()[self.forward_to_backward_edge_ids[edge as usize] as usize] = weight;
     }
 
-    pub fn potentials(&self) -> impl Iterator<Item = &P> {
-        vec![&self.runner.forward_potential, &self.runner.backward_potential].into_iter()
+    pub fn potential(&self) -> &P {
+        &self.runner.potential
     }
 }
 
@@ -805,7 +803,7 @@ pub struct BiDirCorePathServerWrapper<'s, P, D, Q>(&'s mut BiDirCoreServer<P, D>
 
 impl<'s, P, D, Q> PathServer for BiDirCorePathServerWrapper<'s, P, D, Q>
 where
-    P: Potential,
+    P: BiDirPotential,
     D: BidirChooseDir,
     Q: GenQuery<Timestamp> + Copy,
 {
@@ -822,7 +820,7 @@ where
 
 impl<P, D> QueryServer for BiDirCoreServer<P, D>
 where
-    P: Potential,
+    P: BiDirPotential,
     D: BidirChooseDir,
 {
     type P<'s>
@@ -835,22 +833,23 @@ where
     }
 }
 
-struct BiDirSkipLowDegRunner<P = ZeroPotential, D = ChooseMinKeyDir> {
+struct BiDirSkipLowDegRunner<P = BiDirZeroPot, D = ChooseMinKeyDir> {
     forward_graph: VirtualTopocoreGraph<OwnedGraph>,
     forward_dijkstra_data: DijkstraData<Weight, EdgeIdT>,
     backward_graph: VirtualTopocoreGraph<OwnedGraph>,
     backward_dijkstra_data: DijkstraData<Weight, EdgeIdT>,
     meeting_node: NodeId,
-    forward_potential: P,
-    backward_potential: P,
+    potential: P,
     dir_chooser: D,
 }
 
-impl<P: Potential, D: BidirChooseDir> BiDirSkipLowDegRunner<P, D> {
+impl<P: BiDirPotential, D: BidirChooseDir> BiDirSkipLowDegRunner<P, D> {
     fn distance(&mut self, query: impl GenQuery<Timestamp> + Copy, cap: Weight, pot_cap: Weight) -> Option<Weight> {
         use std::cmp::min;
 
         report!("algo", "Virtual Topocore Bidirectional Core Query");
+        D::report();
+        P::report();
 
         let mut ops = DefaultOpsWithLinkPath::default();
         let mut forward_dijkstra = TopoDijkstraRun::<_, _, true, true>::query(&self.forward_graph, &mut self.forward_dijkstra_data, &mut ops, query);
@@ -865,21 +864,21 @@ impl<P: Potential, D: BidirChooseDir> BiDirSkipLowDegRunner<P, D> {
             },
         );
 
-        self.forward_potential.init(query.to());
-        self.backward_potential.init(query.from());
+        self.potential.init(query.from(), query.to());
 
         let mut num_queue_pops = 0;
 
         let meeting_node = &mut self.meeting_node;
         let mut tentative_distance = INFINITY;
-        let forward_potential = RefCell::new(&mut self.forward_potential);
-        let backward_potential = RefCell::new(&mut self.backward_potential);
+        let mut potential = RefCell::new(&mut self.potential);
         let dir_chooser = &mut self.dir_chooser;
 
         let result = (|| {
-            while forward_dijkstra.queue().peek().map_or(false, |q| q.key < min(tentative_distance, cap))
-                || backward_dijkstra.queue().peek().map_or(false, |q| q.key < min(tentative_distance, cap))
-            {
+            while !potential.get_mut().stop(
+                forward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY),
+                backward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY),
+                min(tentative_distance, cap),
+            ) {
                 let stop_dist = min(tentative_distance, cap);
 
                 if dir_chooser.choose(
@@ -888,28 +887,17 @@ impl<P: Potential, D: BidirChooseDir> BiDirSkipLowDegRunner<P, D> {
                 ) {
                     if let Some(node) = forward_dijkstra.next_with_improve_callback_and_potential(
                         |head, &dist| {
-                            // if dist + forward_potential.borrow_mut().potential(head).unwrap_or(INFINITY) > cap {
-                            //     return false;
-                            // }
-                            if forward_potential.borrow_mut().potential(head).unwrap_or(INFINITY)
-                                + backward_potential.borrow_mut().potential(head).unwrap_or(INFINITY)
-                                > pot_cap
-                            {
+                            let mut pot = potential.borrow_mut();
+                            if pot.forward_potential_raw(head).unwrap_or(INFINITY) + pot.backward_potential_raw(head).unwrap_or(INFINITY) > pot_cap {
                                 return false;
                             }
-                            if stop_dist < INFINITY {
-                                if dist + forward_potential.borrow_mut().potential(head).unwrap_or(INFINITY) >= stop_dist {
-                                    return false;
-                                }
-                                let remaining_by_queue = backward_dijkstra
-                                    .queue()
-                                    .peek()
-                                    .map(|q| q.key)
-                                    .unwrap_or(INFINITY)
-                                    .saturating_sub(backward_potential.borrow_mut().potential(head).unwrap_or(INFINITY));
-                                if dist + remaining_by_queue >= stop_dist {
-                                    return false;
-                                }
+                            if pot.prune_forward(
+                                NodeIdT(head),
+                                dist,
+                                backward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY),
+                                stop_dist,
+                            ) {
+                                return false;
                             }
                             if dist + backward_dijkstra.tentative_distance(head) < tentative_distance {
                                 tentative_distance = dist + backward_dijkstra.tentative_distance(head);
@@ -920,7 +908,7 @@ impl<P: Potential, D: BidirChooseDir> BiDirSkipLowDegRunner<P, D> {
                             }
                             true
                         },
-                        |node| forward_potential.borrow_mut().potential(node),
+                        |node| potential.borrow_mut().forward_potential(node),
                     ) {
                         num_queue_pops += 1;
                         if node == query.to() {
@@ -931,28 +919,17 @@ impl<P: Potential, D: BidirChooseDir> BiDirSkipLowDegRunner<P, D> {
                 } else {
                     if let Some(node) = backward_dijkstra.next_with_improve_callback_and_potential(
                         |head, &dist| {
-                            // if dist + backward_potential.borrow_mut().potential(head).unwrap_or(INFINITY) > cap {
-                            //     return false;
-                            // }
-                            if forward_potential.borrow_mut().potential(head).unwrap_or(INFINITY)
-                                + backward_potential.borrow_mut().potential(head).unwrap_or(INFINITY)
-                                > pot_cap
-                            {
+                            let mut pot = potential.borrow_mut();
+                            if pot.forward_potential_raw(head).unwrap_or(INFINITY) + pot.backward_potential_raw(head).unwrap_or(INFINITY) > pot_cap {
                                 return false;
                             }
-                            if stop_dist < INFINITY {
-                                if dist + backward_potential.borrow_mut().potential(head).unwrap_or(INFINITY) >= stop_dist {
-                                    return false;
-                                }
-                                let remaining_by_queue = forward_dijkstra
-                                    .queue()
-                                    .peek()
-                                    .map(|q| q.key)
-                                    .unwrap_or(INFINITY)
-                                    .saturating_sub(forward_potential.borrow_mut().potential(head).unwrap_or(INFINITY));
-                                if dist + remaining_by_queue >= stop_dist {
-                                    return false;
-                                }
+                            if pot.prune_backward(
+                                NodeIdT(head),
+                                dist,
+                                forward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY),
+                                stop_dist,
+                            ) {
+                                return false;
                             }
                             if dist + forward_dijkstra.tentative_distance(head) < tentative_distance {
                                 tentative_distance = dist + forward_dijkstra.tentative_distance(head);
@@ -963,7 +940,7 @@ impl<P: Potential, D: BidirChooseDir> BiDirSkipLowDegRunner<P, D> {
                             }
                             true
                         },
-                        |node| backward_potential.borrow_mut().potential(node),
+                        |node| potential.borrow_mut().backward_potential(node),
                     ) {
                         num_queue_pops += 1;
                         if node == query.from() {
@@ -1007,22 +984,20 @@ impl<P: Potential, D: BidirChooseDir> BiDirSkipLowDegRunner<P, D> {
     }
 }
 
-pub struct MultiThreadedBiDirSkipLowDegServer<P = ZeroPotential> {
+pub struct MultiThreadedBiDirSkipLowDegServer<P = BiDirZeroPot> {
     forward_graph: VirtualTopocoreGraph<OwnedGraph>,
     forward_dijkstra_data: SyncDijkstraData,
     backward_graph: VirtualTopocoreGraph<OwnedGraph>,
     backward_dijkstra_data: SyncDijkstraData,
     meeting_node: NodeId,
-    fw_forward_potential: P,
-    fw_backward_potential: P,
-    bw_forward_potential: P,
-    bw_backward_potential: P,
+    fw_potential: P,
+    bw_potential: P,
     forward_to_backward_edge_ids: Vec<EdgeId>,
     backward_to_forward_edge_ids: Vec<EdgeId>,
 }
 
-impl<P: Potential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
-    pub fn new(graph: VirtualTopocoreGraph<OwnedGraph>, forward_potential: P, backward_potential: P) -> Self {
+impl<P: BiDirPotential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
+    pub fn new(graph: VirtualTopocoreGraph<OwnedGraph>, potential: P) -> Self {
         let n = graph.num_nodes();
         let reversed = VirtualTopocoreGraph::<OwnedGraph>::reversed(&graph);
 
@@ -1050,10 +1025,8 @@ impl<P: Potential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
             backward_graph: reversed,
             forward_dijkstra_data: SyncDijkstraData::new(n),
             backward_dijkstra_data: SyncDijkstraData::new(n),
-            fw_forward_potential: forward_potential.clone(),
-            fw_backward_potential: backward_potential.clone(),
-            bw_forward_potential: forward_potential,
-            bw_backward_potential: backward_potential,
+            fw_potential: potential.clone(),
+            bw_potential: potential,
             meeting_node: n as NodeId,
             forward_to_backward_edge_ids: forward_to_backward,
             backward_to_forward_edge_ids: backward_to_forward,
@@ -1101,45 +1074,36 @@ impl<P: Potential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
         let fw_reverse_dist = &self.backward_dijkstra_data.distances;
         let bw_reverse_dist = &self.forward_dijkstra_data.distances;
 
-        self.fw_forward_potential.init(query.to());
-        self.fw_backward_potential.init(query.from());
-        self.bw_forward_potential.init(query.to());
-        self.bw_backward_potential.init(query.from());
+        self.fw_potential.init(query.from(), query.to());
+        self.bw_potential.init(query.from(), query.to());
 
         let tentative_distance = AtomicU32::new(INFINITY);
         let fw_progress = AtomicU32::new(0);
         let bw_progress = AtomicU32::new(0);
-        let fw_forward_potential = &mut self.fw_forward_potential;
-        let fw_backward_potential = &mut self.fw_backward_potential;
-        let bw_forward_potential = &mut self.bw_forward_potential;
-        let bw_backward_potential = &mut self.bw_backward_potential;
+        let fw_potential = &mut self.fw_potential;
+        let bw_potential = &mut self.bw_potential;
 
         let ((fw_meeting, fw_num_queue_pops), (bw_meeting, bw_num_queue_pops)) = rayon::join(
             || {
-                let fw_forward_potential = RefCell::new(fw_forward_potential);
+                let mut fw_potential = RefCell::new(fw_potential);
                 let mut num_queue_pops = 0;
                 let mut meeting_node = None;
                 let mut fw_tentative_distance = INFINITY;
                 let mut stop_dist = cap;
 
-                while forward_dijkstra.queue().peek().map_or(false, |q| q.key < stop_dist) {
+                while !fw_potential.get_mut().stop_forward(
+                    forward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY),
+                    bw_progress.load(std::sync::atomic::Ordering::Relaxed),
+                    stop_dist,
+                ) {
                     if let Some(node) = forward_dijkstra.next_with_improve_callback_and_potential(
                         |head, &dist| {
-                            if fw_forward_potential.borrow_mut().potential(head).unwrap_or(INFINITY) + fw_backward_potential.potential(head).unwrap_or(INFINITY)
-                                > pot_cap
-                            {
+                            let mut pot = fw_potential.borrow_mut();
+                            if pot.forward_potential_raw(head).unwrap_or(INFINITY) + pot.backward_potential_raw(head).unwrap_or(INFINITY) > pot_cap {
                                 return false;
                             }
-                            if stop_dist < INFINITY {
-                                if dist + fw_forward_potential.borrow_mut().potential(head).unwrap_or(INFINITY) >= stop_dist {
-                                    return false;
-                                }
-                                let remaining_by_queue = bw_progress
-                                    .load(std::sync::atomic::Ordering::Relaxed)
-                                    .saturating_sub(fw_backward_potential.potential(head).unwrap_or(INFINITY));
-                                if dist + remaining_by_queue >= stop_dist {
-                                    return false;
-                                }
+                            if pot.prune_forward(NodeIdT(head), dist, bw_progress.load(std::sync::atomic::Ordering::Relaxed), stop_dist) {
+                                return false;
                             }
                             fw_tentative_distance = min(fw_tentative_distance, dist + fw_reverse_dist.get(head as usize));
                             stop_dist = min(fw_tentative_distance, cap);
@@ -1151,7 +1115,7 @@ impl<P: Potential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
                             }
                             true
                         },
-                        |node| fw_forward_potential.borrow_mut().potential(node),
+                        |node| fw_potential.borrow_mut().forward_potential(node),
                     ) {
                         num_queue_pops += 1;
                         let prog = forward_dijkstra.queue().peek().map_or(INFINITY, |p| p.key);
@@ -1174,30 +1138,25 @@ impl<P: Potential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
                 }
             },
             || {
-                let bw_backward_potential = RefCell::new(bw_backward_potential);
+                let mut bw_potential = RefCell::new(bw_potential);
                 let mut num_queue_pops = 0;
                 let mut meeting_node = None;
                 let mut bw_tentative_distance = INFINITY;
                 let mut stop_dist = cap;
 
-                while backward_dijkstra.queue().peek().map_or(false, |q| q.key < stop_dist) {
+                while !bw_potential.get_mut().stop_backward(
+                    fw_progress.load(std::sync::atomic::Ordering::Relaxed),
+                    backward_dijkstra.queue().peek().map(|q| q.key).unwrap_or(INFINITY),
+                    stop_dist,
+                ) {
                     if let Some(node) = backward_dijkstra.next_with_improve_callback_and_potential(
                         |head, &dist| {
-                            if bw_forward_potential.potential(head).unwrap_or(INFINITY) + bw_backward_potential.borrow_mut().potential(head).unwrap_or(INFINITY)
-                                > pot_cap
-                            {
+                            let mut pot = bw_potential.borrow_mut();
+                            if pot.forward_potential_raw(head).unwrap_or(INFINITY) + pot.backward_potential_raw(head).unwrap_or(INFINITY) > pot_cap {
                                 return false;
                             }
-                            if stop_dist < INFINITY {
-                                if dist + bw_backward_potential.borrow_mut().potential(head).unwrap_or(INFINITY) >= stop_dist {
-                                    return false;
-                                }
-                                let remaining_by_queue = fw_progress
-                                    .load(std::sync::atomic::Ordering::Relaxed)
-                                    .saturating_sub(bw_forward_potential.potential(head).unwrap_or(INFINITY));
-                                if dist + remaining_by_queue >= stop_dist {
-                                    return false;
-                                }
+                            if pot.prune_backward(NodeIdT(head), dist, fw_progress.load(std::sync::atomic::Ordering::Relaxed), stop_dist) {
+                                return false;
                             }
                             bw_tentative_distance = min(bw_tentative_distance, dist + bw_reverse_dist.get(head as usize));
                             stop_dist = min(bw_tentative_distance, cap);
@@ -1209,7 +1168,7 @@ impl<P: Potential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
                             }
                             true
                         },
-                        |node| bw_backward_potential.borrow_mut().potential(node),
+                        |node| bw_potential.borrow_mut().backward_potential(node),
                     ) {
                         num_queue_pops += 1;
                         let prog = backward_dijkstra.queue().peek().map_or(INFINITY, |p| p.key);
@@ -1327,14 +1286,8 @@ impl<P: Potential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
         self.backward_graph.graph.weights_mut()[self.forward_to_backward_edge_ids[edge as usize] as usize] = weight;
     }
 
-    pub fn potentials(&self) -> impl Iterator<Item = &P> {
-        vec![
-            &self.fw_forward_potential,
-            &self.fw_backward_potential,
-            &self.bw_forward_potential,
-            &self.bw_backward_potential,
-        ]
-        .into_iter()
+    pub fn potentials(&self) -> (&P, &P) {
+        (&self.fw_potential, &self.bw_potential)
     }
 }
 
@@ -1342,7 +1295,7 @@ pub struct MultiThreadedBiDirCorePathServerWrapper<'s, P, Q>(&'s mut MultiThread
 
 impl<'s, P, Q> PathServer for MultiThreadedBiDirCorePathServerWrapper<'s, P, Q>
 where
-    P: Potential + Clone + Send,
+    P: BiDirPotential + Clone + Send,
     Q: GenQuery<Timestamp> + Copy,
 {
     type NodeInfo = NodeId;
@@ -1358,7 +1311,7 @@ where
 
 impl<P> QueryServer for MultiThreadedBiDirSkipLowDegServer<P>
 where
-    P: Potential + Clone + Send,
+    P: BiDirPotential + Clone + Send,
 {
     type P<'s>
     where

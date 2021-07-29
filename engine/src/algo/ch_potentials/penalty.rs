@@ -8,8 +8,13 @@ use crate::datastr::rank_select_map::*;
 pub struct Penalty<P> {
     virtual_topocore: VirtualTopocore,
     // shortest_path_penalized: query::SkipLowDegServer<VirtualTopocoreGraph<OwnedGraph>, DefaultOpsWithLinkPath, RecyclingPotential<PotentialForPermutated<P>>, true, true>,
-    // shortest_path_penalized: query::BiDirCoreServer<RecyclingPotential<PotentialForPermutated<P>>, AlternatingDirs>,
-    shortest_path_penalized: query::MultiThreadedBiDirSkipLowDegServer<RecyclingPotential<PotentialForPermutated<P>>>,
+    // shortest_path_penalized: query::BiDirCoreServer<
+    //     SymmetricBiDirPotential<RecyclingPotential<PotentialForPermutated<P>>, RecyclingPotential<PotentialForPermutated<P>>>,
+    //     AlternatingDirs,
+    // >,
+    shortest_path_penalized: query::MultiThreadedBiDirSkipLowDegServer<
+        SymmetricBiDirPotential<RecyclingPotential<PotentialForPermutated<P>>, RecyclingPotential<PotentialForPermutated<P>>>,
+    >,
     alternative_graph_dijkstra: query::SkipLowDegServer<AlternativeGraph<VirtualTopocoreGraph<OwnedGraph>>, DefaultOps, ZeroPotential, true, true>,
     reversed: ReversedGraphWithEdgeIds,
     tail: Vec<NodeId>,
@@ -40,14 +45,16 @@ impl<P: Potential + Send + Clone> Penalty<P> {
             // shortest_path_penalized: query::BiDirCoreServer::new(
             shortest_path_penalized: query::MultiThreadedBiDirSkipLowDegServer::new(
                 main_graph.clone(),
-                RecyclingPotential::new(PotentialForPermutated {
-                    order: virtual_topocore.order.clone(),
-                    potential: forward_potential,
-                }),
-                RecyclingPotential::new(PotentialForPermutated {
-                    order: virtual_topocore.order.clone(),
-                    potential: backward_potential,
-                }),
+                SymmetricBiDirPotential::new(
+                    RecyclingPotential::new(PotentialForPermutated {
+                        order: virtual_topocore.order.clone(),
+                        potential: forward_potential,
+                    }),
+                    RecyclingPotential::new(PotentialForPermutated {
+                        order: virtual_topocore.order.clone(),
+                        potential: backward_potential,
+                    }),
+                ),
                 // DefaultOpsWithLinkPath::default(),
             ),
             alternative_graph_dijkstra: query::SkipLowDegServer::new(
@@ -229,7 +236,10 @@ impl<P: Potential + Send + Clone> Penalty<P> {
 
     pub fn potentials(&self) -> impl Iterator<Item = &RecyclingPotential<PotentialForPermutated<P>>> {
         // std::iter::once(self.shortest_path_penalized.potential())
-        self.shortest_path_penalized.potentials()
+        // let pots = self.shortest_path_penalized.potential();
+        // vec![pots.forward(), pots.backward()].into_iter()
+        let pots = self.shortest_path_penalized.potentials();
+        vec![pots.0.forward(), pots.0.backward(), pots.1.forward(), pots.1.backward()].into_iter()
     }
 }
 
