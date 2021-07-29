@@ -1046,6 +1046,7 @@ impl<P: BiDirPotential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
         use std::cmp::min;
 
         report!("algo", "Virtual Topocore Parallel Bidirectional Core Query");
+        P::report();
 
         let mut ops = DefaultOpsWithLinkPath::default();
         self.forward_dijkstra_data.distances.reset();
