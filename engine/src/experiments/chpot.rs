@@ -49,19 +49,9 @@ pub fn run(
         num_queries(),
         |_, _, _| (),
         // |mut res| {
-        //     report!(
-        //         "num_pot_computations",
-        //         res.as_mut().map(|res| res.data().potential().num_pot_computations()).unwrap_or(0)
-        //     );
-        //     report!(
-        //         "lower_bound",
-        //         res.as_mut()
-        //             .map(|res| {
-        //                 let from = res.data().query().from();
-        //                 res.data().lower_bound(from)
-        //             })
-        //             .flatten()
-        //     );
+        //     report!("num_pot_computations", res.data().potential().num_pot_computations());
+        //     let from = res.data().query().from();
+        //     report!("lower_bound", res.data().lower_bound(from));
         // },
         |_, _| None,
     );

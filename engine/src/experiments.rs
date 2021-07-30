@@ -54,7 +54,7 @@ pub fn run_random_queries_with_callbacks<S: QueryServer>(
     reporting_context: &mut CollectionContextGuard,
     num_queries: usize,
     pre_query: impl FnMut(NodeId, NodeId, &mut S),
-    // with_result: impl for<'a> FnMut(Option<&mut QueryResult<S::P<'a>, Weight>>),
+    // with_result: impl for<'a> FnMut(&mut QueryResult<S::P<'a>, Weight>),
     ground_truth: impl FnMut(NodeId, NodeId) -> Option<Option<Weight>>,
 ) {
     run_queries(
@@ -72,7 +72,7 @@ pub fn run_queries<S: QueryServer>(
     server: &mut S,
     mut reporting_context: Option<&mut CollectionContextGuard>,
     mut pre_query: impl FnMut(NodeId, NodeId, &mut S),
-    // mut with_result: impl for<'a> FnMut(Option<&mut QueryResult<S::P<'a>, Weight>>),
+    // mut with_result: impl for<'a> FnMut(&mut QueryResult<S::P<'a>, Weight>),
     mut ground_truth: impl FnMut(NodeId, NodeId) -> Option<Option<Weight>>,
 ) {
     let core_ids = core_affinity::get_core_ids().unwrap();
@@ -99,7 +99,7 @@ pub fn run_queries<S: QueryServer>(
             assert_eq!(dist, gt);
         }
 
-        // with_result(res.as_mut());
+        // with_result(&mut res);
 
         total_query_time = total_query_time + time;
     }
@@ -121,7 +121,7 @@ pub fn run_random_td_queries<
     reporting_context: &mut CollectionContextGuard,
     num_queries: usize,
     pre_query: impl FnMut(NodeId, NodeId, &mut S),
-    // mut with_result: impl for<'a> FnMut(Option<&mut QueryResult<S::P<'a>, W>>),
+    // with_result: impl for<'a> FnMut(&mut QueryResult<S::P<'a>, W>),
     ground_truth: impl FnMut(NodeId, NodeId) -> Option<Option<W>>,
 ) {
     run_td_queries(
@@ -146,7 +146,7 @@ pub fn run_td_queries<T: Copy + serde::ser::Serialize, W: Copy + Eq + std::fmt::
     server: &mut S,
     mut reporting_context: Option<&mut CollectionContextGuard>,
     mut pre_query: impl FnMut(NodeId, NodeId, &mut S),
-    // mut with_result: impl for<'a> FnMut(Option<&mut QueryResult<S::P<'a>, W>>),
+    // mut with_result: impl for<'a> FnMut(&mut QueryResult<S::P<'a>, W>),
     mut ground_truth: impl FnMut(NodeId, NodeId) -> Option<Option<W>>,
 ) {
     let core_ids = core_affinity::get_core_ids().unwrap();
@@ -174,7 +174,7 @@ pub fn run_td_queries<T: Copy + serde::ser::Serialize, W: Copy + Eq + std::fmt::
             assert_eq!(dist, gt);
         }
 
-        // with_result(res.as_mut());
+        // with_result(&mut res);
 
         total_query_time = total_query_time + time;
     }
