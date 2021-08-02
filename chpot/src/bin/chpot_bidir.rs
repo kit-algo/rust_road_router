@@ -49,7 +49,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     #[cfg(feature = "chpot-alt")]
     let alt_pot_data = {
         pot_name = "ALT";
-        let _ = block_reporting();
+        let _blocked = block_reporting();
         ALTPotData::new_with_avoid(&graph, 16, &mut rng.clone())
     };
     #[cfg(all(not(feature = "chpot-cch"), not(feature = "chpot-alt")))]
@@ -104,7 +104,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let modified_graph = FirstOutGraph::new(graph.first_out(), graph.head(), modified_travel_time);
 
         let mut server = {
-            let _ = block_reporting();
+            let _blocked = block_reporting();
             Server::<OwnedGraph, _, _, true, true, true>::new(&modified_graph, potentials().0, DefaultOps::default())
         };
         run_random_queries_with_callbacks(
@@ -114,7 +114,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             &mut algo_runs_ctxt,
             chpot::num_queries(),
             |from, to, server| {
-                let mut res = server.query(Query { from, to });
+                let mut res = {
+                    let _blocked = block_reporting();
+                    server.query(Query { from, to })
+                };
+                report!("foo", "bar");
                 #[cfg(all(not(feature = "chpot-alt"), not(feature = "chpot-only-topo"), not(feature = "chpot-oracle")))]
                 report!("num_pot_computations", res.data().potential().num_pot_computations());
                 #[cfg(feature = "chpot-oracle")]
@@ -126,7 +130,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let (forward_pot, backward_pot) = potentials();
         let mut server = {
-            let _ = block_reporting();
+            let _blocked = block_reporting();
             BiDirServer::<_, ChooseMinKeyDir>::new(&modified_graph, SymmetricBiDirPotential::new(forward_pot, backward_pot))
         };
         run_random_queries_with_callbacks(
@@ -136,7 +140,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             &mut algo_runs_ctxt,
             chpot::num_queries(),
             |from, to, server| {
-                let mut res = server.query(Query { from, to });
+                let mut res = {
+                    let _blocked = block_reporting();
+                    server.query(Query { from, to })
+                };
                 #[cfg(all(not(feature = "chpot-alt"), not(feature = "chpot-only-topo"), not(feature = "chpot-oracle")))]
                 report!(
                     "num_pot_computations",
@@ -154,7 +161,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let (forward_pot, backward_pot) = potentials();
         let mut server = {
-            let _ = block_reporting();
+            let _blocked = block_reporting();
             BiDirServer::<_, AlternatingDirs>::new(&modified_graph, SymmetricBiDirPotential::new(forward_pot, backward_pot))
         };
         run_random_queries_with_callbacks(
@@ -164,7 +171,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             &mut algo_runs_ctxt,
             chpot::num_queries(),
             |from, to, server| {
-                let mut res = server.query(Query { from, to });
+                let mut res = {
+                    let _blocked = block_reporting();
+                    server.query(Query { from, to })
+                };
                 #[cfg(all(not(feature = "chpot-alt"), not(feature = "chpot-only-topo"), not(feature = "chpot-oracle")))]
                 report!(
                     "num_pot_computations",
@@ -182,7 +192,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let (forward_pot, backward_pot) = potentials();
         let mut server = {
-            let _ = block_reporting();
+            let _blocked = block_reporting();
             BiDirServer::<_, ChooseMinKeyDir>::new(&modified_graph, AveragePotential::new(forward_pot, backward_pot))
         };
         run_random_queries_with_callbacks(
@@ -192,7 +202,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             &mut algo_runs_ctxt,
             chpot::num_queries(),
             |from, to, server| {
-                let mut res = server.query(Query { from, to });
+                let mut res = {
+                    let _blocked = block_reporting();
+                    server.query(Query { from, to })
+                };
                 #[cfg(all(not(feature = "chpot-alt"), not(feature = "chpot-only-topo"), not(feature = "chpot-oracle")))]
                 report!(
                     "num_pot_computations",
@@ -210,7 +223,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let (forward_pot, backward_pot) = potentials();
         let mut server = {
-            let _ = block_reporting();
+            let _blocked = block_reporting();
             BiDirServer::<_, AlternatingDirs>::new(&modified_graph, AveragePotential::new(forward_pot, backward_pot))
         };
         run_random_queries_with_callbacks(
@@ -220,7 +233,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             &mut algo_runs_ctxt,
             chpot::num_queries(),
             |from, to, server| {
-                let mut res = server.query(Query { from, to });
+                let mut res = {
+                    let _blocked = block_reporting();
+                    server.query(Query { from, to })
+                };
                 #[cfg(all(not(feature = "chpot-alt"), not(feature = "chpot-only-topo"), not(feature = "chpot-oracle")))]
                 report!(
                     "num_pot_computations",

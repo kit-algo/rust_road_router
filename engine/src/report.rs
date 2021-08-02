@@ -126,6 +126,9 @@ impl Reporter {
     }
 
     fn pop_context(&mut self) {
+        if matches!(self.current, CurrentReportingContext::Throwaway) {
+            return;
+        }
         let parent = self.context_stack.pop().expect("tried to pop from empty context");
 
         match parent {
@@ -159,15 +162,25 @@ impl Reporter {
                     CurrentReportingContext::Collection(_) => {
                         panic!("Cannot insert collection into collection");
                     }
-                    CurrentReportingContext::Throwaway => (),
+                    CurrentReportingContext::Throwaway => panic!("Inconsistent context stack"),
                 };
 
                 self.current = CurrentReportingContext::Collection(collection);
             }
+            ContextStackItem::Object(_) => panic!("Inconsistent context stack"),
+        }
+    }
+
+    fn unblock(&mut self) {
+        if !matches!(self.current, CurrentReportingContext::Throwaway) {
+            panic!("Inconsistent context stack");
+        }
+        match self.context_stack.pop().expect("tried to pop from empty context") {
+            ContextStackItem::Key(_) => panic!("Inconsistent context stack"),
+            ContextStackItem::Collection(collection) => {
+                self.current = CurrentReportingContext::Collection(collection);
+            }
             ContextStackItem::Object(object) => {
-                if !matches!(self.current, CurrentReportingContext::Throwaway) {
-                    panic!("Inconsistent context stack");
-                }
                 self.current = CurrentReportingContext::Object(object);
             }
         }
@@ -227,7 +240,7 @@ pub struct BlockedReportingContextGuard();
 
 impl Drop for BlockedReportingContextGuard {
     fn drop(&mut self) {
-        REPORTER.with(|reporter| reporter.borrow_mut().as_mut().map(Reporter::pop_context));
+        REPORTER.with(|reporter| reporter.borrow_mut().as_mut().map(Reporter::unblock));
     }
 }
 
