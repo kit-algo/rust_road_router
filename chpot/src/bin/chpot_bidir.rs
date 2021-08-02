@@ -103,7 +103,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
         let modified_graph = FirstOutGraph::new(graph.first_out(), graph.head(), modified_travel_time);
 
-        let mut server = Server::<OwnedGraph, _, _, true, true, true>::new(&modified_graph, potentials().0, DefaultOps::default());
+        let mut server = {
+            let _ = block_reporting();
+            Server::<OwnedGraph, _, _, true, true, true>::new(&modified_graph, potentials().0, DefaultOps::default())
+        };
         run_random_queries_with_callbacks(
             graph.num_nodes(),
             &mut server,
@@ -122,7 +125,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
 
         let (forward_pot, backward_pot) = potentials();
-        let mut server = BiDirServer::<_, ChooseMinKeyDir>::new(&modified_graph, SymmetricBiDirPotential::new(forward_pot, backward_pot));
+        let mut server = {
+            let _ = block_reporting();
+            BiDirServer::<_, ChooseMinKeyDir>::new(&modified_graph, SymmetricBiDirPotential::new(forward_pot, backward_pot))
+        };
         run_random_queries_with_callbacks(
             graph.num_nodes(),
             &mut server,
@@ -147,7 +153,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
 
         let (forward_pot, backward_pot) = potentials();
-        let mut server = BiDirServer::<_, AlternatingDirs>::new(&modified_graph, SymmetricBiDirPotential::new(forward_pot, backward_pot));
+        let mut server = {
+            let _ = block_reporting();
+            BiDirServer::<_, AlternatingDirs>::new(&modified_graph, SymmetricBiDirPotential::new(forward_pot, backward_pot))
+        };
         run_random_queries_with_callbacks(
             graph.num_nodes(),
             &mut server,
@@ -172,7 +181,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
 
         let (forward_pot, backward_pot) = potentials();
-        let mut server = BiDirServer::<_, ChooseMinKeyDir>::new(&modified_graph, AveragePotential::new(forward_pot, backward_pot));
+        let mut server = {
+            let _ = block_reporting();
+            BiDirServer::<_, ChooseMinKeyDir>::new(&modified_graph, AveragePotential::new(forward_pot, backward_pot))
+        };
         run_random_queries_with_callbacks(
             graph.num_nodes(),
             &mut server,
@@ -197,7 +209,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
 
         let (forward_pot, backward_pot) = potentials();
-        let mut server = BiDirServer::<_, AlternatingDirs>::new(&modified_graph, AveragePotential::new(forward_pot, backward_pot));
+        let mut server = {
+            let _ = block_reporting();
+            BiDirServer::<_, AlternatingDirs>::new(&modified_graph, AveragePotential::new(forward_pot, backward_pot))
+        };
         run_random_queries_with_callbacks(
             graph.num_nodes(),
             &mut server,
