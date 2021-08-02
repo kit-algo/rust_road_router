@@ -691,6 +691,21 @@ where
     }
 }
 
+impl<'s, P, D, Q> BiDirPathServerWrapper<'s, P, D, Q>
+where
+    P: BiDirPotential,
+    D: BidirChooseDir,
+    Q: GenQuery<Timestamp> + Copy,
+{
+    pub fn potential(&self) -> &P {
+        &self.0.runner.potential
+    }
+
+    pub fn lower_bound(&mut self, node: NodeId) -> Option<Weight> {
+        self.0.runner.potential.forward_potential_raw(node)
+    }
+}
+
 impl<P, D> QueryServer for BiDirServer<P, D>
 where
     P: BiDirPotential,

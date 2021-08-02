@@ -11,6 +11,7 @@ use rust_road_router::{
         },
         customizable_contraction_hierarchy::*,
         dijkstra::{AlternatingDirs, ChooseMinKeyDir, DefaultOps},
+        *,
     },
     cli::CliErr,
     datastr::{graph::*, node_order::*},
@@ -103,23 +104,122 @@ fn main() -> Result<(), Box<dyn Error>> {
         let modified_graph = FirstOutGraph::new(graph.first_out(), graph.head(), modified_travel_time);
 
         let mut server = Server::<OwnedGraph, _, _, true, true, true>::new(&modified_graph, potentials().0, DefaultOps::default());
-        run_random_queries(graph.num_nodes(), &mut server, &mut rng.clone(), &mut algo_runs_ctxt, chpot::num_queries());
+        run_random_queries_with_callbacks(
+            graph.num_nodes(),
+            &mut server,
+            &mut rng.clone(),
+            &mut algo_runs_ctxt,
+            chpot::num_queries(),
+            |from, to, server| {
+                let mut res = server.query(Query { from, to });
+                #[cfg(all(not(feature = "chpot-alt"), not(feature = "chpot-only-topo"), not(feature = "chpot-oracle")))]
+                report!("num_pot_computations", res.data().potential().num_pot_computations());
+                #[cfg(feature = "chpot-oracle")]
+                report!("num_pot_computations", res.data().potential().inner().num_pot_computations());
+                report!("lower_bound", res.data().lower_bound(from));
+            },
+            |_, _| None,
+        );
 
         let (forward_pot, backward_pot) = potentials();
         let mut server = BiDirServer::<_, ChooseMinKeyDir>::new(&modified_graph, SymmetricBiDirPotential::new(forward_pot, backward_pot));
-        run_random_queries(graph.num_nodes(), &mut server, &mut rng.clone(), &mut algo_runs_ctxt, chpot::num_queries());
+        run_random_queries_with_callbacks(
+            graph.num_nodes(),
+            &mut server,
+            &mut rng.clone(),
+            &mut algo_runs_ctxt,
+            chpot::num_queries(),
+            |from, to, server| {
+                let mut res = server.query(Query { from, to });
+                #[cfg(all(not(feature = "chpot-alt"), not(feature = "chpot-only-topo"), not(feature = "chpot-oracle")))]
+                report!(
+                    "num_pot_computations",
+                    res.data().potential().forward().num_pot_computations() + res.data().potential().backward().num_pot_computations()
+                );
+                #[cfg(feature = "chpot-oracle")]
+                report!(
+                    "num_pot_computations",
+                    res.data().potential().forward().inner().num_pot_computations() + res.data().potential().backward().inner().num_pot_computations()
+                );
+                report!("lower_bound", res.data().lower_bound(from));
+            },
+            |_, _| None,
+        );
 
         let (forward_pot, backward_pot) = potentials();
         let mut server = BiDirServer::<_, AlternatingDirs>::new(&modified_graph, SymmetricBiDirPotential::new(forward_pot, backward_pot));
-        run_random_queries(graph.num_nodes(), &mut server, &mut rng.clone(), &mut algo_runs_ctxt, chpot::num_queries());
+        run_random_queries_with_callbacks(
+            graph.num_nodes(),
+            &mut server,
+            &mut rng.clone(),
+            &mut algo_runs_ctxt,
+            chpot::num_queries(),
+            |from, to, server| {
+                let mut res = server.query(Query { from, to });
+                #[cfg(all(not(feature = "chpot-alt"), not(feature = "chpot-only-topo"), not(feature = "chpot-oracle")))]
+                report!(
+                    "num_pot_computations",
+                    res.data().potential().forward().num_pot_computations() + res.data().potential().backward().num_pot_computations()
+                );
+                #[cfg(feature = "chpot-oracle")]
+                report!(
+                    "num_pot_computations",
+                    res.data().potential().forward().inner().num_pot_computations() + res.data().potential().backward().inner().num_pot_computations()
+                );
+                report!("lower_bound", res.data().lower_bound(from));
+            },
+            |_, _| None,
+        );
 
         let (forward_pot, backward_pot) = potentials();
         let mut server = BiDirServer::<_, ChooseMinKeyDir>::new(&modified_graph, AveragePotential::new(forward_pot, backward_pot));
-        run_random_queries(graph.num_nodes(), &mut server, &mut rng.clone(), &mut algo_runs_ctxt, chpot::num_queries());
+        run_random_queries_with_callbacks(
+            graph.num_nodes(),
+            &mut server,
+            &mut rng.clone(),
+            &mut algo_runs_ctxt,
+            chpot::num_queries(),
+            |from, to, server| {
+                let mut res = server.query(Query { from, to });
+                #[cfg(all(not(feature = "chpot-alt"), not(feature = "chpot-only-topo"), not(feature = "chpot-oracle")))]
+                report!(
+                    "num_pot_computations",
+                    res.data().potential().forward().num_pot_computations() + res.data().potential().backward().num_pot_computations()
+                );
+                #[cfg(feature = "chpot-oracle")]
+                report!(
+                    "num_pot_computations",
+                    res.data().potential().forward().inner().num_pot_computations() + res.data().potential().backward().inner().num_pot_computations()
+                );
+                report!("lower_bound", res.data().lower_bound(from));
+            },
+            |_, _| None,
+        );
 
         let (forward_pot, backward_pot) = potentials();
         let mut server = BiDirServer::<_, AlternatingDirs>::new(&modified_graph, AveragePotential::new(forward_pot, backward_pot));
-        run_random_queries(graph.num_nodes(), &mut server, &mut rng.clone(), &mut algo_runs_ctxt, chpot::num_queries());
+        run_random_queries_with_callbacks(
+            graph.num_nodes(),
+            &mut server,
+            &mut rng.clone(),
+            &mut algo_runs_ctxt,
+            chpot::num_queries(),
+            |from, to, server| {
+                let mut res = server.query(Query { from, to });
+                #[cfg(all(not(feature = "chpot-alt"), not(feature = "chpot-only-topo"), not(feature = "chpot-oracle")))]
+                report!(
+                    "num_pot_computations",
+                    res.data().potential().forward().num_pot_computations() + res.data().potential().backward().num_pot_computations()
+                );
+                #[cfg(feature = "chpot-oracle")]
+                report!(
+                    "num_pot_computations",
+                    res.data().potential().forward().inner().num_pot_computations() + res.data().potential().backward().inner().num_pot_computations()
+                );
+                report!("lower_bound", res.data().lower_bound(from));
+            },
+            |_, _| None,
+        );
     };
 
     for factor in [1., 1.05, 1.1] {
@@ -132,7 +232,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         run(&modified_travel_time);
     }
 
-    for factor in [1., 1.25, 1.5] {
+    for factor in [1.25, 1.5] {
         for p in [0.0, 1.0] {
             for speed in [80.0] {
                 let _exp_ctx = exps_ctxt.push_collection_item();

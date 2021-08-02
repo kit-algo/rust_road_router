@@ -214,11 +214,12 @@ impl<PF: Potential, PB: Potential> AveragePotential<PF, PB> {
         }
     }
 
-    pub fn forward_potential(&mut self, node: NodeId) -> Option<Weight> {
-        self.forward_potential.potential(node)
+    pub fn forward(&self) -> &PF {
+        &self.forward_potential
     }
-    pub fn backward_potential(&mut self, node: NodeId) -> Option<Weight> {
-        self.backward_potential.potential(node)
+
+    pub fn backward(&self) -> &PB {
+        &self.backward_potential
     }
 
     pub fn potential(&mut self, node: NodeId) -> Option<i32> {
