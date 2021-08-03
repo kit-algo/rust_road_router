@@ -91,10 +91,8 @@ impl<G: LinkIterGraph, H: LinkIterGraph, P: BiDirPotential, D: BidirChooseDir> S
                         inspect(node, *forward_dijkstra.tentative_distance(node), &mut potential.borrow_mut());
                         if node == to {
                             *meeting_node = to;
-                            return Some(tentative_distance);
+                            return Some(*forward_dijkstra.tentative_distance(to));
                         }
-                    } else {
-                        return None;
                     }
                 } else {
                     if let Some(node) = backward_dijkstra.next_with_improve_callback_and_potential(
@@ -119,10 +117,8 @@ impl<G: LinkIterGraph, H: LinkIterGraph, P: BiDirPotential, D: BidirChooseDir> S
                         inspect(node, *backward_dijkstra.tentative_distance(node), &mut potential.borrow_mut());
                         if node == from {
                             *meeting_node = from;
-                            return Some(tentative_distance);
+                            return Some(*backward_dijkstra.tentative_distance(from));
                         }
-                    } else {
-                        return None;
                     }
                 }
             }
@@ -188,7 +184,7 @@ impl<G: LinkIterGraph, H: LinkIterGraph, P: BiDirPotential, D: BidirChooseDir> S
     }
 }
 
-pub struct PathServerWrapper<'s, G: LinkIterGraph, H: LinkIterGraph, P, D>(&'s Server<G, H, P, D>, Query);
+pub struct PathServerWrapper<'s, G: LinkIterGraph, H: LinkIterGraph, P, D>(&'s mut Server<G, H, P, D>, Query);
 
 impl<'s, G: LinkIterGraph, H: LinkIterGraph, P: BiDirPotential, D: BidirChooseDir> PathServer for PathServerWrapper<'s, G, H, P, D> {
     type NodeInfo = NodeId;
@@ -199,6 +195,16 @@ impl<'s, G: LinkIterGraph, H: LinkIterGraph, P: BiDirPotential, D: BidirChooseDi
     }
     fn reconstruct_edge_path(&mut self) -> Vec<Self::EdgeInfo> {
         vec![(); self.reconstruct_node_path().len() - 1]
+    }
+}
+
+impl<'s, G: LinkIterGraph, H: LinkIterGraph, P: BiDirPotential, D: BidirChooseDir> PathServerWrapper<'s, G, H, P, D> {
+    pub fn potential(&self) -> &P {
+        &self.0.potential
+    }
+
+    pub fn lower_bound(&mut self, node: NodeId) -> Option<Weight> {
+        self.0.potential.forward_potential_raw(node)
     }
 }
 

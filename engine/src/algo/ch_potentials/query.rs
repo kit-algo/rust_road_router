@@ -936,7 +936,7 @@ impl<P: BiDirPotential, D: BidirChooseDir> BiDirSkipLowDegRunner<P, D> {
                         num_queue_pops += 1;
                         if node == query.to() {
                             *meeting_node = query.to();
-                            return Some(min(*forward_dijkstra.tentative_distance(query.to()), tentative_distance));
+                            return Some(*forward_dijkstra.tentative_distance(query.to()));
                         }
                     }
                 } else {
@@ -967,7 +967,7 @@ impl<P: BiDirPotential, D: BidirChooseDir> BiDirSkipLowDegRunner<P, D> {
                         num_queue_pops += 1;
                         if node == query.from() {
                             *meeting_node = query.from();
-                            return Some(min(*backward_dijkstra.tentative_distance(query.from()), tentative_distance));
+                            return Some(*backward_dijkstra.tentative_distance(query.from()));
                         }
                     }
                 }

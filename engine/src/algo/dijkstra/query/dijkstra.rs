@@ -157,6 +157,14 @@ where
     pub fn distance(&self, node: NodeId) -> Weight {
         self.0.dijkstra.distances[node as usize]
     }
+
+    pub fn potential(&self) -> &P {
+        &self.0.potential
+    }
+
+    pub fn lower_bound(&mut self, node: NodeId) -> Option<Weight> {
+        self.0.potential.potential(node)
+    }
 }
 
 pub struct ServerWrapper<'s, G = OwnedGraph, O = DefaultOps, P = ZeroPotential, B = G>(&'s Server<G, O, P, B>)
