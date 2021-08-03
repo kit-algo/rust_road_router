@@ -196,8 +196,30 @@ pub trait BiDirPotential {
     fn stop_backward(&mut self, fw_min_queue: Option<Weight>, bw_min_queue: Option<Weight>, stop_dist: Weight) -> bool {
         self.stop(fw_min_queue, bw_min_queue, stop_dist)
     }
-    fn prune_forward(&mut self, head: NodeIdT, fw_dist_head: Weight, reverse_min_queue: Weight, max_dist: Weight) -> bool;
-    fn prune_backward(&mut self, head: NodeIdT, bw_dist_head: Weight, reverse_min_queue: Weight, max_dist: Weight) -> bool;
+    fn prune_forward(&mut self, NodeIdT(head): NodeIdT, fw_dist_head: Weight, reverse_min_queue: Weight, max_dist: Weight) -> bool {
+        if max_dist < INFINITY {
+            if fw_dist_head + self.forward_potential_raw(head).unwrap_or(INFINITY) >= max_dist {
+                return true;
+            }
+            let remaining_by_queue = reverse_min_queue.saturating_sub(self.backward_potential(head).unwrap_or(INFINITY));
+            if fw_dist_head + remaining_by_queue >= max_dist {
+                return true;
+            }
+        }
+        return false;
+    }
+    fn prune_backward(&mut self, NodeIdT(head): NodeIdT, bw_dist_head: Weight, reverse_min_queue: Weight, max_dist: Weight) -> bool {
+        if max_dist < INFINITY {
+            if bw_dist_head + self.backward_potential_raw(head).unwrap_or(INFINITY) >= max_dist {
+                return true;
+            }
+            let remaining_by_queue = reverse_min_queue.saturating_sub(self.forward_potential(head).unwrap_or(INFINITY));
+            if bw_dist_head + remaining_by_queue >= max_dist {
+                return true;
+            }
+        }
+        return false;
+    }
     fn bidir_pot_key() -> &'static str;
 
     fn report() {
@@ -295,26 +317,6 @@ impl<PF: Potential, PB: Potential> BiDirPotential for AveragePotential<PF, PB> {
     fn backward_potential_raw(&mut self, node: NodeId) -> Option<Weight> {
         self.backward_potential.potential(node)
     }
-    fn prune_forward(&mut self, head: NodeIdT, fw_dist_head: Weight, reverse_min_queue: Weight, max_dist: Weight) -> bool {
-        prune_edge(
-            &mut self.forward_potential,
-            &mut self.backward_potential,
-            head,
-            fw_dist_head,
-            reverse_min_queue,
-            max_dist,
-        )
-    }
-    fn prune_backward(&mut self, head: NodeIdT, bw_dist_head: Weight, reverse_min_queue: Weight, max_dist: Weight) -> bool {
-        prune_edge(
-            &mut self.backward_potential,
-            &mut self.forward_potential,
-            head,
-            bw_dist_head,
-            reverse_min_queue,
-            max_dist,
-        )
-    }
     fn bidir_pot_key() -> &'static str {
         "Average"
     }
@@ -363,47 +365,7 @@ impl<PF: Potential, PB: Potential> BiDirPotential for SymmetricBiDirPotential<PF
     fn backward_potential(&mut self, node: NodeId) -> Option<Weight> {
         self.backward_potential.potential(node)
     }
-    fn prune_forward(&mut self, head: NodeIdT, fw_dist_head: Weight, reverse_min_queue: Weight, max_dist: Weight) -> bool {
-        prune_edge(
-            &mut self.forward_potential,
-            &mut self.backward_potential,
-            head,
-            fw_dist_head,
-            reverse_min_queue,
-            max_dist,
-        )
-    }
-    fn prune_backward(&mut self, head: NodeIdT, bw_dist_head: Weight, reverse_min_queue: Weight, max_dist: Weight) -> bool {
-        prune_edge(
-            &mut self.backward_potential,
-            &mut self.forward_potential,
-            head,
-            bw_dist_head,
-            reverse_min_queue,
-            max_dist,
-        )
-    }
     fn bidir_pot_key() -> &'static str {
         "Symmetric"
     }
-}
-
-fn prune_edge<PF: Potential, PB: Potential>(
-    forward_pot: &mut PF,
-    backward_pot: &mut PB,
-    NodeIdT(head): NodeIdT,
-    fw_dist_head: Weight,
-    reverse_min_queue: Weight,
-    max_dist: Weight,
-) -> bool {
-    if max_dist < INFINITY {
-        if fw_dist_head + forward_pot.potential(head).unwrap_or(INFINITY) >= max_dist {
-            return true;
-        }
-        let remaining_by_queue = reverse_min_queue.saturating_sub(backward_pot.potential(head).unwrap_or(INFINITY));
-        if fw_dist_head + remaining_by_queue >= max_dist {
-            return true;
-        }
-    }
-    return false;
 }
