@@ -434,18 +434,20 @@ where
         let departure = *dijkstra.tentative_distance(query.from());
         let target_pot = potential.potential(query.to())?;
 
-        let mut counter = 0;
-        visited.clear();
-        Self::dfs(reversed, query.to(), visited, &mut |_| {
+        if dijkstra.graph().num_nodes() > 1000 {
+            let mut counter = 0;
+            visited.clear();
+            Self::dfs(reversed, query.to(), visited, &mut |_| {
+                if counter < 100 {
+                    counter += 1;
+                    false
+                } else {
+                    true
+                }
+            });
             if counter < 100 {
-                counter += 1;
-                false
-            } else {
-                true
+                return None;
             }
-        });
-        if counter < 100 {
-            return None;
         }
 
         while let Some(node) = dijkstra.next_step_with_potential(|node| potential.potential(node)) {

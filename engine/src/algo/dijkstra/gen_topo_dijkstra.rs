@@ -221,6 +221,10 @@ where
         })
     }
 
+    pub fn graph(&self) -> &Graph {
+        self.graph
+    }
+
     pub fn tentative_distance(&self, node: NodeId) -> &Ops::Label {
         &self.distances[node as usize]
     }
