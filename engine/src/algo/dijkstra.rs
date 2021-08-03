@@ -202,6 +202,9 @@ impl Default for DefaultOpsWithLinkPath {
 
 pub trait BidirChooseDir: Default {
     fn choose(&mut self, fw_min_key: Option<Weight>, bw_min_key: Option<Weight>) -> bool;
+    fn may_stop(&self) -> bool {
+        true
+    }
     fn strategy_key() -> &'static str;
     fn report() {
         report!("choose_direction_strategy", Self::strategy_key());
@@ -241,14 +244,15 @@ impl Default for AlternatingDirs {
 
 impl BidirChooseDir for AlternatingDirs {
     fn choose(&mut self, fw_min_key: Option<Weight>, bw_min_key: Option<Weight>) -> bool {
+        self.prev = !self.prev;
         match (fw_min_key, bw_min_key) {
-            (Some(_), Some(_)) => {
-                self.prev = !self.prev;
-                self.prev
-            }
+            (Some(_), Some(_)) => self.prev,
             (None, Some(_)) => false,
             _ => true,
         }
+    }
+    fn may_stop(&self) -> bool {
+        !self.prev
     }
     fn strategy_key() -> &'static str {
         "alternating"

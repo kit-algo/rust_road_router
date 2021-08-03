@@ -639,6 +639,7 @@ where
 }
 
 use std::cell::*;
+use std::marker::PhantomData;
 use std::sync::atomic::AtomicU32;
 
 pub struct BiDirServer<P = ZeroPotential, D = ChooseMinKeyDir> {
@@ -864,7 +865,7 @@ struct BiDirSkipLowDegRunner<P = BiDirZeroPot, D = ChooseMinKeyDir> {
     backward_dijkstra_data: DijkstraData<Weight, EdgeIdT>,
     meeting_node: NodeId,
     potential: P,
-    dir_chooser: D,
+    dir_chooser: PhantomData<D>,
 }
 
 impl<P: BiDirPotential, D: BidirChooseDir> BiDirSkipLowDegRunner<P, D> {
@@ -895,14 +896,16 @@ impl<P: BiDirPotential, D: BidirChooseDir> BiDirSkipLowDegRunner<P, D> {
         let meeting_node = &mut self.meeting_node;
         let mut tentative_distance = INFINITY;
         let mut potential = RefCell::new(&mut self.potential);
-        let dir_chooser = &mut self.dir_chooser;
+        let mut dir_chooser: D = Default::default();
 
         let result = (|| {
-            while !potential.get_mut().stop(
-                forward_dijkstra.queue().peek().map(|q| q.key),
-                backward_dijkstra.queue().peek().map(|q| q.key),
-                min(tentative_distance, cap),
-            ) {
+            while !(dir_chooser.may_stop()
+                && potential.get_mut().stop(
+                    forward_dijkstra.queue().peek().map(|q| q.key),
+                    backward_dijkstra.queue().peek().map(|q| q.key),
+                    min(tentative_distance, cap),
+                ))
+            {
                 let stop_dist = min(tentative_distance, cap);
 
                 if dir_chooser.choose(forward_dijkstra.queue().peek().map(|q| q.key), backward_dijkstra.queue().peek().map(|q| q.key)) {

@@ -1,7 +1,7 @@
 use super::*;
 use crate::algo::{a_star::*, dijkstra::generic_dijkstra::*};
 
-use std::{cell::RefCell, cmp::min};
+use std::{cell::RefCell, cmp::min, marker::PhantomData};
 
 pub struct Server<G, H, P = BiDirZeroPot, D = ChooseMinKeyDir> {
     pub forward: G,
@@ -10,7 +10,7 @@ pub struct Server<G, H, P = BiDirZeroPot, D = ChooseMinKeyDir> {
     pub backward_data: DijkstraData<Weight>,
     pub meeting_node: NodeId,
     pub potential: P,
-    pub dir_chooser: D,
+    pub dir_chooser: PhantomData<D>,
 }
 
 impl<G: LinkIterGraph, D: BidirChooseDir> Server<G, OwnedGraph, BiDirZeroPot, D> {
@@ -58,14 +58,16 @@ impl<G: LinkIterGraph, H: LinkIterGraph, P: BiDirPotential, D: BidirChooseDir> S
         let mut num_queue_pops = 0;
         let meeting_node = &mut self.meeting_node;
         let mut potential = RefCell::new(&mut self.potential);
-        let dir_chooser = &mut self.dir_chooser;
+        let mut dir_chooser: D = Default::default();
 
         let result = (|| {
-            while !potential.get_mut().stop(
-                forward_dijkstra.queue().peek().map(|q| q.key),
-                backward_dijkstra.queue().peek().map(|q| q.key),
-                min(tentative_distance, maximum_distance),
-            ) {
+            while !(dir_chooser.may_stop()
+                && potential.get_mut().stop(
+                    forward_dijkstra.queue().peek().map(|q| q.key),
+                    backward_dijkstra.queue().peek().map(|q| q.key),
+                    min(tentative_distance, maximum_distance),
+                ))
+            {
                 if dir_chooser.choose(forward_dijkstra.queue().peek().map(|q| q.key), backward_dijkstra.queue().peek().map(|q| q.key)) {
                     if let Some(node) = forward_dijkstra.next_with_improve_callback_and_potential(
                         |head, &dist| {
