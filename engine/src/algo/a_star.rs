@@ -267,6 +267,7 @@ impl<PF: Potential, PB: Potential> AveragePotential<PF, PB> {
     }
 }
 
+use std::cmp::max;
 impl<PF: Potential, PB: Potential> BiDirPotential for AveragePotential<PF, PB> {
     fn init(&mut self, source: NodeId, target: NodeId) {
         self.forward_potential.init(target);
@@ -283,10 +284,10 @@ impl<PF: Potential, PB: Potential> BiDirPotential for AveragePotential<PF, PB> {
         }
     }
     fn forward_potential(&mut self, node: NodeId) -> Option<Weight> {
-        self.potential(node).map(|p| (p + self.fw_add) as Weight)
+        self.potential(node).map(|p| max(p + self.fw_add, 0) as Weight)
     }
     fn backward_potential(&mut self, node: NodeId) -> Option<Weight> {
-        self.potential(node).map(|p| (self.bw_add - p) as Weight)
+        self.potential(node).map(|p| max(self.bw_add - p, 0) as Weight)
     }
     fn forward_potential_raw(&mut self, node: NodeId) -> Option<Weight> {
         self.forward_potential.potential(node)
