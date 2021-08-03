@@ -927,9 +927,6 @@ impl<P: BiDirPotential, D: BidirChooseDir> BiDirSkipLowDegRunner<P, D> {
                                 tentative_distance = dist + backward_dijkstra.tentative_distance(head);
                                 *meeting_node = head;
                             }
-                            if *backward_dijkstra.tentative_distance(head) < INFINITY && !backward_dijkstra.queue().contains_index(head as usize) {
-                                return false;
-                            }
                             true
                         },
                         |node| potential.borrow_mut().forward_potential(node),
@@ -958,9 +955,6 @@ impl<P: BiDirPotential, D: BidirChooseDir> BiDirSkipLowDegRunner<P, D> {
                             if dist + forward_dijkstra.tentative_distance(head) < tentative_distance {
                                 tentative_distance = dist + forward_dijkstra.tentative_distance(head);
                                 *meeting_node = head;
-                            }
-                            if *forward_dijkstra.tentative_distance(head) < INFINITY && !forward_dijkstra.queue().contains_index(head as usize) {
-                                return false;
                             }
                             true
                         },
@@ -1135,9 +1129,6 @@ impl<P: BiDirPotential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
                             if tentative_distance.fetch_min(fw_tentative_distance, std::sync::atomic::Ordering::Relaxed) > fw_tentative_distance {
                                 meeting_node = Some(head);
                             }
-                            if fw_reverse_dist.get(head as usize) < INFINITY {
-                                return false;
-                            }
                             true
                         },
                         |node| fw_potential.borrow_mut().forward_potential(node),
@@ -1187,9 +1178,6 @@ impl<P: BiDirPotential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
                             stop_dist = min(bw_tentative_distance, cap);
                             if tentative_distance.fetch_min(bw_tentative_distance, std::sync::atomic::Ordering::Relaxed) > bw_tentative_distance {
                                 meeting_node = Some(head);
-                            }
-                            if bw_reverse_dist.get(head as usize) < INFINITY {
-                                return false;
                             }
                             true
                         },
