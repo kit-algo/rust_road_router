@@ -163,6 +163,7 @@ where
                                     endpoint = true;
                                 } else {
                                     had_deg_three = true;
+                                    improve_callback(next_node, next_distance);
                                     for edge in LinkIterable::<Ops::Arc>::link_iter(self.graph, next_node) {
                                         if edge.head() != prev_node.0 {
                                             if next_edge.is_none() {
