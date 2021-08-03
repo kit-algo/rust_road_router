@@ -729,7 +729,7 @@ where
     fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight> {
         let mut query = query.clone();
         query.permutate(&self.virtual_topocore.order);
-        QueryResult::new(self.runner.distance(query, INFINITY, INFINITY), BiDirPathServerWrapper(self, query))
+        QueryResult::new(self.runner.distance(query, INFINITY, None), BiDirPathServerWrapper(self, query))
     }
 }
 
@@ -782,7 +782,7 @@ impl<P: BiDirPotential, D: BidirChooseDir> BiDirCoreServer<P, D> {
         &mut self,
         query: Q,
         cap: Weight,
-        pot_cap: Weight,
+        pot_cap: Option<Weight>,
     ) -> QueryResult<BiDirCorePathServerWrapper<P, D, Q>, Weight> {
         QueryResult::new(self.runner.distance(query, cap, pot_cap), BiDirCorePathServerWrapper(self, query))
     }
@@ -854,7 +854,7 @@ where
     = BiDirCorePathServerWrapper<'s, P, D, Query>;
 
     fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight> {
-        QueryResult::new(self.runner.distance(query, INFINITY, INFINITY), BiDirCorePathServerWrapper(self, query))
+        QueryResult::new(self.runner.distance(query, INFINITY, None), BiDirCorePathServerWrapper(self, query))
     }
 }
 
@@ -869,7 +869,7 @@ struct BiDirSkipLowDegRunner<P = BiDirZeroPot, D = ChooseMinKeyDir> {
 }
 
 impl<P: BiDirPotential, D: BidirChooseDir> BiDirSkipLowDegRunner<P, D> {
-    fn distance(&mut self, query: impl GenQuery<Timestamp> + Copy, cap: Weight, pot_cap: Weight) -> Option<Weight> {
+    fn distance(&mut self, query: impl GenQuery<Timestamp> + Copy, cap: Weight, pot_cap: Option<Weight>) -> Option<Weight> {
         use std::cmp::min;
 
         report!("algo", "Virtual Topocore Bidirectional Core Query");
@@ -912,8 +912,10 @@ impl<P: BiDirPotential, D: BidirChooseDir> BiDirSkipLowDegRunner<P, D> {
                     if let Some(node) = forward_dijkstra.next_with_improve_callback_and_potential(
                         |head, &dist| {
                             let mut pot = potential.borrow_mut();
-                            if pot.forward_potential_raw(head).unwrap_or(INFINITY) + pot.backward_potential_raw(head).unwrap_or(INFINITY) > pot_cap {
-                                return false;
+                            if let Some(pot_cap) = pot_cap {
+                                if pot.forward_potential_raw(head).unwrap_or(INFINITY) + pot.backward_potential_raw(head).unwrap_or(INFINITY) > pot_cap {
+                                    return false;
+                                }
                             }
                             if pot.prune_forward(
                                 NodeIdT(head),
@@ -941,8 +943,10 @@ impl<P: BiDirPotential, D: BidirChooseDir> BiDirSkipLowDegRunner<P, D> {
                     if let Some(node) = backward_dijkstra.next_with_improve_callback_and_potential(
                         |head, &dist| {
                             let mut pot = potential.borrow_mut();
-                            if pot.forward_potential_raw(head).unwrap_or(INFINITY) + pot.backward_potential_raw(head).unwrap_or(INFINITY) > pot_cap {
-                                return false;
+                            if let Some(pot_cap) = pot_cap {
+                                if pot.forward_potential_raw(head).unwrap_or(INFINITY) + pot.backward_potential_raw(head).unwrap_or(INFINITY) > pot_cap {
+                                    return false;
+                                }
                             }
                             if pot.prune_backward(
                                 NodeIdT(head),
@@ -1064,12 +1068,12 @@ impl<P: BiDirPotential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
         &mut self,
         query: Q,
         cap: Weight,
-        pot_cap: Weight,
+        pot_cap: Option<Weight>,
     ) -> QueryResult<MultiThreadedBiDirCorePathServerWrapper<P, Q>, Weight> {
         QueryResult::new(self.distance(query, cap, pot_cap), MultiThreadedBiDirCorePathServerWrapper(self, query))
     }
 
-    pub fn distance(&mut self, query: impl GenQuery<Timestamp> + Copy + Sync, cap: Weight, pot_cap: Weight) -> Option<Weight> {
+    pub fn distance(&mut self, query: impl GenQuery<Timestamp> + Copy + Sync, cap: Weight, pot_cap: Option<Weight>) -> Option<Weight> {
         use std::cmp::min;
 
         report!("algo", "Virtual Topocore Parallel Bidirectional Core Query");
@@ -1127,8 +1131,10 @@ impl<P: BiDirPotential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
                     if let Some(node) = forward_dijkstra.next_with_improve_callback_and_potential(
                         |head, &dist| {
                             let mut pot = fw_potential.borrow_mut();
-                            if pot.forward_potential_raw(head).unwrap_or(INFINITY) + pot.backward_potential_raw(head).unwrap_or(INFINITY) > pot_cap {
-                                return false;
+                            if let Some(pot_cap) = pot_cap {
+                                if pot.forward_potential_raw(head).unwrap_or(INFINITY) + pot.backward_potential_raw(head).unwrap_or(INFINITY) > pot_cap {
+                                    return false;
+                                }
                             }
                             if pot.prune_forward(NodeIdT(head), dist, bw_progress.load(std::sync::atomic::Ordering::Relaxed), stop_dist) {
                                 return false;
@@ -1177,8 +1183,10 @@ impl<P: BiDirPotential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
                     if let Some(node) = backward_dijkstra.next_with_improve_callback_and_potential(
                         |head, &dist| {
                             let mut pot = bw_potential.borrow_mut();
-                            if pot.forward_potential_raw(head).unwrap_or(INFINITY) + pot.backward_potential_raw(head).unwrap_or(INFINITY) > pot_cap {
-                                return false;
+                            if let Some(pot_cap) = pot_cap {
+                                if pot.forward_potential_raw(head).unwrap_or(INFINITY) + pot.backward_potential_raw(head).unwrap_or(INFINITY) > pot_cap {
+                                    return false;
+                                }
                             }
                             if pot.prune_backward(NodeIdT(head), dist, fw_progress.load(std::sync::atomic::Ordering::Relaxed), stop_dist) {
                                 return false;
@@ -1341,6 +1349,6 @@ where
     = MultiThreadedBiDirCorePathServerWrapper<'s, P, Query>;
 
     fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight> {
-        QueryResult::new(self.distance(query, INFINITY, INFINITY), MultiThreadedBiDirCorePathServerWrapper(self, query))
+        QueryResult::new(self.distance(query, INFINITY, None), MultiThreadedBiDirCorePathServerWrapper(self, query))
     }
 }
