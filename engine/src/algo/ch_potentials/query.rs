@@ -287,7 +287,7 @@ where
     }
 
     pub fn lower_bound(&mut self, node: NodeId) -> Option<Weight> {
-        self.0.core_search.potential.potential(node)
+        self.0.core_search.potential.potential.potential(node)
     }
 
     pub fn query(&self) -> &Q {
@@ -640,7 +640,7 @@ use std::cell::*;
 use std::sync::atomic::AtomicU32;
 
 pub struct BiDirServer<P = ZeroPotential, D = ChooseMinKeyDir> {
-    runner: BiDirSkipLowDegRunner<P, D>,
+    runner: BiDirSkipLowDegRunner<PotentialForPermutated<P>, D>,
     virtual_topocore: VirtualTopocore,
 }
 
@@ -659,7 +659,10 @@ impl<P: BiDirPotential, D: BidirChooseDir> BiDirServer<P, D> {
                 backward_graph: bw,
                 forward_dijkstra_data: DijkstraData::new(n),
                 backward_dijkstra_data: DijkstraData::new(n),
-                potential,
+                potential: PotentialForPermutated {
+                    order: virtual_topocore.order.clone(),
+                    potential,
+                },
                 meeting_node: n as NodeId,
                 dir_chooser: Default::default(),
             },
@@ -668,7 +671,7 @@ impl<P: BiDirPotential, D: BidirChooseDir> BiDirServer<P, D> {
     }
 
     pub fn potentials(&self) -> &P {
-        &self.runner.potential
+        &self.runner.potential.inner()
     }
 }
 
@@ -684,7 +687,11 @@ where
     type EdgeInfo = ();
 
     fn reconstruct_node_path(&mut self) -> Vec<Self::NodeInfo> {
-        BiDirSkipLowDegRunner::path(&self.0.runner, self.1)
+        let mut p = BiDirSkipLowDegRunner::path(&self.0.runner, self.1);
+        for n in &mut p {
+            *n = self.0.virtual_topocore.order.node(*n);
+        }
+        p
     }
     fn reconstruct_edge_path(&mut self) -> Vec<Self::EdgeInfo> {
         vec![(); self.reconstruct_node_path().len() - 1]
@@ -698,11 +705,11 @@ where
     Q: GenQuery<Timestamp> + Copy,
 {
     pub fn potential(&self) -> &P {
-        &self.0.runner.potential
+        &self.0.runner.potential.potential
     }
 
     pub fn lower_bound(&mut self, node: NodeId) -> Option<Weight> {
-        self.0.runner.potential.forward_potential_raw(node)
+        self.0.runner.potential.potential.forward_potential_raw(node)
     }
 }
 

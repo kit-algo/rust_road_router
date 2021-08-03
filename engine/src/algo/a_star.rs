@@ -141,6 +141,44 @@ impl<P: Potential> Potential for PotentialForPermutated<P> {
     }
 }
 
+impl<P: BiDirPotential> BiDirPotential for PotentialForPermutated<P> {
+    fn init(&mut self, source: NodeId, target: NodeId) {
+        self.potential.init(self.order.node(source), self.order.node(target))
+    }
+    fn forward_potential(&mut self, node: NodeId) -> Option<Weight> {
+        self.potential.forward_potential(self.order.node(node))
+    }
+    fn backward_potential(&mut self, node: NodeId) -> Option<Weight> {
+        self.potential.backward_potential(self.order.node(node))
+    }
+    fn forward_potential_raw(&mut self, node: NodeId) -> Option<Weight> {
+        self.potential.forward_potential_raw(self.order.node(node))
+    }
+    fn backward_potential_raw(&mut self, node: NodeId) -> Option<Weight> {
+        self.potential.backward_potential_raw(self.order.node(node))
+    }
+    fn stop(&mut self, fw_min_queue: Option<Weight>, bw_min_queue: Option<Weight>, stop_dist: Weight) -> bool {
+        self.potential.stop(fw_min_queue, bw_min_queue, stop_dist)
+    }
+    fn stop_forward(&mut self, fw_min_queue: Option<Weight>, bw_min_queue: Option<Weight>, stop_dist: Weight) -> bool {
+        self.potential.stop(fw_min_queue, bw_min_queue, stop_dist)
+    }
+    fn stop_backward(&mut self, fw_min_queue: Option<Weight>, bw_min_queue: Option<Weight>, stop_dist: Weight) -> bool {
+        self.potential.stop(fw_min_queue, bw_min_queue, stop_dist)
+    }
+    fn prune_forward(&mut self, NodeIdT(head): NodeIdT, fw_dist_head: Weight, reverse_min_queue: Weight, max_dist: Weight) -> bool {
+        self.potential
+            .prune_forward(NodeIdT(self.order.node(head)), fw_dist_head, reverse_min_queue, max_dist)
+    }
+    fn prune_backward(&mut self, NodeIdT(head): NodeIdT, bw_dist_head: Weight, reverse_min_queue: Weight, max_dist: Weight) -> bool {
+        self.potential
+            .prune_backward(NodeIdT(self.order.node(head)), bw_dist_head, reverse_min_queue, max_dist)
+    }
+    fn bidir_pot_key() -> &'static str {
+        P::bidir_pot_key()
+    }
+}
+
 pub trait BiDirPotential {
     fn init(&mut self, source: NodeId, target: NodeId);
     fn forward_potential(&mut self, node: NodeId) -> Option<Weight>;
