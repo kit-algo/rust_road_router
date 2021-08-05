@@ -1,0 +1,85 @@
+#[macro_use]
+extern crate rust_road_router;
+use rust_road_router::{
+    algo::{a_star::*, ch_potentials::*},
+    cli::CliErr,
+    datastr::graph::*,
+    experiments,
+    io::*,
+    report::*,
+};
+use std::{env, error::Error, path::Path};
+use time::Duration;
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let _reporter = enable_reporting("lazy_rphast");
+    let arg = &env::args().skip(1).next().ok_or(CliErr("No graph directory arg given"))?;
+    let path = Path::new(arg);
+
+    let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
+    let chpot_data = CHPotLoader::reconstruct_from(&path.join("lower_bound_ch"))?;
+
+    let num_queries = 100;
+
+    for target_set_size_exp in [10, 12, 14] {
+        for ball_size_exp in 14..=24 {
+            let queries = experiments::gen_many_to_many_queries(
+                &graph,
+                num_queries,
+                2usize.pow(ball_size_exp),
+                2usize.pow(target_set_size_exp),
+                &mut experiments::rng(Default::default()),
+            );
+
+            let mut many_to_one = chpot_data.potentials().0;
+            let mut algos_ctxt = push_collection_context("algo_runs".to_string());
+
+            let mut total_query_time = Duration::zero();
+
+            for (sources, targets) in &queries {
+                for &source in sources {
+                    let _alg_ctx = algos_ctxt.push_collection_item();
+                    report!("algo", "lazy_rphast_many_to_one");
+                    let (_, time) = measure(|| {
+                        report_time_with_key("selection", "selection", || {
+                            many_to_one.init(source);
+                        });
+                        for &t in targets {
+                            many_to_one.potential(t);
+                        }
+                    });
+                    report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+                    total_query_time = total_query_time + time;
+                }
+            }
+
+            if num_queries > 0 {
+                eprintln!("Avg. query time {}", total_query_time / ((num_queries * num_queries) as i32))
+            };
+
+            let mut many_to_many = chpot_data.bucket_ch_pot();
+            let mut total_query_time = Duration::zero();
+
+            for (sources, targets) in &queries {
+                let _alg_ctx = algos_ctxt.push_collection_item();
+                report!("algo", "lazy_rphast_many_to_many");
+                let (_, time) = measure(|| {
+                    report_time_with_key("selection", "selection", || {
+                        many_to_many.init(&targets);
+                    });
+                    for &s in sources {
+                        many_to_many.potential(s);
+                    }
+                });
+                report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+                total_query_time = total_query_time + time;
+            }
+
+            if num_queries > 0 {
+                eprintln!("Avg. query time {}", total_query_time / (num_queries as i32))
+            };
+        }
+    }
+
+    Ok(())
+}
