@@ -158,12 +158,15 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> CHPotential<GF, GB> {
         }
         *num_pot_computations += 1;
 
-        let min_by_up = LinkIterable::<Link>::link_iter(forward, node)
-            .map(|edge| edge.weight + Self::potential_internal(potentials, forward, backward_data, edge.node, num_pot_computations))
-            .min()
-            .unwrap_or(INFINITY);
+        let mut dist = backward_data.distances[node as usize];
 
-        potentials[node as usize] = InRangeOption::new(Some(std::cmp::min(backward_data.distances[node as usize], min_by_up)));
+        for l in LinkIterable::<Link>::link_iter(forward, node) {
+            dist = std::cmp::min(
+                dist,
+                Self::potential_internal(potentials, forward, backward_data, l.node, num_pot_computations) + l.weight,
+            );
+        }
+        potentials[node as usize] = InRangeOption::new(Some(dist));
 
         potentials[node as usize].value().unwrap()
     }
