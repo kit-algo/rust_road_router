@@ -322,12 +322,11 @@ impl CHPotLoader {
 pub struct BucketCHPotential<GF, GB> {
     order: NodeOrder,
     potentials: Vec<Option<Box<[Weight]>>>,
-    backward_dists: Vec<Vec<(u32, Weight)>>,
     pot_final: FastClearBitVec,
     to_clear: Vec<NodeId>,
     forward: GF,
     backward: GB,
-    dijkstra_data: DijkstraData<Weight>,
+    dijkstra_data: DijkstraData<Vec<(NodeId, Weight)>>,
     num_pot_computations: usize,
     num_targets: usize,
 }
@@ -338,7 +337,6 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> BucketCHPotential<GF, GB> {
         Self {
             order,
             potentials: vec![None; n],
-            backward_dists: vec![Vec::new(); n],
             pot_final: FastClearBitVec::new(n),
             to_clear: Vec::new(),
             forward,
@@ -355,7 +353,7 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> BucketCHPotential<GF, GB> {
 
     fn compute_dists(
         potentials: &mut [Option<Box<[Weight]>>],
-        backward_dists: &mut [Vec<(u32, Weight)>],
+        dijkstra_data: &DijkstraData<Vec<(NodeId, Weight)>>,
         forward: &GF,
         pot_final: &mut FastClearBitVec,
         to_clear: &mut Vec<NodeId>,
@@ -369,11 +367,9 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> BucketCHPotential<GF, GB> {
         *num_pot_computations += 1;
 
         if potentials[node as usize].is_none() {
-            if backward_dists[node as usize].is_empty() {
-                to_clear.push(node);
-            }
+            to_clear.push(node);
             potentials[node as usize] = Some(std::iter::repeat(INFINITY).take(num_targets).collect());
-            for &(i, dist) in backward_dists[node as usize].iter() {
+            for &(i, dist) in &dijkstra_data.distances[node as usize] {
                 potentials[node as usize].as_mut().unwrap()[i as usize] = dist;
             }
         }
@@ -382,7 +378,7 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> BucketCHPotential<GF, GB> {
             debug_assert!(l.node > node);
             Self::compute_dists(
                 potentials,
-                backward_dists,
+                dijkstra_data,
                 forward,
                 pot_final,
                 to_clear,
@@ -408,28 +404,26 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> BucketCHPotential<GF, GB> {
         self.num_pot_computations = 0;
         for node in self.to_clear.drain(..) {
             self.potentials[node as usize] = None;
-            self.backward_dists[node as usize].clear();
         }
         self.pot_final.clear();
 
-        for (i, &target) in targets.iter().enumerate() {
-            let mut ops = DefaultOps();
-            let mut backward_dijkstra_run = DijkstraRun::query(
-                &self.backward,
-                &mut self.dijkstra_data,
-                &mut ops,
-                Query {
-                    from: self.order.rank(target),
-                    to: std::u32::MAX,
-                },
-            );
-            while let Some(node) = backward_dijkstra_run.next() {
-                if self.backward_dists[node as usize].is_empty() {
-                    self.to_clear.push(node);
-                }
-                self.backward_dists[node as usize].push((i as u32, *backward_dijkstra_run.tentative_distance(node)))
-            }
+        let mut ops = SimulBucketCHOps();
+        let mut backward_dijkstra_run = DijkstraRun::query(
+            &self.backward,
+            &mut self.dijkstra_data,
+            &mut ops,
+            SimulBucketQuery {
+                node: self.order.rank(targets[0]),
+                index: 0,
+            },
+        );
+        for (i, &target) in targets.iter().enumerate().skip(1) {
+            backward_dijkstra_run.add_start_node(SimulBucketQuery {
+                node: self.order.rank(target),
+                index: i as u32,
+            });
         }
+        while let Some(_) = backward_dijkstra_run.next() {}
     }
 
     pub fn potential(&mut self, node: NodeId) -> &[Weight] {
@@ -437,7 +431,7 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> BucketCHPotential<GF, GB> {
 
         Self::compute_dists(
             &mut self.potentials,
-            &mut self.backward_dists,
+            &self.dijkstra_data,
             &self.forward,
             &mut self.pot_final,
             &mut self.to_clear,
@@ -447,5 +441,106 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> BucketCHPotential<GF, GB> {
         );
         debug_assert!(self.pot_final.get(node as usize));
         self.potentials[node as usize].as_ref().unwrap()
+    }
+}
+
+struct SimulBucketQuery {
+    node: NodeId,
+    index: u32,
+}
+
+impl GenQuery<Vec<(NodeId, Weight)>> for SimulBucketQuery {
+    fn new(_from: NodeId, _to: NodeId, _initial_state: Vec<(NodeId, Weight)>) -> Self {
+        unimplemented!()
+    }
+    fn from(&self) -> NodeId {
+        self.node
+    }
+    fn to(&self) -> NodeId {
+        unimplemented!()
+    }
+    fn initial_state(&self) -> Vec<(NodeId, Weight)> {
+        vec![(self.index, 0)]
+    }
+    fn permutate(&mut self, _order: &NodeOrder) {
+        unimplemented!()
+    }
+}
+
+struct SimulBucketCHOps();
+
+impl<G: LinkIterGraph> DijkstraOps<G> for SimulBucketCHOps {
+    type Label = Vec<(NodeId, Weight)>;
+    type Arc = Link;
+    type LinkResult = Vec<(NodeId, Weight)>;
+    type PredecessorLink = ();
+
+    #[inline(always)]
+    fn link(&mut self, _graph: &G, label: &Vec<(NodeId, Weight)>, link: &Link) -> Self::LinkResult {
+        label.iter().map(move |&(n, w)| (n, w + link.weight)).collect()
+    }
+
+    #[inline(always)]
+    fn merge<'g, 'l, 'a>(&mut self, label: &mut Vec<(NodeId, Weight)>, linked: Self::LinkResult) -> bool {
+        let mut improved = false;
+        let mut res: Self::Label = Vec::with_capacity(label.len() + linked.len());
+
+        let mut cur_iter = label.iter().peekable();
+        let mut linked_iter = linked.iter().peekable();
+
+        loop {
+            use std::cmp::*;
+            match (cur_iter.peek(), linked_iter.peek()) {
+                (Some(&&(cur_node, cur_dist)), Some(&&(linked_node, linked_dist))) => match cur_node.cmp(&linked_node) {
+                    Ordering::Less => {
+                        res.push((cur_node, cur_dist));
+                        cur_iter.next();
+                    }
+                    Ordering::Greater => {
+                        improved = true;
+                        res.push((linked_node, linked_dist));
+                        linked_iter.next();
+                    }
+                    Ordering::Equal => {
+                        if linked_dist < cur_dist {
+                            improved = true;
+                        }
+                        res.push((cur_node, min(cur_dist, linked_dist)));
+                        cur_iter.next();
+                        linked_iter.next();
+                    }
+                },
+                (Some(&&(cur_node, cur_dist)), None) => {
+                    res.push((cur_node, cur_dist));
+                    cur_iter.next();
+                }
+                (None, Some(&&(linked_node, linked_dist))) => {
+                    improved = true;
+                    res.push((linked_node, linked_dist));
+                    linked_iter.next();
+                }
+                _ => break,
+            }
+        }
+
+        if improved {
+            *label = res;
+        }
+        improved
+    }
+
+    #[inline(always)]
+    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {
+        ()
+    }
+}
+
+impl Label for Vec<(NodeId, Weight)> {
+    type Key = ();
+    fn neutral() -> Self {
+        Vec::new()
+    }
+    fn key(&self) -> Self::Key {
+        ()
     }
 }
