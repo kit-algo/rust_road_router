@@ -120,7 +120,7 @@ impl Load for BitVec {
 
 /// A Bitarray with a clearlist for fast resetting.
 /// Effective, when few bits (compared to the total number) will be set in each round before reset.
-#[derive(Debug)]
+#[derive(Clone)]
 pub struct FastClearBitVec {
     data: Vec<u64>,
     to_clear: Vec<usize>,

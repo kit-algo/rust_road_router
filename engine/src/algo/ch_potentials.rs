@@ -5,7 +5,7 @@ use crate::{
         customizable_contraction_hierarchy::{query::stepped_elimination_tree::SteppedEliminationTree, *},
         dijkstra::*,
     },
-    datastr::{node_order::*, timestamped_vector::TimestampedVector},
+    datastr::{node_order::*, rank_select_map::FastClearBitVec, timestamped_vector::TimestampedVector},
     io::*,
     report::*,
     util::in_range_option::InRangeOption,
@@ -307,5 +307,145 @@ impl CHPotLoader {
                 self.order.clone(),
             ),
         )
+    }
+
+    pub fn bucket_ch_pot(&self) -> BucketCHPotential<FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>, FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>> {
+        BucketCHPotential::new(
+            FirstOutGraph::new(&self.forward_first_out[..], &self.forward_head[..], &self.forward_weight[..]),
+            FirstOutGraph::new(&self.backward_first_out[..], &self.backward_head[..], &self.backward_weight[..]),
+            self.order.clone(),
+        )
+    }
+}
+
+#[derive(Clone)]
+pub struct BucketCHPotential<GF, GB> {
+    order: NodeOrder,
+    potentials: Vec<Option<Box<[Weight]>>>,
+    backward_dists: Vec<Vec<(u32, Weight)>>,
+    pot_final: FastClearBitVec,
+    to_clear: Vec<NodeId>,
+    forward: GF,
+    backward: GB,
+    dijkstra_data: DijkstraData<Weight>,
+    num_pot_computations: usize,
+    num_targets: usize,
+}
+
+impl<GF: LinkIterGraph, GB: LinkIterGraph> BucketCHPotential<GF, GB> {
+    pub fn new(forward: GF, backward: GB, order: NodeOrder) -> Self {
+        let n = forward.num_nodes();
+        Self {
+            order,
+            potentials: vec![None; n],
+            backward_dists: vec![Vec::new(); n],
+            pot_final: FastClearBitVec::new(n),
+            to_clear: Vec::new(),
+            forward,
+            backward,
+            dijkstra_data: DijkstraData::new(n),
+            num_pot_computations: 0,
+            num_targets: 0,
+        }
+    }
+
+    pub fn num_pot_computations(&self) -> usize {
+        self.num_pot_computations
+    }
+
+    fn compute_dists(
+        potentials: &mut [Option<Box<[Weight]>>],
+        backward_dists: &mut [Vec<(u32, Weight)>],
+        forward: &GF,
+        pot_final: &mut FastClearBitVec,
+        to_clear: &mut Vec<NodeId>,
+        node: NodeId,
+        num_pot_computations: &mut usize,
+        num_targets: usize,
+    ) {
+        if pot_final.get(node as usize) {
+            return;
+        }
+        *num_pot_computations += 1;
+
+        if potentials[node as usize].is_none() {
+            if backward_dists[node as usize].is_empty() {
+                to_clear.push(node);
+            }
+            potentials[node as usize] = Some(std::iter::repeat(INFINITY).take(num_targets).collect());
+            for &(i, dist) in backward_dists[node as usize].iter() {
+                potentials[node as usize].as_mut().unwrap()[i as usize] = dist;
+            }
+        }
+
+        for l in LinkIterable::<Link>::link_iter(forward, node) {
+            debug_assert!(l.node > node);
+            Self::compute_dists(
+                potentials,
+                backward_dists,
+                forward,
+                pot_final,
+                to_clear,
+                l.node,
+                num_pot_computations,
+                num_targets,
+            );
+            debug_assert!(pot_final.get(node as usize));
+            let (potentials, upper_dists) = potentials.split_at_mut(l.node as usize);
+            let head_dists = upper_dists[0].as_ref().unwrap();
+            let self_dists = potentials[node as usize].as_mut().unwrap();
+
+            for (self_dist, head_dist) in self_dists.iter_mut().zip(head_dists.iter()) {
+                *self_dist = std::cmp::min(*self_dist, *head_dist + l.weight);
+            }
+        }
+
+        pot_final.set(node as usize);
+    }
+
+    pub fn init(&mut self, targets: &[NodeId]) {
+        self.num_targets = targets.len();
+        self.num_pot_computations = 0;
+        for node in self.to_clear.drain(..) {
+            self.potentials[node as usize] = None;
+            self.backward_dists[node as usize].clear();
+        }
+        self.pot_final.clear();
+
+        for (i, &target) in targets.iter().enumerate() {
+            let mut ops = DefaultOps();
+            let mut backward_dijkstra_run = DijkstraRun::query(
+                &self.backward,
+                &mut self.dijkstra_data,
+                &mut ops,
+                Query {
+                    from: self.order.rank(target),
+                    to: std::u32::MAX,
+                },
+            );
+            while let Some(node) = backward_dijkstra_run.next() {
+                if self.backward_dists[node as usize].is_empty() {
+                    self.to_clear.push(node);
+                }
+                self.backward_dists[node as usize].push((i as u32, *backward_dijkstra_run.tentative_distance(node)))
+            }
+        }
+    }
+
+    pub fn potential(&mut self, node: NodeId) -> &[Weight] {
+        let node = self.order.rank(node);
+
+        Self::compute_dists(
+            &mut self.potentials,
+            &mut self.backward_dists,
+            &self.forward,
+            &mut self.pot_final,
+            &mut self.to_clear,
+            node,
+            &mut self.num_pot_computations,
+            self.num_targets,
+        );
+        debug_assert!(self.pot_final.get(node as usize));
+        self.potentials[node as usize].as_ref().unwrap()
     }
 }

@@ -7,7 +7,11 @@ pub fn num_dijkstra_queries() -> usize {
 use rand::{distributions::uniform::SampleUniform, prelude::*};
 use time::Duration;
 
-use crate::{algo::*, datastr::graph::*, report::*};
+use crate::{
+    algo::{dijkstra::*, *},
+    datastr::graph::*,
+    report::*,
+};
 
 pub mod catchup;
 pub mod chpot;
@@ -187,4 +191,51 @@ pub fn run_td_queries<T: Copy + serde::ser::Serialize, W: Copy + Eq + std::fmt::
 pub fn rng(seed: <StdRng as SeedableRng>::Seed) -> StdRng {
     report!("seed", seed);
     StdRng::from_seed(seed)
+}
+
+pub fn gen_many_to_many_queries(
+    graph: &impl LinkIterGraph,
+    num_queries: usize,
+    ball_size: usize,
+    set_size: usize,
+    rng: &mut StdRng,
+) -> Vec<(Vec<NodeId>, Vec<NodeId>)> {
+    assert!(ball_size >= set_size);
+    let n = graph.num_nodes();
+    let mut queries = Vec::with_capacity(num_queries);
+
+    let mut dijk_data = DijkstraData::new(n);
+    let mut ops = DefaultOps();
+
+    for _ in 0..num_queries {
+        let source_center = rng.gen_range(0..n as NodeId);
+        let dijk_run = DijkstraRun::query(
+            graph,
+            &mut dijk_data,
+            &mut ops,
+            Query {
+                from: source_center,
+                to: n as NodeId,
+            },
+        );
+        let ball: Vec<_> = dijk_run.take(ball_size).collect();
+        let sources = ball.choose_multiple(rng, set_size).copied().collect();
+
+        // let target_center = rng.gen_range(0..n as NodeId);
+        // let dijk_run = DijkstraRun::query(
+        //     graph,
+        //     &mut dijk_data,
+        //     &mut ops,
+        //     Query {
+        //         from: target_center,
+        //         to: n as NodeId,
+        //     },
+        // );
+        // let ball: Vec<_> = dijk_run.take(ball_size).collect();
+        let targets = ball.choose_multiple(rng, set_size).copied().collect();
+
+        queries.push((sources, targets));
+    }
+
+    queries
 }
