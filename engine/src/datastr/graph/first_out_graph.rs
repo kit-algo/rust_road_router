@@ -191,7 +191,7 @@ where
     WeightContainer: AsRef<[Weight]>,
 {
     #[allow(clippy::type_complexity)]
-    type Iter<'a> = std::iter::Map<std::iter::Zip<std::slice::Iter<'a, NodeId>, std::slice::Iter<'a, Weight>>, fn((&NodeId, &Weight)) -> Link>;
+    type Iter<'a> = impl Iterator<Item = Link> + 'a;
 
     #[inline]
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
