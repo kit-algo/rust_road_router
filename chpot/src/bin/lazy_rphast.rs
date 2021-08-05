@@ -21,8 +21,16 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let num_queries = 100;
 
+    let mut exps_ctxt = push_collection_context("experiments".to_string());
+
     for target_set_size_exp in [10, 12, 14] {
         for ball_size_exp in 14..=24 {
+            let _exp_ctx = exps_ctxt.push_collection_item();
+
+            report!("experiment", "lazy_rphast");
+            report!("target_set_size_exp", target_set_size_exp);
+            report!("ball_size_exp", ball_size_exp);
+
             let queries = experiments::gen_many_to_many_queries(
                 &graph,
                 num_queries,
