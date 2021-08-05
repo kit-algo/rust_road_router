@@ -62,9 +62,9 @@ pub fn run(
     Ok(())
 }
 
-fn kmh_to_mpms(speed: f64) -> f64 {
+fn kmh_to_mpms(tt_units_per_s: u32, dist_units_per_m: u32, speed: f64) -> f64 {
     // speed * 1000.0 / 3600.0 / 1000.0
-    speed * 1000.0 / 3600.0 / 10.0
+    speed * 1000.0 * dist_units_per_m as f64 / 3600.0 / tt_units_per_s as f64
 }
 
 pub struct ProbabilisticSpeedWeightedScaler {
@@ -76,30 +76,30 @@ pub struct ProbabilisticSpeedWeightedScaler {
 }
 
 impl ProbabilisticSpeedWeightedScaler {
-    pub fn scale_all(factor: f64) -> Self {
+    pub fn scale_all(tt_units_per_s: u32, dist_units_per_m: u32, factor: f64) -> Self {
         Self {
             v_min: 0.0,
-            v_max: kmh_to_mpms(300.0),
+            v_max: kmh_to_mpms(tt_units_per_s, dist_units_per_m, 300.0),
             prob_at_min: 1.0,
             prob_at_max: 1.0,
             factor,
         }
     }
 
-    pub fn scale_probabilistically(factor: f64, p: f64) -> Self {
+    pub fn scale_probabilistically(tt_units_per_s: u32, dist_units_per_m: u32, factor: f64, p: f64) -> Self {
         Self {
             v_min: 0.0,
-            v_max: kmh_to_mpms(300.0),
+            v_max: kmh_to_mpms(tt_units_per_s, dist_units_per_m, 300.0),
             prob_at_min: p,
             prob_at_max: p,
             factor,
         }
     }
 
-    pub fn speed_cutoff(factor: f64, speed: f64, p_below: f64) -> Self {
+    pub fn speed_cutoff(tt_units_per_s: u32, dist_units_per_m: u32, factor: f64, speed: f64, p_below: f64) -> Self {
         Self {
-            v_min: kmh_to_mpms(speed),
-            v_max: kmh_to_mpms(speed + 1.0),
+            v_min: kmh_to_mpms(tt_units_per_s, dist_units_per_m, speed),
+            v_max: kmh_to_mpms(tt_units_per_s, dist_units_per_m, speed + 1.0),
             prob_at_min: p_below,
             prob_at_max: 1.0 - p_below,
             factor,

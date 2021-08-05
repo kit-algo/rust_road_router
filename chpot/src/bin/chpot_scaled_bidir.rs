@@ -61,7 +61,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         report!("factor", factor);
 
         let mut modified_travel_time = graph.weight().to_vec();
-        ProbabilisticSpeedWeightedScaler::scale_all(factor).scale_with_speed_weighted_prob(&mut modify_rng, &mut modified_travel_time, &geo_distance);
+        ProbabilisticSpeedWeightedScaler::scale_all(tt_units_per_s, dist_units_per_m, factor).scale_with_speed_weighted_prob(
+            &mut modify_rng,
+            &mut modified_travel_time,
+            &geo_distance,
+        );
         run(&modified_travel_time);
     }
 
@@ -73,7 +77,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             report!("probability", p);
 
             let mut modified_travel_time = graph.weight().to_vec();
-            ProbabilisticSpeedWeightedScaler::scale_probabilistically(factor, p).scale_with_speed_weighted_prob(
+            ProbabilisticSpeedWeightedScaler::scale_probabilistically(tt_units_per_s, dist_units_per_m, factor, p).scale_with_speed_weighted_prob(
                 &mut modify_rng,
                 &mut modified_travel_time,
                 &geo_distance,
@@ -92,7 +96,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 report!("speed", speed);
 
                 let mut modified_travel_time = graph.weight().to_vec();
-                ProbabilisticSpeedWeightedScaler::speed_cutoff(factor, speed, p).scale_with_speed_weighted_prob(
+                ProbabilisticSpeedWeightedScaler::speed_cutoff(tt_units_per_s, dist_units_per_m, factor, speed, p).scale_with_speed_weighted_prob(
                     &mut modify_rng,
                     &mut modified_travel_time,
                     &geo_distance,
