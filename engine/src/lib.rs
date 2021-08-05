@@ -1,6 +1,5 @@
 #![feature(array_windows)]
 #![feature(slice_group_by)]
-#![allow(incomplete_features)]
 #![feature(generic_associated_types)]
 #![feature(type_alias_impl_trait)]
 #![allow(clippy::redundant_closure_call)]
