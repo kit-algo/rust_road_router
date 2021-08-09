@@ -1,5 +1,6 @@
 #[macro_use]
 extern crate rust_road_router;
+use rand::prelude::*;
 use rust_road_router::{
     algo::{a_star::*, ch_potentials::*},
     cli::CliErr,
@@ -19,7 +20,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
     let chpot_data = CHPotLoader::reconstruct_from(&path.join("lower_bound_ch"))?;
 
-    let num_queries = 100;
+    let num_queries = 1000;
 
     let mut exps_ctxt = push_collection_context("experiments".to_string());
 
@@ -31,13 +32,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             report!("target_set_size_exp", target_set_size_exp);
             report!("ball_size_exp", ball_size_exp);
 
-            let queries = experiments::gen_many_to_many_queries(
-                &graph,
-                num_queries,
-                2usize.pow(ball_size_exp),
-                2usize.pow(target_set_size_exp),
-                &mut experiments::rng(Default::default()),
-            );
+            let mut rng = experiments::rng(Default::default());
+
+            let queries = experiments::gen_many_to_many_queries(&graph, num_queries, 2usize.pow(ball_size_exp), 2usize.pow(target_set_size_exp), &mut rng);
 
             let mut many_to_one = chpot_data.potentials().0;
             let mut algos_ctxt = push_collection_context("algo_runs".to_string());
@@ -45,15 +42,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             let mut total_query_time = Duration::zero();
 
             for (sources, targets) in &queries {
-                for &source in sources {
+                for &target in targets.choose_multiple(&mut rng, num_queries) {
                     let _alg_ctx = algos_ctxt.push_collection_item();
                     report!("algo", "lazy_rphast_many_to_one");
                     let (_, time) = measure(|| {
                         report_time_with_key("selection", "selection", || {
-                            many_to_one.init(source);
+                            many_to_one.init(target);
                         });
-                        for &t in targets {
-                            many_to_one.potential(t);
+                        for &s in sources {
+                            many_to_one.potential(s);
                         }
                     });
                     report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
