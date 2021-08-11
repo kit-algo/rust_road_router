@@ -25,6 +25,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
     let geo_distance = Vec::<Weight>::load_from(path.join("geo_distance"))?;
+    let tt_units_per_s = Vec::<u32>::load_from(path.join("tt_units_per_s"))?[0];
+    let dist_units_per_m = Vec::<u32>::load_from(path.join("dist_units_per_m"))?[0];
     let chpot_data = CHPotLoader::reconstruct_from(&path.join("lower_bound_ch"))?;
 
     let rng = rng(Default::default());
@@ -38,20 +40,25 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut server = UniDir::<_, DefaultOps, _>::with_potential(modified_graph.clone(), chpot_data.potentials().0);
         run_random_queries(graph.num_nodes(), &mut server, &mut rng.clone(), &mut algo_runs_ctxt, chpot::num_queries());
 
-        let (forward_pot, backward_pot) = chpot_data.potentials();
-        let mut server = BiDir::<_, _, _>::new_with_potentials(modified_graph.clone(), AveragePotential::new(forward_pot, backward_pot));
+        let mut server = BiDir::<_, _, _>::new_with_potentials(modified_graph.clone(), BiDirZeroPot);
         run_random_queries(graph.num_nodes(), &mut server, &mut rng.clone(), &mut algo_runs_ctxt, chpot::num_queries());
 
         let (forward_pot, backward_pot) = chpot_data.potentials();
-        let mut server = BiDir::<_, _, _, AlternatingDirs>::new_with_potentials(modified_graph.clone(), AveragePotential::new(forward_pot, backward_pot));
+        let mut server = BiDir::<_, _, _>::new_with_potentials(modified_graph.clone(), AveragePotential::<_, _>::new(forward_pot, backward_pot));
         run_random_queries(graph.num_nodes(), &mut server, &mut rng.clone(), &mut algo_runs_ctxt, chpot::num_queries());
 
         let (forward_pot, backward_pot) = chpot_data.potentials();
-        let mut server = BiDir::<_, _, _>::new_with_potentials(modified_graph.clone(), SymmetricBiDirPotential::new(forward_pot, backward_pot));
+        let mut server =
+            BiDir::<_, _, _, AlternatingDirs>::new_with_potentials(modified_graph.clone(), AveragePotential::<_, _>::new(forward_pot, backward_pot));
         run_random_queries(graph.num_nodes(), &mut server, &mut rng.clone(), &mut algo_runs_ctxt, chpot::num_queries());
 
         let (forward_pot, backward_pot) = chpot_data.potentials();
-        let mut server = BiDir::<_, _, _, AlternatingDirs>::new_with_potentials(modified_graph, SymmetricBiDirPotential::new(forward_pot, backward_pot));
+        let mut server = BiDir::<_, _, _>::new_with_potentials(modified_graph.clone(), SymmetricBiDirPotential::<_, _>::new(forward_pot, backward_pot));
+        run_random_queries(graph.num_nodes(), &mut server, &mut rng.clone(), &mut algo_runs_ctxt, chpot::num_queries());
+
+        let (forward_pot, backward_pot) = chpot_data.potentials();
+        let mut server =
+            BiDir::<_, _, _, AlternatingDirs>::new_with_potentials(modified_graph, SymmetricBiDirPotential::<_, _>::new(forward_pot, backward_pot));
         run_random_queries(graph.num_nodes(), &mut server, &mut rng.clone(), &mut algo_runs_ctxt, chpot::num_queries());
     };
 

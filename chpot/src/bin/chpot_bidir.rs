@@ -6,11 +6,14 @@ use rust_road_router::{
         a_star::*,
         alt::*,
         ch_potentials::{
-            query::{BiDirServer, Server},
+            query::{BiDirServer as BiDirTopo, Server as UniDirTopo},
             *,
         },
         customizable_contraction_hierarchy::*,
-        dijkstra::{AlternatingDirs, ChooseMinKeyDir, DefaultOps},
+        dijkstra::{
+            query::{bidirectional_dijkstra::Server as BiDir, dijkstra::Server as UniDir},
+            AlternatingDirs, ChooseMinKeyDir, DefaultOps,
+        },
         *,
     },
     cli::CliErr,
@@ -21,15 +24,56 @@ use rust_road_router::{
 };
 use std::{env, error::Error, path::Path};
 
+macro_rules! bidir_pre_callback {
+    () => {
+        |from, to, server| {
+            let mut res = {
+                let _blocked = block_reporting();
+                server.query(Query { from, to })
+            };
+            #[cfg(all(not(feature = "chpot-alt"), not(feature = "chpot-only-topo"), not(feature = "chpot-oracle")))]
+            report!(
+                "num_pot_computations",
+                res.data().potential().forward().num_pot_computations() + res.data().potential().backward().num_pot_computations()
+            );
+            #[cfg(feature = "chpot-oracle")]
+            report!(
+                "num_pot_computations",
+                res.data().potential().forward().inner().num_pot_computations() + res.data().potential().backward().inner().num_pot_computations()
+            );
+            report!("lower_bound", res.data().lower_bound(from));
+        }
+    };
+}
+
+macro_rules! unidir_pre_callback {
+    () => {
+        |from, to, server| {
+            let mut res = {
+                let _blocked = block_reporting();
+                server.query(Query { from, to })
+            };
+            #[cfg(all(not(feature = "chpot-alt"), not(feature = "chpot-only-topo"), not(feature = "chpot-oracle")))]
+            report!("num_pot_computations", res.data().potential().num_pot_computations());
+            #[cfg(feature = "chpot-oracle")]
+            report!("num_pot_computations", res.data().potential().inner().num_pot_computations());
+            report!("lower_bound", res.data().lower_bound(from));
+        }
+    };
+}
+
+#[allow(unused_braces)]
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting("bidir_chpot_scaling");
     let rng = rng(Default::default());
     let mut modify_rng = rng.clone();
+    let q = chpot::num_queries();
 
     let arg = &env::args().skip(1).next().ok_or(CliErr("No graph directory arg given"))?;
     let path = Path::new(arg);
 
     let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
+    let n = graph.num_nodes();
     let geo_distance = Vec::<Weight>::load_from(path.join("geo_distance"))?;
     let tt_units_per_s = Vec::<u32>::load_from(path.join("tt_units_per_s"))?[0];
     let dist_units_per_m = Vec::<u32>::load_from(path.join("dist_units_per_m"))?[0];
@@ -38,7 +82,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     #[cfg(feature = "chpot-cch")]
     let cch = {
+        // if cfg!(feature = "chpot-cch") {
         pot_name = "CCH";
+        // }
         let _blocked = block_reporting();
         let order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm"))?);
         CCH::fix_order_and_build(&graph, order)
@@ -105,154 +151,104 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
         let modified_graph = FirstOutGraph::new(graph.first_out(), graph.head(), modified_travel_time);
 
+        // let mut gt = {
+        //     let _blocked = block_reporting();
+        //     customizable_contraction_hierarchy::query::Server::new(customize(&cch, &modified_graph))
+        // };
+        // let gt_cb = |from, to| Some(gt.query(Query { from, to }).distance());
+        let gt_cb = |_, _| None;
+
         let mut server = {
             let _blocked = block_reporting();
-            Server::<OwnedGraph, _, _, true, true, true>::new(&modified_graph, potentials().0, DefaultOps::default())
+            UniDirTopo::<OwnedGraph, _, _, true, true, true>::new(&modified_graph, potentials().0, DefaultOps::default())
         };
-        run_random_queries_with_callbacks(
-            graph.num_nodes(),
-            &mut server,
-            &mut rng.clone(),
-            &mut algo_runs_ctxt,
-            chpot::num_queries(),
-            |from, to, server| {
-                let mut res = {
-                    let _blocked = block_reporting();
-                    server.query(Query { from, to })
-                };
-                report!("foo", "bar");
-                #[cfg(all(not(feature = "chpot-alt"), not(feature = "chpot-only-topo"), not(feature = "chpot-oracle")))]
-                report!("num_pot_computations", res.data().potential().num_pot_computations());
-                #[cfg(feature = "chpot-oracle")]
-                report!("num_pot_computations", res.data().potential().inner().num_pot_computations());
-                report!("lower_bound", res.data().lower_bound(from));
-            },
-            |_, _| None,
-        );
+        run_random_queries_with_callbacks(n, &mut server, &mut rng.clone(), &mut algo_runs_ctxt, q, unidir_pre_callback!(), gt_cb);
 
         let (forward_pot, backward_pot) = potentials();
         let mut server = {
             let _blocked = block_reporting();
-            BiDirServer::<_, ChooseMinKeyDir>::new(&modified_graph, SymmetricBiDirPotential::new(forward_pot, backward_pot))
+            BiDirTopo::<_, ChooseMinKeyDir>::new(
+                &modified_graph,
+                SymmetricBiDirPotential::<_, _, { cfg!(feature = "chpot-improved-pruning") }>::new(forward_pot, backward_pot),
+            )
         };
-        run_random_queries_with_callbacks(
-            graph.num_nodes(),
-            &mut server,
-            &mut rng.clone(),
-            &mut algo_runs_ctxt,
-            chpot::num_queries(),
-            |from, to, server| {
-                let mut res = {
-                    let _blocked = block_reporting();
-                    server.query(Query { from, to })
-                };
-                #[cfg(all(not(feature = "chpot-alt"), not(feature = "chpot-only-topo"), not(feature = "chpot-oracle")))]
-                report!(
-                    "num_pot_computations",
-                    res.data().potential().forward().num_pot_computations() + res.data().potential().backward().num_pot_computations()
-                );
-                #[cfg(feature = "chpot-oracle")]
-                report!(
-                    "num_pot_computations",
-                    res.data().potential().forward().inner().num_pot_computations() + res.data().potential().backward().inner().num_pot_computations()
-                );
-                report!("lower_bound", res.data().lower_bound(from));
-            },
-            |_, _| None,
-        );
+        run_random_queries_with_callbacks(n, &mut server, &mut rng.clone(), &mut algo_runs_ctxt, q, bidir_pre_callback!(), gt_cb);
 
         let (forward_pot, backward_pot) = potentials();
         let mut server = {
             let _blocked = block_reporting();
-            BiDirServer::<_, AlternatingDirs>::new(&modified_graph, SymmetricBiDirPotential::new(forward_pot, backward_pot))
+            BiDirTopo::<_, AlternatingDirs>::new(
+                &modified_graph,
+                SymmetricBiDirPotential::<_, _, { cfg!(feature = "chpot-improved-pruning") }>::new(forward_pot, backward_pot),
+            )
         };
-        run_random_queries_with_callbacks(
-            graph.num_nodes(),
-            &mut server,
-            &mut rng.clone(),
-            &mut algo_runs_ctxt,
-            chpot::num_queries(),
-            |from, to, server| {
-                let mut res = {
-                    let _blocked = block_reporting();
-                    server.query(Query { from, to })
-                };
-                #[cfg(all(not(feature = "chpot-alt"), not(feature = "chpot-only-topo"), not(feature = "chpot-oracle")))]
-                report!(
-                    "num_pot_computations",
-                    res.data().potential().forward().num_pot_computations() + res.data().potential().backward().num_pot_computations()
-                );
-                #[cfg(feature = "chpot-oracle")]
-                report!(
-                    "num_pot_computations",
-                    res.data().potential().forward().inner().num_pot_computations() + res.data().potential().backward().inner().num_pot_computations()
-                );
-                report!("lower_bound", res.data().lower_bound(from));
-            },
-            |_, _| None,
-        );
+        run_random_queries_with_callbacks(n, &mut server, &mut rng.clone(), &mut algo_runs_ctxt, q, bidir_pre_callback!(), gt_cb);
 
         let (forward_pot, backward_pot) = potentials();
         let mut server = {
             let _blocked = block_reporting();
-            BiDirServer::<_, ChooseMinKeyDir>::new(&modified_graph, AveragePotential::new(forward_pot, backward_pot))
+            BiDirTopo::<_, ChooseMinKeyDir>::new(
+                &modified_graph,
+                AveragePotential::<_, _, { cfg!(feature = "chpot-improved-pruning") }>::new(forward_pot, backward_pot),
+            )
         };
-        run_random_queries_with_callbacks(
-            graph.num_nodes(),
-            &mut server,
-            &mut rng.clone(),
-            &mut algo_runs_ctxt,
-            chpot::num_queries(),
-            |from, to, server| {
-                let mut res = {
-                    let _blocked = block_reporting();
-                    server.query(Query { from, to })
-                };
-                #[cfg(all(not(feature = "chpot-alt"), not(feature = "chpot-only-topo"), not(feature = "chpot-oracle")))]
-                report!(
-                    "num_pot_computations",
-                    res.data().potential().forward().num_pot_computations() + res.data().potential().backward().num_pot_computations()
-                );
-                #[cfg(feature = "chpot-oracle")]
-                report!(
-                    "num_pot_computations",
-                    res.data().potential().forward().inner().num_pot_computations() + res.data().potential().backward().inner().num_pot_computations()
-                );
-                report!("lower_bound", res.data().lower_bound(from));
-            },
-            |_, _| None,
-        );
+        run_random_queries_with_callbacks(n, &mut server, &mut rng.clone(), &mut algo_runs_ctxt, q, bidir_pre_callback!(), gt_cb);
 
         let (forward_pot, backward_pot) = potentials();
         let mut server = {
             let _blocked = block_reporting();
-            BiDirServer::<_, AlternatingDirs>::new(&modified_graph, AveragePotential::new(forward_pot, backward_pot))
+            BiDirTopo::<_, AlternatingDirs>::new(
+                &modified_graph,
+                AveragePotential::<_, _, { cfg!(feature = "chpot-improved-pruning") }>::new(forward_pot, backward_pot),
+            )
         };
-        run_random_queries_with_callbacks(
-            graph.num_nodes(),
-            &mut server,
-            &mut rng.clone(),
-            &mut algo_runs_ctxt,
-            chpot::num_queries(),
-            |from, to, server| {
-                let mut res = {
-                    let _blocked = block_reporting();
-                    server.query(Query { from, to })
-                };
-                #[cfg(all(not(feature = "chpot-alt"), not(feature = "chpot-only-topo"), not(feature = "chpot-oracle")))]
-                report!(
-                    "num_pot_computations",
-                    res.data().potential().forward().num_pot_computations() + res.data().potential().backward().num_pot_computations()
-                );
-                #[cfg(feature = "chpot-oracle")]
-                report!(
-                    "num_pot_computations",
-                    res.data().potential().forward().inner().num_pot_computations() + res.data().potential().backward().inner().num_pot_computations()
-                );
-                report!("lower_bound", res.data().lower_bound(from));
-            },
-            |_, _| None,
-        );
+        run_random_queries_with_callbacks(n, &mut server, &mut rng.clone(), &mut algo_runs_ctxt, q, bidir_pre_callback!(), gt_cb);
+
+        let mut server = {
+            let _blocked = block_reporting();
+            UniDir::<_, DefaultOps, _>::with_potential(modified_graph.clone(), chpot_data.potentials().0)
+        };
+        run_random_queries_with_callbacks(n, &mut server, &mut rng.clone(), &mut algo_runs_ctxt, q, unidir_pre_callback!(), gt_cb);
+
+        let (forward_pot, backward_pot) = potentials();
+        let mut server = {
+            let _blocked = block_reporting();
+            BiDir::<_, _, _, ChooseMinKeyDir>::new_with_potentials(
+                modified_graph.clone(),
+                SymmetricBiDirPotential::<_, _, { cfg!(feature = "chpot-improved-pruning") }>::new(forward_pot, backward_pot),
+            )
+        };
+        run_random_queries_with_callbacks(n, &mut server, &mut rng.clone(), &mut algo_runs_ctxt, q, bidir_pre_callback!(), gt_cb);
+
+        let (forward_pot, backward_pot) = potentials();
+        let mut server = {
+            let _blocked = block_reporting();
+            BiDir::<_, _, _, AlternatingDirs>::new_with_potentials(
+                modified_graph.clone(),
+                SymmetricBiDirPotential::<_, _, { cfg!(feature = "chpot-improved-pruning") }>::new(forward_pot, backward_pot),
+            )
+        };
+        run_random_queries_with_callbacks(n, &mut server, &mut rng.clone(), &mut algo_runs_ctxt, q, bidir_pre_callback!(), gt_cb);
+
+        let (forward_pot, backward_pot) = potentials();
+        let mut server = {
+            let _blocked = block_reporting();
+            BiDir::<_, _, _, ChooseMinKeyDir>::new_with_potentials(
+                modified_graph.clone(),
+                AveragePotential::<_, _, { cfg!(feature = "chpot-improved-pruning") }>::new(forward_pot, backward_pot),
+            )
+        };
+        run_random_queries_with_callbacks(n, &mut server, &mut rng.clone(), &mut algo_runs_ctxt, q, bidir_pre_callback!(), gt_cb);
+
+        let (forward_pot, backward_pot) = potentials();
+        let mut server = {
+            let _blocked = block_reporting();
+            BiDir::<_, _, _, AlternatingDirs>::new_with_potentials(
+                modified_graph.clone(),
+                AveragePotential::<_, _, { cfg!(feature = "chpot-improved-pruning") }>::new(forward_pot, backward_pot),
+            )
+        };
+        run_random_queries_with_callbacks(n, &mut server, &mut rng.clone(), &mut algo_runs_ctxt, q, bidir_pre_callback!(), gt_cb);
     };
 
     for factor in [1., 1.05, 1.1] {

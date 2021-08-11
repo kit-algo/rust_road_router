@@ -197,29 +197,41 @@ pub trait BiDirPotential {
         self.stop(fw_min_queue, bw_min_queue, stop_dist)
     }
     fn prune_forward(&mut self, NodeIdT(head): NodeIdT, fw_dist_head: Weight, reverse_min_queue: Weight, max_dist: Weight) -> bool {
+        self.prune_forward_internal::<true>(NodeIdT(head), fw_dist_head, reverse_min_queue, max_dist)
+    }
+    fn prune_forward_internal<const IMPROVED: bool>(&mut self, NodeIdT(head): NodeIdT, fw_dist_head: Weight, reverse_min_queue: Weight, max_dist: Weight) -> bool {
         if max_dist < INFINITY {
             if fw_dist_head + self.forward_potential_raw(head).unwrap_or(INFINITY) >= max_dist {
                 return true;
             }
-            let remaining_by_queue = reverse_min_queue.saturating_sub(self.backward_potential(head).unwrap_or(INFINITY));
-            if fw_dist_head + remaining_by_queue >= max_dist {
-                return true;
+            if IMPROVED {
+                let remaining_by_queue = reverse_min_queue.saturating_sub(self.backward_potential(head).unwrap_or(INFINITY));
+                if fw_dist_head + remaining_by_queue >= max_dist {
+                    return true;
+                }
             }
         }
         return false;
     }
     fn prune_backward(&mut self, NodeIdT(head): NodeIdT, bw_dist_head: Weight, reverse_min_queue: Weight, max_dist: Weight) -> bool {
+        self.prune_backward_internal::<true>(NodeIdT(head), bw_dist_head, reverse_min_queue, max_dist)
+    }
+
+    fn prune_backward_internal<const IMPROVED: bool>(&mut self, NodeIdT(head): NodeIdT, bw_dist_head: Weight, reverse_min_queue: Weight, max_dist: Weight) -> bool {
         if max_dist < INFINITY {
             if bw_dist_head + self.backward_potential_raw(head).unwrap_or(INFINITY) >= max_dist {
                 return true;
             }
-            let remaining_by_queue = reverse_min_queue.saturating_sub(self.forward_potential(head).unwrap_or(INFINITY));
-            if bw_dist_head + remaining_by_queue >= max_dist {
-                return true;
+            if IMPROVED {
+                let remaining_by_queue = reverse_min_queue.saturating_sub(self.forward_potential(head).unwrap_or(INFINITY));
+                if bw_dist_head + remaining_by_queue >= max_dist {
+                    return true;
+                }
             }
         }
         return false;
     }
+
     fn bidir_pot_key() -> &'static str;
 
     fn report() {
@@ -255,7 +267,7 @@ impl BiDirPotential for BiDirZeroPot {
 }
 
 #[derive(Clone)]
-pub struct AveragePotential<PF, PB> {
+pub struct AveragePotential<PF, PB, const IMPROVED_PRUNING: bool = false> {
     forward_potential: PF,
     backward_potential: PB,
     fw_add: i32,
@@ -263,7 +275,7 @@ pub struct AveragePotential<PF, PB> {
     mu_add: Weight,
 }
 
-impl<PF: Potential, PB: Potential> AveragePotential<PF, PB> {
+impl<PF: Potential, PB: Potential, const IP: bool> AveragePotential<PF, PB, IP> {
     pub fn new(forward_potential: PF, backward_potential: PB) -> Self {
         Self {
             forward_potential,
@@ -290,7 +302,7 @@ impl<PF: Potential, PB: Potential> AveragePotential<PF, PB> {
 }
 
 use std::cmp::max;
-impl<PF: Potential, PB: Potential> BiDirPotential for AveragePotential<PF, PB> {
+impl<PF: Potential, PB: Potential, const IP: bool> BiDirPotential for AveragePotential<PF, PB, IP> {
     fn init(&mut self, source: NodeId, target: NodeId) {
         self.forward_potential.init(target);
         self.backward_potential.init(source);
@@ -317,18 +329,25 @@ impl<PF: Potential, PB: Potential> BiDirPotential for AveragePotential<PF, PB> {
     fn backward_potential_raw(&mut self, node: NodeId) -> Option<Weight> {
         self.backward_potential.potential(node)
     }
+    fn prune_forward(&mut self, NodeIdT(head): NodeIdT, fw_dist_head: Weight, reverse_min_queue: Weight, max_dist: Weight) -> bool {
+        self.prune_forward_internal::<IP>(NodeIdT(head), fw_dist_head, reverse_min_queue, max_dist)
+    }
+    fn prune_backward(&mut self, NodeIdT(head): NodeIdT, bw_dist_head: Weight, reverse_min_queue: Weight, max_dist: Weight) -> bool {
+        self.prune_backward_internal::<IP>(NodeIdT(head), bw_dist_head, reverse_min_queue, max_dist)
+    }
     fn bidir_pot_key() -> &'static str {
+        report!("improved_pruning", IP);
         "Average"
     }
 }
 
 #[derive(Clone)]
-pub struct SymmetricBiDirPotential<PF, PB> {
+pub struct SymmetricBiDirPotential<PF, PB, const IMPROVED_PRUNING: bool = true> {
     forward_potential: PF,
     backward_potential: PB,
 }
 
-impl<PF: Potential, PB: Potential> SymmetricBiDirPotential<PF, PB> {
+impl<PF: Potential, PB: Potential, const IP: bool> SymmetricBiDirPotential<PF, PB, IP> {
     pub fn new(forward_potential: PF, backward_potential: PB) -> Self {
         Self {
             forward_potential,
@@ -345,7 +364,7 @@ impl<PF: Potential, PB: Potential> SymmetricBiDirPotential<PF, PB> {
     }
 }
 
-impl<PF: Potential, PB: Potential> BiDirPotential for SymmetricBiDirPotential<PF, PB> {
+impl<PF: Potential, PB: Potential, const IP: bool> BiDirPotential for SymmetricBiDirPotential<PF, PB, IP> {
     fn init(&mut self, source: NodeId, target: NodeId) {
         self.forward_potential.init(target);
         self.backward_potential.init(source);
@@ -365,7 +384,14 @@ impl<PF: Potential, PB: Potential> BiDirPotential for SymmetricBiDirPotential<PF
     fn backward_potential(&mut self, node: NodeId) -> Option<Weight> {
         self.backward_potential.potential(node)
     }
+    fn prune_forward(&mut self, NodeIdT(head): NodeIdT, fw_dist_head: Weight, reverse_min_queue: Weight, max_dist: Weight) -> bool {
+        self.prune_forward_internal::<IP>(NodeIdT(head), fw_dist_head, reverse_min_queue, max_dist)
+    }
+    fn prune_backward(&mut self, NodeIdT(head): NodeIdT, bw_dist_head: Weight, reverse_min_queue: Weight, max_dist: Weight) -> bool {
+        self.prune_backward_internal::<IP>(NodeIdT(head), bw_dist_head, reverse_min_queue, max_dist)
+    }
     fn bidir_pot_key() -> &'static str {
+        report!("improved_pruning", IP);
         "Symmetric"
     }
 }

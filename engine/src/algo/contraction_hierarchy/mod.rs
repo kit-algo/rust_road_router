@@ -283,7 +283,7 @@ impl<'a> PartialContractionGraph<'a> {
             forward_data: recycled.0,
             backward_data: recycled.1,
             meeting_node: 0,
-            potential: AveragePotential::new(ZeroPotential(), ZeroPotential()),
+            potential: BiDirZeroPot,
             dir_chooser: PhantomData::<ChooseMinKeyDir>::default(),
         };
 
