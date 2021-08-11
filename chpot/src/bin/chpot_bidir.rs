@@ -206,7 +206,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let mut server = {
             let _blocked = block_reporting();
-            UniDir::<_, DefaultOps, _>::with_potential(modified_graph.clone(), chpot_data.potentials().0)
+            UniDir::<_, DefaultOps, _>::with_potential(modified_graph.clone(), potentials().0)
         };
         run_random_queries_with_callbacks(n, &mut server, &mut rng.clone(), &mut algo_runs_ctxt, q, unidir_pre_callback!(), gt_cb);
 
