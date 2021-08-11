@@ -14,7 +14,6 @@ time = "^0.1.40"
 core_affinity = "^0.5.9"
 
 [features]
-default = ["chpot-improved-pruning"]
 chpot-only-topo = []
 chpot-no-deg2 = []
 chpot-no-deg3 = []
