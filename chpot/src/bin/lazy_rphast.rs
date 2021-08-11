@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
     let chpot_data = CHPotLoader::reconstruct_from(&path.join("lower_bound_ch"))?;
 
-    let num_queries = 1000;
+    let num_queries = 100;
 
     let mut exps_ctxt = push_collection_context("experiments".to_string());
 
