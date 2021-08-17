@@ -251,7 +251,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         run_random_queries_with_callbacks(n, &mut server, &mut rng.clone(), &mut algo_runs_ctxt, q, bidir_pre_callback!(), gt_cb);
     };
 
-    for factor in [1., 1.05, 1.1] {
+    for factor in [1., 1.05] {
         let _exp_ctx = exps_ctxt.push_collection_item();
         report!("experiment", "weight_scale");
         report!("factor", factor);
@@ -265,7 +265,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         run(&modified_travel_time);
     }
 
-    for factor in [1.25, 1.5] {
+    for factor in [1.5] {
         for p in [0.0, 1.0] {
             for speed in [80.0] {
                 let _exp_ctx = exps_ctxt.push_collection_item();
