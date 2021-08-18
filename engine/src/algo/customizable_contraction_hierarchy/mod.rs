@@ -179,7 +179,9 @@ impl CCH {
     /// for turn expanded graphs because many edges can be removed.
     pub fn into_directed_cch(self) -> DirectedCCH {
         // identify arcs which are always infinity and can be removed
-        let (forward, backward) = customization::always_infinity(&self).into_ch_graphs();
+        let customized = customization::always_infinity(&self);
+        let forward = customized.forward_graph();
+        let backward = customized.backward_graph();
 
         let mut forward_first_out = Vec::with_capacity(self.first_out.len());
         forward_first_out.push(0);
@@ -338,20 +340,6 @@ pub struct Customized<'c, CCH> {
 }
 
 impl<'c, CCH: CCHT> Customized<'c, CCH> {
-    /// Decompose into an upward and a downward graph which could be used for a CH query.
-    #[allow(clippy::type_complexity)]
-    pub fn into_ch_graphs(
-        self,
-    ) -> (
-        FirstOutGraph<&'c [EdgeId], &'c [NodeId], Vec<Weight>>,
-        FirstOutGraph<&'c [EdgeId], &'c [NodeId], Vec<Weight>>,
-    ) {
-        (
-            FirstOutGraph::new(self.cch.forward_first_out(), self.cch.forward_head(), self.upward),
-            FirstOutGraph::new(self.cch.backward_first_out(), self.cch.backward_head(), self.downward),
-        )
-    }
-
     pub fn forward_graph(&self) -> FirstOutGraph<&'c [EdgeId], &'c [NodeId], &'_ [Weight]> {
         FirstOutGraph::new(self.cch.forward_first_out(), self.cch.forward_head(), &self.upward)
     }
