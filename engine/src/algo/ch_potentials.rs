@@ -2,7 +2,7 @@ use super::*;
 use crate::{
     algo::{
         a_star::Potential,
-        customizable_contraction_hierarchy::{query::stepped_elimination_tree::SteppedEliminationTree, *},
+        customizable_contraction_hierarchy::{query::stepped_elimination_tree::EliminationTreeWalk, *},
         dijkstra::*,
     },
     datastr::{node_order::*, rank_select_map::FastClearBitVec, timestamped_vector::TimestampedVector},
@@ -30,13 +30,15 @@ impl<'a> CCHPotData<'a> {
     pub fn forward_potential(
         &self,
     ) -> CCHPotential<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'_ [Weight]>, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'_ [Weight]>> {
-        let backward_elimination_tree = SteppedEliminationTree::new(self.customized.backward_graph(), self.customized.cch().elimination_tree());
+        let n = self.customized.forward_graph().num_nodes();
 
         CCHPotential {
             cch: self.customized.cch(),
             stack: Vec::new(),
             forward_cch_graph: self.customized.forward_graph(),
-            backward_elimination_tree,
+            backward_distances: vec![INFINITY; n],
+            backward_parents: vec![n as NodeId; n],
+            backward_cch_graph: self.customized.backward_graph(),
             potentials: TimestampedVector::new(self.customized.cch().num_nodes(), InRangeOption::new(None)),
             num_pot_computations: 0,
         }
@@ -45,13 +47,15 @@ impl<'a> CCHPotData<'a> {
     pub fn backward_potential(
         &self,
     ) -> CCHPotential<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'_ [Weight]>, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'_ [Weight]>> {
-        let backward_elimination_tree = SteppedEliminationTree::new(self.customized.forward_graph(), self.customized.cch().elimination_tree());
+        let n = self.customized.forward_graph().num_nodes();
 
         CCHPotential {
             cch: self.customized.cch(),
             stack: Vec::new(),
             forward_cch_graph: self.customized.backward_graph(),
-            backward_elimination_tree,
+            backward_distances: vec![INFINITY; n],
+            backward_parents: vec![n as NodeId; n],
+            backward_cch_graph: self.customized.forward_graph(),
             potentials: TimestampedVector::new(self.customized.cch().num_nodes(), InRangeOption::new(None)),
             num_pot_computations: 0,
         }
@@ -63,7 +67,9 @@ pub struct CCHPotential<'a, GF, GB> {
     stack: Vec<NodeId>,
     potentials: TimestampedVector<InRangeOption<Weight>>,
     forward_cch_graph: GF,
-    backward_elimination_tree: SteppedEliminationTree<'a, GB>,
+    backward_distances: Vec<Weight>,
+    backward_parents: Vec<NodeId>,
+    backward_cch_graph: GB,
     num_pot_computations: usize,
 }
 
@@ -80,9 +86,15 @@ where
 {
     fn init(&mut self, target: NodeId) {
         self.potentials.reset();
-        self.backward_elimination_tree.initialize_query(self.cch.node_order().rank(target));
-        while self.backward_elimination_tree.next().is_some() {
-            self.backward_elimination_tree.next_step();
+        let mut bw_walk = EliminationTreeWalk::query(
+            &self.backward_cch_graph,
+            self.cch.elimination_tree(),
+            &mut self.backward_distances,
+            &mut self.backward_parents,
+            target,
+        );
+        while let Some(_) = bw_walk.peek() {
+            bw_walk.next_step();
         }
         self.num_pot_computations = 0;
     }
@@ -94,7 +106,7 @@ where
         while self.potentials[cur_node as usize].value().is_none() {
             self.num_pot_computations += 1;
             self.stack.push(cur_node);
-            if let Some(parent) = self.backward_elimination_tree.parent(cur_node).value() {
+            if let Some(parent) = self.cch.elimination_tree()[cur_node as usize].value() {
                 cur_node = parent;
             } else {
                 break;
@@ -107,7 +119,7 @@ where
                 .min()
                 .unwrap_or(INFINITY);
 
-            self.potentials[node as usize] = InRangeOption::new(Some(std::cmp::min(self.backward_elimination_tree.tentative_distance(node), min_by_up)));
+            self.potentials[node as usize] = InRangeOption::new(Some(std::cmp::min(self.backward_distances[node as usize], min_by_up)));
         }
 
         let dist = self.potentials[node as usize].value().unwrap();

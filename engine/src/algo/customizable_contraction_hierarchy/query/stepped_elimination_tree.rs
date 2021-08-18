@@ -1,42 +1,44 @@
 //! Elimination Tree path to root traversal while relaxing edges.
 
 use super::*;
-use crate::datastr::timestamped_vector::TimestampedVector;
 use crate::util::in_range_option::InRangeOption;
 
 #[derive(Debug)]
-pub struct SteppedEliminationTree<'b, Graph> {
-    graph: Graph,
-    distances: TimestampedVector<Weight>,
-    predecessors: Vec<NodeId>,
-    elimination_tree: &'b [InRangeOption<NodeId>],
+pub struct EliminationTreeWalk<'a, Graph> {
+    graph: &'a Graph,
+    distances: &'a mut [Weight],
+    predecessors: &'a mut [NodeId],
+    elimination_tree: &'a [InRangeOption<NodeId>],
     next: Option<NodeId>,
-    origin: Option<NodeId>,
+    origin: NodeId,
 }
 
-impl<'b, Graph: LinkIterGraph> SteppedEliminationTree<'b, Graph> {
-    pub fn new(graph: Graph, elimination_tree: &'b [InRangeOption<NodeId>]) -> SteppedEliminationTree<'b, Graph> {
-        let n = graph.num_nodes();
-
-        SteppedEliminationTree {
-            graph,
-            // initialize tentative distances to INFINITY
-            distances: TimestampedVector::new(n, INFINITY),
-            predecessors: vec![n as NodeId; n],
-            elimination_tree,
-            next: None,
-            origin: None,
-        }
-    }
-
-    pub fn initialize_query(&mut self, from: NodeId) {
+impl<'a, Graph: LinkIterGraph> EliminationTreeWalk<'a, Graph> {
+    pub fn query(
+        graph: &'a Graph,
+        elimination_tree: &'a [InRangeOption<NodeId>],
+        distances: &'a mut [Weight],
+        predecessors: &'a mut [NodeId],
+        from: NodeId,
+    ) -> Self {
         // initialize
-        self.origin = Some(from);
-        self.next = Some(from);
-        self.distances.reset();
+        let mut cur = from;
+        while let Some(parent) = elimination_tree[cur as usize].value() {
+            distances[parent as usize] = INFINITY;
+            cur = parent;
+        }
 
         // Starte with origin
-        self.distances.set(from as usize, 0);
+        distances[from as usize] = 0;
+
+        Self {
+            graph,
+            distances,
+            predecessors,
+            elimination_tree,
+            next: Some(from),
+            origin: from,
+        }
     }
 
     pub fn next_step(&mut self) -> QueryProgress<Weight> {
@@ -59,7 +61,7 @@ impl<'b, Graph: LinkIterGraph> SteppedEliminationTree<'b, Graph> {
 
                 if next.key < self.distances[next.node as usize] {
                     // Relaxation, we have now found a better way
-                    self.distances.set(next.node as usize, next.key);
+                    self.distances[next.node as usize] = next.key;
                     self.predecessors[next.node as usize] = node;
                 }
             }
@@ -70,7 +72,7 @@ impl<'b, Graph: LinkIterGraph> SteppedEliminationTree<'b, Graph> {
         }
     }
 
-    pub fn next(&self) -> Option<NodeId> {
+    pub fn peek(&self) -> Option<NodeId> {
         self.next
     }
 
@@ -87,44 +89,10 @@ impl<'b, Graph: LinkIterGraph> SteppedEliminationTree<'b, Graph> {
     }
 
     pub fn origin(&self) -> NodeId {
-        self.origin.unwrap()
+        self.origin
     }
 
     pub fn graph(&self) -> &Graph {
         &self.graph
-    }
-
-    pub fn graph_mut(&mut self) -> &mut Graph {
-        &mut self.graph
-    }
-}
-
-impl<'b, FirstOutContainer, HeadContainer, WeightContainer> SteppedEliminationTree<'b, FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>>
-where
-    FirstOutContainer: AsRef<[EdgeId]>,
-    HeadContainer: AsRef<[NodeId]>,
-    WeightContainer: AsRef<[Weight]>,
-{
-    /// Unpack path from a start node (the meeting node of the CCH query), so that parent pointers point along the unpacked path.
-    pub fn unpack_path(&mut self, target: NodeId, forward: bool, cch: &dyn CCHT, other_weights: &[Weight]) {
-        let origin = self.origin();
-        let mut current = target;
-        while current != origin {
-            let pred = self.predecessor(current);
-            let weight = self.tentative_distance(current) - self.tentative_distance(pred);
-
-            let unpacked = if forward {
-                cch.unpack_arc(pred, current, weight, self.graph.weight(), other_weights)
-            } else {
-                cch.unpack_arc(current, pred, weight, other_weights, self.graph.weight())
-            };
-            if let Some((middle, first_weight, second_weight)) = unpacked {
-                self.predecessors[current as usize] = middle;
-                self.predecessors[middle as usize] = pred;
-                self.distances[middle as usize] = self.tentative_distance(pred) + if forward { first_weight } else { second_weight };
-            } else {
-                current = pred;
-            }
-        }
     }
 }
