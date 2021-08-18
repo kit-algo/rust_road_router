@@ -58,14 +58,13 @@ impl<'a, CCH: CCHT> Server<'a, CCH> {
         );
 
         // walk up forward elimination tree
-        while fw_walk.peek().is_some() {
-            fw_walk.next_step();
-        }
+        while let Some(_) = fw_walk.next() {}
 
         // walk up backward elimination tree while updating tentative distances
-        while let QueryProgress::Settled(State { key, node }) = bw_walk.next_step() {
-            if key + fw_walk.tentative_distance(node) < tentative_distance {
-                tentative_distance = key + fw_walk.tentative_distance(node);
+        while let Some(node) = bw_walk.next() {
+            let dist = bw_walk.tentative_distance(node);
+            if dist + fw_walk.tentative_distance(node) < tentative_distance {
+                tentative_distance = dist + fw_walk.tentative_distance(node);
                 self.meeting_node = node;
             }
         }

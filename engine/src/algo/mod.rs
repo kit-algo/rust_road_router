@@ -2,7 +2,7 @@
 
 use crate::datastr::{graph::*, node_order::NodeOrder};
 
-use self::dijkstra::{QueryProgress, State};
+use self::dijkstra::State;
 
 pub mod a_star;
 pub mod alt;

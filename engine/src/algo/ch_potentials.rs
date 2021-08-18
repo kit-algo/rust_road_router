@@ -93,9 +93,7 @@ where
             &mut self.backward_parents,
             target,
         );
-        while let Some(_) = bw_walk.peek() {
-            bw_walk.next_step();
-        }
+        while let Some(_) = bw_walk.next() {}
         self.num_pot_computations = 0;
     }
 

@@ -41,11 +41,7 @@ impl<'a, Graph: LinkIterGraph> EliminationTreeWalk<'a, Graph> {
         }
     }
 
-    pub fn next_step(&mut self) -> QueryProgress<Weight> {
-        self.settle_next_node()
-    }
-
-    fn settle_next_node(&mut self) -> QueryProgress<Weight> {
+    fn settle_next_node(&mut self) -> Option<NodeId> {
         // Examine the next node on the path to the elimination tree node
         if let Some(node) = self.next {
             let distance = self.distances[node as usize];
@@ -66,9 +62,9 @@ impl<'a, Graph: LinkIterGraph> EliminationTreeWalk<'a, Graph> {
                 }
             }
 
-            QueryProgress::Settled(State { key: distance, node })
+            Some(node)
         } else {
-            QueryProgress::Done(None) // TODO
+            None
         }
     }
 
@@ -94,5 +90,12 @@ impl<'a, Graph: LinkIterGraph> EliminationTreeWalk<'a, Graph> {
 
     pub fn graph(&self) -> &Graph {
         &self.graph
+    }
+}
+
+impl<'a, Graph: LinkIterGraph> Iterator for EliminationTreeWalk<'a, Graph> {
+    type Item = NodeId;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.settle_next_node()
     }
 }
