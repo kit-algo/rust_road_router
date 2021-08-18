@@ -1,6 +1,6 @@
 use super::*;
 use rayon::prelude::*;
-use std::cell::RefCell;
+use std::{cell::RefCell, cmp::min};
 
 mod parallelization;
 use parallelization::*;
@@ -9,13 +9,11 @@ pub mod ftd;
 // One mapping of node id to weight for each thread during the scope of the customization.
 scoped_thread_local!(static UPWARD_WORKSPACE: RefCell<Vec<Weight>>);
 scoped_thread_local!(static DOWNWARD_WORKSPACE: RefCell<Vec<Weight>>);
+scoped_thread_local!(static PERFECT_WORKSPACE: RefCell<Vec<InRangeOption<EdgeId>>>);
 
 /// Execute second phase, that is metric dependent preprocessing.
 /// `metric` has to have the same topology as the original graph used for first phase preprocessing.
 /// The weights of `metric` should be the ones that the cch should be customized with.
-///
-/// GOTCHA: When the original graph has parallel edges, the respecting phase may not necessarily use the best.
-/// This may lead to wrong query results.
 pub fn customize<'c, Graph>(cch: &'c CCH, metric: &Graph) -> Customized<'c, CCH>
 where
     Graph: LinkIterGraph + EdgeRandomAccessGraph<Link> + Sync,
@@ -73,10 +71,10 @@ where
             .zip(cch.cch_edge_to_orig_arc.par_iter())
             .for_each(|((up_weight, down_weight), (up_arcs, down_arcs))| {
                 for &EdgeIdT(up_arc) in up_arcs {
-                    *up_weight = std::cmp::min(metric.link(up_arc).weight, *up_weight);
+                    *up_weight = min(metric.link(up_arc).weight, *up_weight);
                 }
                 for &EdgeIdT(down_arc) in down_arcs {
-                    *down_weight = std::cmp::min(metric.link(down_arc).weight, *down_weight);
+                    *down_weight = min(metric.link(down_arc).weight, *down_weight);
                 }
             });
     });
@@ -92,7 +90,7 @@ where
             .zip(cch.forward_cch_edge_to_orig_arc.par_iter())
             .for_each(|(up_weight, up_arcs)| {
                 for &EdgeIdT(up_arc) in up_arcs {
-                    *up_weight = std::cmp::min(metric.link(up_arc).weight, *up_weight);
+                    *up_weight = min(metric.link(up_arc).weight, *up_weight);
                 }
             });
         downward_weights
@@ -100,7 +98,7 @@ where
             .zip(cch.backward_cch_edge_to_orig_arc.par_iter())
             .for_each(|(down_weight, down_arcs)| {
                 for &EdgeIdT(down_arc) in down_arcs {
-                    *down_weight = std::cmp::min(metric.link(down_arc).weight, *down_weight);
+                    *down_weight = min(metric.link(down_arc).weight, *down_weight);
                 }
             });
     });
@@ -194,9 +192,9 @@ fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weig
                             // the unsafes are safe, because the `head` nodes in the cch are all < n
                             // we might want to add an explicit validation for this
                             let relax = unsafe { node_outgoing_weights.get_unchecked_mut(node as usize) };
-                            *relax = std::cmp::min(*relax, upward_weight + first_down_weight);
+                            *relax = min(*relax, upward_weight + first_down_weight);
                             let relax = unsafe { node_incoming_weights.get_unchecked_mut(node as usize) };
-                            *relax = std::cmp::min(*relax, downward_weight + first_up_weight);
+                            *relax = min(*relax, downward_weight + first_up_weight);
                         }
                     }
 
@@ -306,7 +304,7 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
                             // the unsafes are safe, because the `head` nodes in the cch are all < n
                             // we might want to add an explicit validation for this
                             let relax = unsafe { node_outgoing_weights.get_unchecked_mut(node as usize) };
-                            *relax = std::cmp::min(*relax, upward_weight + first_down_weight);
+                            *relax = min(*relax, upward_weight + first_down_weight);
                         }
                     }
 
@@ -339,7 +337,7 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
                             // the unsafes are safe, because the `head` nodes in the cch are all < n
                             // we might want to add an explicit validation for this
                             let relax = unsafe { node_incoming_weights.get_unchecked_mut(node as usize) };
-                            *relax = std::cmp::min(*relax, downward_weight + first_up_weight);
+                            *relax = min(*relax, downward_weight + first_up_weight);
                         }
                     }
 

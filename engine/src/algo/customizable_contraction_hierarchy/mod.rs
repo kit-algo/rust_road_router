@@ -348,7 +348,7 @@ impl<'c, CCH: CCHT> Customized<'c, CCH> {
     ) {
         (
             FirstOutGraph::new(self.cch.forward_first_out(), self.cch.forward_head(), self.upward),
-            FirstOutGraph::new(self.cch.backward_first_out(), &self.cch.backward_head(), self.downward),
+            FirstOutGraph::new(self.cch.backward_first_out(), self.cch.backward_head(), self.downward),
         )
     }
 
