@@ -340,11 +340,11 @@ pub struct Customized<'c, CCH> {
 }
 
 impl<'c, CCH: CCHT> Customized<'c, CCH> {
-    pub fn forward_graph(&self) -> FirstOutGraph<&'c [EdgeId], &'c [NodeId], &'_ [Weight]> {
+    pub fn forward_graph(&self) -> FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]> {
         FirstOutGraph::new(self.cch.forward_first_out(), self.cch.forward_head(), &self.upward)
     }
 
-    pub fn backward_graph(&self) -> FirstOutGraph<&'c [EdgeId], &'c [NodeId], &'_ [Weight]> {
+    pub fn backward_graph(&self) -> FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]> {
         FirstOutGraph::new(self.cch.backward_first_out(), self.cch.backward_head(), &self.downward)
     }
 

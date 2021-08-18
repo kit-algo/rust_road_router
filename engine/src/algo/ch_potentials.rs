@@ -27,9 +27,7 @@ impl<'a> CCHPotData<'a> {
         Self { customized }
     }
 
-    pub fn forward_potential(
-        &self,
-    ) -> CCHPotential<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'_ [Weight]>, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'_ [Weight]>> {
+    pub fn forward_potential(&self) -> CCHPotential<'a, FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>, FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>> {
         let n = self.customized.forward_graph().num_nodes();
 
         CCHPotential {
@@ -44,9 +42,7 @@ impl<'a> CCHPotData<'a> {
         }
     }
 
-    pub fn backward_potential(
-        &self,
-    ) -> CCHPotential<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'_ [Weight]>, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'_ [Weight]>> {
+    pub fn backward_potential(&self) -> CCHPotential<'a, FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>, FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>> {
         let n = self.customized.forward_graph().num_nodes();
 
         CCHPotential {
