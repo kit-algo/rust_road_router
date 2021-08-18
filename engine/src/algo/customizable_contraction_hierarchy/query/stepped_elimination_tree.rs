@@ -10,7 +10,6 @@ pub struct EliminationTreeWalk<'a, Graph> {
     predecessors: &'a mut [NodeId],
     elimination_tree: &'a [InRangeOption<NodeId>],
     next: Option<NodeId>,
-    origin: NodeId,
 }
 
 impl<'a, Graph: LinkIterGraph> EliminationTreeWalk<'a, Graph> {
@@ -37,7 +36,6 @@ impl<'a, Graph: LinkIterGraph> EliminationTreeWalk<'a, Graph> {
             predecessors,
             elimination_tree,
             next: Some(from),
-            origin: from,
         }
     }
 
@@ -50,15 +48,12 @@ impl<'a, Graph: LinkIterGraph> EliminationTreeWalk<'a, Graph> {
             // For each node we can reach, see if we can find a way with
             // a lower distance going through this node
             for edge in self.graph.link_iter(node) {
-                let next = State {
-                    key: distance + edge.weight,
-                    node: edge.node,
-                };
+                let next_dist = distance + edge.weight;
 
-                if next.key < self.distances[next.node as usize] {
+                if next_dist < self.distances[edge.node as usize] {
                     // Relaxation, we have now found a better way
-                    self.distances[next.node as usize] = next.key;
-                    self.predecessors[next.node as usize] = node;
+                    self.distances[edge.node as usize] = next_dist;
+                    self.predecessors[edge.node as usize] = node;
                 }
             }
 
@@ -78,18 +73,6 @@ impl<'a, Graph: LinkIterGraph> EliminationTreeWalk<'a, Graph> {
 
     pub fn predecessor(&self, node: NodeId) -> NodeId {
         self.predecessors[node as usize]
-    }
-
-    pub fn parent(&self, node: NodeId) -> InRangeOption<NodeId> {
-        self.elimination_tree[node as usize]
-    }
-
-    pub fn origin(&self) -> NodeId {
-        self.origin
-    }
-
-    pub fn graph(&self) -> &Graph {
-        &self.graph
     }
 }
 
