@@ -57,15 +57,38 @@ impl<'a, CCH: CCHT> Server<'a, CCH> {
             to,
         );
 
-        // walk up forward elimination tree
-        while let Some(_) = fw_walk.next() {}
-
-        // walk up backward elimination tree while updating tentative distances
-        while let Some(node) = bw_walk.next() {
-            let dist = bw_walk.tentative_distance(node);
-            if dist + fw_walk.tentative_distance(node) < tentative_distance {
-                tentative_distance = dist + fw_walk.tentative_distance(node);
-                self.meeting_node = node;
+        loop {
+            match (fw_walk.peek(), bw_walk.peek()) {
+                (Some(fw_node), Some(bw_node)) if fw_node < bw_node => {
+                    fw_walk.next();
+                }
+                (Some(fw_node), Some(bw_node)) if fw_node > bw_node => {
+                    bw_walk.next();
+                }
+                (Some(node), Some(_node)) => {
+                    debug_assert_eq!(node, _node);
+                    if fw_walk.tentative_distance(node) < tentative_distance {
+                        fw_walk.next();
+                    } else {
+                        fw_walk.skip_next();
+                    }
+                    if bw_walk.tentative_distance(node) < tentative_distance {
+                        bw_walk.next();
+                    } else {
+                        bw_walk.skip_next();
+                    }
+                    let dist = fw_walk.tentative_distance(node) + bw_walk.tentative_distance(node);
+                    if dist < tentative_distance {
+                        tentative_distance = dist;
+                        self.meeting_node = node;
+                    }
+                }
+                // the (Some,None) case can only happen when the nodes
+                // share no common ancestores in the elimination tree
+                // thus, there will be no path
+                (Some(_), None) => return None,
+                (None, Some(_)) => return None,
+                (None, None) => break,
             }
         }
 

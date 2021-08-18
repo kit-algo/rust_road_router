@@ -67,6 +67,13 @@ impl<'a, Graph: LinkIterGraph> EliminationTreeWalk<'a, Graph> {
         self.next
     }
 
+    pub fn skip_next(&mut self) {
+        // Iterator::skip(n) would still call `next` and thus relax edges, we want to actually skip them
+        if let Some(node) = self.next {
+            self.next = self.elimination_tree[node as usize].value();
+        }
+    }
+
     pub fn tentative_distance(&self, node: NodeId) -> Weight {
         self.distances[node as usize]
     }
