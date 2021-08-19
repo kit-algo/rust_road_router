@@ -230,6 +230,150 @@ fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weig
     Customized::new(cch, upward_weights, downward_weights)
 }
 
+pub fn customize_perfect(mut customized: Customized<CCH, &CCH>) -> Customized<DirectedCCH, DirectedCCH> {
+    let cch = customized.cch;
+    let n = cch.num_nodes();
+    let m = cch.num_arcs();
+    // Routine for perfect precustomization.
+    // The interface is similar to the one for the basic customization, but we need access to nonconsecutive ranges of edges,
+    // so we can't use slices. Thus, we just take a mutable pointer to the shortcut vecs.
+    // The logic of the perfect customization based on separators guarantees, that we will never concurrently modify
+    // the same shortcuts, but so far I haven't found a way to express that in safe rust.
+    let customize_perfect = |nodes: Range<usize>, upward: *mut Weight, downward: *mut Weight| {
+        PERFECT_WORKSPACE.with(|node_edge_ids| {
+            let mut node_edge_ids = node_edge_ids.borrow_mut();
+
+            // processing nodes in reverse order
+            for current_node in nodes.rev() {
+                let current_node = current_node as NodeId;
+                // store mapping of head node to corresponding outgoing edge id
+                for (node, edge_id) in cch.neighbor_iter(current_node).zip(cch.neighbor_edge_indices(current_node)) {
+                    node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
+                }
+
+                for (node, edge_id) in cch.neighbor_iter(current_node).zip(cch.neighbor_edge_indices(current_node)) {
+                    let shortcut_edge_ids = cch.neighbor_edge_indices(node);
+                    for (target, shortcut_edge_id) in cch.neighbor_iter(node).zip(shortcut_edge_ids) {
+                        if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
+                            // Here we have both an intermediate and an upper triangle
+                            // depending on which edge we take as the base
+                            // Relax all them.
+                            unsafe {
+                                (*upward.add(other_edge_id as usize)) = min(
+                                    *upward.add(other_edge_id as usize),
+                                    (*upward.add(edge_id as usize)) + (*upward.add(shortcut_edge_id as usize)),
+                                );
+
+                                (*upward.add(edge_id as usize)) = min(
+                                    *upward.add(edge_id as usize),
+                                    (*upward.add(other_edge_id as usize)) + (*downward.add(shortcut_edge_id as usize)),
+                                );
+
+                                (*downward.add(other_edge_id as usize)) = min(
+                                    *downward.add(other_edge_id as usize),
+                                    (*downward.add(edge_id as usize)) + (*downward.add(shortcut_edge_id as usize)),
+                                );
+
+                                (*downward.add(edge_id as usize)) = min(
+                                    *downward.add(edge_id as usize),
+                                    (*downward.add(other_edge_id as usize)) + (*upward.add(shortcut_edge_id as usize)),
+                                );
+                            }
+                        }
+                    }
+                }
+
+                // reset the mapping
+                for node in cch.neighbor_iter(current_node) {
+                    node_edge_ids[node as usize] = InRangeOption::new(None);
+                }
+            }
+        });
+    };
+
+    let static_perfect_customization = SeperatorBasedPerfectParallelCustomization::new(cch, customize_perfect, customize_perfect);
+
+    let upward = &mut customized.upward;
+    let downward = &mut customized.downward;
+    let upward_orig = upward.clone();
+    let downward_orig = downward.clone();
+
+    report_time_with_key("CCH Perfect Customization", "perfect_customization", || {
+        static_perfect_customization.customize(upward, downward, |cb| {
+            PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::new(None); n as usize]), || cb());
+        });
+    });
+
+    report_time_with_key("Build Perfect Customized Graph", "graph_build", || {
+        let forward = customized.forward_graph();
+        let backward = customized.backward_graph();
+
+        let mut forward_first_out = Vec::with_capacity(cch.first_out.len());
+        forward_first_out.push(0);
+        let mut forward_head = Vec::with_capacity(m);
+        let mut forward_weight = Vec::with_capacity(m);
+        let mut forward_cch_edge_to_orig_arc = Vec::with_capacity(m);
+
+        let mut backward_first_out = Vec::with_capacity(cch.first_out.len());
+        backward_first_out.push(0);
+        let mut backward_head = Vec::with_capacity(m);
+        let mut backward_weight = Vec::with_capacity(m);
+        let mut backward_cch_edge_to_orig_arc = Vec::with_capacity(m);
+
+        let mut forward_edge_counter = 0;
+        let mut backward_edge_counter = 0;
+
+        for node in 0..n as NodeId {
+            let edge_ids = cch.neighbor_edge_indices_usize(node);
+            let orig_arcs = &cch.cch_edge_to_orig_arc[edge_ids.clone()];
+            for ((link, (forward_orig_arcs, _)), &customized_weight) in LinkIterable::<Link>::link_iter(&forward, node)
+                .zip(orig_arcs.iter())
+                .zip(&upward_orig[edge_ids.clone()])
+            {
+                if link.weight < INFINITY && !link.weight < customized_weight {
+                    forward_head.push(link.node);
+                    forward_weight.push(link.weight);
+                    forward_cch_edge_to_orig_arc.push(forward_orig_arcs.clone());
+                    forward_edge_counter += 1;
+                }
+            }
+            for ((link, (_, backward_orig_arcs)), &customized_weight) in LinkIterable::<Link>::link_iter(&backward, node)
+                .zip(orig_arcs.iter())
+                .zip(&downward_orig[edge_ids.clone()])
+            {
+                if link.weight < INFINITY && !link.weight < customized_weight {
+                    backward_head.push(link.node);
+                    backward_weight.push(link.weight);
+                    backward_cch_edge_to_orig_arc.push(backward_orig_arcs.clone());
+                    backward_edge_counter += 1;
+                }
+            }
+            forward_first_out.push(forward_edge_counter);
+            backward_first_out.push(backward_edge_counter);
+        }
+
+        let forward_inverted = ReversedGraphWithEdgeIds::reversed(&UnweightedFirstOutGraph::new(&forward_first_out[..], &forward_head[..]));
+        let backward_inverted = ReversedGraphWithEdgeIds::reversed(&UnweightedFirstOutGraph::new(&backward_first_out[..], &backward_head[..]));
+
+        Customized::new(
+            DirectedCCH {
+                forward_first_out,
+                forward_head,
+                backward_first_out,
+                backward_head,
+                node_order: cch.node_order.clone(),
+                forward_cch_edge_to_orig_arc,
+                backward_cch_edge_to_orig_arc,
+                elimination_tree: cch.elimination_tree.clone(),
+                forward_inverted,
+                backward_inverted,
+            },
+            forward_weight,
+            backward_weight,
+        )
+    })
+}
+
 fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, mut downward_weights: Vec<Weight>) -> Customized<DirectedCCH, &DirectedCCH> {
     let n = cch.num_nodes() as NodeId;
 
