@@ -333,23 +333,24 @@ impl CCHT for CCH {
 
 /// A struct containing the results of the second preprocessing phase.
 #[derive(Debug)]
-pub struct Customized<'c, CCH> {
-    cch: &'c CCH,
+pub struct Customized<CCH, CCHRef> {
+    cch: CCHRef,
     upward: Vec<Weight>,
     downward: Vec<Weight>,
+    _phantom: std::marker::PhantomData<CCH>,
 }
 
-impl<'c, CCH: CCHT> Customized<'c, CCH> {
+impl<C: CCHT, CCHRef: std::borrow::Borrow<C>> Customized<C, CCHRef> {
     pub fn forward_graph(&self) -> FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]> {
-        FirstOutGraph::new(self.cch.forward_first_out(), self.cch.forward_head(), &self.upward)
+        FirstOutGraph::new(self.cch.borrow().forward_first_out(), self.cch.borrow().forward_head(), &self.upward)
     }
 
     pub fn backward_graph(&self) -> FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]> {
-        FirstOutGraph::new(self.cch.backward_first_out(), self.cch.backward_head(), &self.downward)
+        FirstOutGraph::new(self.cch.borrow().backward_first_out(), self.cch.borrow().backward_head(), &self.downward)
     }
 
-    pub fn cch(&self) -> &'c CCH {
-        self.cch
+    pub fn cch(&self) -> &C {
+        self.cch.borrow()
     }
 }
 

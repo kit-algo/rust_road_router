@@ -14,7 +14,7 @@ scoped_thread_local!(static PERFECT_WORKSPACE: RefCell<Vec<InRangeOption<EdgeId>
 /// Execute second phase, that is metric dependent preprocessing.
 /// `metric` has to have the same topology as the original graph used for first phase preprocessing.
 /// The weights of `metric` should be the ones that the cch should be customized with.
-pub fn customize<'c, Graph>(cch: &'c CCH, metric: &Graph) -> Customized<'c, CCH>
+pub fn customize<'c, Graph>(cch: &'c CCH, metric: &Graph) -> Customized<CCH, &'c CCH>
 where
     Graph: LinkIterGraph + EdgeRandomAccessGraph<Link> + Sync,
 {
@@ -31,7 +31,7 @@ where
 }
 
 /// Same as [customize], except with a `DirectedCCH`
-pub fn customize_directed<'c, Graph>(cch: &'c DirectedCCH, metric: &Graph) -> Customized<'c, DirectedCCH>
+pub fn customize_directed<'c, Graph>(cch: &'c DirectedCCH, metric: &Graph) -> Customized<DirectedCCH, &'c DirectedCCH>
 where
     Graph: LinkIterGraph + EdgeRandomAccessGraph<Link> + Sync,
 {
@@ -49,7 +49,7 @@ where
 /// Customize with zero metric.
 /// Edges that have weight infinity after customization will have this weight
 /// for every metric and can be removed.
-pub fn always_infinity(cch: &CCH) -> Customized<CCH> {
+pub fn always_infinity(cch: &CCH) -> Customized<CCH, &CCH> {
     let m = cch.num_arcs();
     // buffers for the customized weights
     let mut upward_weights = vec![INFINITY; m];
@@ -121,7 +121,7 @@ fn prepare_zero_weights(cch: &CCH, upward_weights: &mut [Weight], downward_weigh
     });
 }
 
-fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weights: Vec<Weight>) -> Customized<CCH> {
+fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weights: Vec<Weight>) -> Customized<CCH, &CCH> {
     let n = cch.num_nodes() as NodeId;
 
     // Main customization routine.
@@ -231,10 +231,11 @@ fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weig
         cch,
         upward: upward_weights,
         downward: downward_weights,
+        _phantom: Default::default(),
     }
 }
 
-fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, mut downward_weights: Vec<Weight>) -> Customized<DirectedCCH> {
+fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, mut downward_weights: Vec<Weight>) -> Customized<DirectedCCH, &DirectedCCH> {
     let n = cch.num_nodes() as NodeId;
 
     // Main customization routine.
@@ -371,5 +372,6 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
         cch,
         upward: upward_weights,
         downward: downward_weights,
+        _phantom: Default::default(),
     }
 }

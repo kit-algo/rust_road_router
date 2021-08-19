@@ -7,7 +7,7 @@ use stepped_elimination_tree::EliminationTreeWalk;
 
 #[derive(Debug)]
 pub struct Server<'a, CCH> {
-    customized: Customized<'a, CCH>,
+    customized: Customized<CCH, &'a CCH>,
     fw_distances: TimestampedVector<Weight>,
     bw_distances: TimestampedVector<Weight>,
     fw_parents: Vec<NodeId>,
@@ -16,7 +16,7 @@ pub struct Server<'a, CCH> {
 }
 
 impl<'a, CCH: CCHT> Server<'a, CCH> {
-    pub fn new(customized: Customized<'a, CCH>) -> Self {
+    pub fn new(customized: Customized<CCH, &'a CCH>) -> Self {
         let n = customized.forward_graph().num_nodes();
         Server {
             customized,
@@ -29,7 +29,7 @@ impl<'a, CCH: CCHT> Server<'a, CCH> {
     }
 
     // Update the metric using a new customization result
-    pub fn update(&mut self, mut customized: Customized<'a, CCH>) {
+    pub fn update(&mut self, mut customized: Customized<CCH, &'a CCH>) {
         std::mem::swap(&mut self.customized, &mut customized);
     }
 

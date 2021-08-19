@@ -15,7 +15,7 @@ pub mod penalty;
 pub mod query;
 
 pub struct CCHPotData<'a> {
-    customized: Customized<'a, CCH>,
+    customized: Customized<CCH, &'a CCH>,
 }
 
 impl<'a> CCHPotData<'a> {
@@ -27,7 +27,7 @@ impl<'a> CCHPotData<'a> {
         Self { customized }
     }
 
-    pub fn forward_potential(&self) -> CCHPotential<'a, FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>, FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>> {
+    pub fn forward_potential(&self) -> CCHPotential<FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>, FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>> {
         let n = self.customized.forward_graph().num_nodes();
 
         CCHPotential {
@@ -42,7 +42,7 @@ impl<'a> CCHPotData<'a> {
         }
     }
 
-    pub fn backward_potential(&self) -> CCHPotential<'a, FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>, FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>> {
+    pub fn backward_potential(&self) -> CCHPotential<FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>, FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>> {
         let n = self.customized.forward_graph().num_nodes();
 
         CCHPotential {
