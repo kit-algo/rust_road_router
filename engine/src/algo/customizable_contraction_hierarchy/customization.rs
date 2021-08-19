@@ -227,12 +227,7 @@ fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weig
         });
     });
 
-    Customized {
-        cch,
-        upward: upward_weights,
-        downward: downward_weights,
-        _phantom: Default::default(),
-    }
+    Customized::new(cch, upward_weights, downward_weights)
 }
 
 fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, mut downward_weights: Vec<Weight>) -> Customized<DirectedCCH, &DirectedCCH> {
@@ -368,10 +363,5 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
         });
     });
 
-    Customized {
-        cch,
-        upward: upward_weights,
-        downward: downward_weights,
-        _phantom: Default::default(),
-    }
+    Customized::new(cch, upward_weights, downward_weights)
 }

@@ -341,6 +341,15 @@ pub struct Customized<CCH, CCHRef> {
 }
 
 impl<C: CCHT, CCHRef: std::borrow::Borrow<C>> Customized<C, CCHRef> {
+    fn new(cch: CCHRef, upward: Vec<Weight>, downward: Vec<Weight>) -> Self {
+        Customized {
+            cch,
+            upward,
+            downward,
+            _phantom: Default::default(),
+        }
+    }
+
     pub fn forward_graph(&self) -> FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]> {
         FirstOutGraph::new(self.cch.borrow().forward_first_out(), self.cch.borrow().forward_head(), &self.upward)
     }
