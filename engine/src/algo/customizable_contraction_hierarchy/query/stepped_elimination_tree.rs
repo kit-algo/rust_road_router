@@ -1,12 +1,12 @@
 //! Elimination Tree path to root traversal while relaxing edges.
 
 use super::*;
-use crate::util::in_range_option::InRangeOption;
+use crate::{datastr::timestamped_vector::TimestampedVector, util::in_range_option::InRangeOption};
 
 #[derive(Debug)]
 pub struct EliminationTreeWalk<'a, Graph> {
     graph: &'a Graph,
-    distances: &'a mut [Weight],
+    distances: &'a mut TimestampedVector<Weight>,
     predecessors: &'a mut [NodeId],
     elimination_tree: &'a [InRangeOption<NodeId>],
     next: Option<NodeId>,
@@ -16,16 +16,12 @@ impl<'a, Graph: LinkIterGraph> EliminationTreeWalk<'a, Graph> {
     pub fn query(
         graph: &'a Graph,
         elimination_tree: &'a [InRangeOption<NodeId>],
-        distances: &'a mut [Weight],
+        distances: &'a mut TimestampedVector<Weight>,
         predecessors: &'a mut [NodeId],
         from: NodeId,
     ) -> Self {
         // initialize
-        let mut cur = from;
-        while let Some(parent) = elimination_tree[cur as usize].value() {
-            distances[parent as usize] = INFINITY;
-            cur = parent;
-        }
+        distances.reset();
 
         // Starte with origin
         distances[from as usize] = 0;

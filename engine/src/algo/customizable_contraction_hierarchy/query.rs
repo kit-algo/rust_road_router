@@ -2,13 +2,14 @@
 
 use super::*;
 pub mod stepped_elimination_tree;
+use crate::datastr::timestamped_vector::TimestampedVector;
 use stepped_elimination_tree::EliminationTreeWalk;
 
 #[derive(Debug)]
 pub struct Server<'a, CCH> {
     customized: Customized<'a, CCH>,
-    fw_distances: Vec<Weight>,
-    bw_distances: Vec<Weight>,
+    fw_distances: TimestampedVector<Weight>,
+    bw_distances: TimestampedVector<Weight>,
     fw_parents: Vec<NodeId>,
     bw_parents: Vec<NodeId>,
     meeting_node: NodeId,
@@ -19,8 +20,8 @@ impl<'a, CCH: CCHT> Server<'a, CCH> {
         let n = customized.forward_graph().num_nodes();
         Server {
             customized,
-            fw_distances: vec![INFINITY; n],
-            bw_distances: vec![INFINITY; n],
+            fw_distances: TimestampedVector::new(n, INFINITY),
+            bw_distances: TimestampedVector::new(n, INFINITY),
             fw_parents: vec![n as NodeId; n],
             bw_parents: vec![n as NodeId; n],
             meeting_node: 0,
@@ -152,7 +153,7 @@ impl<'a, CCH: CCHT> Server<'a, CCH> {
         cch: &CCH,
         weights: &[Weight],
         other_weights: &[Weight],
-        distances: &mut [Weight],
+        distances: &mut TimestampedVector<Weight>,
         parents: &mut [NodeId],
     ) {
         let mut current = target;
