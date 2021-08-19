@@ -4,7 +4,7 @@ use super::*;
 use crate::{
     datastr::node_order::NodeOrder,
     io::*,
-    report::benchmark::*,
+    report::{benchmark::*, block_reporting},
     util::{in_range_option::InRangeOption, *},
 };
 use std::{cmp::Ordering, ops::Range};
@@ -60,7 +60,10 @@ impl<'g, Graph: EdgeIdGraph> ReconstructPrepared<CCH> for CCHReconstrctor<'g, Gr
 
 impl CCH {
     pub fn fix_order_and_build(graph: &(impl LinkIterable<NodeIdT> + EdgeIdGraph), order: NodeOrder) -> Self {
-        let cch = contract(graph, order);
+        let cch = {
+            let _blocked = block_reporting();
+            contract(graph, order)
+        };
         let order = CCHReordering {
             cch: &cch,
             latitude: &[],
