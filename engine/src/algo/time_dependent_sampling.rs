@@ -26,7 +26,7 @@ pub struct Server<'a> {
     // The Dijkstra algo on the original graph
     dijkstra_data: DijkstraData<Weight>,
     // A CCH Server for each time window
-    samples: Vec<CCHServer<'a, CCH>>,
+    samples: Vec<CCHServer<CCH, &'a CCH>>,
     // marking edges in the subgraph we perform dijkstra on
     active_edges: TimestampedVector<bool>,
 }

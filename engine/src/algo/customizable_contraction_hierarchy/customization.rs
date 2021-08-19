@@ -330,7 +330,7 @@ pub fn customize_perfect(mut customized: Customized<CCH, &CCH>) -> Customized<Di
                 .zip(orig_arcs.iter())
                 .zip(&upward_orig[edge_ids.clone()])
             {
-                if link.weight < INFINITY && !link.weight < customized_weight {
+                if link.weight < INFINITY && !(link.weight < customized_weight) {
                     forward_head.push(link.node);
                     forward_weight.push(link.weight);
                     forward_cch_edge_to_orig_arc.push(forward_orig_arcs.clone());
@@ -341,7 +341,7 @@ pub fn customize_perfect(mut customized: Customized<CCH, &CCH>) -> Customized<Di
                 .zip(orig_arcs.iter())
                 .zip(&downward_orig[edge_ids.clone()])
             {
-                if link.weight < INFINITY && !link.weight < customized_weight {
+                if link.weight < INFINITY && !(link.weight < customized_weight) {
                     backward_head.push(link.node);
                     backward_weight.push(link.weight);
                     backward_cch_edge_to_orig_arc.push(backward_orig_arcs.clone());

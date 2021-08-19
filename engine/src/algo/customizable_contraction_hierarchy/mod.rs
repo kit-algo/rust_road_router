@@ -13,7 +13,7 @@ mod contraction;
 use contraction::*;
 mod customization;
 pub use customization::ftd as ftd_cch;
-pub use customization::{customize, customize_directed};
+pub use customization::{customize, customize_directed, customize_perfect};
 pub mod separator_decomposition;
 use separator_decomposition::*;
 mod reorder;

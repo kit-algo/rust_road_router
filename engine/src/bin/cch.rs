@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm"))?);
     let cch = CCH::fix_order_and_build(&graph, order);
 
-    let mut server = Server::new(customize(&cch, &graph));
+    let mut server = Server::new(customize_perfect(customize(&cch, &graph)));
 
     let from = Vec::load_from(path.join("test/source"))?;
     let to = Vec::load_from(path.join("test/target"))?;
