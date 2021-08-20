@@ -49,12 +49,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                         silent_report_time_with_key("selection", || {
                             many_to_one.init(target);
                         });
-                        let mut queries_ctxt = push_collection_context("queries".to_string());
                         for &s in sources {
-                            let _alg_ctx = queries_ctxt.push_collection_item();
-                            silent_report_time(|| {
-                                many_to_one.potential(s);
-                            });
+                            many_to_one.potential(s);
                         }
                     });
                     report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
@@ -79,8 +75,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let mut queries_ctxt = push_collection_context("queries".to_string());
 
                     for &s in sources {
+                        let _alg_ctx = queries_ctxt.push_collection_item();
                         silent_report_time(|| {
-                            let _alg_ctx = queries_ctxt.push_collection_item();
                             many_to_many.potential(s);
                         });
                     }
