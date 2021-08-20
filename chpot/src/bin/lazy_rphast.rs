@@ -36,8 +36,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             let queries = experiments::gen_many_to_many_queries(&graph, num_queries, 2usize.pow(ball_size_exp), 2usize.pow(target_set_size_exp), &mut rng);
 
-            let mut many_to_one = chpot_data.potentials().0;
             let mut algos_ctxt = push_collection_context("algo_runs".to_string());
+            let mut many_to_one = chpot_data.potentials().0;
 
             let mut total_query_time = Duration::zero();
 
@@ -49,8 +49,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                         silent_report_time_with_key("selection", || {
                             many_to_one.init(target);
                         });
-                        let mut _queries_ctxt = push_collection_context("queries".to_string());
+                        let mut queries_ctxt = push_collection_context("queries".to_string());
                         for &s in sources {
+                            let _alg_ctx = queries_ctxt.push_collection_item();
                             silent_report_time(|| {
                                 many_to_one.potential(s);
                             });
@@ -75,10 +76,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                     report_time_with_key("selection", "selection", || {
                         many_to_many.init(&targets);
                     });
-                    let mut _queries_ctxt = push_collection_context("queries".to_string());
+                    let mut queries_ctxt = push_collection_context("queries".to_string());
 
                     for &s in sources {
                         silent_report_time(|| {
+                            let _alg_ctx = queries_ctxt.push_collection_item();
                             many_to_many.potential(s);
                         });
                     }
