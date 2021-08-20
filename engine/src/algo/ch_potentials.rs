@@ -14,16 +14,16 @@ use crate::{
 pub mod penalty;
 pub mod query;
 
-pub struct CCHPotData<'a> {
-    customized: Customized<CCH, &'a CCH>,
+pub struct CCHPotData {
+    customized: Customized<DirectedCCH, DirectedCCH>,
 }
 
-impl<'a> CCHPotData<'a> {
-    pub fn new<Graph>(cch: &'a CCH, lower_bound: &Graph) -> Self
+impl<'a> CCHPotData {
+    pub fn new<Graph>(cch: &CCH, lower_bound: &Graph) -> Self
     where
         Graph: LinkIterGraph + EdgeRandomAccessGraph<Link> + Sync,
     {
-        let customized = customize(cch, lower_bound);
+        let customized = customize_perfect(customize(cch, lower_bound));
         Self { customized }
     }
 
@@ -59,7 +59,7 @@ impl<'a> CCHPotData<'a> {
 }
 
 pub struct CCHPotential<'a, GF, GB> {
-    cch: &'a CCH,
+    cch: &'a DirectedCCH,
     stack: Vec<NodeId>,
     potentials: TimestampedVector<InRangeOption<Weight>>,
     forward_cch_graph: GF,
