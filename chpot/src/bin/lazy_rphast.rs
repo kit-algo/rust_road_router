@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         CCHPotData::new(&cch, &graph)
     };
 
-    let num_queries = 20;
+    let num_queries = 100;
 
     let mut exps_ctxt = push_collection_context("experiments".to_string());
 
