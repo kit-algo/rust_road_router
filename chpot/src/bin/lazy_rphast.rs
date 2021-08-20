@@ -47,6 +47,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             let mut algos_ctxt = push_collection_context("algo_runs".to_string());
             let mut many_to_one = chpot_data.potentials().0;
+            many_to_one.init(*queries.last().unwrap().1.last().unwrap());
+            many_to_one.potential(*queries.last().unwrap().0.last().unwrap());
 
             let mut total_query_time = Duration::zero();
 
@@ -72,6 +74,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             };
 
             let mut many_to_one = cch_pot_data.forward_potential();
+            many_to_one.init(*queries.last().unwrap().1.last().unwrap());
+            many_to_one.potential(*queries.last().unwrap().0.last().unwrap());
 
             let mut total_query_time = Duration::zero();
 
@@ -97,6 +101,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             };
 
             let mut many_to_many = chpot_data.bucket_ch_pot();
+            many_to_many.init(&queries.last().unwrap().1);
+            many_to_many.potential(*queries.last().unwrap().0.last().unwrap());
             let mut total_query_time = Duration::zero();
 
             for (sources, targets) in &queries {
