@@ -46,11 +46,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let _alg_ctx = algos_ctxt.push_collection_item();
                     report!("algo", "lazy_rphast_many_to_one");
                     let (_, time) = measure(|| {
-                        report_time_with_key("selection", "selection", || {
+                        silent_report_time_with_key("selection", || {
                             many_to_one.init(target);
                         });
+                        let mut _queries_ctxt = push_collection_context("queries".to_string());
                         for &s in sources {
-                            many_to_one.potential(s);
+                            silent_report_time(|| {
+                                many_to_one.potential(s);
+                            });
                         }
                     });
                     report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
@@ -72,8 +75,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                     report_time_with_key("selection", "selection", || {
                         many_to_many.init(&targets);
                     });
+                    let mut _queries_ctxt = push_collection_context("queries".to_string());
+
                     for &s in sources {
-                        many_to_many.potential(s);
+                        silent_report_time(|| {
+                            many_to_many.potential(s);
+                        });
                     }
                 });
                 report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);

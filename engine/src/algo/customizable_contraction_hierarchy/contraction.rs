@@ -5,7 +5,7 @@
 //! This implementation is not guaranteed to run in linear time, but is practically faster than the linear version.
 
 use super::*;
-use crate::{datastr::graph::first_out_graph::degrees_to_first_out, report::benchmark::report_time, report::*};
+use crate::{datastr::graph::first_out_graph::degrees_to_first_out, report::*};
 use std::{
     cmp::Ordering,
     ops::{Index, IndexMut},

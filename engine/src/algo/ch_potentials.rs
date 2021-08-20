@@ -37,7 +37,7 @@ impl<'a> CCHPotData<'a> {
             backward_distances: TimestampedVector::new(n, INFINITY),
             backward_parents: vec![n as NodeId; n],
             backward_cch_graph: self.customized.backward_graph(),
-            potentials: TimestampedVector::new(self.customized.cch().num_nodes(), InRangeOption::new(None)),
+            potentials: TimestampedVector::new(n, InRangeOption::new(None)),
             num_pot_computations: 0,
         }
     }
@@ -52,7 +52,7 @@ impl<'a> CCHPotData<'a> {
             backward_distances: TimestampedVector::new(n, INFINITY),
             backward_parents: vec![n as NodeId; n],
             backward_cch_graph: self.customized.forward_graph(),
-            potentials: TimestampedVector::new(self.customized.cch().num_nodes(), InRangeOption::new(None)),
+            potentials: TimestampedVector::new(n, InRangeOption::new(None)),
             num_pot_computations: 0,
         }
     }
