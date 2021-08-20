@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &env::args().skip(1).next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 
-    let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
+    let graph = WeightedGraphReconstructor("lower_bound").reconstruct_from(&path)?;
     let order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm"))?);
     let cch = CCH::fix_order_and_build(&graph, order);
 
