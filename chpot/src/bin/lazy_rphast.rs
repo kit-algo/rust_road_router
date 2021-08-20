@@ -2,9 +2,9 @@
 extern crate rust_road_router;
 use rand::prelude::*;
 use rust_road_router::{
-    algo::{a_star::*, ch_potentials::*},
+    algo::{a_star::*, ch_potentials::*, customizable_contraction_hierarchy::*},
     cli::CliErr,
-    datastr::graph::*,
+    datastr::{graph::*, node_order::*},
     experiments,
     io::*,
     report::*,
@@ -19,8 +19,17 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
     let chpot_data = CHPotLoader::reconstruct_from(&path.join("lower_bound_ch"))?;
+    let cch = {
+        let _blocked = block_reporting();
+        let order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm"))?);
+        CCH::fix_order_and_build(&graph, order)
+    };
+    let cch_pot_data = {
+        let _blocked = block_reporting();
+        CCHPotData::new(&cch, &graph)
+    };
 
-    let num_queries = 100;
+    let num_queries = 20;
 
     let mut exps_ctxt = push_collection_context("experiments".to_string());
 
@@ -45,6 +54,31 @@ fn main() -> Result<(), Box<dyn Error>> {
                 for &target in targets.choose_multiple(&mut rng, num_queries) {
                     let _alg_ctx = algos_ctxt.push_collection_item();
                     report!("algo", "lazy_rphast_many_to_one");
+                    let (_, time) = measure(|| {
+                        silent_report_time_with_key("selection", || {
+                            many_to_one.init(target);
+                        });
+                        for &s in sources {
+                            many_to_one.potential(s);
+                        }
+                    });
+                    report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+                    total_query_time = total_query_time + time;
+                }
+            }
+
+            if num_queries > 0 {
+                eprintln!("Avg. query time {}", total_query_time / ((num_queries * num_queries) as i32))
+            };
+
+            let mut many_to_one = cch_pot_data.forward_potential();
+
+            let mut total_query_time = Duration::zero();
+
+            for (sources, targets) in &queries {
+                for &target in targets.choose_multiple(&mut rng, num_queries) {
+                    let _alg_ctx = algos_ctxt.push_collection_item();
+                    report!("algo", "lazy_rphast_cch_many_to_one");
                     let (_, time) = measure(|| {
                         silent_report_time_with_key("selection", || {
                             many_to_one.init(target);
