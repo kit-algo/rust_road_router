@@ -21,6 +21,7 @@ enum ContextStackItem {
     Key(String),
     Collection(Vec<Value>),
     Object(Map<String, Value>),
+    Throwaway,
 }
 
 #[derive(Debug)]
@@ -106,7 +107,9 @@ impl Reporter {
                 self.context_stack.push(ContextStackItem::Collection(tmp));
                 self.current = CurrentReportingContext::Throwaway;
             }
-            CurrentReportingContext::Throwaway => (),
+            CurrentReportingContext::Throwaway => {
+                self.context_stack.push(ContextStackItem::Throwaway);
+            }
         }
     }
 
@@ -167,7 +170,7 @@ impl Reporter {
 
                 self.current = CurrentReportingContext::Collection(collection);
             }
-            ContextStackItem::Object(_) => panic!("Inconsistent context stack"),
+            _ => panic!("Inconsistent context stack"),
         }
     }
 
@@ -183,6 +186,7 @@ impl Reporter {
             ContextStackItem::Object(object) => {
                 self.current = CurrentReportingContext::Object(object);
             }
+            ContextStackItem::Throwaway => (),
         }
     }
 }
