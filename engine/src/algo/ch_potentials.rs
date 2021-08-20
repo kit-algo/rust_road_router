@@ -108,12 +108,13 @@ where
         }
 
         while let Some(node) = self.stack.pop() {
-            let min_by_up = LinkIterable::<Link>::link_iter(&self.forward_cch_graph, node)
-                .map(|edge| edge.weight + self.potentials[edge.node as usize].value().unwrap())
-                .min()
-                .unwrap_or(INFINITY);
+            let mut dist = self.backward_distances[node as usize];
 
-            self.potentials[node as usize] = InRangeOption::new(Some(std::cmp::min(self.backward_distances[node as usize], min_by_up)));
+            for edge in LinkIterable::<Link>::link_iter(&self.forward_cch_graph, node) {
+                dist = std::cmp::min(dist, edge.weight + self.potentials[edge.node as usize].value().unwrap())
+            }
+
+            self.potentials[node as usize] = InRangeOption::new(Some(dist));
         }
 
         let dist = self.potentials[node as usize].value().unwrap();
@@ -133,6 +134,7 @@ pub struct CHPotential<GF, GB> {
     backward: GB,
     dijkstra_data: DijkstraData<Weight>,
     num_pot_computations: usize,
+    stack: Vec<NodeId>,
 }
 
 impl<GF: LinkIterGraph, GB: LinkIterGraph> CHPotential<GF, GB> {
@@ -145,36 +147,12 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> CHPotential<GF, GB> {
             backward,
             dijkstra_data: DijkstraData::new(n),
             num_pot_computations: 0,
+            stack: Vec::new(),
         }
     }
 
     pub fn num_pot_computations(&self) -> usize {
         self.num_pot_computations
-    }
-
-    fn potential_internal(
-        potentials: &mut TimestampedVector<InRangeOption<Weight>>,
-        forward: &GF,
-        backward_data: &DijkstraData<Weight>,
-        node: NodeId,
-        num_pot_computations: &mut usize,
-    ) -> Weight {
-        if let Some(pot) = potentials[node as usize].value() {
-            return pot;
-        }
-        *num_pot_computations += 1;
-
-        let mut dist = backward_data.distances[node as usize];
-
-        for l in LinkIterable::<Link>::link_iter(forward, node) {
-            dist = std::cmp::min(
-                dist,
-                Self::potential_internal(potentials, forward, backward_data, l.node, num_pot_computations) + l.weight,
-            );
-        }
-        potentials[node as usize] = InRangeOption::new(Some(dist));
-
-        potentials[node as usize].value().unwrap()
     }
 }
 
@@ -198,8 +176,34 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> Potential for CHPotential<GF, GB> {
 
     fn potential(&mut self, node: NodeId) -> Option<Weight> {
         let node = self.order.rank(node);
+        let dist = if let Some(pot) = self.potentials[node as usize].value() {
+            pot
+        } else {
+            self.stack.push(node);
 
-        let dist = Self::potential_internal(&mut self.potentials, &self.forward, &self.dijkstra_data, node, &mut self.num_pot_computations);
+            while let Some(&node) = self.stack.last() {
+                if self.potentials[node as usize].value().is_some() {
+                    self.stack.pop();
+                    continue;
+                }
+                let mut dist = self.dijkstra_data.distances[node as usize];
+                let mut missing = false;
+                for l in LinkIterable::<Link>::link_iter(&self.forward, node) {
+                    if let Some(pot) = self.potentials[l.node as usize].value() {
+                        dist = std::cmp::min(dist, pot + l.weight);
+                    } else {
+                        missing = true;
+                        self.stack.push(l.node);
+                    }
+                }
+                if !missing {
+                    self.potentials[node as usize] = InRangeOption::new(Some(dist));
+                    self.stack.pop();
+                }
+            }
+
+            self.potentials[node as usize].value().unwrap()
+        };
 
         if dist < INFINITY {
             Some(dist)
@@ -207,50 +211,6 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> Potential for CHPotential<GF, GB> {
             None
         }
     }
-
-    // fn potential(&mut self, node: NodeId) -> Option<Weight> {
-    //     let node = self.order.rank(node);
-    //     let dist = if let Some(pot) = self.potentials[node as usize].value() {
-    //         pot
-    //     } else {
-    //         let mut stack = Vec::new();
-    //         stack.push((
-    //             node,
-    //             LinkIterable::<Link>::link_iter(&self.forward, node).peekable(),
-    //             *self.backward_dijkstra.tentative_distance(node),
-    //         ));
-
-    //         while let Some((node, iter, tentative_distance)) = stack.last_mut() {
-    //             let node = *node;
-    //             let mut missing = false;
-    //             while let Some(&link) = iter.peek() {
-    //                 if let Some(pot) = self.potentials[link.node as usize].value() {
-    //                     *tentative_distance = std::cmp::min(*tentative_distance, pot + link.weight);
-    //                     iter.next();
-    //                 } else {
-    //                     stack.push((
-    //                         link.node,
-    //                         LinkIterable::<Link>::link_iter(&self.forward, link.node).peekable(),
-    //                         *self.backward_dijkstra.tentative_distance(link.node),
-    //                     ));
-    //                     missing = true;
-    //                     break;
-    //                 }
-    //             }
-    //             if !missing {
-    //                 self.potentials[node as usize] = InRangeOption::new(Some(stack.pop().unwrap().2));
-    //             }
-    //         }
-
-    //         self.potentials[node as usize].value().unwrap()
-    //     };
-
-    //     if dist < INFINITY {
-    //         Some(dist)
-    //     } else {
-    //         None
-    //     }
-    // }
 }
 
 impl Reconstruct for CHPotential<OwnedGraph, OwnedGraph> {
