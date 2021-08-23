@@ -24,6 +24,10 @@ impl<P> TurnExpandedPotential<P> {
         Self { potential, tail }
     }
 
+    pub fn new_with_tail(tail: Vec<NodeId>, potential: P) -> Self {
+        Self { potential, tail }
+    }
+
     pub fn inner(&self) -> &P {
         &self.potential
     }
