@@ -81,6 +81,7 @@ where
     GB: LinkIterGraph,
 {
     fn init(&mut self, target: NodeId) {
+        let target = self.cch.node_order().rank(target);
         self.potentials.reset();
         let mut bw_walk = EliminationTreeWalk::query(
             &self.backward_cch_graph,
