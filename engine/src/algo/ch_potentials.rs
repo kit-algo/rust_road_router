@@ -198,6 +198,7 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> Potential for CHPotential<GF, GB> {
                     }
                 }
                 if !missing {
+                    self.num_pot_computations += 1;
                     self.potentials[node as usize] = InRangeOption::new(Some(dist));
                     self.stack.pop();
                 }
