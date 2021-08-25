@@ -510,6 +510,26 @@ where
         res
     }
 
+    pub fn one_to_all(&mut self, from: NodeId) -> BiconnectedPathServerWrapper<Graph, Ops, P, Query, SKIP_DEG_2, SKIP_DEG_3> {
+        let mut dijkstra = TopoDijkstraRun::<Graph, Ops, SKIP_DEG_2, SKIP_DEG_3>::query(
+            &self.graph,
+            &mut self.dijkstra_data,
+            &mut self.ops,
+            Query {
+                from,
+                to: self.graph.num_nodes() as NodeId,
+            },
+        );
+        while let Some(_) = dijkstra.next_step() {}
+        BiconnectedPathServerWrapper(
+            self,
+            Query {
+                from,
+                to: self.graph.num_nodes() as NodeId,
+            },
+        )
+    }
+
     fn node_path(&self, query: impl GenQuery<Timestamp>) -> Vec<NodeId> {
         self.dijkstra_data.node_path(query.from(), query.to())
     }
@@ -603,6 +623,10 @@ where
 
     pub fn lower_bound(&mut self, node: NodeId) -> Option<Weight> {
         self.0.potential.potential(node)
+    }
+
+    pub fn graph(&self) -> &G {
+        self.0.graph()
     }
 }
 

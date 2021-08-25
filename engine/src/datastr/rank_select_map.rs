@@ -157,6 +157,42 @@ impl FastClearBitVec {
         }
         self.to_clear.clear();
     }
+
+    pub fn set_bits_iter(&self) -> impl Iterator<Item = usize> + '_ {
+        SetBitsIter {
+            to_clear_iter: self.to_clear.iter(),
+            data: &self.data,
+            current_bits: 0,
+            current_idx: 0,
+        }
+    }
+}
+
+pub struct SetBitsIter<'a> {
+    to_clear_iter: std::slice::Iter<'a, usize>,
+    data: &'a [u64],
+    current_bits: u64,
+    current_idx: usize,
+}
+
+impl Iterator for SetBitsIter<'_> {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current_bits == 0 {
+            if let Some(&next_idx) = self.to_clear_iter.next() {
+                self.current_idx = next_idx;
+                self.current_bits = self.data[next_idx];
+            } else {
+                return None;
+            }
+        }
+        debug_assert_ne!(self.current_bits, 0);
+
+        let index = self.current_bits.trailing_zeros() as usize;
+        self.current_bits &= !(1 << index);
+        Some(self.current_idx * STORAGE_BITS + index)
+    }
 }
 
 /// the actual map data structure.
