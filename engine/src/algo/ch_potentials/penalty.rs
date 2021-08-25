@@ -87,11 +87,11 @@ impl<P: Potential + Send + Clone> Penalty<P> {
             let base_dist = result.distance();
             report!("base_dist", base_dist);
 
-            let max_orig_dist = base_dist * 25 / 20;
+            let max_orig_dist = (base_dist as f64 * 1.25) as Weight;
             let rejoin_penalty = base_dist / 100;
 
-            let max_penalized_dist = max_orig_dist * 25 / 20 + 2 * rejoin_penalty;
-            let max_num_penalizations = 3;
+            let max_penalized_dist = (base_dist as f64 * 1.25 * 1.1) as Weight + 2 * rejoin_penalty;
+            let max_num_penalizations = 5;
 
             let mut path = result.node_path();
             let mut path_edges = result.edge_path();
@@ -119,7 +119,7 @@ impl<P: Potential + Send + Clone> Penalty<P> {
                         || self.times_penalized[alternative_graph_dijkstra.graph().graph.graph.head()[edge as usize] as usize] < max_num_penalizations
                     {
                         let weight = shortest_path_penalized.graph().graph.weight()[edge as usize];
-                        shortest_path_penalized.set_edge_weight(edge, weight * 25 / 20);
+                        shortest_path_penalized.set_edge_weight(edge, weight * 11 / 10);
                     }
                 }
                 let dists: Vec<_> = std::iter::once(0)
@@ -134,7 +134,10 @@ impl<P: Potential + Send + Clone> Penalty<P> {
                         for (NodeIdT(rev_head), Reversed(EdgeIdT(edge))) in self.reversed.link_iter(head) {
                             if rev_head != tail {
                                 let weight = shortest_path_penalized.graph().graph.weight()[edge as usize];
-                                shortest_path_penalized.set_edge_weight(edge, weight + rejoin_penalty * head_dist / total_penalized_dist);
+                                shortest_path_penalized.set_edge_weight(
+                                    edge,
+                                    weight + (rejoin_penalty as u64 * head_dist as u64 / *total_penalized_dist as u64) as Weight,
+                                );
                             }
                         }
                     }
@@ -145,7 +148,10 @@ impl<P: Potential + Send + Clone> Penalty<P> {
                         {
                             if edge_head != head {
                                 let weight = shortest_path_penalized.graph().graph.weight()[edge as usize];
-                                shortest_path_penalized.set_edge_weight(edge, weight + rejoin_penalty * tail_dist / total_penalized_dist);
+                                shortest_path_penalized.set_edge_weight(
+                                    edge,
+                                    weight + (rejoin_penalty as u64 * tail_dist as u64 / *total_penalized_dist as u64) as Weight,
+                                );
                             }
                         }
                     }
@@ -203,7 +209,7 @@ impl<P: Potential + Send + Clone> Penalty<P> {
                         .map(|&EdgeIdT(e)| alternative_graph_dijkstra.graph().graph.graph.weight()[e as usize])
                         .sum();
 
-                    if part_dist * 10 > base_dist {
+                    if part_dist * 20 > base_dist {
                         let _blocked = block_reporting();
                         if part_dist * 20
                             <= alternative_graph_dijkstra
@@ -216,16 +222,13 @@ impl<P: Potential + Send + Clone> Penalty<P> {
                                 .unwrap_or(INFINITY)
                         {
                             feasable = true;
-                            break;
+                            alternative_graph_dijkstra.graph_mut().add_edges(&new_part);
+                            s += 1;
                         }
                     }
                 }
 
                 report!("feasable", feasable);
-                if feasable {
-                    alternative_graph_dijkstra.graph_mut().add_edges(&path_edges);
-                    s += 1;
-                }
 
                 if path_orig_len > max_orig_dist || penalty_dist > max_penalized_dist || s >= 10 {
                     dbg!(path_orig_len > max_orig_dist);
