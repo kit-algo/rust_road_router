@@ -113,7 +113,7 @@ impl<P: Potential> Potential for RecyclingPotential<P> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct ZeroPotential();
 
 impl Potential for ZeroPotential {
