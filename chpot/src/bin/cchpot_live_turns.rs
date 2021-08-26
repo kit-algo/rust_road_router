@@ -2,7 +2,10 @@ use rust_road_router::{
     algo::{
         ch_potentials::{query::Server as TopoServer, *},
         customizable_contraction_hierarchy::*,
-        dijkstra::{query::dijkstra::Server as DijkServer, DefaultOps},
+        dijkstra::{
+            query::{dijkstra::Server as DijkServer, disconnected_targets::*},
+            DefaultOps,
+        },
     },
     cli::CliErr,
     datastr::graph::*,
@@ -72,11 +75,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let potential = cch_pot_data.forward_potential();
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
-    let mut topocore: TopoServer<OwnedGraph, _, _, true, true, true> = TopoServer::new(&exp_graph, potential, DefaultOps::default());
+    let topocore: TopoServer<OwnedGraph, _, _, true, true, true> = TopoServer::new(&exp_graph, potential, DefaultOps::default());
+    let mut topocore = CatchDisconnectedTarget::new(topocore, &graph);
     drop(virtual_topocore_ctxt);
 
+    let n = exp_graph.num_nodes();
     experiments::run_random_queries_with_callbacks(
-        graph.num_nodes(),
+        n,
         &mut topocore,
         &mut rng,
         &mut algo_runs_ctxt,
@@ -103,7 +108,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut server = DijkServer::<_, DefaultOps>::new(exp_graph);
 
     experiments::run_random_queries(
-        graph.num_nodes(),
+        n,
         &mut server,
         &mut rng,
         &mut &mut algo_runs_ctxt,

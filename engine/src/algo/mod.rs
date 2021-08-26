@@ -166,6 +166,10 @@ where
             None
         }
     }
+
+    pub fn decompose(self) -> (Option<W>, P) {
+        (self.distance, self.path_server)
+    }
 }
 
 pub struct ConnectedQueryResult<P, W>(QueryResult<P, W>);

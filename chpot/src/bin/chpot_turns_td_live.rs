@@ -8,7 +8,7 @@ use rust_road_router::{
     algo::{
         a_star::*,
         ch_potentials::{query::Server, *},
-        dijkstra::query::{dijkstra::Server as DijkServer, td_dijkstra::LiveTDDijkstraOps},
+        dijkstra::query::{dijkstra::Server as DijkServer, disconnected_targets::*, td_dijkstra::LiveTDDijkstraOps},
     },
     cli::CliErr,
     datastr::graph::{time_dependent::*, *},
@@ -28,7 +28,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let path = Path::new(arg);
 
     let graph = TDGraph::reconstruct_from(&path)?;
-    let n = graph.num_nodes();
     let live_travel_time = Vec::<Weight>::load_from(path.join("live_travel_time"))?;
 
     let lower_bound = (0..graph.num_arcs() as EdgeId)
@@ -90,12 +89,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         Some(0)
     });
+    let n = graph.num_nodes();
 
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[0]);
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
-    let mut server = Server::new(&graph, potential, LiveTDDijkstraOps::default());
+    let server = Server::new(&graph, potential, LiveTDDijkstraOps::default());
+    let mut server = CatchDisconnectedTarget::new(server, &graph);
     drop(virtual_topocore_ctxt);
 
     experiments::run_random_td_queries(
