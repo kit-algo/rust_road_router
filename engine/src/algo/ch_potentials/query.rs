@@ -1049,6 +1049,7 @@ pub struct MultiThreadedBiDirSkipLowDegServer<P = BiDirZeroPot> {
     bw_potential: P,
     forward_to_backward_edge_ids: Vec<EdgeId>,
     backward_to_forward_edge_ids: Vec<EdgeId>,
+    thread_pool: rayon::ThreadPool,
 }
 
 impl<P: BiDirPotential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
@@ -1085,6 +1086,7 @@ impl<P: BiDirPotential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
             meeting_node: n as NodeId,
             forward_to_backward_edge_ids: forward_to_backward,
             backward_to_forward_edge_ids: backward_to_forward,
+            thread_pool: rayon::ThreadPoolBuilder::new().num_threads(2).build().unwrap(),
         }
     }
 
@@ -1139,7 +1141,7 @@ impl<P: BiDirPotential + Clone + Send> MultiThreadedBiDirSkipLowDegServer<P> {
         let fw_potential = &mut self.fw_potential;
         let bw_potential = &mut self.bw_potential;
 
-        let ((fw_meeting, fw_num_queue_pops), (bw_meeting, bw_num_queue_pops)) = rayon::join(
+        let ((fw_meeting, fw_num_queue_pops), (bw_meeting, bw_num_queue_pops)) = self.thread_pool.join(
             || {
                 let mut fw_potential = RefCell::new(fw_potential);
                 let mut num_queue_pops = 0;
