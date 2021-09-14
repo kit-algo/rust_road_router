@@ -131,7 +131,10 @@ impl UBSChecker<'_> {
             }
 
             for &node in path {
-                reset_path_parent_cache(cch_order.rank(node), &mut self.path_parent_cache);
+                reset_path_parent_cache(cch_order.rank(node), self.forward_pot.target_shortest_path_tree(), &mut self.path_parent_cache);
+            }
+            for pp in &self.path_parent_cache {
+                debug_assert_eq!(pp.value(), None);
             }
 
             if fw_earliest_deviation_rank.is_none() {
@@ -162,7 +165,10 @@ impl UBSChecker<'_> {
             }
 
             for &node in path {
-                reset_path_parent_cache(cch_order.rank(node), &mut self.path_parent_cache);
+                reset_path_parent_cache(cch_order.rank(node), self.backward_pot.target_shortest_path_tree(), &mut self.path_parent_cache);
+            }
+            for pp in &self.path_parent_cache {
+                debug_assert_eq!(pp.value(), None);
             }
 
             let fw_earliest_deviation_rank = fw_earliest_deviation_rank.unwrap();

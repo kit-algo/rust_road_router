@@ -119,10 +119,10 @@ pub fn path_parent(node: NodeId, predecessors: &[NodeId], path_parent_cache: &mu
     pp
 }
 
-pub fn reset_path_parent_cache(node: NodeId, path_parent_cache: &mut [InRangeOption<NodeId>]) {
-    if let Some(path_parent) = path_parent_cache[node as usize].value() {
+pub fn reset_path_parent_cache(node: NodeId, predecessors: &[NodeId], path_parent_cache: &mut [InRangeOption<NodeId>]) {
+    if path_parent_cache[node as usize].value().is_some() {
         path_parent_cache[node as usize] = InRangeOption::new(None);
-        reset_path_parent_cache(path_parent, path_parent_cache);
+        reset_path_parent_cache(predecessors[node as usize], predecessors, path_parent_cache);
     }
 }
 
