@@ -444,7 +444,7 @@ impl<G: LinkIterGraph> DijkstraOps<G> for SimulBucketCHOps {
     type PredecessorLink = ();
 
     #[inline(always)]
-    fn link(&mut self, _graph: &G, label: &Vec<(NodeId, Weight)>, link: &Link) -> Self::LinkResult {
+    fn link(&mut self, _graph: &G, _tail: NodeIdT, label: &Vec<(NodeId, Weight)>, link: &Link) -> Self::LinkResult {
         label.iter().map(move |&(n, w)| (n, w + link.weight)).collect()
     }
 

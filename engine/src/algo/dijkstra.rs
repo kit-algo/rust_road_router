@@ -109,7 +109,7 @@ pub trait DijkstraOps<Graph> {
     type LinkResult;
     type PredecessorLink: Default + Copy;
 
-    fn link(&mut self, graph: &Graph, label: &Self::Label, link: &Self::Arc) -> Self::LinkResult;
+    fn link(&mut self, graph: &Graph, tail: NodeIdT, label: &Self::Label, link: &Self::Arc) -> Self::LinkResult;
     fn merge(&mut self, label: &mut Self::Label, linked: Self::LinkResult) -> bool;
     fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink;
 }
@@ -124,7 +124,7 @@ impl<G> DijkstraOps<G> for DefaultOps {
     type PredecessorLink = ();
 
     #[inline(always)]
-    fn link(&mut self, _graph: &G, label: &Weight, link: &Link) -> Self::LinkResult {
+    fn link(&mut self, _graph: &G, _tail: NodeIdT, label: &Weight, link: &Link) -> Self::LinkResult {
         label + link.weight
     }
 
@@ -159,7 +159,7 @@ impl<G: EdgeIdGraph> DijkstraOps<G> for DefaultOpsWithLinkPath {
     type PredecessorLink = EdgeIdT;
 
     #[inline(always)]
-    fn link(&mut self, _graph: &G, label: &Weight, (_, (weight, _)): &Self::Arc) -> Self::LinkResult {
+    fn link(&mut self, _graph: &G, _tail: NodeIdT, label: &Weight, (_, (weight, _)): &Self::Arc) -> Self::LinkResult {
         label + weight
     }
 
