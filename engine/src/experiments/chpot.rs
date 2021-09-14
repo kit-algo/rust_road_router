@@ -142,6 +142,7 @@ impl FakeTraffic {
     }
 
     pub fn simulate(&self, rng: &mut StdRng, travel_time: &mut [Weight], geo_distance: &[Weight]) {
+        let mut num_changed = 0;
         for (weight, &dist) in travel_time.iter_mut().zip(geo_distance.iter()) {
             if *weight == 0 {
                 continue;
@@ -150,8 +151,10 @@ impl FakeTraffic {
             let speed = dist as f64 / *weight as f64;
 
             if speed > self.v_min && rng.gen_bool(self.prob) {
+                num_changed += 1;
                 *weight = (dist as f64 / self.traffic_speed) as Weight;
             }
         }
+        report!("num_changed_arcs", num_changed);
     }
 }
