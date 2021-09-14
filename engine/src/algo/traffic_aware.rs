@@ -112,12 +112,16 @@ impl UBSChecker<'_> {
                     cch_order.rank(node),
                     self.forward_pot.target_shortest_path_tree(),
                     &mut self.path_parent_cache,
-                    |cch_rank| path_ranks[cch_order.node(cch_rank) as usize].value().is_some(),
+                    |cch_rank| {
+                        path_ranks[cch_order.node(cch_rank) as usize].value().map_or(false, |path_rank| {
+                            path_rank >= path_ranks[start as usize].value().unwrap() && path_rank <= path_ranks[end as usize].value().unwrap()
+                        })
+                    },
                 );
             }
 
             let mut fw_earliest_deviation_rank = None;
-            for &node in path.iter().skip(1) {
+            for &node in path.iter() {
                 let node = cch_order.rank(node);
                 if self.forward_pot.target_shortest_path_tree()[node as usize] != self.path_parent_cache[node as usize].value().unwrap() {
                     let path_parent = self.path_parent_cache[node as usize].value().unwrap();
@@ -146,12 +150,16 @@ impl UBSChecker<'_> {
                     cch_order.rank(node),
                     self.backward_pot.target_shortest_path_tree(),
                     &mut self.path_parent_cache,
-                    |cch_rank| path_ranks[cch_order.node(cch_rank) as usize].value().is_some(),
+                    |cch_rank| {
+                        path_ranks[cch_order.node(cch_rank) as usize].value().map_or(false, |path_rank| {
+                            path_rank >= path_ranks[start as usize].value().unwrap() && path_rank <= path_ranks[end as usize].value().unwrap()
+                        })
+                    },
                 );
             }
 
             let mut bw_earliest_deviation_rank = None;
-            for &node in path.iter().rev().skip(1) {
+            for &node in path.iter() {
                 let node = cch_order.rank(node);
                 if self.backward_pot.target_shortest_path_tree()[node as usize] != self.path_parent_cache[node as usize].value().unwrap() {
                     let path_parent = self.path_parent_cache[node as usize].value().unwrap();
@@ -197,7 +205,7 @@ impl UBSChecker<'_> {
                 }
             }
 
-            path = &path[bw_earliest_deviation_rank + 1..fw_earliest_deviation_rank];
+            path = &full_path[bw_earliest_deviation_rank + 1..fw_earliest_deviation_rank];
         }
 
         for &node in path {
