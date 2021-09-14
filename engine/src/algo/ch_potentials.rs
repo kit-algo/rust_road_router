@@ -18,7 +18,7 @@ pub struct CCHPotData {
     customized: Customized<DirectedCCH, DirectedCCH>,
 }
 
-impl<'a> CCHPotData {
+impl CCHPotData {
     pub fn new<Graph>(cch: &CCH, lower_bound: &Graph) -> Self
     where
         Graph: LinkIterGraph + EdgeRandomAccessGraph<Link> + Sync,
