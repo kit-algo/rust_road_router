@@ -125,3 +125,33 @@ impl ProbabilisticSpeedWeightedScaler {
         }
     }
 }
+
+pub struct FakeTraffic {
+    v_min: f64,
+    prob: f64,
+    traffic_speed: f64,
+}
+
+impl FakeTraffic {
+    pub fn new(tt_units_per_s: u32, dist_units_per_m: u32, v_min: f64, prob: f64, traffic_speed: f64) -> Self {
+        Self {
+            v_min: kmh_to_mpms(tt_units_per_s, dist_units_per_m, v_min),
+            prob,
+            traffic_speed: kmh_to_mpms(tt_units_per_s, dist_units_per_m, traffic_speed),
+        }
+    }
+
+    pub fn simulate(&self, rng: &mut StdRng, travel_time: &mut [Weight], geo_distance: &[Weight]) {
+        for (weight, &dist) in travel_time.iter_mut().zip(geo_distance.iter()) {
+            if *weight == 0 {
+                continue;
+            }
+
+            let speed = dist as f64 / *weight as f64;
+
+            if speed > self.v_min && rng.gen_bool(self.prob) {
+                *weight = (dist as f64 / self.traffic_speed) as Weight;
+            }
+        }
+    }
+}

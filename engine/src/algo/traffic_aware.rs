@@ -1,13 +1,9 @@
 use super::*;
 
 use crate::{
-    algo::{
-        a_star::*,
-        ch_potentials::*,
-        customizable_contraction_hierarchy::*,
-        dijkstra::{path_parent, reset_path_parent_cache, DijkstraOps, Label},
-    },
+    algo::{a_star::*, ch_potentials::*, customizable_contraction_hierarchy::*, dijkstra::*},
     datastr::rank_select_map::BitVec,
+    report::*,
     util::{in_range_option::InRangeOption, with_index},
 };
 use std::{collections::BTreeMap, ops::Range};
@@ -20,7 +16,7 @@ pub struct UBSChecker<'a> {
 }
 
 impl UBSChecker<'_> {
-    pub fn find_ubs_violating_subpaths<G>(&mut self, path: &[NodeId], graph: G, epsilon: f64) -> Vec<Range<usize>>
+    pub fn find_ubs_violating_subpaths<G>(&mut self, path: &[NodeId], graph: &G, epsilon: f64) -> Vec<Range<usize>>
     where
         G: EdgeIdGraph + EdgeRandomAccessGraph<Link>,
     {
@@ -345,5 +341,117 @@ impl<G> DijkstraOps<G> for BlockedPathsDijkstra {
     }
     fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {
         ()
+    }
+}
+
+pub struct TrafficAwareQuery(Query);
+
+impl GenQuery<Vec<(Weight, ActiveForbittenPaths, NodeIdT)>> for TrafficAwareQuery {
+    fn new(from: NodeId, to: NodeId, _initial_state: Vec<(Weight, ActiveForbittenPaths, NodeIdT)>) -> Self {
+        TrafficAwareQuery(Query { from, to })
+    }
+
+    fn from(&self) -> NodeId {
+        self.0.from
+    }
+    fn to(&self) -> NodeId {
+        self.0.to
+    }
+    fn initial_state(&self) -> Vec<(Weight, ActiveForbittenPaths, NodeIdT)> {
+        vec![(0, ActiveForbittenPaths(0), NodeIdT(self.0.from))]
+    }
+    fn permutate(&mut self, order: &NodeOrder) {
+        self.0.from = order.rank(self.0.from);
+        self.0.to = order.rank(self.0.to);
+    }
+}
+
+pub struct TrafficAwareServer<'a> {
+    ubs_checker: UBSChecker<'a>,
+    dijkstra_data: DijkstraData<Vec<(Weight, ActiveForbittenPaths, NodeIdT)>>,
+    live_pot: CCHPotential<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>>,
+    live_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>,
+    smooth_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>,
+    dijkstra_ops: BlockedPathsDijkstra,
+}
+
+impl<'a> TrafficAwareServer<'a> {
+    pub fn new(
+        smooth_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>,
+        live_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>,
+        smooth_cch_pot: &'a CCHPotData,
+        live_cch_pot: &'a CCHPotData,
+    ) -> Self {
+        let n = smooth_graph.num_nodes();
+        Self {
+            ubs_checker: UBSChecker {
+                forward_pot: smooth_cch_pot.forward_path_potential(),
+                backward_pot: smooth_cch_pot.backward_path_potential(),
+                path_parent_cache: vec![InRangeOption::new(None); n],
+                path_ranks: vec![InRangeOption::new(None); n],
+            },
+            dijkstra_data: DijkstraData::new(n),
+            live_pot: live_cch_pot.forward_potential(),
+            live_graph,
+            smooth_graph,
+            dijkstra_ops: BlockedPathsDijkstra::new(n),
+        }
+    }
+
+    pub fn query(&mut self, query: Query, epsilon: f64) -> Option<()> {
+        self.dijkstra_ops.reset();
+
+        self.live_pot.init(query.to);
+
+        let mut i = 0;
+        let result = loop {
+            i += 1;
+            let mut dijk_run = DijkstraRun::query(&self.live_graph, &mut self.dijkstra_data, &mut self.dijkstra_ops, TrafficAwareQuery(query));
+
+            let live_pot = &mut self.live_pot;
+            while let Some(node) = dijk_run.next_step_with_potential(|node| live_pot.potential(node)) {
+                if node == query.to {
+                    break;
+                }
+            }
+            if self.dijkstra_data.distances[query.to as usize].is_empty() {
+                break None;
+            }
+
+            let mut path = Vec::new();
+            path.push(query.to);
+
+            let mut label_idx = 0;
+            while *path.last().unwrap() != query.from {
+                let (dist, _, NodeIdT(parent)) = self.dijkstra_data.distances[*path.last().unwrap() as usize][label_idx];
+
+                let min_weight_edge = self
+                    .live_graph
+                    .edge_indices(parent, *path.last().unwrap())
+                    .min_by_key(|&EdgeIdT(edge_id)| self.live_graph.link(edge_id).weight)
+                    .unwrap();
+
+                label_idx = self.dijkstra_data.distances[parent as usize]
+                    .iter()
+                    .position(|l| l.0 == dist - self.live_graph.link(min_weight_edge.0).weight)
+                    .unwrap();
+
+                path.push(parent);
+            }
+
+            path.reverse();
+
+            let violating = self.ubs_checker.find_ubs_violating_subpaths(&path, &self.smooth_graph, epsilon);
+
+            if violating.is_empty() {
+                break Some(());
+            }
+
+            for violating_range in violating {
+                self.dijkstra_ops.add_forbidden_path(&path[violating_range.start..=violating_range.end]);
+            }
+        };
+        report!("num_iterations", i);
+        result
     }
 }

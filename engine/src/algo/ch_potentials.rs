@@ -56,6 +56,38 @@ impl CCHPotData {
             num_pot_computations: 0,
         }
     }
+
+    pub fn forward_path_potential(&self) -> CCHPotentialWithPathUnpacking {
+        let n = self.customized.forward_graph().num_nodes();
+
+        CCHPotentialWithPathUnpacking {
+            cch: self.customized.cch(),
+            stack: Vec::new(),
+            forward_cch_graph: self.customized.forward_graph(),
+            backward_distances: TimestampedVector::new(n, INFINITY),
+            backward_parents: vec![n as NodeId; n],
+            backward_cch_graph: self.customized.backward_graph(),
+            potentials: TimestampedVector::new(n, InRangeOption::new(None)),
+            num_pot_computations: 0,
+            path_unpacked: FastClearBitVec::new(n),
+        }
+    }
+
+    pub fn backward_path_potential(&self) -> CCHPotentialWithPathUnpacking {
+        let n = self.customized.forward_graph().num_nodes();
+
+        CCHPotentialWithPathUnpacking {
+            cch: self.customized.cch(),
+            stack: Vec::new(),
+            forward_cch_graph: self.customized.backward_graph(),
+            backward_distances: TimestampedVector::new(n, INFINITY),
+            backward_parents: vec![n as NodeId; n],
+            backward_cch_graph: self.customized.forward_graph(),
+            potentials: TimestampedVector::new(n, InRangeOption::new(None)),
+            num_pot_computations: 0,
+            path_unpacked: FastClearBitVec::new(n),
+        }
+    }
 }
 
 pub struct CCHPotential<'a, GF, GB> {
