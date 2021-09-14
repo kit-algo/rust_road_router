@@ -53,7 +53,7 @@ impl UBSChecker<'_> {
         ranges.sort_unstable_by(|lhs, rhs| {
             let cmp_start = lhs.start.cmp(&rhs.start);
             if let std::cmp::Ordering::Equal = cmp_start {
-                lhs.end.cmp(&rhs.end)
+                rhs.end.cmp(&lhs.end)
             } else {
                 cmp_start
             }
@@ -76,7 +76,7 @@ impl UBSChecker<'_> {
             ending_at_current_end.push(i);
         }
 
-        ranges.retain(with_index(|index, _| !covered.get(index - 1)));
+        ranges.retain(with_index(|index, _| !covered.get(index)));
     }
 
     fn find_ubs_violating_subpaths_tree(&mut self, path: &[NodeId], dists: &[Weight], epsilon: f64) -> Vec<Range<usize>> {
@@ -461,5 +461,33 @@ impl<'a> TrafficAwareServer<'a> {
         };
         report!("num_iterations", i);
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_filter_covered() {
+        let mut ranges = vec![0..1];
+        UBSChecker::filter_covered(&mut ranges);
+        assert_eq!(vec![0..1], ranges);
+
+        let mut ranges = vec![1..3, 1..2, 2..3, 0..3];
+        UBSChecker::filter_covered(&mut ranges);
+        assert_eq!(vec![1..2, 2..3], ranges);
+
+        let mut ranges = vec![0..1, 0..2];
+        UBSChecker::filter_covered(&mut ranges);
+        assert_eq!(vec![0..1], ranges);
+
+        let mut ranges = vec![1..2, 0..2];
+        UBSChecker::filter_covered(&mut ranges);
+        assert_eq!(vec![1..2], ranges);
+
+        let mut ranges = vec![0..1, 1..2];
+        UBSChecker::filter_covered(&mut ranges);
+        assert_eq!(vec![0..1, 1..2], ranges);
     }
 }
