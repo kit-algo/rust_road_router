@@ -325,7 +325,8 @@ impl<G> DijkstraOps<G> for BlockedPathsDijkstra {
 
         let mut cur_dist_start_idx = 0;
         let mut cur_dist = 0;
-        for cur_idx in 0..label.len() {
+        let mut cur_idx = 0;
+        while cur_idx < label.len() {
             if label[cur_idx].0 > cur_dist {
                 cur_dist = label[cur_idx].0;
                 cur_dist_start_idx = cur_idx;
@@ -335,6 +336,7 @@ impl<G> DijkstraOps<G> for BlockedPathsDijkstra {
             label.retain(with_index(|idx, l: &(Weight, ActiveForbittenPaths, NodeIdT)| {
                 idx < cur_dist_start_idx || idx == cur_idx || !active_paths.is_subset(&l.1)
             }));
+            cur_idx += 1;
         }
 
         updated
