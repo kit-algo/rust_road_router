@@ -25,6 +25,7 @@ impl<'a, Graph: LinkIterGraph> EliminationTreeWalk<'a, Graph> {
 
         // Starte with origin
         distances[from as usize] = 0;
+        predecessors[from as usize] = from;
 
         Self {
             graph,

@@ -127,6 +127,122 @@ where
     }
 }
 
+pub struct CCHPotentialWithPathUnpacking<'a> {
+    cch: &'a DirectedCCH,
+    stack: Vec<NodeId>,
+    potentials: TimestampedVector<InRangeOption<Weight>>,
+    forward_cch_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>,
+    backward_distances: TimestampedVector<Weight>,
+    backward_parents: Vec<NodeId>,
+    backward_cch_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>,
+    num_pot_computations: usize,
+    path_unpacked: FastClearBitVec,
+}
+
+impl<'a> CCHPotentialWithPathUnpacking<'a> {
+    pub fn num_pot_computations(&self) -> usize {
+        self.num_pot_computations
+    }
+}
+
+impl<'a> Potential for CCHPotentialWithPathUnpacking<'a> {
+    fn init(&mut self, target: NodeId) {
+        let target = self.cch.node_order().rank(target);
+        self.path_unpacked.clear();
+        self.potentials.reset();
+        let mut bw_walk = EliminationTreeWalk::query(
+            &self.backward_cch_graph,
+            self.cch.elimination_tree(),
+            &mut self.backward_distances,
+            &mut self.backward_parents,
+            target,
+        );
+        while let Some(_) = bw_walk.next() {}
+        self.num_pot_computations = 0;
+    }
+
+    fn potential(&mut self, node: NodeId) -> Option<u32> {
+        self.potential_int(self.cch.node_order().rank(node))
+    }
+}
+
+impl<'a> CCHPotentialWithPathUnpacking<'a> {
+    fn potential_int(&mut self, node: NodeId) -> Option<u32> {
+        let mut cur_node = node;
+        while self.potentials[cur_node as usize].value().is_none() {
+            self.num_pot_computations += 1;
+            self.stack.push(cur_node);
+            if let Some(parent) = self.cch.elimination_tree()[cur_node as usize].value() {
+                cur_node = parent;
+            } else {
+                break;
+            }
+        }
+
+        while let Some(node) = self.stack.pop() {
+            let mut dist = self.backward_distances[node as usize];
+
+            for edge in LinkIterable::<Link>::link_iter(&self.forward_cch_graph, node) {
+                let relaxed = edge.weight + self.potentials[edge.node as usize].value().unwrap();
+                if relaxed < dist {
+                    self.backward_parents[node as usize] = edge.node;
+                    dist = relaxed;
+                }
+            }
+
+            self.potentials[node as usize] = InRangeOption::new(Some(dist));
+        }
+
+        let dist = self.potentials[node as usize].value().unwrap();
+        if dist < INFINITY {
+            Some(dist)
+        } else {
+            None
+        }
+    }
+
+    pub fn unpack_path(&mut self, NodeIdT(node): NodeIdT) {
+        self.unpack_path_int(NodeIdT(self.cch.node_order().rank(node)))
+    }
+
+    fn unpack_path_int(&mut self, NodeIdT(node): NodeIdT) {
+        if self.path_unpacked.get(node as usize) {
+            return;
+        }
+        let self_dist = self.potential_int(node).unwrap();
+        let parent = self.backward_parents[node as usize];
+        if parent == node {
+            self.path_unpacked.set(node as usize);
+            return;
+        }
+        let parent_dist = self.potential_int(parent).unwrap();
+        self.unpack_path_int(NodeIdT(parent));
+
+        if let Some((middle, _down, up)) = self.cch.unpack_arc(
+            node,
+            parent,
+            self_dist - parent_dist,
+            self.forward_cch_graph.weight(),
+            self.backward_cch_graph.weight(),
+        ) {
+            self.backward_parents[node as usize] = middle;
+            self.backward_parents[middle as usize] = parent;
+            self.potentials[middle as usize] = InRangeOption::new(Some(parent_dist + up));
+            self.unpack_path_int(NodeIdT(middle));
+            self.unpack_path_int(NodeIdT(node));
+        }
+        self.path_unpacked.set(node as usize);
+    }
+
+    pub fn target_shortest_path_tree(&self) -> &[NodeId] {
+        &self.backward_parents
+    }
+
+    pub fn cch(&self) -> &DirectedCCH {
+        &self.cch
+    }
+}
+
 #[derive(Clone)]
 pub struct CHPotential<GF, GB> {
     order: NodeOrder,
