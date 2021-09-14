@@ -114,7 +114,9 @@ pub fn path_parent(node: NodeId, predecessors: &[NodeId], path_parent_cache: &mu
         return predecessors[node as usize];
     }
 
-    path_parent(predecessors[node as usize], predecessors, path_parent_cache, on_path)
+    let pp = path_parent(predecessors[node as usize], predecessors, path_parent_cache, on_path);
+    path_parent_cache[node as usize] = InRangeOption::new(Some(pp));
+    pp
 }
 
 pub fn reset_path_parent_cache(node: NodeId, path_parent_cache: &mut [InRangeOption<NodeId>]) {
