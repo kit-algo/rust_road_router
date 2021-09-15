@@ -88,7 +88,7 @@ impl UBSChecker<'_> {
 
         for (rank, &node) in path.iter().enumerate() {
             if let Some(prev_rank) = path_ranks[node as usize].value() {
-                eprintln!("Found Cycle");
+                eprintln!("Found Cycle of len: {}", rank - prev_rank);
                 for &node in path {
                     self.path_ranks[node as usize] = InRangeOption::new(None);
                 }
@@ -428,6 +428,11 @@ impl<'a> TrafficAwareServer<'a> {
         self.dijkstra_ops.reset();
 
         self.live_pot.init(query.to);
+        let base_live_dist = self.live_pot.potential(query.from)?;
+        let mut final_live_dist = base_live_dist;
+
+        let mut explore_time = time::Duration::zero();
+        let mut ubs_time = time::Duration::zero();
 
         let mut i = 0;
         let result = loop {
@@ -435,14 +440,20 @@ impl<'a> TrafficAwareServer<'a> {
             let mut dijk_run = DijkstraRun::query(&self.live_graph, &mut self.dijkstra_data, &mut self.dijkstra_ops, TrafficAwareQuery(query));
 
             let live_pot = &mut self.live_pot;
-            while let Some(node) = dijk_run.next_step_with_potential(|node| live_pot.potential(node)) {
-                if node == query.to {
-                    break;
+            let (_, time) = measure(|| {
+                while let Some(node) = dijk_run.next_step_with_potential(|node| live_pot.potential(node)) {
+                    if node == query.to {
+                        break;
+                    }
                 }
-            }
+            });
+            explore_time = explore_time + time;
+
             if self.dijkstra_data.distances[query.to as usize].is_empty() {
                 break None;
             }
+
+            final_live_dist = self.dijkstra_data.distances[query.to as usize][0].0;
 
             let mut path = Vec::new();
             path.push(query.to);
@@ -467,7 +478,8 @@ impl<'a> TrafficAwareServer<'a> {
 
             path.reverse();
 
-            let violating = self.ubs_checker.find_ubs_violating_subpaths(&path, &self.smooth_graph, epsilon);
+            let (violating, time) = measure(|| self.ubs_checker.find_ubs_violating_subpaths(&path, &self.smooth_graph, epsilon));
+            ubs_time = ubs_time + time;
 
             if violating.is_empty() {
                 break Some(());
@@ -478,6 +490,13 @@ impl<'a> TrafficAwareServer<'a> {
             }
         };
         report!("num_iterations", i);
+        report!("num_forbidden_paths", self.dijkstra_ops.forbidden_paths.len());
+        report!(
+            "length_increase_percent",
+            (final_live_dist - base_live_dist) as f64 / base_live_dist as f64 * 100.0
+        );
+        report!("exploration_time_ms", explore_time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        report!("ubs_time_ms", ubs_time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         result
     }
 }
