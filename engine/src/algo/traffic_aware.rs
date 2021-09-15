@@ -80,12 +80,18 @@ impl UBSChecker<'_> {
     }
 
     fn find_ubs_violating_subpaths_tree(&mut self, path: &[NodeId], dists: &[Weight], epsilon: f64) -> Vec<Range<usize>> {
+        for rank in &self.path_ranks {
+            debug_assert!(rank.value().is_none());
+        }
         let mut violating = Vec::new();
         let path_ranks = &mut self.path_ranks;
 
         for (rank, &node) in path.iter().enumerate() {
             if let Some(prev_rank) = path_ranks[node as usize].value() {
                 eprintln!("Found Cycle");
+                for &node in path {
+                    self.path_ranks[node as usize] = InRangeOption::new(None);
+                }
                 return vec![prev_rank..rank];
             }
             path_ranks[node as usize] = InRangeOption::new(Some(rank));
@@ -208,7 +214,7 @@ impl UBSChecker<'_> {
             path = &full_path[bw_earliest_deviation_rank + 1..fw_earliest_deviation_rank];
         }
 
-        for &node in path {
+        for &node in full_path {
             self.path_ranks[node as usize] = InRangeOption::new(None);
         }
 
