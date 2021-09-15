@@ -250,7 +250,7 @@ impl<'a> CCHPotentialWithPathUnpacking<'a> {
         let parent_dist = self.potential_int(parent).unwrap();
         self.unpack_path_int(NodeIdT(parent));
 
-        if let Some((middle, _down, up)) = self.cch.unpack_arc(
+        if let Some((middle, _down, _up)) = self.cch.unpack_arc(
             node,
             parent,
             self_dist - parent_dist,

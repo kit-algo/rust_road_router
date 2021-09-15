@@ -113,6 +113,7 @@ impl UBSChecker<'_> {
             }
             let cch_order = self.forward_pot.cch().node_order();
 
+            // sp tree to target
             for &node in path {
                 path_parent(
                     cch_order.rank(node),
@@ -127,9 +128,10 @@ impl UBSChecker<'_> {
             }
 
             let mut fw_earliest_deviation_rank = None;
-            for &node in path.iter() {
+            for &[node, next_on_path] in path.array_windows::<2>() {
+                let next_on_path = cch_order.rank(next_on_path);
                 let node = cch_order.rank(node);
-                if self.forward_pot.target_shortest_path_tree()[node as usize] != self.path_parent_cache[node as usize].value().unwrap() {
+                if self.forward_pot.target_shortest_path_tree()[node as usize] != next_on_path {
                     let path_parent = self.path_parent_cache[node as usize].value().unwrap();
                     let path_parent_rank = path_ranks[cch_order.node(path_parent) as usize].value().unwrap();
                     if let Some(fw_earliest_deviation_rank_inner) = fw_earliest_deviation_rank {
@@ -151,6 +153,7 @@ impl UBSChecker<'_> {
                 break;
             }
 
+            // sp tree from source
             for &node in path {
                 path_parent(
                     cch_order.rank(node),
@@ -165,9 +168,10 @@ impl UBSChecker<'_> {
             }
 
             let mut bw_earliest_deviation_rank = None;
-            for &node in path.iter() {
+            for &[prev_on_path, node] in path.array_windows::<2>() {
+                let prev_on_path = cch_order.rank(prev_on_path);
                 let node = cch_order.rank(node);
-                if self.backward_pot.target_shortest_path_tree()[node as usize] != self.path_parent_cache[node as usize].value().unwrap() {
+                if self.backward_pot.target_shortest_path_tree()[node as usize] != prev_on_path {
                     let path_parent = self.path_parent_cache[node as usize].value().unwrap();
                     let path_parent_rank = path_ranks[cch_order.node(path_parent) as usize].value().unwrap();
                     if let Some(bw_earliest_deviation_rank_inner) = bw_earliest_deviation_rank {
@@ -268,7 +272,7 @@ impl BlockedPathsDijkstra {
         for (node_path_index, &[tail, head]) in path.array_windows::<2>().enumerate() {
             self.node_forbidden_paths[tail as usize].push((global_id, node_path_index));
             let node_forbidden_path_index = self.node_forbidden_paths[head as usize].len();
-            assert!(node_forbidden_path_index < 256);
+            assert!(node_forbidden_path_index < 32);
             forbidden_path.push((NodeIdT(head), node_forbidden_path_index as u8));
         }
 
