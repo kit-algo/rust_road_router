@@ -70,6 +70,8 @@ impl CCHPotData {
             potentials: TimestampedVector::new(n, InRangeOption::new(None)),
             num_pot_computations: 0,
             path_unpacked: FastClearBitVec::new(n),
+            forward_inverted: self.customized.cch().forward_inverted(),
+            backward_inverted: self.customized.cch().backward_inverted(),
         }
     }
 
@@ -86,6 +88,8 @@ impl CCHPotData {
             potentials: TimestampedVector::new(n, InRangeOption::new(None)),
             num_pot_computations: 0,
             path_unpacked: FastClearBitVec::new(n),
+            forward_inverted: self.customized.cch().backward_inverted(),
+            backward_inverted: self.customized.cch().forward_inverted(),
         }
     }
 }
@@ -169,6 +173,8 @@ pub struct CCHPotentialWithPathUnpacking<'a> {
     backward_cch_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>,
     num_pot_computations: usize,
     path_unpacked: FastClearBitVec,
+    forward_inverted: &'a ReversedGraphWithEdgeIds,
+    backward_inverted: &'a ReversedGraphWithEdgeIds,
 }
 
 impl<'a> CCHPotentialWithPathUnpacking<'a> {
@@ -250,16 +256,21 @@ impl<'a> CCHPotentialWithPathUnpacking<'a> {
         let parent_dist = self.potential_int(parent).unwrap();
         self.unpack_path_int(NodeIdT(parent));
 
-        if let Some((middle, _down, _up)) = self.cch.unpack_arc(
+        debug_assert!(self_dist >= parent_dist, "{:#?}", (node, parent, self_dist, parent_dist));
+        if let Some((middle, _down, _up)) = unpack_arc(
             node,
             parent,
             self_dist - parent_dist,
             self.forward_cch_graph.weight(),
             self.backward_cch_graph.weight(),
+            self.forward_inverted,
+            self.backward_inverted,
         ) {
             self.backward_parents[node as usize] = middle;
             self.backward_parents[middle as usize] = parent;
+
             self.unpack_path_int(NodeIdT(middle));
+            debug_assert_eq!(self.potential_int(middle).unwrap(), parent_dist + _up,);
             self.unpack_path_int(NodeIdT(node));
         }
         self.path_unpacked.set(node as usize);

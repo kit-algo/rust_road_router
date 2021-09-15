@@ -273,33 +273,48 @@ pub trait CCHT {
     /// Check for a node pair and a weight if there is a corresponding lower triangle.
     /// If so, return the id of the middle node and the weights of both lower edges.
     fn unpack_arc(&self, from: NodeId, to: NodeId, weight: Weight, upward: &[Weight], downward: &[Weight]) -> Option<(NodeId, Weight, Weight)> {
-        // `inverted` contains the downward neighbors sorted ascending.
-        // We do a coordinated linear sweep over both neighborhoods.
-        // Whenever we find a common neighbor, we have a lower triangle.
-        let mut current_iter = self.backward_inverted().link_iter(from).peekable();
-        let mut other_iter = self.forward_inverted().link_iter(to).peekable();
-
-        while let (
-            Some(&(NodeIdT(lower_from_first), Reversed(EdgeIdT(edge_from_first_id)))),
-            Some(&(NodeIdT(lower_from_second), Reversed(EdgeIdT(edge_from_second_id)))),
-        ) = (current_iter.peek(), other_iter.peek())
-        {
-            match lower_from_first.cmp(&lower_from_second) {
-                Ordering::Less => current_iter.next(),
-                Ordering::Greater => other_iter.next(),
-                Ordering::Equal => {
-                    if downward[edge_from_first_id as usize] + upward[edge_from_second_id as usize] == weight {
-                        return Some((lower_from_first, downward[edge_from_first_id as usize], upward[edge_from_second_id as usize]));
-                    }
-
-                    current_iter.next();
-                    other_iter.next()
-                }
-            };
-        }
-
-        None
+        unpack_arc(from, to, weight, upward, downward, self.forward_inverted(), self.backward_inverted())
     }
+}
+
+pub fn unpack_arc(
+    from: NodeId,
+    to: NodeId,
+    weight: Weight,
+    upward: &[Weight],
+    downward: &[Weight],
+    forward_inverted: &ReversedGraphWithEdgeIds,
+    backward_inverted: &ReversedGraphWithEdgeIds,
+) -> Option<(NodeId, Weight, Weight)> {
+    // `inverted` contains the downward neighbors sorted ascending.
+    // We do a coordinated linear sweep over both neighborhoods.
+    // Whenever we find a common neighbor, we have a lower triangle.
+    let mut current_iter = backward_inverted.link_iter(from).peekable();
+    let mut other_iter = forward_inverted.link_iter(to).peekable();
+
+    debug_assert_eq!(upward.len(), forward_inverted.num_arcs());
+    debug_assert_eq!(downward.len(), backward_inverted.num_arcs());
+
+    while let (
+        Some(&(NodeIdT(lower_from_first), Reversed(EdgeIdT(edge_from_first_id)))),
+        Some(&(NodeIdT(lower_from_second), Reversed(EdgeIdT(edge_from_second_id)))),
+    ) = (current_iter.peek(), other_iter.peek())
+    {
+        match lower_from_first.cmp(&lower_from_second) {
+            Ordering::Less => current_iter.next(),
+            Ordering::Greater => other_iter.next(),
+            Ordering::Equal => {
+                if downward[edge_from_first_id as usize] + upward[edge_from_second_id as usize] == weight {
+                    return Some((lower_from_first, downward[edge_from_first_id as usize], upward[edge_from_second_id as usize]));
+                }
+
+                current_iter.next();
+                other_iter.next()
+            }
+        };
+    }
+
+    None
 }
 
 /// A struct containing all metric independent preprocessing data of CCHs.
