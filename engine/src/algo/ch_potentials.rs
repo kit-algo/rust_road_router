@@ -259,7 +259,6 @@ impl<'a> CCHPotentialWithPathUnpacking<'a> {
         ) {
             self.backward_parents[node as usize] = middle;
             self.backward_parents[middle as usize] = parent;
-            self.potentials[middle as usize] = InRangeOption::new(Some(parent_dist + up));
             self.unpack_path_int(NodeIdT(middle));
             self.unpack_path_int(NodeIdT(node));
         }
