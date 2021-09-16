@@ -130,11 +130,13 @@ impl UBSChecker<'_> {
 
             let mut fw_earliest_deviation_rank = None;
             for &[node, next_on_path] in path.array_windows::<2>() {
-                let next_on_path = cch_order.rank(next_on_path);
-                let node = cch_order.rank(node);
-                if self.forward_pot.target_shortest_path_tree()[node as usize] != next_on_path {
+                let path_dist = dists[path_ranks[end as usize].value().unwrap()] - dists[path_ranks[node as usize].value().unwrap() as usize];
+                let shortest_dist = self.forward_pot.potential(node).unwrap();
+                let next_on_path = self.forward_pot.cch().node_order().rank(next_on_path);
+                let node = self.forward_pot.cch().node_order().rank(node);
+                if self.forward_pot.target_shortest_path_tree()[node as usize] != next_on_path && shortest_dist != path_dist {
                     let path_parent = self.path_parent_cache[node as usize].value().unwrap();
-                    let path_parent_rank = path_ranks[cch_order.node(path_parent) as usize].value().unwrap();
+                    let path_parent_rank = path_ranks[self.forward_pot.cch().node_order().node(path_parent) as usize].value().unwrap();
                     if let Some(fw_earliest_deviation_rank_inner) = fw_earliest_deviation_rank {
                         fw_earliest_deviation_rank = Some(std::cmp::max(fw_earliest_deviation_rank_inner, path_parent_rank));
                     } else {
@@ -144,7 +146,11 @@ impl UBSChecker<'_> {
             }
 
             for &node in path {
-                reset_path_parent_cache(cch_order.rank(node), self.forward_pot.target_shortest_path_tree(), &mut self.path_parent_cache);
+                reset_path_parent_cache(
+                    self.forward_pot.cch().node_order().rank(node),
+                    self.forward_pot.target_shortest_path_tree(),
+                    &mut self.path_parent_cache,
+                );
             }
             for pp in &self.path_parent_cache {
                 debug_assert_eq!(pp.value(), None);
@@ -156,8 +162,9 @@ impl UBSChecker<'_> {
 
             // sp tree from source
             for &node in path {
+                let cch_order = self.forward_pot.cch().node_order();
                 path_parent(
-                    cch_order.rank(node),
+                    self.forward_pot.cch().node_order().rank(node),
                     self.backward_pot.target_shortest_path_tree(),
                     &mut self.path_parent_cache,
                     |cch_rank| {
@@ -170,11 +177,13 @@ impl UBSChecker<'_> {
 
             let mut bw_earliest_deviation_rank = None;
             for &[prev_on_path, node] in path.array_windows::<2>() {
-                let prev_on_path = cch_order.rank(prev_on_path);
-                let node = cch_order.rank(node);
-                if self.backward_pot.target_shortest_path_tree()[node as usize] != prev_on_path {
+                let path_dist = dists[path_ranks[node as usize].value().unwrap() as usize] - dists[path_ranks[start as usize].value().unwrap()];
+                let shortest_dist = self.backward_pot.potential(node).unwrap();
+                let prev_on_path = self.forward_pot.cch().node_order().rank(prev_on_path);
+                let node = self.forward_pot.cch().node_order().rank(node);
+                if self.backward_pot.target_shortest_path_tree()[node as usize] != prev_on_path && shortest_dist != path_dist {
                     let path_parent = self.path_parent_cache[node as usize].value().unwrap();
-                    let path_parent_rank = path_ranks[cch_order.node(path_parent) as usize].value().unwrap();
+                    let path_parent_rank = path_ranks[self.forward_pot.cch().node_order().node(path_parent) as usize].value().unwrap();
                     if let Some(bw_earliest_deviation_rank_inner) = bw_earliest_deviation_rank {
                         bw_earliest_deviation_rank = Some(std::cmp::min(bw_earliest_deviation_rank_inner, path_parent_rank));
                     } else {
@@ -184,7 +193,11 @@ impl UBSChecker<'_> {
             }
 
             for &node in path {
-                reset_path_parent_cache(cch_order.rank(node), self.backward_pot.target_shortest_path_tree(), &mut self.path_parent_cache);
+                reset_path_parent_cache(
+                    self.forward_pot.cch().node_order().rank(node),
+                    self.backward_pot.target_shortest_path_tree(),
+                    &mut self.path_parent_cache,
+                );
             }
             for pp in &self.path_parent_cache {
                 debug_assert_eq!(pp.value(), None);
