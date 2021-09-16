@@ -316,8 +316,6 @@ struct ShortcutGraph<'a> {
 #[derive(Debug)]
 pub struct CustomizedGraph<'a> {
     pub original_graph: &'a TDGraph,
-    first_out: &'a [EdgeId],
-    head: &'a [NodeId],
     pub outgoing: CustomizedSingleDirGraph,
     pub incoming: CustomizedSingleDirGraph,
 }
@@ -406,8 +404,6 @@ impl<'a> From<ShortcutGraph<'a>> for CustomizedGraph<'a> {
 
         CustomizedGraph {
             original_graph: shortcut_graph.original_graph,
-            first_out: shortcut_graph.first_out,
-            head: shortcut_graph.head,
 
             outgoing: CustomizedSingleDirGraph {
                 first_out: outgoing_first_out,
@@ -595,8 +591,6 @@ impl<'a> ReconstructPrepared<CustomizedGraph<'a>> for CustomizedGraphReconstrcto
 
         Ok(CustomizedGraph {
             original_graph: self.original_graph,
-            first_out: self.first_out,
-            head: self.head,
 
             outgoing: CustomizedSingleDirGraph {
                 first_out: outgoing_first_out,
