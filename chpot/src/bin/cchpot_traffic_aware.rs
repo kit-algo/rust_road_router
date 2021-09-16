@@ -23,7 +23,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &env::args().skip(1).next().ok_or(CliErr("No graph directory arg given"))?;
     let path = Path::new(arg);
 
-    let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
+    let mut graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
+    for w in graph.weights_mut() {
+        *w = std::cmp::max(1, *w);
+    }
     let n = graph.num_nodes();
     let geo_distance = Vec::<Weight>::load_from(path.join("geo_distance"))?;
     let tt_units_per_s = Vec::<u32>::load_from(path.join("tt_units_per_s"))?[0];
@@ -42,6 +45,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut modified_travel_time = graph.weight().to_vec();
     FakeTraffic::new(tt_units_per_s, dist_units_per_m, 30.0, 0.005, 5.0).simulate(&mut modify_rng, &mut modified_travel_time, &geo_distance);
     let live_graph = FirstOutGraph::new(graph.first_out(), graph.head(), &modified_travel_time[..]);
+    for &w in live_graph.weight() {
+        assert!(w > 0);
+    }
 
     let live_cch_pot = {
         let _blocked = block_reporting();
