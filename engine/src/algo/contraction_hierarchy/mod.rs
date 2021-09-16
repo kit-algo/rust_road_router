@@ -98,7 +98,6 @@ impl Node {
 #[derive(Debug)]
 struct ContractionGraph {
     nodes: Vec<Node>,
-    order: NodeOrder,
 }
 
 impl ContractionGraph {
@@ -144,7 +143,7 @@ impl ContractionGraph {
             outs.zip(ins).map(|(outgoing, incoming)| Node { outgoing, incoming }).collect()
         };
 
-        ContractionGraph { nodes, order }
+        ContractionGraph { nodes }
     }
 
     // contract all nodes - full preprocessing
