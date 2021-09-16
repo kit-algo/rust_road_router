@@ -32,6 +32,7 @@ impl UBSChecker<'_> {
         self.find_ubs_violating_subpaths_tree(path, &dists, epsilon)
     }
 
+    #[allow(dead_code)]
     fn find_ubs_violating_subpaths_naive(&mut self, path: &[NodeId], dists: &[Weight], epsilon: f64) -> Vec<Range<usize>> {
         let mut violating = Vec::new();
         for (end_rank, end) in path.iter().copied().enumerate() {
@@ -227,7 +228,7 @@ impl UBSChecker<'_> {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ActiveForbittenPaths(u32);
 
 impl ActiveForbittenPaths {
@@ -236,7 +237,7 @@ impl ActiveForbittenPaths {
     }
 }
 
-impl Label for Vec<(Weight, ActiveForbittenPaths, NodeIdT)> {
+impl Label for Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths))> {
     type Key = Weight;
     fn neutral() -> Self {
         Vec::new()
@@ -272,7 +273,7 @@ impl BlockedPathsDijkstra {
         for (node_path_index, &[tail, head]) in path.array_windows::<2>().enumerate() {
             self.node_forbidden_paths[tail as usize].push((global_id, node_path_index));
             let node_forbidden_path_index = self.node_forbidden_paths[head as usize].len();
-            assert!(node_forbidden_path_index < 32);
+            assert!(node_forbidden_path_index < 32, "{:#?}", (&self.node_forbidden_paths[head as usize], tail, head));
             forbidden_path.push((NodeIdT(head), node_forbidden_path_index as u8));
         }
 
@@ -292,9 +293,9 @@ impl BlockedPathsDijkstra {
 }
 
 impl<G> DijkstraOps<G> for BlockedPathsDijkstra {
-    type Label = Vec<(Weight, ActiveForbittenPaths, NodeIdT)>;
+    type Label = Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths))>;
     type Arc = Link;
-    type LinkResult = Vec<(Weight, ActiveForbittenPaths, NodeIdT)>;
+    type LinkResult = Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths))>;
     type PredecessorLink = ();
 
     fn link(&mut self, _graph: &G, NodeIdT(tail): NodeIdT, label: &Self::Label, link: &Self::Arc) -> Self::LinkResult {
@@ -357,7 +358,7 @@ impl<G> DijkstraOps<G> for BlockedPathsDijkstra {
             }
             let active_paths = label[cur_idx].1;
 
-            label.retain(with_index(|idx, l: &(Weight, ActiveForbittenPaths, NodeIdT)| {
+            label.retain(with_index(|idx, l: &(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths))| {
                 idx < cur_dist_start_idx || idx == cur_idx || !active_paths.is_subset(&l.1)
             }));
             cur_idx += 1;
@@ -372,8 +373,8 @@ impl<G> DijkstraOps<G> for BlockedPathsDijkstra {
 
 pub struct TrafficAwareQuery(Query);
 
-impl GenQuery<Vec<(Weight, ActiveForbittenPaths, NodeIdT)>> for TrafficAwareQuery {
-    fn new(from: NodeId, to: NodeId, _initial_state: Vec<(Weight, ActiveForbittenPaths, NodeIdT)>) -> Self {
+impl GenQuery<Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths))>> for TrafficAwareQuery {
+    fn new(from: NodeId, to: NodeId, _initial_state: Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths))>) -> Self {
         TrafficAwareQuery(Query { from, to })
     }
 
@@ -383,8 +384,8 @@ impl GenQuery<Vec<(Weight, ActiveForbittenPaths, NodeIdT)>> for TrafficAwareQuer
     fn to(&self) -> NodeId {
         self.0.to
     }
-    fn initial_state(&self) -> Vec<(Weight, ActiveForbittenPaths, NodeIdT)> {
-        vec![(0, ActiveForbittenPaths(0), NodeIdT(self.0.from))]
+    fn initial_state(&self) -> Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths))> {
+        vec![(0, ActiveForbittenPaths(0), (NodeIdT(self.0.from), ActiveForbittenPaths(0)))]
     }
     fn permutate(&mut self, order: &NodeOrder) {
         self.0.from = order.rank(self.0.from);
@@ -394,7 +395,7 @@ impl GenQuery<Vec<(Weight, ActiveForbittenPaths, NodeIdT)>> for TrafficAwareQuer
 
 pub struct TrafficAwareServer<'a> {
     ubs_checker: UBSChecker<'a>,
-    dijkstra_data: DijkstraData<Vec<(Weight, ActiveForbittenPaths, NodeIdT)>>,
+    dijkstra_data: DijkstraData<Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths))>>,
     live_pot: CCHPotential<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>>,
     live_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>,
     smooth_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>,
@@ -460,7 +461,7 @@ impl<'a> TrafficAwareServer<'a> {
 
             let mut label_idx = 0;
             while *path.last().unwrap() != query.from {
-                let (dist, _, NodeIdT(parent)) = self.dijkstra_data.distances[*path.last().unwrap() as usize][label_idx];
+                let (dist, _, (NodeIdT(parent), parent_active_forb_paths)) = self.dijkstra_data.distances[*path.last().unwrap() as usize][label_idx];
 
                 let min_weight_edge = self
                     .live_graph
@@ -468,10 +469,18 @@ impl<'a> TrafficAwareServer<'a> {
                     .min_by_key(|&EdgeIdT(edge_id)| self.live_graph.link(edge_id).weight)
                     .unwrap();
 
-                label_idx = self.dijkstra_data.distances[parent as usize]
+                let pos = self.dijkstra_data.distances[parent as usize]
                     .iter()
-                    .position(|l| l.0 == dist - self.live_graph.link(min_weight_edge.0).weight)
-                    .unwrap();
+                    .position(|l| l.0 == dist - self.live_graph.link(min_weight_edge.0).weight && l.1.is_subset(&parent_active_forb_paths));
+                if let Some(pos) = pos {
+                    label_idx = pos;
+                } else {
+                    dbg!(
+                        self.dijkstra_data.distances[*path.last().unwrap() as usize][label_idx],
+                        self.live_graph.link(min_weight_edge.0).weight
+                    );
+                    panic!("missing parent label: {:#?}", self.dijkstra_data.distances[parent as usize])
+                }
 
                 path.push(parent);
             }
@@ -526,5 +535,56 @@ mod tests {
         let mut ranges = vec![0..1, 1..2];
         UBSChecker::filter_covered(&mut ranges);
         assert_eq!(vec![0..1, 1..2], ranges);
+    }
+
+    #[test]
+    fn test_linking_forbidden_paths() {
+        let graph = FirstOutGraph::new(&[0, 0, 0], &[], &[]);
+        let mut ops = BlockedPathsDijkstra::new(2);
+        ops.add_forbidden_path(&[0, 1]);
+
+        assert_eq!(
+            ops.link(
+                &graph,
+                NodeIdT(0),
+                &vec![(0, ActiveForbittenPaths(0), (NodeIdT(0), ActiveForbittenPaths(0)))],
+                &Link { node: 1, weight: 1 },
+            ),
+            vec![]
+        );
+
+        let mut ops = BlockedPathsDijkstra::new(2);
+        ops.add_forbidden_path(&[0, 1, 0]);
+        assert_eq!(
+            ops.link(
+                &graph,
+                NodeIdT(0),
+                &vec![(0, ActiveForbittenPaths(0), (NodeIdT(0), ActiveForbittenPaths(0)))],
+                &Link { node: 1, weight: 1 },
+            ),
+            vec![(1, ActiveForbittenPaths(1), (NodeIdT(0), ActiveForbittenPaths(0)))]
+        );
+        assert_eq!(
+            ops.link(
+                &graph,
+                NodeIdT(1),
+                &vec![(1, ActiveForbittenPaths(1), (NodeIdT(0), ActiveForbittenPaths(0)))],
+                &Link { node: 0, weight: 1 }
+            ),
+            vec![]
+        );
+    }
+
+    #[test]
+    fn test_merging() {
+        let mut ops = BlockedPathsDijkstra::new(0);
+        let mut current = vec![(10, ActiveForbittenPaths(1), (NodeIdT(1), ActiveForbittenPaths(0)))];
+        let improved = DijkstraOps::<OwnedGraph>::merge(
+            &mut ops,
+            &mut current,
+            vec![(10, ActiveForbittenPaths(0), (NodeIdT(2), ActiveForbittenPaths(0)))],
+        );
+        assert!(improved);
+        assert_eq!(current, vec![(10, ActiveForbittenPaths(0), (NodeIdT(2), ActiveForbittenPaths(0)))]);
     }
 }
