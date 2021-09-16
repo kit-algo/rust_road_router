@@ -820,8 +820,6 @@ impl<'a> PartialPiecewiseLinearFunction<'a> {
     // Merge two partial plfs in the range between start and end and store the result in buffer.
     pub fn merge(self, other: &Self, start: Timestamp, end: Timestamp, buffer: &mut Vec<TTFPoint>) -> (Box<[TTFPoint]>, Vec<(Timestamp, bool)>) {
         debug_assert!(start >= Timestamp::ZERO);
-        debug_assert!(end <= period());
-
         self.merge_in_bounds::<PartialPlfMergeCursor, False>(other, start, end, buffer)
     }
 
