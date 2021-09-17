@@ -267,9 +267,12 @@ impl<'a> CCHPotentialWithPathUnpacking<'a> {
             self.backward_inverted,
         ) {
             self.backward_parents[node as usize] = middle;
-            self.backward_parents[middle as usize] = parent;
 
-            self.unpack_path_int(NodeIdT(middle));
+            if !self.path_unpacked.get(middle as usize) {
+                self.backward_parents[middle as usize] = parent;
+                self.unpack_path_int(NodeIdT(middle));
+            }
+
             debug_assert_eq!(self.potential_int(middle).unwrap(), parent_dist + _up,);
             self.unpack_path_int(NodeIdT(node));
         }
