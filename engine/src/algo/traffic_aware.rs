@@ -333,7 +333,7 @@ impl<G> DijkstraOps<G> for BlockedPathsDijkstra {
                 }
             }
             if !illegal {
-                linked.push((l.0 + link.weight, ActiveForbittenPaths(head_active_forbidden_paths), NodeIdT(tail)));
+                linked.push((l.0 + link.weight, ActiveForbittenPaths(head_active_forbidden_paths), (NodeIdT(tail), l.1)));
             }
         }
 
