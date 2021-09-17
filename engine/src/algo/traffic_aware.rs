@@ -483,18 +483,10 @@ impl<'a> TrafficAwareServer<'a> {
                     .min_by_key(|&EdgeIdT(edge_id)| self.live_graph.link(edge_id).weight)
                     .unwrap();
 
-                let pos = self.dijkstra_data.distances[parent as usize]
+                label_idx = self.dijkstra_data.distances[parent as usize]
                     .iter()
-                    .position(|l| l.0 == dist - self.live_graph.link(min_weight_edge.0).weight && l.1.is_subset(&parent_active_forb_paths));
-                if let Some(pos) = pos {
-                    label_idx = pos;
-                } else {
-                    dbg!(
-                        self.dijkstra_data.distances[*path.last().unwrap() as usize][label_idx],
-                        self.live_graph.link(min_weight_edge.0).weight
-                    );
-                    panic!("missing parent label: {:#?}", self.dijkstra_data.distances[parent as usize])
-                }
+                    .position(|l| l.0 == dist - self.live_graph.link(min_weight_edge.0).weight && l.1.is_subset(&parent_active_forb_paths))
+                    .unwrap();
 
                 path.push(parent);
             }
