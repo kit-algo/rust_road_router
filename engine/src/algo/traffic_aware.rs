@@ -101,7 +101,9 @@ impl UBSChecker<'_> {
         let full_path = path;
         let mut path = path;
 
+        let mut i = 0;
         while !path.is_empty() {
+            i += 1;
             let &start = path.first().unwrap();
             let &end = path.last().unwrap();
             self.target_pot.init(end);
@@ -232,6 +234,7 @@ impl UBSChecker<'_> {
 
             path = &full_path[source_earliest_deviation_rank + 1..target_earliest_deviation_rank];
         }
+        report!("num_ubs_tree_iterations", i);
 
         for &node in full_path {
             self.path_ranks[node as usize] = InRangeOption::new(None);
@@ -450,18 +453,28 @@ impl<'a> TrafficAwareServer<'a> {
         let mut ubs_time = time::Duration::zero();
 
         let mut i = 0;
+        let mut iterations_ctxt = push_collection_context("iterations".to_string());
         let result = loop {
+            let _it_ctxt = iterations_ctxt.push_collection_item();
             i += 1;
+            report!("iteration", i);
             let mut dijk_run = DijkstraRun::query(&self.live_graph, &mut self.dijkstra_data, &mut self.dijkstra_ops, TrafficAwareQuery(query));
 
+            let mut num_queue_pops = 0;
+            let mut num_labels_in_search_space = 0;
             let live_pot = &mut self.live_pot;
             let (_, time) = measure(|| {
                 while let Some(node) = dijk_run.next_step_with_potential(|node| live_pot.potential(node)) {
+                    num_queue_pops += 1;
+                    num_labels_in_search_space += dijk_run.tentative_distance(node).len();
                     if node == query.to {
                         break;
                     }
                 }
             });
+            report!("num_queue_pops", num_queue_pops);
+            report!("num_labels_in_search_space", num_labels_in_search_space);
+            report!("exploration_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
             explore_time = explore_time + time;
 
             if self.dijkstra_data.distances[query.to as usize].is_empty() {
@@ -492,8 +505,10 @@ impl<'a> TrafficAwareServer<'a> {
             }
 
             path.reverse();
+            report!("num_nodes_on_path", path.len());
 
             let (violating, time) = measure(|| self.ubs_checker.find_ubs_violating_subpaths(&path, &self.smooth_graph, epsilon));
+            report!("ubs_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
             ubs_time = ubs_time + time;
 
             if violating.is_empty() {
@@ -504,14 +519,15 @@ impl<'a> TrafficAwareServer<'a> {
                 self.dijkstra_ops.add_forbidden_path(&path[violating_range.start..=violating_range.end]);
             }
         };
+        drop(iterations_ctxt);
         report!("num_iterations", i);
         report!("num_forbidden_paths", self.dijkstra_ops.forbidden_paths.len());
         report!(
             "length_increase_percent",
             (final_live_dist - base_live_dist) as f64 / base_live_dist as f64 * 100.0
         );
-        report!("exploration_time_ms", explore_time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-        report!("ubs_time_ms", ubs_time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        report!("total_exploration_time_ms", explore_time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        report!("total_ubs_time_ms", ubs_time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         result
     }
 }
