@@ -281,7 +281,7 @@ impl BlockedPathsDijkstra {
         }
     }
 
-    pub fn add_forbidden_path(&mut self, path: &[NodeId]) {
+    pub fn add_forbidden_path(&mut self, path: &[NodeId]) -> Result<(), ()> {
         self.forbidden_paths_start_nodes.push(NodeIdT(path[0]));
 
         let global_id = self.forbidden_paths.len();
@@ -290,15 +290,14 @@ impl BlockedPathsDijkstra {
         for (node_path_index, &[tail, head]) in path.array_windows::<2>().enumerate() {
             self.node_forbidden_paths[tail as usize].push((global_id, node_path_index));
             let node_forbidden_path_index = self.node_forbidden_paths[head as usize].len();
-            assert!(
-                node_forbidden_path_index < 128,
-                "{:#?}",
-                (&self.node_forbidden_paths[head as usize], tail, head)
-            );
+            if node_forbidden_path_index >= 128 {
+                return Err(());
+            }
             forbidden_path.push((NodeIdT(head), node_forbidden_path_index as u8));
         }
 
         self.forbidden_paths.push(forbidden_path);
+        Ok(())
     }
 
     pub fn reset(&mut self) {
@@ -458,7 +457,7 @@ impl<'a> TrafficAwareServer<'a> {
 
         let mut i = 0;
         let mut iterations_ctxt = push_collection_context("iterations".to_string());
-        let result = loop {
+        let result = 'ipb: loop {
             let _it_ctxt = iterations_ctxt.push_collection_item();
             i += 1;
             report!("iteration", i);
@@ -520,7 +519,14 @@ impl<'a> TrafficAwareServer<'a> {
             }
 
             for violating_range in violating {
-                self.dijkstra_ops.add_forbidden_path(&path[violating_range.start..=violating_range.end]);
+                if self
+                    .dijkstra_ops
+                    .add_forbidden_path(&path[violating_range.start..=violating_range.end])
+                    .is_err()
+                {
+                    report!("failed", true);
+                    break 'ipb None;
+                }
             }
         };
         drop(iterations_ctxt);
@@ -567,7 +573,7 @@ mod tests {
     fn test_linking_forbidden_paths() {
         let graph = FirstOutGraph::new(&[0, 0, 0], &[], &[]);
         let mut ops = BlockedPathsDijkstra::new(2);
-        ops.add_forbidden_path(&[0, 1]);
+        ops.add_forbidden_path(&[0, 1]).unwrap();
 
         assert_eq!(
             ops.link(
@@ -580,7 +586,7 @@ mod tests {
         );
 
         let mut ops = BlockedPathsDijkstra::new(2);
-        ops.add_forbidden_path(&[0, 1, 0]);
+        ops.add_forbidden_path(&[0, 1, 0]).unwrap();
         assert_eq!(
             ops.link(
                 &graph,
