@@ -246,7 +246,7 @@ impl UBSChecker<'_> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ActiveForbittenPaths(u32);
+pub struct ActiveForbittenPaths(u128);
 
 impl ActiveForbittenPaths {
     fn is_subset(&self, rhs: &Self) -> bool {
@@ -290,7 +290,11 @@ impl BlockedPathsDijkstra {
         for (node_path_index, &[tail, head]) in path.array_windows::<2>().enumerate() {
             self.node_forbidden_paths[tail as usize].push((global_id, node_path_index));
             let node_forbidden_path_index = self.node_forbidden_paths[head as usize].len();
-            assert!(node_forbidden_path_index < 32, "{:#?}", (&self.node_forbidden_paths[head as usize], tail, head));
+            assert!(
+                node_forbidden_path_index < 128,
+                "{:#?}",
+                (&self.node_forbidden_paths[head as usize], tail, head)
+            );
             forbidden_path.push((NodeIdT(head), node_forbidden_path_index as u8));
         }
 
