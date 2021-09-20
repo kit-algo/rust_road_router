@@ -266,6 +266,14 @@ impl<T> std::ops::Add<T> for Neutral {
     }
 }
 
+impl std::ops::Sub<Neutral> for Weight {
+    type Output = Weight;
+
+    fn sub(self, _rhs: Neutral) -> Self::Output {
+        self
+    }
+}
+
 #[derive(Debug)]
 pub enum SymmetricDeg {
     LessEqTwo,

@@ -212,7 +212,17 @@ where
     Graph: LinkIterable<Ops::Arc>,
     Ops: ComplexDijkstraOps<Graph>,
 {
-    pub fn query(graph: &'b Graph, data: &'b mut DijkstraData<Ops::Label, Ops::PredecessorLink>, ops: &'b mut Ops, query: impl GenQuery<Ops::Label>) -> Self {
+    pub fn query<P, O>(
+        graph: &'b Graph,
+        data: &'b mut DijkstraData<Ops::Label, Ops::PredecessorLink>,
+        ops: &'b mut Ops,
+        query: impl GenQuery<Ops::Label>,
+        potential: P,
+    ) -> Self
+    where
+        P: FnMut(NodeId) -> Option<O>,
+        O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
+    {
         let mut s = Self {
             graph,
             ops,
@@ -222,7 +232,7 @@ where
             num_relaxed_arcs: 0,
             num_queue_pushs: 0,
         };
-        s.initialize(query);
+        s.initialize(query, potential);
         s
     }
 
@@ -240,16 +250,26 @@ where
         s
     }
 
-    pub fn initialize(&mut self, query: impl GenQuery<Ops::Label>) {
+    pub fn initialize<P, O>(&mut self, query: impl GenQuery<Ops::Label>, potential: P)
+    where
+        P: FnMut(NodeId) -> Option<O>,
+        O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
+    {
         self.queue.clear();
         self.distances.reset();
-        self.add_start_node(query);
+        self.add_start_node(query, potential);
     }
 
-    pub fn add_start_node(&mut self, query: impl GenQuery<Ops::Label>) {
+    pub fn add_start_node<P, O>(&mut self, query: impl GenQuery<Ops::Label>, mut potential: P)
+    where
+        P: FnMut(NodeId) -> Option<O>,
+        O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
+    {
         let from = query.from();
         let init = query.initial_state();
-        self.queue.push(State { key: init.key(), node: from });
+        if let Some(key) = potential(from).map(|p| p + init.key()) {
+            self.queue.push(State { key, node: from });
+        }
         self.distances[from as usize] = init;
         self.predecessors[from as usize].0 = from;
     }
@@ -263,7 +283,10 @@ where
     }
 
     #[inline(always)]
-    pub fn next_filtered_edges(&mut self, edge_predicate: impl FnMut(&Ops::Arc) -> bool) -> Option<NodeId> {
+    pub fn next_filtered_edges(&mut self, edge_predicate: impl FnMut(&Ops::Arc) -> bool) -> Option<NodeId>
+    where
+        <Ops::Label as super::Label>::Key: std::ops::Sub<Neutral, Output = <Ops::Label as super::Label>::Key> + Copy,
+    {
         self.settle_next_node(edge_predicate, |_, _| true, |_| Some(Neutral()))
     }
 
@@ -272,12 +295,16 @@ where
     where
         P: FnMut(NodeId) -> Option<O>,
         O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
+        <Ops::Label as super::Label>::Key: std::ops::Sub<O, Output = <Ops::Label as super::Label>::Key> + Copy,
     {
         self.settle_next_node(|_| true, |_, _| true, potential)
     }
 
     #[inline(always)]
-    pub fn next_with_improve_callback(&mut self, improve_callback: impl FnMut(NodeId, &Ops::Label) -> bool) -> Option<NodeId> {
+    pub fn next_with_improve_callback(&mut self, improve_callback: impl FnMut(NodeId, &Ops::Label) -> bool) -> Option<NodeId>
+    where
+        <Ops::Label as super::Label>::Key: std::ops::Sub<Neutral, Output = <Ops::Label as super::Label>::Key> + Copy,
+    {
         self.settle_next_node(|_| true, improve_callback, |_| Some(Neutral()))
     }
 
@@ -286,6 +313,7 @@ where
     where
         P: FnMut(NodeId) -> Option<O>,
         O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
+        <Ops::Label as super::Label>::Key: std::ops::Sub<O, Output = <Ops::Label as super::Label>::Key> + Copy,
     {
         self.settle_next_node(|_| true, improve_callback, potential)
     }
@@ -296,8 +324,9 @@ where
         I: FnMut(NodeId, &Ops::Label) -> bool,
         P: FnMut(NodeId) -> Option<O>,
         O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
+        <Ops::Label as super::Label>::Key: std::ops::Sub<O, Output = <Ops::Label as super::Label>::Key> + Copy,
     {
-        self.queue.pop().map(|State { node, .. }| {
+        self.queue.pop().map(|State { node, key }| {
             for link in self.graph.borrow().link_iter(node) {
                 if edge_predicate(&link) {
                     self.num_relaxed_arcs += 1;
@@ -306,19 +335,22 @@ where
                         &self.distances,
                         &self.predecessors,
                         NodeIdT(node),
+                        key - potential(node).unwrap(),
                         &self.distances[node as usize],
                         &link,
                     );
 
-                    if self.ops.merge(&mut self.distances[link.head() as usize], linked) {
+                    if let Some(improved) = self.ops.merge(&mut self.distances[link.head() as usize], linked) {
                         self.predecessors[link.head() as usize] = (node, self.ops.predecessor_link(&link));
                         let next_distance = &self.distances[link.head() as usize];
 
                         if improve_callback(link.head(), next_distance) {
-                            if let Some(key) = potential(link.head()).map(|p| p + next_distance.key()) {
+                            if let Some(key) = potential(link.head()).map(|p| p + improved) {
                                 let next = State { key, node: link.head() };
-                                if self.queue.contains_index(next.as_index()) {
-                                    self.queue.decrease_key(next);
+                                if let Some(prev) = self.queue.get(next.as_index()) {
+                                    if next < *prev {
+                                        self.queue.decrease_key(next);
+                                    }
                                 } else {
                                     self.num_queue_pushs += 1;
                                     self.queue.push(next);
@@ -375,6 +407,7 @@ where
 impl<'b, Ops, Graph> Iterator for ComplexDijkstraRun<'b, Graph, Ops>
 where
     Ops: ComplexDijkstraOps<Graph>,
+    <Ops::Label as super::Label>::Key: std::ops::Sub<Neutral, Output = <Ops::Label as super::Label>::Key> + Copy,
     Graph: LinkIterable<Ops::Arc>,
 {
     type Item = NodeId;

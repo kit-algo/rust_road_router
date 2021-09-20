@@ -149,10 +149,11 @@ pub trait ComplexDijkstraOps<Graph> {
         labels: &TimestampedVector<Self::Label>,
         parents: &[(NodeId, Self::PredecessorLink)],
         tail: NodeIdT,
+        key: <Self::Label as Label>::Key,
         label: &Self::Label,
         link: &Self::Arc,
     ) -> Self::LinkResult;
-    fn merge(&mut self, label: &mut Self::Label, linked: Self::LinkResult) -> bool;
+    fn merge(&mut self, label: &mut Self::Label, linked: Self::LinkResult) -> Option<<Self::Label as Label>::Key>;
     fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink;
 }
 

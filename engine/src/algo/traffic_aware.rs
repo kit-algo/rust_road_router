@@ -333,12 +333,16 @@ impl<G> ComplexDijkstraOps<G> for BlockedPathsDijkstra {
         _labels: &TimestampedVector<Self::Label>,
         _parents: &[(NodeId, Self::PredecessorLink)],
         NodeIdT(tail): NodeIdT,
+        key: Weight,
         label: &Self::Label,
         link: &Self::Arc,
     ) -> Self::LinkResult {
         let mut linked = Vec::new();
 
         for l in label {
+            if l.0 < key {
+                continue;
+            }
             let mut illegal = false;
             let mut head_active_forbidden_paths = 0;
             let active_forbidden_paths = l.1 .0;
@@ -362,7 +366,7 @@ impl<G> ComplexDijkstraOps<G> for BlockedPathsDijkstra {
 
         linked
     }
-    fn merge(&mut self, label: &mut Self::Label, mut linked: Self::LinkResult) -> bool {
+    fn merge(&mut self, label: &mut Self::Label, mut linked: Self::LinkResult) -> Option<Weight> {
         linked.retain(|new_label| {
             let mut needed = true;
 
@@ -380,7 +384,7 @@ impl<G> ComplexDijkstraOps<G> for BlockedPathsDijkstra {
             needed
         });
 
-        let updated = !linked.is_empty();
+        let updated = linked.first().map(|l| l.0);
 
         label.extend_from_slice(&linked);
         label.sort_unstable_by_key(|l| l.0);
@@ -451,6 +455,7 @@ impl<G> ComplexDijkstraOps<G> for PseudoBlockedPathsDijkstra {
         _labels: &TimestampedVector<Self::Label>,
         parents: &[(NodeId, Self::PredecessorLink)],
         NodeIdT(tail): NodeIdT,
+        _key: Weight,
         label: &Self::Label,
         link: &Self::Arc,
     ) -> Self::LinkResult {
@@ -474,12 +479,12 @@ impl<G> ComplexDijkstraOps<G> for PseudoBlockedPathsDijkstra {
             label + link.weight
         }
     }
-    fn merge(&mut self, label: &mut Self::Label, linked: Self::LinkResult) -> bool {
+    fn merge(&mut self, label: &mut Self::Label, linked: Self::LinkResult) -> Option<Weight> {
         if linked < *label {
             *label = linked;
-            return true;
+            return Some(*label);
         }
-        false
+        None
     }
     fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {
         ()
@@ -577,11 +582,17 @@ impl<'a> TrafficAwareServer<'a> {
             let _it_ctxt = iterations_ctxt.push_collection_item();
             i += 1;
             report!("iteration", i);
-            let mut dijk_run = ComplexDijkstraRun::query(&self.live_graph, &mut self.dijkstra_data, &mut self.dijkstra_ops, TrafficAwareQuery(query));
+            let live_pot = &mut self.live_pot;
+            let mut dijk_run = ComplexDijkstraRun::query(
+                &self.live_graph,
+                &mut self.dijkstra_data,
+                &mut self.dijkstra_ops,
+                TrafficAwareQuery(query),
+                |node| live_pot.potential(node),
+            );
 
             let mut num_queue_pops = 0;
             let mut num_labels_in_search_space = 0;
-            let live_pot = &mut self.live_pot;
             let (_, time) = measure(|| {
                 while let Some(node) = dijk_run.next_step_with_potential(|node| live_pot.potential(node)) {
                     num_queue_pops += 1;
@@ -702,6 +713,7 @@ mod tests {
                 &dd.distances,
                 &dd.predecessors,
                 NodeIdT(0),
+                0,
                 &vec![(0, ActiveForbittenPaths(0), (NodeIdT(0), ActiveForbittenPaths(0)))],
                 &Link { node: 1, weight: 1 },
             ),
@@ -716,6 +728,7 @@ mod tests {
                 &dd.distances,
                 &dd.predecessors,
                 NodeIdT(0),
+                0,
                 &vec![(0, ActiveForbittenPaths(0), (NodeIdT(0), ActiveForbittenPaths(0)))],
                 &Link { node: 1, weight: 1 },
             ),
@@ -727,6 +740,7 @@ mod tests {
                 &dd.distances,
                 &dd.predecessors,
                 NodeIdT(1),
+                0,
                 &vec![(1, ActiveForbittenPaths(1), (NodeIdT(0), ActiveForbittenPaths(0)))],
                 &Link { node: 0, weight: 1 }
             ),
@@ -743,7 +757,7 @@ mod tests {
             &mut current,
             vec![(10, ActiveForbittenPaths(0), (NodeIdT(2), ActiveForbittenPaths(0)))],
         );
-        assert!(improved);
+        assert!(improved.is_some());
         assert_eq!(current, vec![(10, ActiveForbittenPaths(0), (NodeIdT(2), ActiveForbittenPaths(0)))]);
     }
 }
