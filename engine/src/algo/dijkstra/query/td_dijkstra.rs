@@ -10,7 +10,7 @@ impl DijkstraOps<TDGraph> for TDDijkstraOps {
     type PredecessorLink = ();
 
     #[inline(always)]
-    fn link(&mut self, graph: &TDGraph, _tail: NodeIdT, label: &Weight, link: &Self::Arc) -> Self::LinkResult {
+    fn link(&mut self, graph: &TDGraph, label: &Weight, link: &Self::Arc) -> Self::LinkResult {
         label + graph.travel_time_function(link.1 .0).eval(*label)
     }
 
@@ -44,7 +44,7 @@ impl DijkstraOps<LiveTDGraph> for LiveTDDijkstraOps {
     type PredecessorLink = ();
 
     #[inline(always)]
-    fn link(&mut self, graph: &LiveTDGraph, _tail: NodeIdT, label: &Weight, link: &Self::Arc) -> Self::LinkResult {
+    fn link(&mut self, graph: &LiveTDGraph, label: &Weight, link: &Self::Arc) -> Self::LinkResult {
         label + graph.eval(link.1 .0, *label)
     }
 

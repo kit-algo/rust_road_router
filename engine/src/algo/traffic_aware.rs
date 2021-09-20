@@ -1,8 +1,13 @@
 use super::*;
 
 use crate::{
-    algo::{a_star::*, ch_potentials::*, customizable_contraction_hierarchy::*, dijkstra::*},
-    datastr::rank_select_map::BitVec,
+    algo::{
+        a_star::*,
+        ch_potentials::*,
+        customizable_contraction_hierarchy::*,
+        dijkstra::{generic_dijkstra::ComplexDijkstraRun, *},
+    },
+    datastr::{rank_select_map::BitVec, timestamped_vector::*},
     report::*,
     util::{in_range_option::InRangeOption, with_index},
 };
@@ -312,13 +317,21 @@ impl BlockedPathsDijkstra {
     }
 }
 
-impl<G> DijkstraOps<G> for BlockedPathsDijkstra {
+impl<G> ComplexDijkstraOps<G> for BlockedPathsDijkstra {
     type Label = Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths))>;
     type Arc = Link;
     type LinkResult = Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths))>;
     type PredecessorLink = ();
 
-    fn link(&mut self, _graph: &G, NodeIdT(tail): NodeIdT, label: &Self::Label, link: &Self::Arc) -> Self::LinkResult {
+    fn link(
+        &mut self,
+        _graph: &G,
+        _labels: &TimestampedVector<Self::Label>,
+        _parents: &[(NodeId, Self::PredecessorLink)],
+        NodeIdT(tail): NodeIdT,
+        label: &Self::Label,
+        link: &Self::Arc,
+    ) -> Self::LinkResult {
         let mut linked = Vec::new();
 
         for l in label {
@@ -461,7 +474,7 @@ impl<'a> TrafficAwareServer<'a> {
             let _it_ctxt = iterations_ctxt.push_collection_item();
             i += 1;
             report!("iteration", i);
-            let mut dijk_run = DijkstraRun::query(&self.live_graph, &mut self.dijkstra_data, &mut self.dijkstra_ops, TrafficAwareQuery(query));
+            let mut dijk_run = ComplexDijkstraRun::query(&self.live_graph, &mut self.dijkstra_data, &mut self.dijkstra_ops, TrafficAwareQuery(query));
 
             let mut num_queue_pops = 0;
             let mut num_labels_in_search_space = 0;
@@ -573,11 +586,14 @@ mod tests {
     fn test_linking_forbidden_paths() {
         let graph = FirstOutGraph::new(&[0, 0, 0], &[], &[]);
         let mut ops = BlockedPathsDijkstra::new(2);
+        let dd = DijkstraData::new(2);
         ops.add_forbidden_path(&[0, 1]).unwrap();
 
         assert_eq!(
             ops.link(
                 &graph,
+                &dd.distances,
+                &dd.predecessors,
                 NodeIdT(0),
                 &vec![(0, ActiveForbittenPaths(0), (NodeIdT(0), ActiveForbittenPaths(0)))],
                 &Link { node: 1, weight: 1 },
@@ -590,6 +606,8 @@ mod tests {
         assert_eq!(
             ops.link(
                 &graph,
+                &dd.distances,
+                &dd.predecessors,
                 NodeIdT(0),
                 &vec![(0, ActiveForbittenPaths(0), (NodeIdT(0), ActiveForbittenPaths(0)))],
                 &Link { node: 1, weight: 1 },
@@ -599,6 +617,8 @@ mod tests {
         assert_eq!(
             ops.link(
                 &graph,
+                &dd.distances,
+                &dd.predecessors,
                 NodeIdT(1),
                 &vec![(1, ActiveForbittenPaths(1), (NodeIdT(0), ActiveForbittenPaths(0)))],
                 &Link { node: 0, weight: 1 }
@@ -611,7 +631,7 @@ mod tests {
     fn test_merging() {
         let mut ops = BlockedPathsDijkstra::new(0);
         let mut current = vec![(10, ActiveForbittenPaths(1), (NodeIdT(1), ActiveForbittenPaths(0)))];
-        let improved = DijkstraOps::<OwnedGraph>::merge(
+        let improved = ComplexDijkstraOps::<OwnedGraph>::merge(
             &mut ops,
             &mut current,
             vec![(10, ActiveForbittenPaths(0), (NodeIdT(2), ActiveForbittenPaths(0)))],

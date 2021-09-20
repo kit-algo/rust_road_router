@@ -101,7 +101,7 @@ impl DijkstraOps<TDGraph> for FlTDDijkstraOps {
     type PredecessorLink = ();
 
     #[inline(always)]
-    fn link(&mut self, graph: &TDGraph, _tail: NodeIdT, label: &Timestamp, link: &Self::Arc) -> Self::LinkResult {
+    fn link(&mut self, graph: &TDGraph, label: &Timestamp, link: &Self::Arc) -> Self::LinkResult {
         *label + graph.travel_time_function(link.1 .0).evaluate(*label)
     }
 

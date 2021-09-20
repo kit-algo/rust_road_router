@@ -337,8 +337,8 @@ where
     type PredecessorLink = O::PredecessorLink;
 
     #[inline(always)]
-    fn link(&mut self, graph: &VirtualTopocoreGraph<G>, tail: NodeIdT, label: &Self::Label, link: &Self::Arc) -> Self::LinkResult {
-        self.0.link(&graph.graph, tail, label, link)
+    fn link(&mut self, graph: &VirtualTopocoreGraph<G>, label: &Self::Label, link: &Self::Arc) -> Self::LinkResult {
+        self.0.link(&graph.graph, label, link)
     }
 
     #[inline(always)]
