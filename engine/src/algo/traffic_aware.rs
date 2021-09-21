@@ -95,12 +95,17 @@ impl UBSChecker<'_> {
         for (rank, &node) in path.iter().enumerate() {
             if let Some(prev_rank) = path_ranks[node as usize].value() {
                 eprintln!("Found Cycle of len: {}", rank - prev_rank);
-                for &node in path {
-                    self.path_ranks[node as usize] = InRangeOption::new(None);
-                }
-                return vec![prev_rank..rank];
+                violating.push(prev_rank..rank)
+            } else {
+                path_ranks[node as usize] = InRangeOption::new(Some(rank));
             }
-            path_ranks[node as usize] = InRangeOption::new(Some(rank));
+        }
+
+        if !violating.is_empty() {
+            for &node in path {
+                self.path_ranks[node as usize] = InRangeOption::new(None);
+            }
+            return violating;
         }
 
         let full_path = path;
