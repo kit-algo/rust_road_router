@@ -255,12 +255,45 @@ impl UBSChecker<'_> {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ActiveForbittenPaths(u128);
+#[derive(Clone, Debug, PartialEq)]
+pub enum ActiveForbittenPaths {
+    One(u128),
+    More(Box<[u128]>),
+}
 
 impl ActiveForbittenPaths {
+    fn new(size: usize) -> Self {
+        if size <= 128 {
+            Self::One(0)
+        } else {
+            Self::More(std::iter::repeat(0).take(size + 127 / 128).collect())
+        }
+    }
+
+    fn get(&self, idx: usize) -> bool {
+        match self {
+            Self::One(active) => active & (1 << idx) != 0,
+            Self::More(active) => (active[idx / 128] & (1 << (idx % 128))) != 0,
+        }
+    }
+
+    fn set(&mut self, idx: usize) {
+        match self {
+            Self::One(active) => *active |= 1 << idx,
+            Self::More(active) => active[idx / 128] |= 1 << (idx % 128),
+        }
+    }
+
     fn is_subset(&self, rhs: &Self) -> bool {
-        !(!self.0 | rhs.0) == 0
+        match (self, rhs) {
+            (&Self::One(self_active), &Self::One(rhs_active)) => !(!self_active | rhs_active) == 0,
+            (&Self::One(self_active), Self::More(rhs_active)) => !(!self_active | rhs_active[0]) == 0,
+            (Self::More(self_active), &Self::One(rhs_active)) => !(!self_active[0] | rhs_active) == 0 && self_active[1..].iter().all(|&a| a == 0),
+            (Self::More(self_active), Self::More(rhs_active)) => self_active
+                .iter()
+                .zip(rhs_active.iter().chain(std::iter::repeat(&0)))
+                .all(|(&s_a, &rhs_a)| !(!s_a | rhs_a) == 0),
+        }
     }
 }
 
@@ -276,7 +309,7 @@ impl Label for Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths
 
 pub struct BlockedPathsDijkstra {
     // Outgoing Edge, Next Node Local Offset
-    forbidden_paths: Vec<Vec<(NodeIdT, u8)>>,
+    forbidden_paths: Vec<Vec<(NodeIdT, u32)>>,
     // Global forbidden path id, Node offset on path
     node_forbidden_paths: Vec<Vec<(usize, usize)>>,
     forbidden_paths_start_nodes: Vec<NodeIdT>,
@@ -288,25 +321,29 @@ impl BlockedPathsDijkstra {
             forbidden_paths: Vec::new(),
             node_forbidden_paths: vec![Vec::new(); n],
             forbidden_paths_start_nodes: Vec::new(),
+            cycles: Vec::new(),
         }
     }
 
     pub fn add_forbidden_path(&mut self, path: &[NodeId]) -> Result<(), ()> {
-        self.forbidden_paths_start_nodes.push(NodeIdT(path[0]));
-
         let global_id = self.forbidden_paths.len();
         let mut forbidden_path = Vec::with_capacity(path.len() - 1);
 
+        // for &head in &path[1..] {
+        //     if self.node_forbidden_paths[head as usize].len() >= 128 {
+        //         return Err(());
+        // }
+        // }
+
         for (node_path_index, &[tail, head]) in path.array_windows::<2>().enumerate() {
-            self.node_forbidden_paths[tail as usize].push((global_id, node_path_index));
             let node_forbidden_path_index = self.node_forbidden_paths[head as usize].len();
-            if node_forbidden_path_index >= 128 {
-                return Err(());
-            }
-            forbidden_path.push((NodeIdT(head), node_forbidden_path_index as u8));
+            self.node_forbidden_paths[tail as usize].push((global_id, node_path_index));
+            forbidden_path.push((NodeIdT(head), node_forbidden_path_index as u32));
         }
 
+        self.forbidden_paths_start_nodes.push(NodeIdT(path[0]));
         self.forbidden_paths.push(forbidden_path);
+
         Ok(())
     }
 
@@ -349,17 +386,17 @@ impl<G> ComplexDijkstraOps<G> for BlockedPathsDijkstra {
                 continue;
             }
             let mut illegal = false;
-            let mut head_active_forbidden_paths = 0;
-            let active_forbidden_paths = l.1 .0;
+            let mut head_active_forbidden_paths = ActiveForbittenPaths::new(self.node_forbidden_paths[link.node as usize].len());
+            let active_forbidden_paths = &l.1;
 
             for (local_idx, &(global_id, current_node_path_offset)) in self.node_forbidden_paths[tail as usize].iter().enumerate() {
-                if current_node_path_offset == 0 || active_forbidden_paths & (1 << local_idx) != 0 {
+                if current_node_path_offset == 0 || active_forbidden_paths.get(local_idx) {
                     if self.forbidden_paths[global_id][current_node_path_offset].0 .0 == link.node {
                         if self.forbidden_paths[global_id].len() == current_node_path_offset + 1 {
                             illegal = true;
                             break;
                         } else {
-                            head_active_forbidden_paths |= 1 << self.forbidden_paths[global_id][current_node_path_offset].1
+                            head_active_forbidden_paths.set(self.forbidden_paths[global_id][current_node_path_offset].1 as usize);
                         }
                     }
                 }
@@ -402,7 +439,7 @@ impl<G> ComplexDijkstraOps<G> for BlockedPathsDijkstra {
                 cur_dist = label[cur_idx].0;
                 cur_dist_start_idx = cur_idx;
             }
-            let active_paths = label[cur_idx].1;
+            let active_paths = label[cur_idx].1.clone(); // TODO optimize
 
             label.retain(with_index(|idx, l: &(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths))| {
                 idx < cur_dist_start_idx || idx == cur_idx || !active_paths.is_subset(&l.1)
@@ -510,7 +547,7 @@ impl GenQuery<Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths)
         self.0.to
     }
     fn initial_state(&self) -> Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths))> {
-        vec![(0, ActiveForbittenPaths(0), (NodeIdT(self.0.from), ActiveForbittenPaths(0)))]
+        vec![(0, ActiveForbittenPaths::new(0), (NodeIdT(self.0.from), ActiveForbittenPaths::new(0)))]
     }
     fn permutate(&mut self, order: &NodeOrder) {
         self.0.from = order.rank(self.0.from);
@@ -627,20 +664,24 @@ impl<'a> TrafficAwareServer<'a> {
 
             let mut label_idx = 0;
             while *path.last().unwrap() != query.from {
-                let (dist, _, (NodeIdT(parent), parent_active_forb_paths)) = self.dijkstra_data.distances[*path.last().unwrap() as usize][label_idx];
+                let (dist, _, (NodeIdT(parent), parent_active_forb_paths)) = &self.dijkstra_data.distances[*path.last().unwrap() as usize][label_idx];
 
                 let min_weight_edge = self
                     .live_graph
-                    .edge_indices(parent, *path.last().unwrap())
+                    .edge_indices(*parent, *path.last().unwrap())
                     .min_by_key(|&EdgeIdT(edge_id)| self.live_graph.link(edge_id).weight)
                     .unwrap();
 
-                label_idx = self.dijkstra_data.distances[parent as usize]
+                if let Some(parent_label_idx) = self.dijkstra_data.distances[*parent as usize]
                     .iter()
                     .position(|l| l.0 == dist - self.live_graph.link(min_weight_edge.0).weight && l.1.is_subset(&parent_active_forb_paths))
-                    .unwrap();
+                {
+                    label_idx = parent_label_idx;
+                } else {
+                    break;
+                }
 
-                path.push(parent);
+                path.push(*parent);
             }
 
             path.reverse();
@@ -660,12 +701,12 @@ impl<'a> TrafficAwareServer<'a> {
                     .add_forbidden_path(&path[violating_range.start..=violating_range.end])
                     .is_err()
                 {
-                    report!("failed", true);
                     break 'ipb None;
                 }
             }
         };
         drop(iterations_ctxt);
+        report!("failed", result.is_none());
         report!("num_iterations", i);
         report!("num_forbidden_paths", self.dijkstra_ops.num_forbidden_paths());
         report!(
@@ -719,7 +760,7 @@ mod tests {
                 &dd.predecessors,
                 NodeIdT(0),
                 0,
-                &vec![(0, ActiveForbittenPaths(0), (NodeIdT(0), ActiveForbittenPaths(0)))],
+                &vec![(0, ActiveForbittenPaths::One(0), (NodeIdT(0), ActiveForbittenPaths::One(0)))],
                 &Link { node: 1, weight: 1 },
             ),
             vec![]
@@ -734,10 +775,10 @@ mod tests {
                 &dd.predecessors,
                 NodeIdT(0),
                 0,
-                &vec![(0, ActiveForbittenPaths(0), (NodeIdT(0), ActiveForbittenPaths(0)))],
+                &vec![(0, ActiveForbittenPaths::One(0), (NodeIdT(0), ActiveForbittenPaths::One(0)))],
                 &Link { node: 1, weight: 1 },
             ),
-            vec![(1, ActiveForbittenPaths(1), (NodeIdT(0), ActiveForbittenPaths(0)))]
+            vec![(1, ActiveForbittenPaths::One(1), (NodeIdT(0), ActiveForbittenPaths::One(0)))]
         );
         assert_eq!(
             ops.link(
@@ -746,7 +787,7 @@ mod tests {
                 &dd.predecessors,
                 NodeIdT(1),
                 0,
-                &vec![(1, ActiveForbittenPaths(1), (NodeIdT(0), ActiveForbittenPaths(0)))],
+                &vec![(1, ActiveForbittenPaths::One(1), (NodeIdT(0), ActiveForbittenPaths::One(0)))],
                 &Link { node: 0, weight: 1 }
             ),
             vec![]
@@ -756,13 +797,13 @@ mod tests {
     #[test]
     fn test_merging() {
         let mut ops = BlockedPathsDijkstra::new(0);
-        let mut current = vec![(10, ActiveForbittenPaths(1), (NodeIdT(1), ActiveForbittenPaths(0)))];
+        let mut current = vec![(10, ActiveForbittenPaths::One(1), (NodeIdT(1), ActiveForbittenPaths::One(0)))];
         let improved = ComplexDijkstraOps::<OwnedGraph>::merge(
             &mut ops,
             &mut current,
-            vec![(10, ActiveForbittenPaths(0), (NodeIdT(2), ActiveForbittenPaths(0)))],
+            vec![(10, ActiveForbittenPaths::One(0), (NodeIdT(2), ActiveForbittenPaths::One(0)))],
         );
         assert!(improved.is_some());
-        assert_eq!(current, vec![(10, ActiveForbittenPaths(0), (NodeIdT(2), ActiveForbittenPaths(0)))]);
+        assert_eq!(current, vec![(10, ActiveForbittenPaths::One(0), (NodeIdT(2), ActiveForbittenPaths::One(0)))]);
     }
 }
