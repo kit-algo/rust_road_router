@@ -1,16 +1,16 @@
+use super::*;
 use crate::{
     algo::{
-        ch_potentials::{query::Server as TopoServer, *},
+        ch_potentials::{
+            query::{PathServerWrapper, Server as TopoServer},
+            *,
+        },
         dijkstra::{query::dijkstra::Server as DijkServer, DefaultOps},
     },
-    datastr::graph::*,
     io::*,
-    report::*,
     util::{fl_max, fl_min},
 };
 use std::{error::Error, path::Path};
-
-use rand::prelude::*;
 
 /// Number of queries performed for each experiment.
 /// Can be overriden through the CHPOT_NUM_QUERIES env var.
@@ -25,6 +25,7 @@ pub fn run(
     let mut rng = super::rng(Default::default());
 
     let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
+    let num_nodes = graph.num_nodes();
     let mut modified_travel_time = graph.weight().to_vec();
 
     modify_travel_time(&graph.borrowed(), &mut rng, &mut modified_travel_time)?;
@@ -41,18 +42,21 @@ pub fn run(
     let mut topocore: TopoServer<OwnedGraph, _, _, true, true, true> = TopoServer::new(&modified_graph, potential, DefaultOps::default());
     drop(virtual_topocore_ctxt);
 
-    super::run_random_queries_with_callbacks(
+    super::ResultCallbackWrapper(
+        Default::default(),
+        |res: &mut QueryResult<PathServerWrapper<OwnedGraph, DefaultOps, CHPotential<OwnedGraph, OwnedGraph>, Query, true, true, true>, Weight>| {
+            report!("num_pot_computations", res.data().potential().num_pot_computations());
+            let from = res.data().query().from();
+            report!("lower_bound", res.data().lower_bound(from));
+        },
+    )
+    .run_random_queries_with_callbacks(
         graph.num_nodes(),
         &mut topocore,
         &mut rng,
         &mut algo_runs_ctxt,
         num_queries(),
         |_, _, _| (),
-        // |mut res| {
-        //     report!("num_pot_computations", res.data().potential().num_pot_computations());
-        //     let from = res.data().query().from();
-        //     report!("lower_bound", res.data().lower_bound(from));
-        // },
         |_, _| None,
     );
 

@@ -35,12 +35,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         val => Some(val),
     });
 
-    experiments::run_queries(
+    experiments::ResultCallbackWrapper(Default::default(), |_| ()).run_queries(
         from.iter().copied().zip(to.iter().copied()).take(10000),
         &mut server,
         None,
         |_, _, _| (),
-        // |_| (),
         |_, _| gt_iter.next(),
     );
 
