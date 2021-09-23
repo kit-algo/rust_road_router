@@ -312,6 +312,7 @@ pub struct BlockedPathsDijkstra {
     // Global forbidden path id, Node offset on path
     node_forbidden_paths: Vec<Vec<(usize, usize)>>,
     forbidden_paths_start_nodes: Vec<NodeIdT>,
+    cycles: Vec<Vec<NodeId>>,
 }
 
 impl BlockedPathsDijkstra {
@@ -377,9 +378,24 @@ impl BlockedPathsDijkstra {
     pub fn num_forbidden_paths(&self) -> usize {
         self.forbidden_paths_start_nodes.len()
     }
+
+    pub fn block_cycles(&mut self) {
+        let mut tmp = Vec::new();
+        std::mem::swap(&mut tmp, &mut self.cycles);
+
+        tmp.sort();
+        tmp.dedup();
+
+        for cycle in tmp.drain(..) {
+            debug_assert_eq!(cycle.first(), cycle.last());
+            debug_assert!(cycle.len() > 2);
+            self.add_forbidden_path(&cycle);
+        }
+        std::mem::swap(&mut tmp, &mut self.cycles);
+    }
 }
 
-impl<G> ComplexDijkstraOps<G> for BlockedPathsDijkstra {
+impl<G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> ComplexDijkstraOps<G> for BlockedPathsDijkstra {
     type Label = Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths))>;
     type Arc = Link;
     type LinkResult = Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths))>;
@@ -387,8 +403,8 @@ impl<G> ComplexDijkstraOps<G> for BlockedPathsDijkstra {
 
     fn link(
         &mut self,
-        _graph: &G,
-        _labels: &TimestampedVector<Self::Label>,
+        #[allow(unused)] graph: &G,
+        #[allow(unused)] labels: &TimestampedVector<Self::Label>,
         _parents: &[(NodeId, Self::PredecessorLink)],
         NodeIdT(tail): NodeIdT,
         key: Weight,
@@ -397,7 +413,10 @@ impl<G> ComplexDijkstraOps<G> for BlockedPathsDijkstra {
     ) -> Self::LinkResult {
         let mut linked = Vec::new();
 
-        for l in label {
+        // let fastest_existing_label = labels[link.head() as usize].first();
+
+        #[allow(unused)]
+        for (i, l) in label.iter().enumerate() {
             if l.0 < key {
                 continue;
             }
@@ -417,6 +436,70 @@ impl<G> ComplexDijkstraOps<G> for BlockedPathsDijkstra {
                     }
                 }
             }
+            // if !illegal {
+            //     if let Some(fastest_existing_label) = fastest_existing_label {
+            //         if fastest_existing_label.0 < l.0 + link.weight && !fastest_existing_label.1.is_subset(&head_active_forbidden_paths) {
+            //             let mut label_idx = i;
+            //             let mut cur = tail;
+            //             while labels[cur as usize][label_idx].0 > fastest_existing_label.0 {
+            //                 let (dist, _, (NodeIdT(parent), parent_active_forb_paths)) = &labels[cur as usize][label_idx];
+
+            //                 let min_weight_edge = graph
+            //                     .edge_indices(*parent, cur)
+            //                     .min_by_key(|&EdgeIdT(edge_id)| graph.link(edge_id).weight)
+            //                     .unwrap();
+
+            //                 if let Some(par_label_idx) = labels[*parent as usize]
+            //                     .iter()
+            //                     .position(|l| l.0 == dist - graph.link(min_weight_edge.0).weight && l.1.is_subset(&parent_active_forb_paths))
+            //                 {
+            //                     label_idx = par_label_idx;
+            //                 } else {
+            //                     illegal = true;
+            //                     break;
+            //                 }
+
+            //                 cur = *parent;
+
+            //                 if cur == link.node {
+            //                     let mut cycle = Vec::new();
+            //                     cycle.push(cur);
+            //                     cycle.push(tail);
+
+            //                     label_idx = i;
+            //                     cur = tail;
+
+            //                     while cur != link.node {
+            //                         let (dist, _, (NodeIdT(parent), parent_active_forb_paths)) = &labels[cur as usize][label_idx];
+            //                         cycle.push(*parent);
+
+            //                         let min_weight_edge = graph
+            //                             .edge_indices(*parent, cur)
+            //                             .min_by_key(|&EdgeIdT(edge_id)| graph.link(edge_id).weight)
+            //                             .unwrap();
+
+            //                         label_idx = labels[*parent as usize]
+            //                             .iter()
+            //                             .position(|l| l.0 == dist - graph.link(min_weight_edge.0).weight && l.1.is_subset(&parent_active_forb_paths))
+            //                             .unwrap();
+
+            //                         cur = *parent;
+            //                     }
+
+            //                     cycle.reverse();
+
+            //                     for &[tail, head] in cycle.array_windows::<2>() {
+            //                         debug_assert!(graph.edge_indices(tail, head).next().is_some(), "{:#?}", (cycle, tail, head));
+            //                     }
+
+            //                     illegal = true;
+            //                     self.cycles.push(cycle);
+            //                     break;
+            //                 }
+            //             }
+            //         }
+            //     }
+            // }
             if !illegal {
                 linked.push((l.0 + link.weight, head_active_forbidden_paths, (NodeIdT(tail), l.1.clone())));
             }
@@ -665,6 +748,8 @@ impl<'a> TrafficAwareServer<'a> {
                     }
                 }
             });
+
+            report!("num_pruned_cycles", self.dijkstra_ops.cycles.len());
             report!("num_queue_pops", num_queue_pops);
             report!("num_labels_in_search_space", num_labels_in_search_space);
             report!("exploration_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
@@ -678,6 +763,8 @@ impl<'a> TrafficAwareServer<'a> {
             // final_live_dist = self.dijkstra_data.distances[query.to as usize];
             final_live_dist = self.dijkstra_data.distances[query.to as usize][0].0;
             // let path = self.dijkstra_data.node_path(query.from, query.to);
+
+            // let mut cycle_pruning_broke_shortest_path = false;
 
             let mut path = Vec::new();
             path.push(query.to);
@@ -702,6 +789,16 @@ impl<'a> TrafficAwareServer<'a> {
                 {
                     label_idx = parent_label_idx;
                 } else {
+                    // how can this legally happen?
+                    // only with instant cycle pruning
+                    // forbidden path [s,u,t]
+                    // cycle to avoid [u,v,u]
+                    // relaxing path [s,...,v,u,t] first because A* stuff
+                    // then [s,u,v,u] -> if the distance from s to u (and then v) is shorter than the other path
+                    // then we will dominate the [s,...,v] label at v and throw it away.
+                    // but we will keep the label [s,...,v,u] at u because the cycle pruning removes the other one.
+                    // then we will have a broken path
+                    // cycle_pruning_broke_shortest_path = true;
                     break;
                 }
 
@@ -715,13 +812,19 @@ impl<'a> TrafficAwareServer<'a> {
             report!("ubs_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
             ubs_time = ubs_time + time;
 
-            if violating.is_empty() {
+            if violating.is_empty() && self.dijkstra_ops.cycles.is_empty() {
+                // if violating.is_empty() && !cycle_pruning_broke_shortest_path {
                 break Some(());
             }
 
             for violating_range in violating {
                 self.dijkstra_ops.add_forbidden_path(&path[violating_range.start..=violating_range.end]);
             }
+            // if cycle_pruning_broke_shortest_path {
+            self.dijkstra_ops.block_cycles();
+            // } else {
+            //     self.dijkstra_ops.cycles.clear();
+            // }
         };
         drop(iterations_ctxt);
         report!("failed", result.is_none());
