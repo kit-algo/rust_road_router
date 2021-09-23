@@ -298,34 +298,34 @@ impl Label for Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths
 }
 
 pub struct BlockedPathsDijkstra {
-    // Outgoing Edge, Next Node Local Offset
+    // Next Node, Next Node Local Offset
     forbidden_paths: Vec<Vec<(NodeIdT, u32)>>,
-    // Global forbidden path id, Node offset on path
-    node_forbidden_paths: Vec<Vec<(usize, usize)>>,
-    forbidden_paths_start_nodes: Vec<NodeIdT>,
+    // Global forbidden path id, offset on path, Tail node Local offset
+    edge_forbidden_paths: Vec<Vec<(usize, usize, u32)>>,
+    node_forbidden_path_counter: Vec<usize>,
     cycles: Vec<Vec<NodeId>>,
 }
 
 impl BlockedPathsDijkstra {
-    pub fn new(n: usize) -> Self {
+    pub fn new(n: usize, m: usize) -> Self {
         Self {
             forbidden_paths: Vec::new(),
-            node_forbidden_paths: vec![Vec::new(); n],
-            forbidden_paths_start_nodes: Vec::new(),
+            edge_forbidden_paths: vec![Vec::new(); m],
+            node_forbidden_path_counter: vec![0; n],
             cycles: Vec::new(),
         }
     }
 
-    pub fn add_forbidden_path(&mut self, path: &[NodeId]) {
+    pub fn add_forbidden_path(&mut self, path: &[NodeId], graph: &impl EdgeIdGraph) {
         if cfg!(debug_assertions) {
-            let mut active_forbidden_paths = ActiveForbittenPaths::new(self.node_forbidden_paths[path[0] as usize].len());
+            let mut active_forbidden_paths = ActiveForbittenPaths::new(self.node_forbidden_path_counter[path[0] as usize]);
 
             for &[tail, head] in path.array_windows::<2>() {
-                let mut head_active_forbidden_paths = ActiveForbittenPaths::new(self.node_forbidden_paths[head as usize].len());
-                for (local_idx, &(global_id, current_node_path_offset)) in self.node_forbidden_paths[tail as usize].iter().enumerate() {
-                    if current_node_path_offset == 0 || active_forbidden_paths.get(local_idx) {
-                        if self.forbidden_paths[global_id][current_node_path_offset].0 .0 == head {
-                            if self.forbidden_paths[global_id].len() == current_node_path_offset + 1 {
+                let mut head_active_forbidden_paths = ActiveForbittenPaths::new(self.node_forbidden_path_counter[head as usize]);
+                if let Some(EdgeIdT(link_id)) = graph.edge_indices(tail, head).next() {
+                    for &(global_id, current_edge_path_offset, tail_local_idx) in &self.edge_forbidden_paths[link_id as usize] {
+                        if current_edge_path_offset == 1 || active_forbidden_paths.get(tail_local_idx as usize) {
+                            if self.forbidden_paths[global_id].len() == current_edge_path_offset + 1 {
                                 if head == *path.last().unwrap() {
                                     panic!("path already forbidden: {:#?}", path);
                                 } else {
@@ -333,7 +333,7 @@ impl BlockedPathsDijkstra {
                                     return;
                                 }
                             } else {
-                                head_active_forbidden_paths.set(self.forbidden_paths[global_id][current_node_path_offset].1 as usize);
+                                head_active_forbidden_paths.set(self.forbidden_paths[global_id][current_edge_path_offset].1 as usize);
                             }
                         }
                     }
@@ -343,34 +343,40 @@ impl BlockedPathsDijkstra {
         }
 
         let global_id = self.forbidden_paths.len();
-        let mut forbidden_path = Vec::with_capacity(path.len() - 1);
+        let mut forbidden_path = Vec::with_capacity(path.len());
+        forbidden_path.push((NodeIdT(path[0]), 0));
 
-        for (node_path_index, &[tail, head]) in path.array_windows::<2>().enumerate() {
-            let node_forbidden_path_index = self.node_forbidden_paths[head as usize].len();
-            self.node_forbidden_paths[tail as usize].push((global_id, node_path_index));
-            forbidden_path.push((NodeIdT(head), node_forbidden_path_index as u32));
+        for (offset, &[tail, head]) in path.array_windows::<2>().enumerate() {
+            for EdgeIdT(link_id) in graph.edge_indices(tail, head) {
+                self.edge_forbidden_paths[link_id as usize].push((global_id, offset + 1, self.node_forbidden_path_counter[tail as usize] as u32));
+            }
+            forbidden_path.push((NodeIdT(head), self.node_forbidden_path_counter[head as usize] as u32));
+        }
+        for &node in &path[1..path.len() - 1] {
+            self.node_forbidden_path_counter[node as usize] += 1;
         }
 
-        self.forbidden_paths_start_nodes.push(NodeIdT(path[0]));
         self.forbidden_paths.push(forbidden_path);
     }
 
-    pub fn reset(&mut self) {
-        for NodeIdT(node) in self.forbidden_paths_start_nodes.drain(..) {
-            self.node_forbidden_paths[node as usize].clear();
-        }
+    pub fn reset(&mut self, graph: &impl EdgeIdGraph) {
         for path in self.forbidden_paths.drain(..) {
+            for &[(NodeIdT(tail), _), (NodeIdT(head), _)] in path.array_windows::<2>() {
+                for EdgeIdT(link_id) in graph.edge_indices(tail, head) {
+                    self.edge_forbidden_paths[link_id as usize].clear();
+                }
+            }
             for (NodeIdT(node), _) in path {
-                self.node_forbidden_paths[node as usize].clear();
+                self.node_forbidden_path_counter[node as usize] = 0;
             }
         }
     }
 
     pub fn num_forbidden_paths(&self) -> usize {
-        self.forbidden_paths_start_nodes.len()
+        self.forbidden_paths.len()
     }
 
-    pub fn block_cycles(&mut self) {
+    pub fn block_cycles(&mut self, graph: &impl EdgeIdGraph) {
         let mut tmp = Vec::new();
         std::mem::swap(&mut tmp, &mut self.cycles);
 
@@ -380,7 +386,7 @@ impl BlockedPathsDijkstra {
         for cycle in tmp.drain(..) {
             debug_assert_eq!(cycle.first(), cycle.last());
             debug_assert!(cycle.len() > 2);
-            self.add_forbidden_path(&cycle);
+            self.add_forbidden_path(&cycle, graph);
         }
         std::mem::swap(&mut tmp, &mut self.cycles);
     }
@@ -413,18 +419,16 @@ impl<G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> ComplexDijkstraOps<G> for Blo
                 continue;
             }
             let mut illegal = false;
-            let mut head_active_forbidden_paths = ActiveForbittenPaths::new(self.node_forbidden_paths[head as usize].len());
+            let mut head_active_forbidden_paths = ActiveForbittenPaths::new(self.node_forbidden_path_counter[head as usize]);
             let active_forbidden_paths = &l.1;
 
-            for (local_idx, &(global_id, current_node_path_offset)) in self.node_forbidden_paths[tail as usize].iter().enumerate() {
-                if current_node_path_offset == 0 || active_forbidden_paths.get(local_idx) {
-                    if self.forbidden_paths[global_id][current_node_path_offset].0 .0 == head {
-                        if self.forbidden_paths[global_id].len() == current_node_path_offset + 1 {
-                            illegal = true;
-                            break;
-                        } else {
-                            head_active_forbidden_paths.set(self.forbidden_paths[global_id][current_node_path_offset].1 as usize);
-                        }
+            for &(global_id, current_edge_path_offset, tail_local_idx) in &self.edge_forbidden_paths[link_id as usize] {
+                if current_edge_path_offset == 1 || active_forbidden_paths.get(tail_local_idx as usize) {
+                    if self.forbidden_paths[global_id].len() == current_edge_path_offset + 1 {
+                        illegal = true;
+                        break;
+                    } else {
+                        head_active_forbidden_paths.set(self.forbidden_paths[global_id][current_edge_path_offset].1 as usize);
                     }
                 }
             }
@@ -684,6 +688,7 @@ impl<'a> TrafficAwareServer<'a> {
         live_cch_pot: &'a CCHPotData,
     ) -> Self {
         let n = smooth_graph.num_nodes();
+        let m = smooth_graph.num_arcs();
         Self {
             ubs_checker: UBSChecker {
                 target_pot: smooth_cch_pot.forward_path_potential(),
@@ -695,12 +700,12 @@ impl<'a> TrafficAwareServer<'a> {
             live_pot: live_cch_pot.forward_potential(),
             live_graph,
             smooth_graph,
-            dijkstra_ops: BlockedPathsDijkstra::new(n),
+            dijkstra_ops: BlockedPathsDijkstra::new(n, m),
         }
     }
 
     pub fn query(&mut self, query: Query, epsilon: f64) -> Option<()> {
-        self.dijkstra_ops.reset();
+        self.dijkstra_ops.reset(&self.smooth_graph);
 
         self.live_pot.init(query.to);
         let base_live_dist = self.live_pot.potential(query.from)?;
@@ -810,10 +815,11 @@ impl<'a> TrafficAwareServer<'a> {
             }
 
             for violating_range in violating {
-                self.dijkstra_ops.add_forbidden_path(&path[violating_range.start..=violating_range.end]);
+                self.dijkstra_ops
+                    .add_forbidden_path(&path[violating_range.start..=violating_range.end], &self.smooth_graph);
             }
             // if cycle_pruning_broke_shortest_path {
-            self.dijkstra_ops.block_cycles();
+            self.dijkstra_ops.block_cycles(&self.smooth_graph);
             // } else {
             //     self.dijkstra_ops.cycles.clear();
             // }
@@ -862,9 +868,9 @@ mod tests {
     #[test]
     fn test_linking_forbidden_paths() {
         let graph = FirstOutGraph::new(&[0, 1, 2], &[1, 0], &[1, 1]);
-        let mut ops = BlockedPathsDijkstra::new(2);
+        let mut ops = BlockedPathsDijkstra::new(2, 2);
         let dd = DijkstraData::new(2);
-        ops.add_forbidden_path(&[0, 1]);
+        ops.add_forbidden_path(&[0, 1], &graph);
 
         assert_eq!(
             ops.link(
@@ -879,8 +885,8 @@ mod tests {
             vec![]
         );
 
-        let mut ops = BlockedPathsDijkstra::new(2);
-        ops.add_forbidden_path(&[0, 1, 0]);
+        let mut ops = BlockedPathsDijkstra::new(2, 2);
+        ops.add_forbidden_path(&[0, 1, 0], &graph);
         assert_eq!(
             ops.link(
                 &graph,
@@ -909,7 +915,7 @@ mod tests {
 
     #[test]
     fn test_merging() {
-        let mut ops = BlockedPathsDijkstra::new(0);
+        let mut ops = BlockedPathsDijkstra::new(0, 0);
         let mut current = vec![(10, ActiveForbittenPaths::One(1), (NodeIdT(1), ActiveForbittenPaths::One(0)))];
         let improved = ComplexDijkstraOps::<OwnedGraph>::merge(
             &mut ops,
