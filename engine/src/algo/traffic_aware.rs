@@ -117,35 +117,27 @@ impl UBSChecker<'_> {
             let &end = path.last().unwrap();
             self.target_pot.init(end);
             self.source_pot.init(start);
-            for &node in path {
-                self.target_pot.potential(node);
-                self.target_pot.unpack_path(NodeIdT(node));
-                self.source_pot.potential(node);
-                self.source_pot.unpack_path(NodeIdT(node));
-            }
-            let cch_order = self.target_pot.cch().node_order();
-
-            // sp tree to target
-            for &node in path {
-                path_parent(
-                    cch_order.rank(node),
-                    self.target_pot.target_shortest_path_tree(),
-                    &mut self.path_parent_cache,
-                    |cch_rank| {
-                        path_ranks[cch_order.node(cch_rank) as usize].value().map_or(false, |path_rank| {
-                            path_rank >= path_ranks[start as usize].value().unwrap() && path_rank <= path_ranks[end as usize].value().unwrap()
-                        })
-                    },
-                );
-            }
 
             let mut target_earliest_deviation_rank = None;
             for &[node, next_on_path] in path.array_windows::<2>() {
                 let path_dist = dists[path_ranks[end as usize].value().unwrap()] - dists[path_ranks[node as usize].value().unwrap() as usize];
                 let shortest_dist = self.target_pot.potential(node).unwrap();
+
+                if path_dist == shortest_dist {
+                    break;
+                }
+                self.target_pot.unpack_path(NodeIdT(node));
+
                 let next_on_path = self.target_pot.cch().node_order().rank(next_on_path);
                 let node = self.target_pot.cch().node_order().rank(node);
                 if self.target_pot.target_shortest_path_tree()[node as usize] != next_on_path && shortest_dist != path_dist {
+                    let cch_order = self.target_pot.cch().node_order();
+                    path_parent(node, self.target_pot.target_shortest_path_tree(), &mut self.path_parent_cache, |cch_rank| {
+                        path_ranks[cch_order.node(cch_rank) as usize].value().map_or(false, |path_rank| {
+                            path_rank >= path_ranks[start as usize].value().unwrap() && path_rank <= path_ranks[end as usize].value().unwrap()
+                        })
+                    });
+
                     let path_parent = self.path_parent_cache[node as usize].value().unwrap();
                     let path_parent_rank = path_ranks[self.target_pot.cch().node_order().node(path_parent) as usize].value().unwrap();
                     if let Some(target_earliest_deviation_rank_inner) = target_earliest_deviation_rank {
@@ -172,27 +164,26 @@ impl UBSChecker<'_> {
             }
 
             // sp tree from source
-            for &node in path {
-                let cch_order = self.target_pot.cch().node_order();
-                path_parent(
-                    self.target_pot.cch().node_order().rank(node),
-                    self.source_pot.target_shortest_path_tree(),
-                    &mut self.path_parent_cache,
-                    |cch_rank| {
-                        path_ranks[cch_order.node(cch_rank) as usize].value().map_or(false, |path_rank| {
-                            path_rank >= path_ranks[start as usize].value().unwrap() && path_rank <= path_ranks[end as usize].value().unwrap()
-                        })
-                    },
-                );
-            }
-
             let mut source_earliest_deviation_rank = None;
-            for &[prev_on_path, node] in path.array_windows::<2>() {
+            for &[prev_on_path, node] in path.array_windows::<2>().rev() {
                 let path_dist = dists[path_ranks[node as usize].value().unwrap() as usize] - dists[path_ranks[start as usize].value().unwrap()];
                 let shortest_dist = self.source_pot.potential(node).unwrap();
+
+                if path_dist == shortest_dist {
+                    break;
+                }
+                self.source_pot.unpack_path(NodeIdT(node));
+
                 let prev_on_path = self.target_pot.cch().node_order().rank(prev_on_path);
                 let node = self.target_pot.cch().node_order().rank(node);
                 if self.source_pot.target_shortest_path_tree()[node as usize] != prev_on_path && shortest_dist != path_dist {
+                    let cch_order = self.target_pot.cch().node_order();
+                    path_parent(node, self.source_pot.target_shortest_path_tree(), &mut self.path_parent_cache, |cch_rank| {
+                        path_ranks[cch_order.node(cch_rank) as usize].value().map_or(false, |path_rank| {
+                            path_rank >= path_ranks[start as usize].value().unwrap() && path_rank <= path_ranks[end as usize].value().unwrap()
+                        })
+                    });
+
                     let path_parent = self.path_parent_cache[node as usize].value().unwrap();
                     let path_parent_rank = path_ranks[self.target_pot.cch().node_order().node(path_parent) as usize].value().unwrap();
                     if let Some(source_earliest_deviation_rank_inner) = source_earliest_deviation_rank {
