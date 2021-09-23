@@ -96,9 +96,8 @@ impl UBSChecker<'_> {
             if let Some(prev_rank) = path_ranks[node as usize].value() {
                 eprintln!("Found Cycle of len: {}", rank - prev_rank);
                 violating.push(prev_rank..rank)
-            } else {
-                path_ranks[node as usize] = InRangeOption::new(Some(rank));
             }
+            path_ranks[node as usize] = InRangeOption::new(Some(rank));
         }
 
         if !violating.is_empty() {
@@ -325,15 +324,34 @@ impl BlockedPathsDijkstra {
         }
     }
 
-    pub fn add_forbidden_path(&mut self, path: &[NodeId]) -> Result<(), ()> {
+    pub fn add_forbidden_path(&mut self, path: &[NodeId]) {
+        if cfg!(debug_assertions) {
+            let mut active_forbidden_paths = ActiveForbittenPaths::new(self.node_forbidden_paths[path[0] as usize].len());
+
+            for &[tail, head] in path.array_windows::<2>() {
+                let mut head_active_forbidden_paths = ActiveForbittenPaths::new(self.node_forbidden_paths[head as usize].len());
+                for (local_idx, &(global_id, current_node_path_offset)) in self.node_forbidden_paths[tail as usize].iter().enumerate() {
+                    if current_node_path_offset == 0 || active_forbidden_paths.get(local_idx) {
+                        if self.forbidden_paths[global_id][current_node_path_offset].0 .0 == head {
+                            if self.forbidden_paths[global_id].len() == current_node_path_offset + 1 {
+                                if head == *path.last().unwrap() {
+                                    panic!("path already forbidden: {:#?}", path);
+                                } else {
+                                    dbg!("subpath already forbidden");
+                                    return;
+                                }
+                            } else {
+                                head_active_forbidden_paths.set(self.forbidden_paths[global_id][current_node_path_offset].1 as usize);
+                            }
+                        }
+                    }
+                }
+                active_forbidden_paths = head_active_forbidden_paths;
+            }
+        }
+
         let global_id = self.forbidden_paths.len();
         let mut forbidden_path = Vec::with_capacity(path.len() - 1);
-
-        // for &head in &path[1..] {
-        //     if self.node_forbidden_paths[head as usize].len() >= 128 {
-        //         return Err(());
-        // }
-        // }
 
         for (node_path_index, &[tail, head]) in path.array_windows::<2>().enumerate() {
             let node_forbidden_path_index = self.node_forbidden_paths[head as usize].len();
@@ -343,8 +361,6 @@ impl BlockedPathsDijkstra {
 
         self.forbidden_paths_start_nodes.push(NodeIdT(path[0]));
         self.forbidden_paths.push(forbidden_path);
-
-        Ok(())
     }
 
     pub fn reset(&mut self) {
@@ -402,7 +418,7 @@ impl<G> ComplexDijkstraOps<G> for BlockedPathsDijkstra {
                 }
             }
             if !illegal {
-                linked.push((l.0 + link.weight, ActiveForbittenPaths(head_active_forbidden_paths), (NodeIdT(tail), l.1)));
+                linked.push((l.0 + link.weight, head_active_forbidden_paths, (NodeIdT(tail), l.1.clone())));
             }
         }
 
@@ -620,7 +636,11 @@ impl<'a> TrafficAwareServer<'a> {
 
         let mut i = 0;
         let mut iterations_ctxt = push_collection_context("iterations".to_string());
-        let result = 'ipb: loop {
+        let result = loop {
+            if i > 200 {
+                break None;
+            }
+
             let _it_ctxt = iterations_ctxt.push_collection_item();
             i += 1;
             report!("iteration", i);
@@ -674,6 +694,10 @@ impl<'a> TrafficAwareServer<'a> {
 
                 if let Some(parent_label_idx) = self.dijkstra_data.distances[*parent as usize]
                     .iter()
+                    // why is_subset instead of ==
+                    // because at node u, a better label (without some forbidden path [..., u, w])
+                    // with same dist might get merged but when linking this new label along uv this will not cause a merge at v
+                    // because its not on that forbidden path and thus both labels have the same bitsets.
                     .position(|l| l.0 == dist - self.live_graph.link(min_weight_edge.0).weight && l.1.is_subset(&parent_active_forb_paths))
                 {
                     label_idx = parent_label_idx;
@@ -696,13 +720,7 @@ impl<'a> TrafficAwareServer<'a> {
             }
 
             for violating_range in violating {
-                if self
-                    .dijkstra_ops
-                    .add_forbidden_path(&path[violating_range.start..=violating_range.end])
-                    .is_err()
-                {
-                    break 'ipb None;
-                }
+                self.dijkstra_ops.add_forbidden_path(&path[violating_range.start..=violating_range.end]);
             }
         };
         drop(iterations_ctxt);
@@ -751,7 +769,7 @@ mod tests {
         let graph = FirstOutGraph::new(&[0, 0, 0], &[], &[]);
         let mut ops = BlockedPathsDijkstra::new(2);
         let dd = DijkstraData::new(2);
-        ops.add_forbidden_path(&[0, 1]).unwrap();
+        ops.add_forbidden_path(&[0, 1]);
 
         assert_eq!(
             ops.link(
@@ -767,7 +785,7 @@ mod tests {
         );
 
         let mut ops = BlockedPathsDijkstra::new(2);
-        ops.add_forbidden_path(&[0, 1, 0]).unwrap();
+        ops.add_forbidden_path(&[0, 1, 0]);
         assert_eq!(
             ops.link(
                 &graph,
