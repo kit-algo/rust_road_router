@@ -388,7 +388,7 @@ impl BlockedPathsDijkstra {
 
 impl<G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> ComplexDijkstraOps<G> for BlockedPathsDijkstra {
     type Label = Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths))>;
-    type Arc = Link;
+    type Arc = (NodeIdT, EdgeIdT);
     type LinkResult = Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths))>;
     type PredecessorLink = ();
 
@@ -400,11 +400,12 @@ impl<G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> ComplexDijkstraOps<G> for Blo
         NodeIdT(tail): NodeIdT,
         key: Weight,
         label: &Self::Label,
-        link: &Self::Arc,
+        &(NodeIdT(head), EdgeIdT(link_id)): &Self::Arc,
     ) -> Self::LinkResult {
+        let weight = graph.link(link_id).weight;
         let mut linked = Vec::new();
 
-        // let fastest_existing_label = labels[link.head() as usize].first();
+        // let fastest_existing_label = labels[head as usize].first();
 
         #[allow(unused)]
         for (i, l) in label.iter().enumerate() {
@@ -412,12 +413,12 @@ impl<G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> ComplexDijkstraOps<G> for Blo
                 continue;
             }
             let mut illegal = false;
-            let mut head_active_forbidden_paths = ActiveForbittenPaths::new(self.node_forbidden_paths[link.node as usize].len());
+            let mut head_active_forbidden_paths = ActiveForbittenPaths::new(self.node_forbidden_paths[head as usize].len());
             let active_forbidden_paths = &l.1;
 
             for (local_idx, &(global_id, current_node_path_offset)) in self.node_forbidden_paths[tail as usize].iter().enumerate() {
                 if current_node_path_offset == 0 || active_forbidden_paths.get(local_idx) {
-                    if self.forbidden_paths[global_id][current_node_path_offset].0 .0 == link.node {
+                    if self.forbidden_paths[global_id][current_node_path_offset].0 .0 == head {
                         if self.forbidden_paths[global_id].len() == current_node_path_offset + 1 {
                             illegal = true;
                             break;
@@ -429,7 +430,7 @@ impl<G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> ComplexDijkstraOps<G> for Blo
             }
             // if !illegal {
             //     if let Some(fastest_existing_label) = fastest_existing_label {
-            //         if fastest_existing_label.0 < l.0 + link.weight && !fastest_existing_label.1.is_subset(&head_active_forbidden_paths) {
+            //         if fastest_existing_label.0 < l.0 + weight && !fastest_existing_label.1.is_subset(&head_active_forbidden_paths) {
             //             let mut label_idx = i;
             //             let mut cur = tail;
             //             while labels[cur as usize][label_idx].0 > fastest_existing_label.0 {
@@ -452,7 +453,7 @@ impl<G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> ComplexDijkstraOps<G> for Blo
 
             //                 cur = *parent;
 
-            //                 if cur == link.node {
+            //                 if cur == head {
             //                     let mut cycle = Vec::new();
             //                     cycle.push(cur);
             //                     cycle.push(tail);
@@ -460,7 +461,7 @@ impl<G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> ComplexDijkstraOps<G> for Blo
             //                     label_idx = i;
             //                     cur = tail;
 
-            //                     while cur != link.node {
+            //                     while cur != head {
             //                         let (dist, _, (NodeIdT(parent), parent_active_forb_paths)) = &labels[cur as usize][label_idx];
             //                         cycle.push(*parent);
 
@@ -492,7 +493,7 @@ impl<G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> ComplexDijkstraOps<G> for Blo
             //     }
             // }
             if !illegal {
-                linked.push((l.0 + link.weight, head_active_forbidden_paths, (NodeIdT(tail), l.1.clone())));
+                linked.push((l.0 + weight, head_active_forbidden_paths, (NodeIdT(tail), l.1.clone())));
             }
         }
 
@@ -860,7 +861,7 @@ mod tests {
 
     #[test]
     fn test_linking_forbidden_paths() {
-        let graph = FirstOutGraph::new(&[0, 0, 0], &[], &[]);
+        let graph = FirstOutGraph::new(&[0, 1, 2], &[1, 0], &[1, 1]);
         let mut ops = BlockedPathsDijkstra::new(2);
         let dd = DijkstraData::new(2);
         ops.add_forbidden_path(&[0, 1]);
@@ -873,7 +874,7 @@ mod tests {
                 NodeIdT(0),
                 0,
                 &vec![(0, ActiveForbittenPaths::One(0), (NodeIdT(0), ActiveForbittenPaths::One(0)))],
-                &Link { node: 1, weight: 1 },
+                &(NodeIdT(1), EdgeIdT(0)),
             ),
             vec![]
         );
@@ -888,7 +889,7 @@ mod tests {
                 NodeIdT(0),
                 0,
                 &vec![(0, ActiveForbittenPaths::One(0), (NodeIdT(0), ActiveForbittenPaths::One(0)))],
-                &Link { node: 1, weight: 1 },
+                &(NodeIdT(1), EdgeIdT(0)),
             ),
             vec![(1, ActiveForbittenPaths::One(1), (NodeIdT(0), ActiveForbittenPaths::One(0)))]
         );
@@ -900,7 +901,7 @@ mod tests {
                 NodeIdT(1),
                 0,
                 &vec![(1, ActiveForbittenPaths::One(1), (NodeIdT(0), ActiveForbittenPaths::One(0)))],
-                &Link { node: 0, weight: 1 }
+                &(NodeIdT(0), EdgeIdT(1))
             ),
             vec![]
         );
