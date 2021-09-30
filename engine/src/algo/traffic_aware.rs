@@ -78,7 +78,7 @@ impl UBSChecker<'_> {
                 }
             }
 
-            let ending_at_current_end = active.entry(range.end).or_insert(Vec::new());
+            let ending_at_current_end = active.entry(range.end).or_insert_with(Vec::new);
             ending_at_current_end.push(i);
         }
 
@@ -256,7 +256,7 @@ impl ActiveForbittenPaths {
         if size <= 128 {
             Self::One(0)
         } else {
-            Self::More(std::iter::repeat(0).take(size + 127 / 128).collect())
+            Self::More(std::iter::repeat(0).take((size + 127) / 128).collect())
         }
     }
 
@@ -544,9 +544,7 @@ impl<G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> ComplexDijkstraOps<G> for Blo
 
         updated
     }
-    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {
-        ()
-    }
+    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {}
 }
 
 pub struct PseudoBlockedPathsDijkstra {
@@ -562,11 +560,10 @@ impl PseudoBlockedPathsDijkstra {
         }
     }
 
-    pub fn add_forbidden_path(&mut self, path: &[NodeId]) -> Result<(), ()> {
+    pub fn add_forbidden_path(&mut self, path: &[NodeId]) {
         let (&last, rest) = path.split_last().unwrap();
         self.forbidden_paths_end_nodes.push(NodeIdT(last));
         self.node_forbidden_paths[last as usize].push(rest.iter().copied().map(NodeIdT).collect());
-        Ok(())
     }
 
     pub fn reset(&mut self) {
@@ -623,9 +620,7 @@ impl<G> ComplexDijkstraOps<G> for PseudoBlockedPathsDijkstra {
         }
         None
     }
-    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {
-        ()
-    }
+    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {}
 }
 
 pub struct TrafficAwareQuery(Query);
@@ -678,6 +673,7 @@ pub struct TrafficAwareServer<'a> {
     live_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>,
     smooth_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>,
     dijkstra_ops: BlockedPathsDijkstra,
+    // dijkstra_ops: PseudoBlockedPathsDijkstra,
 }
 
 impl<'a> TrafficAwareServer<'a> {
@@ -701,11 +697,13 @@ impl<'a> TrafficAwareServer<'a> {
             live_graph,
             smooth_graph,
             dijkstra_ops: BlockedPathsDijkstra::new(n, m),
+            // dijkstra_ops: PseudoBlockedPathsDijkstra::new(n),
         }
     }
 
     pub fn query(&mut self, query: Query, epsilon: f64) -> Option<()> {
         self.dijkstra_ops.reset(&self.smooth_graph);
+        // self.dijkstra_ops.reset();
 
         self.live_pot.init(query.to);
         let base_live_dist = self.live_pot.potential(query.from)?;

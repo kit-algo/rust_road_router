@@ -222,7 +222,7 @@ impl<P: Potential + Send + Clone> Penalty<P> {
                                 .unwrap_or(INFINITY)
                         {
                             feasable = true;
-                            alternative_graph_dijkstra.graph_mut().add_edges(&new_part);
+                            alternative_graph_dijkstra.graph_mut().add_edges(new_part);
                             s += 1;
                         }
                     }
@@ -246,7 +246,7 @@ impl<P: Potential + Send + Clone> Penalty<P> {
             let reversed_graph = ReversedAlternativeGraph {
                 graph: &self.reversed,
                 contained_edges: &alternative_graph_dijkstra.graph().contained_edges,
-                weights: &alternative_graph_dijkstra.graph().graph.graph.weight(),
+                weights: alternative_graph_dijkstra.graph().graph.graph.weight(),
             };
             let mut dijk_run = DijkstraRun::query(
                 &reversed_graph,
