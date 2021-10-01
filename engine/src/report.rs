@@ -147,7 +147,9 @@ impl Reporter {
                         CurrentReportingContext::Collection(collection) => object.insert(key, Value::Array(collection)),
                         CurrentReportingContext::Throwaway => None,
                     };
-                    assert_eq!(prev, None);
+                    if !cfg!(feature = "report-allow-override") {
+                        assert_eq!(prev, None);
+                    }
 
                     self.current = CurrentReportingContext::Object(object);
                 } else {
