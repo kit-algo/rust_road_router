@@ -86,6 +86,7 @@ where
         let departure = query.initial_state();
         let mut num_queue_pops = 0;
         potential.init(query.to());
+        report!("lower_bound", potential.potential(query.from()).unwrap_or(INFINITY));
 
         let into_core = virtual_topocore.bridge_node(query.from()).unwrap_or(query.from());
         let out_of_core = virtual_topocore.bridge_node(query.to()).unwrap_or(query.to());
@@ -657,7 +658,7 @@ impl<P: BiDirPotential, D: BidirChooseDir> BiDirServer<P, D> {
     }
 
     pub fn potentials(&self) -> &P {
-        &self.runner.potential.inner()
+        self.runner.potential.inner()
     }
 }
 
@@ -709,8 +710,7 @@ where
         Self: 's,
     = BiDirPathServerWrapper<'s, P, D, Query>;
 
-    fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight> {
-        let mut query = query.clone();
+    fn query(&mut self, mut query: Query) -> QueryResult<Self::P<'_>, Weight> {
         query.permutate(&self.virtual_topocore.order);
         QueryResult::new(self.runner.distance(query, INFINITY, None), BiDirPathServerWrapper(self, query))
     }
@@ -873,6 +873,7 @@ impl<P: BiDirPotential, D: BidirChooseDir> BiDirSkipLowDegRunner<P, D> {
         );
 
         self.potential.init(query.from(), query.to());
+        report!("lower_bound", self.potential.forward_potential_raw(query.from()).unwrap_or(INFINITY));
 
         let mut num_queue_pops = 0;
 
