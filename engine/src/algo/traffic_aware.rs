@@ -4,246 +4,13 @@ use crate::{
     algo::{
         a_star::*,
         ch_potentials::*,
-        customizable_contraction_hierarchy::*,
         dijkstra::{generic_dijkstra::ComplexDijkstraRun, *},
+        minimal_nonshortest_subpaths::*,
     },
-    datastr::{rank_select_map::BitVec, timestamped_vector::*},
+    datastr::timestamped_vector::*,
     report::*,
-    util::{in_range_option::InRangeOption, with_index},
+    util::with_index,
 };
-use std::{collections::BTreeMap, ops::Range};
-
-pub struct UBSChecker<'a> {
-    target_pot: CCHPotentialWithPathUnpacking<'a>,
-    source_pot: CCHPotentialWithPathUnpacking<'a>,
-    path_parent_cache: Vec<InRangeOption<NodeId>>,
-    path_ranks: Vec<InRangeOption<usize>>,
-}
-
-impl UBSChecker<'_> {
-    pub fn find_ubs_violating_subpaths<G>(&mut self, path: &[NodeId], graph: &G, epsilon: f64) -> Vec<Range<usize>>
-    where
-        G: EdgeIdGraph + EdgeRandomAccessGraph<Link>,
-    {
-        let mut dists = Vec::with_capacity(path.len());
-        dists.push(0);
-        for node_pair in path.windows(2) {
-            let mut min_edge_weight = INFINITY;
-            for EdgeIdT(edge_id) in graph.edge_indices(node_pair[0], node_pair[1]) {
-                min_edge_weight = std::cmp::min(min_edge_weight, graph.link(edge_id).weight);
-            }
-            dists.push(dists.last().unwrap() + min_edge_weight);
-        }
-        self.find_ubs_violating_subpaths_tree(path, &dists, epsilon)
-    }
-
-    #[allow(dead_code)]
-    fn find_ubs_violating_subpaths_naive(&mut self, path: &[NodeId], dists: &[Weight], epsilon: f64) -> Vec<Range<usize>> {
-        let mut violating = Vec::new();
-        for (end_rank, end) in path.iter().copied().enumerate() {
-            self.target_pot.init(end);
-            for (start_rank, start) in path[..end_rank].iter().copied().enumerate().rev() {
-                let path_dist = dists[end_rank] - dists[start_rank];
-                let shortest_dist = self.target_pot.potential(start).unwrap();
-                if path_dist - shortest_dist > (shortest_dist as f64 * epsilon) as Weight {
-                    violating.push(start_rank..end_rank);
-                    break;
-                }
-            }
-        }
-        Self::filter_covered(&mut violating);
-        violating
-    }
-
-    fn filter_covered(ranges: &mut Vec<Range<usize>>) {
-        ranges.sort_unstable_by(|lhs, rhs| {
-            let cmp_start = lhs.start.cmp(&rhs.start);
-            if let std::cmp::Ordering::Equal = cmp_start {
-                rhs.end.cmp(&lhs.end)
-            } else {
-                cmp_start
-            }
-        });
-
-        let mut covered = BitVec::new(ranges.len());
-        let mut active = BTreeMap::new();
-
-        for (i, range) in ranges.iter().enumerate() {
-            active = active.split_off(&range.start);
-
-            let active_and_covered = active.split_off(&range.end);
-            for (_, entry) in active_and_covered {
-                for idx in entry {
-                    covered.set(idx);
-                }
-            }
-
-            let ending_at_current_end = active.entry(range.end).or_insert_with(Vec::new);
-            ending_at_current_end.push(i);
-        }
-
-        ranges.retain(with_index(|index, _| !covered.get(index)));
-    }
-
-    fn find_ubs_violating_subpaths_tree(&mut self, path: &[NodeId], dists: &[Weight], epsilon: f64) -> Vec<Range<usize>> {
-        for rank in &self.path_ranks {
-            debug_assert!(rank.value().is_none());
-        }
-        let mut violating = Vec::new();
-        let path_ranks = &mut self.path_ranks;
-
-        for (rank, &node) in path.iter().enumerate() {
-            if let Some(prev_rank) = path_ranks[node as usize].value() {
-                eprintln!("Found Cycle of len: {}", rank - prev_rank);
-                violating.push(prev_rank..rank)
-            }
-            path_ranks[node as usize] = InRangeOption::new(Some(rank));
-        }
-
-        if !violating.is_empty() {
-            for &node in path {
-                self.path_ranks[node as usize] = InRangeOption::new(None);
-            }
-            return violating;
-        }
-
-        let full_path = path;
-        let mut path = path;
-
-        let mut i = 0;
-        while !path.is_empty() {
-            i += 1;
-            let &start = path.first().unwrap();
-            let &end = path.last().unwrap();
-            self.target_pot.init(end);
-            self.source_pot.init(start);
-
-            let mut target_earliest_deviation_rank = None;
-            for &[node, next_on_path] in path.array_windows::<2>() {
-                let path_dist = dists[path_ranks[end as usize].value().unwrap()] - dists[path_ranks[node as usize].value().unwrap() as usize];
-                let shortest_dist = self.target_pot.potential(node).unwrap();
-
-                if path_dist == shortest_dist {
-                    break;
-                }
-                self.target_pot.unpack_path(NodeIdT(node));
-
-                let next_on_path = self.target_pot.cch().node_order().rank(next_on_path);
-                let node = self.target_pot.cch().node_order().rank(node);
-                if self.target_pot.target_shortest_path_tree()[node as usize] != next_on_path && shortest_dist != path_dist {
-                    let cch_order = self.target_pot.cch().node_order();
-                    path_parent(node, self.target_pot.target_shortest_path_tree(), &mut self.path_parent_cache, |cch_rank| {
-                        path_ranks[cch_order.node(cch_rank) as usize].value().map_or(false, |path_rank| {
-                            path_rank >= path_ranks[start as usize].value().unwrap() && path_rank <= path_ranks[end as usize].value().unwrap()
-                        })
-                    });
-
-                    let path_parent = self.path_parent_cache[node as usize].value().unwrap();
-                    let path_parent_rank = path_ranks[self.target_pot.cch().node_order().node(path_parent) as usize].value().unwrap();
-                    if let Some(target_earliest_deviation_rank_inner) = target_earliest_deviation_rank {
-                        target_earliest_deviation_rank = Some(std::cmp::max(target_earliest_deviation_rank_inner, path_parent_rank));
-                    } else {
-                        target_earliest_deviation_rank = Some(path_parent_rank);
-                    }
-                }
-            }
-
-            for &node in path {
-                reset_path_parent_cache(
-                    self.target_pot.cch().node_order().rank(node),
-                    self.target_pot.target_shortest_path_tree(),
-                    &mut self.path_parent_cache,
-                );
-            }
-            for pp in &self.path_parent_cache {
-                debug_assert_eq!(pp.value(), None);
-            }
-
-            if target_earliest_deviation_rank.is_none() {
-                break;
-            }
-
-            // sp tree from source
-            let mut source_earliest_deviation_rank = None;
-            for &[prev_on_path, node] in path.array_windows::<2>().rev() {
-                let path_dist = dists[path_ranks[node as usize].value().unwrap() as usize] - dists[path_ranks[start as usize].value().unwrap()];
-                let shortest_dist = self.source_pot.potential(node).unwrap();
-
-                if path_dist == shortest_dist {
-                    break;
-                }
-                self.source_pot.unpack_path(NodeIdT(node));
-
-                let prev_on_path = self.target_pot.cch().node_order().rank(prev_on_path);
-                let node = self.target_pot.cch().node_order().rank(node);
-                if self.source_pot.target_shortest_path_tree()[node as usize] != prev_on_path && shortest_dist != path_dist {
-                    let cch_order = self.target_pot.cch().node_order();
-                    path_parent(node, self.source_pot.target_shortest_path_tree(), &mut self.path_parent_cache, |cch_rank| {
-                        path_ranks[cch_order.node(cch_rank) as usize].value().map_or(false, |path_rank| {
-                            path_rank >= path_ranks[start as usize].value().unwrap() && path_rank <= path_ranks[end as usize].value().unwrap()
-                        })
-                    });
-
-                    let path_parent = self.path_parent_cache[node as usize].value().unwrap();
-                    let path_parent_rank = path_ranks[self.target_pot.cch().node_order().node(path_parent) as usize].value().unwrap();
-                    if let Some(source_earliest_deviation_rank_inner) = source_earliest_deviation_rank {
-                        source_earliest_deviation_rank = Some(std::cmp::min(source_earliest_deviation_rank_inner, path_parent_rank));
-                    } else {
-                        source_earliest_deviation_rank = Some(path_parent_rank);
-                    }
-                }
-            }
-
-            for &node in path {
-                reset_path_parent_cache(
-                    self.target_pot.cch().node_order().rank(node),
-                    self.source_pot.target_shortest_path_tree(),
-                    &mut self.path_parent_cache,
-                );
-            }
-            for pp in &self.path_parent_cache {
-                debug_assert_eq!(pp.value(), None);
-            }
-
-            let target_earliest_deviation_rank = target_earliest_deviation_rank.unwrap();
-            let target_earliest_deviation_node = full_path[target_earliest_deviation_rank];
-            let source_earliest_deviation_rank = source_earliest_deviation_rank.unwrap();
-            let source_earliest_deviation_node = full_path[source_earliest_deviation_rank];
-
-            let target_path_base_dist = dists[path_ranks[end as usize].value().unwrap()] - dists[target_earliest_deviation_rank];
-            debug_assert_eq!(target_path_base_dist, self.target_pot.potential(target_earliest_deviation_node).unwrap());
-            let source_path_base_dist = dists[source_earliest_deviation_rank] - dists[path_ranks[start as usize].value().unwrap()];
-            debug_assert_eq!(source_path_base_dist, self.source_pot.potential(source_earliest_deviation_node).unwrap());
-
-            for &node in &full_path[source_earliest_deviation_rank..=target_earliest_deviation_rank] {
-                let path_dist = dists[path_ranks[node as usize].value().unwrap()] - dists[path_ranks[start as usize].value().unwrap()] - source_path_base_dist;
-                let shortest_dist = self.source_pot.potential(node).unwrap() - source_path_base_dist;
-                if path_dist - shortest_dist > (shortest_dist as f64 * epsilon) as Weight {
-                    violating.push(source_earliest_deviation_rank..path_ranks[node as usize].value().unwrap());
-                    break;
-                }
-            }
-            for &node in full_path[source_earliest_deviation_rank..=target_earliest_deviation_rank].iter().rev() {
-                let path_dist = dists[path_ranks[end as usize].value().unwrap()] - dists[path_ranks[node as usize].value().unwrap()] - target_path_base_dist;
-                let shortest_dist = self.target_pot.potential(node).unwrap() - target_path_base_dist;
-                if path_dist - shortest_dist > (shortest_dist as f64 * epsilon) as Weight {
-                    violating.push(path_ranks[node as usize].value().unwrap()..target_earliest_deviation_rank);
-                    break;
-                }
-            }
-
-            path = &full_path[source_earliest_deviation_rank + 1..target_earliest_deviation_rank];
-        }
-        report!("num_ubs_tree_iterations", i);
-
-        for &node in full_path {
-            self.path_ranks[node as usize] = InRangeOption::new(None);
-        }
-
-        Self::filter_covered(&mut violating);
-        violating
-    }
-}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ActiveForbittenPaths {
@@ -666,7 +433,7 @@ impl GenQuery<Weight> for TrafficAwareQuery {
 }
 
 pub struct TrafficAwareServer<'a> {
-    ubs_checker: UBSChecker<'a>,
+    ubs_checker: MinimalNonShortestSubPaths<'a>,
     dijkstra_data: DijkstraData<Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths))>>,
     // dijkstra_data: DijkstraData<Weight>,
     live_pot: CCHPotential<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>>,
@@ -686,12 +453,7 @@ impl<'a> TrafficAwareServer<'a> {
         let n = smooth_graph.num_nodes();
         let m = smooth_graph.num_arcs();
         Self {
-            ubs_checker: UBSChecker {
-                target_pot: smooth_cch_pot.forward_path_potential(),
-                source_pot: smooth_cch_pot.backward_path_potential(),
-                path_parent_cache: vec![InRangeOption::new(None); n],
-                path_ranks: vec![InRangeOption::new(None); n],
-            },
+            ubs_checker: MinimalNonShortestSubPaths::new(smooth_cch_pot),
             dijkstra_data: DijkstraData::new(n),
             live_pot: live_cch_pot.forward_potential(),
             live_graph,
@@ -761,8 +523,7 @@ impl<'a> TrafficAwareServer<'a> {
 
             // let mut cycle_pruning_broke_shortest_path = false;
 
-            let mut path = Vec::new();
-            path.push(query.to);
+            let mut path = vec![query.to];
 
             let mut label_idx = 0;
             while *path.last().unwrap() != query.from {
@@ -780,7 +541,7 @@ impl<'a> TrafficAwareServer<'a> {
                     // because at node u, a better label (without some forbidden path [..., u, w])
                     // with same dist might get merged but when linking this new label along uv this will not cause a merge at v
                     // because its not on that forbidden path and thus both labels have the same bitsets.
-                    .position(|l| l.0 == dist - self.live_graph.link(min_weight_edge.0).weight && l.1.is_subset(&parent_active_forb_paths))
+                    .position(|l| l.0 == dist - self.live_graph.link(min_weight_edge.0).weight && l.1.is_subset(parent_active_forb_paths))
                 {
                     label_idx = parent_label_idx;
                 } else {
@@ -807,7 +568,8 @@ impl<'a> TrafficAwareServer<'a> {
             report!("ubs_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
             ubs_time = ubs_time + time;
 
-            if violating.is_empty() && self.dijkstra_ops.cycles.is_empty() {
+            if violating.is_empty() {
+                // if violating.is_empty() && self.dijkstra_ops.cycles.is_empty() {
                 // if violating.is_empty() && !cycle_pruning_broke_shortest_path {
                 break Some(());
             }
@@ -815,9 +577,10 @@ impl<'a> TrafficAwareServer<'a> {
             for violating_range in violating {
                 self.dijkstra_ops
                     .add_forbidden_path(&path[violating_range.start..=violating_range.end], &self.smooth_graph);
+                // .add_forbidden_path(&path[violating_range.start..=violating_range.end]);
             }
             // if cycle_pruning_broke_shortest_path {
-            self.dijkstra_ops.block_cycles(&self.smooth_graph);
+            // self.dijkstra_ops.block_cycles(&self.smooth_graph);
             // } else {
             //     self.dijkstra_ops.cycles.clear();
             // }
@@ -839,29 +602,6 @@ impl<'a> TrafficAwareServer<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_filter_covered() {
-        let mut ranges = vec![0..1];
-        UBSChecker::filter_covered(&mut ranges);
-        assert_eq!(vec![0..1], ranges);
-
-        let mut ranges = vec![1..3, 1..2, 2..3, 0..3];
-        UBSChecker::filter_covered(&mut ranges);
-        assert_eq!(vec![1..2, 2..3], ranges);
-
-        let mut ranges = vec![0..1, 0..2];
-        UBSChecker::filter_covered(&mut ranges);
-        assert_eq!(vec![0..1], ranges);
-
-        let mut ranges = vec![1..2, 0..2];
-        UBSChecker::filter_covered(&mut ranges);
-        assert_eq!(vec![1..2], ranges);
-
-        let mut ranges = vec![0..1, 1..2];
-        UBSChecker::filter_covered(&mut ranges);
-        assert_eq!(vec![0..1, 1..2], ranges);
-    }
 
     #[test]
     fn test_linking_forbidden_paths() {

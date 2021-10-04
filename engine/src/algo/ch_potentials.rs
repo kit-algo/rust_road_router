@@ -27,6 +27,10 @@ impl CCHPotData {
         Self { customized }
     }
 
+    pub fn num_nodes(&self) -> usize {
+        self.customized.forward_graph().num_nodes()
+    }
+
     pub fn forward_potential(&self) -> CCHPotential<FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>, FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>> {
         let n = self.customized.forward_graph().num_nodes();
 
@@ -94,6 +98,7 @@ impl CCHPotData {
     }
 }
 
+#[derive(Clone)]
 pub struct CCHPotential<'a, GF, GB> {
     cch: &'a DirectedCCH,
     stack: Vec<NodeId>,
@@ -284,7 +289,7 @@ impl<'a> CCHPotentialWithPathUnpacking<'a> {
     }
 
     pub fn cch(&self) -> &DirectedCCH {
-        &self.cch
+        self.cch
     }
 }
 
@@ -659,9 +664,7 @@ impl<G: LinkIterGraph> DijkstraOps<G> for SimulBucketCHOps {
     }
 
     #[inline(always)]
-    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {
-        ()
-    }
+    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {}
 }
 
 impl Label for Vec<(NodeId, Weight)> {
@@ -669,7 +672,5 @@ impl Label for Vec<(NodeId, Weight)> {
     fn neutral() -> Self {
         Vec::new()
     }
-    fn key(&self) -> Self::Key {
-        ()
-    }
+    fn key(&self) -> Self::Key {}
 }

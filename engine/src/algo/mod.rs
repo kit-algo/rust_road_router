@@ -12,6 +12,7 @@ pub mod contraction_hierarchy;
 pub mod customizable_contraction_hierarchy;
 pub mod dijkstra;
 pub mod hl;
+pub mod minimal_nonshortest_subpaths;
 pub mod time_dependent_sampling;
 pub mod topocore;
 pub mod traffic_aware;

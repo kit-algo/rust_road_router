@@ -3,7 +3,6 @@
 use super::*;
 use crate::datastr::{index_heap::*, timestamped_vector::*};
 use crate::report::*;
-use crate::util::in_range_option::InRangeOption;
 
 pub mod gen_topo_dijkstra;
 pub mod generic_dijkstra;
@@ -100,28 +99,6 @@ impl<L: Label, PredLink: Copy> DijkstraData<L, PredLink> {
         path.reverse();
 
         path
-    }
-}
-
-pub fn path_parent(node: NodeId, predecessors: &[NodeId], path_parent_cache: &mut [InRangeOption<NodeId>], mut on_path: impl FnMut(NodeId) -> bool) -> NodeId {
-    if let Some(path_parent) = path_parent_cache[node as usize].value() {
-        return path_parent;
-    }
-
-    if on_path(predecessors[node as usize]) {
-        path_parent_cache[node as usize] = InRangeOption::new(Some(predecessors[node as usize]));
-        return predecessors[node as usize];
-    }
-
-    let pp = path_parent(predecessors[node as usize], predecessors, path_parent_cache, on_path);
-    path_parent_cache[node as usize] = InRangeOption::new(Some(pp));
-    pp
-}
-
-pub fn reset_path_parent_cache(node: NodeId, predecessors: &[NodeId], path_parent_cache: &mut [InRangeOption<NodeId>]) {
-    if path_parent_cache[node as usize].value().is_some() {
-        path_parent_cache[node as usize] = InRangeOption::new(None);
-        reset_path_parent_cache(predecessors[node as usize], predecessors, path_parent_cache);
     }
 }
 

@@ -215,7 +215,7 @@ pub trait BiDirPotential {
                 }
             }
         }
-        return false;
+        false
     }
     fn prune_backward(&mut self, NodeIdT(head): NodeIdT, bw_dist_head: Weight, reverse_min_queue: Weight, max_dist: Weight) -> bool {
         self.prune_backward_internal::<true>(NodeIdT(head), bw_dist_head, reverse_min_queue, max_dist)
@@ -233,7 +233,7 @@ pub trait BiDirPotential {
                 }
             }
         }
-        return false;
+        false
     }
 
     fn bidir_pot_key() -> &'static str;
