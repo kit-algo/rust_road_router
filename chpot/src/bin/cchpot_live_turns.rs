@@ -1,5 +1,6 @@
 use rust_road_router::{
     algo::{
+        a_star::*,
         ch_potentials::{query::Server as TopoServer, *},
         customizable_contraction_hierarchy::*,
         dijkstra::{
