@@ -72,11 +72,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[0]);
 
-    let potential = cch_pot_data.forward_potential();
+    let potential = TurnExpandedPotential::new(&graph, cch_pot_data.forward_potential());
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
     let topocore: TopoServer<OwnedGraph, _, _, true, true, true> = TopoServer::new(&exp_graph, potential, DefaultOps::default());
-    let mut topocore = CatchDisconnectedTarget::new(topocore, &graph);
+    let mut topocore = CatchDisconnectedTarget::new(topocore, &exp_graph);
     drop(virtual_topocore_ctxt);
 
     let n = exp_graph.num_nodes();
