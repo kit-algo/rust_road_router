@@ -274,6 +274,12 @@ impl<'a> CCHPotentialWithPathUnpacking<'a> {
             self.backward_parents[node as usize] = middle;
 
             if !self.path_unpacked.get(middle as usize) {
+                // will be called in the unpack_path_int call
+                // but we need to make sure that the parent of middle is parent
+                // so we call potential_int first, then set the parent
+                // and then the call in unpack_path won't override it again.
+                // This is only a problem with zero arcs and the induced non-unique shortest paths
+                self.potential_int(middle);
                 self.backward_parents[middle as usize] = parent;
                 self.unpack_path_int(NodeIdT(middle));
             }
