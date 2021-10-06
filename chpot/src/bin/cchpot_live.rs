@@ -20,8 +20,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &args.next().ok_or(CliErr("No graph directory arg given"))?;
     let path = Path::new(arg);
 
-    let graph = WeightedGraphReconstructor("live_travel_time").reconstruct_from(&path)?;
+    let mut graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
     let n = graph.num_nodes();
+    let live_travel_time = Vec::<Weight>::load_from(path.join("live_travel_time"))?;
+    for (query, input) in graph.weights_mut().iter_mut().zip(live_travel_time.iter()) {
+        if input > query {
+            *query = *input;
+        }
+    }
 
     let mut rng = experiments::rng(Default::default());
 

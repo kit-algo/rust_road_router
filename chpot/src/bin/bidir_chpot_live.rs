@@ -16,7 +16,7 @@ use rust_road_router::{
 use std::{env, error::Error, path::Path};
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let _reporter = enable_reporting("chpot_live");
+    let _reporter = enable_reporting("bidir_chpot_live");
 
     let mut args = env::args().skip(1);
     let arg = &args.next().ok_or(CliErr("No graph directory arg given"))?;
@@ -91,7 +91,7 @@ pub fn run(
         |_, _| None,
     );
 
-    let mut server = DijkServer::<_, _>::new(modified_graph);
+    let mut server = DijkServer::<_, _, _, AlternatingDirs>::new(modified_graph);
     experiments::run_random_queries(
         graph.num_nodes(),
         &mut server,

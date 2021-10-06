@@ -19,7 +19,7 @@ const TUNNEL_BIT: u8 = 1;
 const FREEWAY_BIT: u8 = 2;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let _reporter = enable_reporting("chpot_blocked");
+    let _reporter = enable_reporting("bidir_chpot_blocked");
     let arg = &env::args().skip(1).next().ok_or(CliErr("No graph directory arg given"))?;
     let path = Path::new(arg);
 
@@ -111,7 +111,7 @@ pub fn run(
         |_, _| None,
     );
 
-    let mut server = DijkServer::<_, _>::new(modified_graph);
+    let mut server = DijkServer::<_, _, _, AlternatingDirs>::new(modified_graph);
     experiments::run_random_queries(
         graph.num_nodes(),
         &mut server,

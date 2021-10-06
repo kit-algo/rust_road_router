@@ -19,14 +19,20 @@ use rust_road_router::{
 use std::{env, error::Error, path::Path};
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let _reporter = enable_reporting("chpot_turns");
+    let _reporter = enable_reporting("cchpot_turns");
 
     let mut rng = experiments::rng(Default::default());
 
     let arg = &env::args().skip(1).next().ok_or(CliErr("No graph directory arg given"))?;
     let path = Path::new(arg);
 
-    let graph = WeightedGraphReconstructor("live_travel_time").reconstruct_from(&path)?;
+    let mut graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
+    let live_travel_time = Vec::<Weight>::load_from(path.join("live_travel_time"))?;
+    for (query, input) in graph.weights_mut().iter_mut().zip(live_travel_time.iter()) {
+        if input > query {
+            *query = *input;
+        }
+    }
 
     let forbidden_turn_from_arc = Vec::<EdgeId>::load_from(path.join("forbidden_turn_from_arc"))?;
     let forbidden_turn_to_arc = Vec::<EdgeId>::load_from(path.join("forbidden_turn_to_arc"))?;
