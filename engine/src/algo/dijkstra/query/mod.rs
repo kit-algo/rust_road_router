@@ -26,7 +26,7 @@ pub mod disconnected_targets {
         {
             Self {
                 server,
-                reversed: UnweightedOwnedGraph::reversed(&graph),
+                reversed: UnweightedOwnedGraph::reversed(graph),
                 visited: FastClearBitVec::new(graph.num_nodes()),
             }
         }
@@ -61,7 +61,7 @@ pub mod disconnected_targets {
                     true
                 }
             });
-            return reachable;
+            reachable
         }
     }
 

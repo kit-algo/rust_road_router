@@ -53,7 +53,7 @@ impl BaselinePotential {
         OwnedGraph: BuildReversed<G>,
     {
         Self {
-            graph: OwnedGraph::reversed(&graph),
+            graph: OwnedGraph::reversed(graph),
             data: DijkstraData::new(graph.num_nodes()),
         }
     }
@@ -63,7 +63,7 @@ impl Potential for BaselinePotential {
     fn init(&mut self, target: NodeId) {
         report_time_with_key("BaselinePotential init", "baseline_pot_init", || {
             let mut ops = DefaultOps();
-            let mut dijkstra = DijkstraRun::query(
+            let dijkstra = DijkstraRun::query(
                 &self.graph,
                 &mut self.data,
                 &mut ops,
@@ -72,7 +72,7 @@ impl Potential for BaselinePotential {
                     to: self.graph.num_nodes() as NodeId,
                 },
             );
-            while let Some(_) = dijkstra.next() {}
+            for _ in dijkstra {}
         })
     }
 
