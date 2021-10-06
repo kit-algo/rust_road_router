@@ -70,12 +70,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     );
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
-    let server = BiDirTopo::<_, AlternatingDirs>::new(&exp_graph, SymmetricBiDirPotential::<_, _>::new(pots.0, pots.1));
-    let mut server = CatchDisconnectedTarget::new(server, &exp_graph);
+    let mut server = BiDirTopo::<_, AlternatingDirs>::new(&exp_graph, SymmetricBiDirPotential::<_, _>::new(pots.0, pots.1));
     drop(virtual_topocore_ctxt);
 
+    let n = exp_graph.num_nodes();
     experiments::run_random_queries_with_callbacks(
-        graph.num_nodes(),
+        n,
         &mut server,
         &mut rng,
         &mut algo_runs_ctxt,
@@ -102,7 +102,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut server = DijkServer::<_, _, _, AlternatingDirs>::new(exp_graph);
 
     experiments::run_random_queries(
-        graph.num_nodes(),
+        n,
         &mut server,
         &mut rng,
         &mut algo_runs_ctxt,

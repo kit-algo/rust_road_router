@@ -374,7 +374,8 @@ impl<PF: Potential, PB: Potential, const IP: bool> BiDirPotential for SymmetricB
         self.backward_potential.init(source);
     }
     fn stop(&mut self, fw_min_queue: Option<Weight>, bw_min_queue: Option<Weight>, stop_dist: Weight) -> bool {
-        self.stop_forward(fw_min_queue, bw_min_queue, stop_dist) && self.stop_backward(fw_min_queue, bw_min_queue, stop_dist)
+        (self.stop_forward(fw_min_queue, bw_min_queue, stop_dist) && self.stop_backward(fw_min_queue, bw_min_queue, stop_dist))
+            || (stop_dist == INFINITY && (fw_min_queue.is_none() || bw_min_queue.is_none()))
     }
     fn stop_forward(&mut self, fw_min_queue: Option<Weight>, _bw_min_queue: Option<Weight>, stop_dist: Weight) -> bool {
         fw_min_queue.map(|key| key >= stop_dist).unwrap_or(true)
