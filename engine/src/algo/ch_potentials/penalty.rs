@@ -629,9 +629,12 @@ impl<'a, G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> PenaltyIterative<'a, G> {
                 for node in &mut alternative {
                     *node = self.virtual_topocore.order.node(*node);
                 }
+                let path_stats = &mut self.path_stats;
+                let original_graph = self.original_graph;
                 report!(
                     "local_optimality_percent",
-                    self.path_stats.local_optimality(&alternative, self.original_graph) * 100 / base_dist
+                    report_time_with_key("path_stats", "path_stats", || path_stats.local_optimality(&alternative, original_graph) * 100
+                        / base_dist)
                 );
             }
 
