@@ -2,10 +2,7 @@ use rust_road_router::{
     algo::{
         a_star::*,
         ch_potentials::{query::BiDirServer as BiDirTopo, *},
-        dijkstra::{
-            query::{bidirectional_dijkstra::Server as DijkServer, disconnected_targets::CatchDisconnectedTarget},
-            AlternatingDirs,
-        },
+        dijkstra::{query::bidirectional_dijkstra::Server as DijkServer, AlternatingDirs},
     },
     cli::CliErr,
     datastr::graph::*,

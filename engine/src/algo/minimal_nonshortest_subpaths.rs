@@ -125,6 +125,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
             self.source_pot.init(start);
 
             let mut target_earliest_deviation_rank = None;
+            let mut target_earliest_suboptimal_rank = path_ranks[start as usize].value().unwrap();
             for &[node, next_on_path] in path.array_windows::<2>() {
                 let path_dist = dists[path_ranks[end as usize].value().unwrap()] - dists[path_ranks[node as usize].value().unwrap() as usize];
                 let shortest_dist = self.target_pot.potential(node).unwrap();
@@ -132,6 +133,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
                 if path_dist == shortest_dist {
                     break;
                 }
+                target_earliest_suboptimal_rank = path_ranks[node as usize].value().unwrap() as usize;
                 self.target_pot.unpack_path(NodeIdT(node));
 
                 let next_on_path = self.target_pot.cch().node_order().rank(next_on_path);
@@ -171,6 +173,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
 
             // sp tree from source
             let mut source_earliest_deviation_rank = None;
+            let mut source_earliest_suboptimal_rank = path_ranks[end as usize].value().unwrap();
             for &[prev_on_path, node] in path.array_windows::<2>().rev() {
                 let path_dist = dists[path_ranks[node as usize].value().unwrap() as usize] - dists[path_ranks[start as usize].value().unwrap()];
                 let shortest_dist = self.source_pot.potential(node).unwrap();
@@ -178,6 +181,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
                 if path_dist == shortest_dist {
                     break;
                 }
+                source_earliest_suboptimal_rank = path_ranks[node as usize].value().unwrap() as usize;
                 self.source_pot.unpack_path(NodeIdT(node));
 
                 let prev_on_path = self.target_pot.cch().node_order().rank(prev_on_path);
@@ -221,7 +225,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
             let source_path_base_dist = dists[source_earliest_deviation_rank] - dists[path_ranks[start as usize].value().unwrap()];
             debug_assert_eq!(source_path_base_dist, self.source_pot.potential(source_earliest_deviation_node).unwrap());
 
-            for &node in &full_path[source_earliest_deviation_rank..=target_earliest_deviation_rank] {
+            for &node in &full_path[source_earliest_suboptimal_rank..=target_earliest_deviation_rank] {
                 let path_dist = dists[path_ranks[node as usize].value().unwrap()] - dists[path_ranks[start as usize].value().unwrap()] - source_path_base_dist;
                 let shortest_dist = self.source_pot.potential(node).unwrap() - source_path_base_dist;
                 if found_violating(
@@ -232,7 +236,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
                     break;
                 }
             }
-            for &node in full_path[source_earliest_deviation_rank..=target_earliest_deviation_rank].iter().rev() {
+            for &node in full_path[source_earliest_deviation_rank..=target_earliest_suboptimal_rank].iter().rev() {
                 let path_dist = dists[path_ranks[end as usize].value().unwrap()] - dists[path_ranks[node as usize].value().unwrap()] - target_path_base_dist;
                 let shortest_dist = self.target_pot.potential(node).unwrap() - target_path_base_dist;
                 if found_violating(
