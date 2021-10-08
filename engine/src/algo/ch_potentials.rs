@@ -5,7 +5,7 @@ use crate::{
         customizable_contraction_hierarchy::{query::stepped_elimination_tree::EliminationTreeWalk, *},
         dijkstra::*,
     },
-    datastr::{node_order::*, rank_select_map::FastClearBitVec, timestamped_vector::TimestampedVector},
+    datastr::{graph::first_out_graph::BorrowedGraph, node_order::*, rank_select_map::FastClearBitVec, timestamped_vector::TimestampedVector},
     io::*,
     report::*,
     util::in_range_option::InRangeOption,
@@ -31,7 +31,7 @@ impl CCHPotData {
         self.customized.forward_graph().num_nodes()
     }
 
-    pub fn forward_potential(&self) -> CCHPotential<FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>, FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>> {
+    pub fn forward_potential(&self) -> BorrowedCCHPot {
         let n = self.customized.forward_graph().num_nodes();
 
         CCHPotential {
@@ -46,7 +46,7 @@ impl CCHPotData {
         }
     }
 
-    pub fn backward_potential(&self) -> CCHPotential<FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>, FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>> {
+    pub fn backward_potential(&self) -> BorrowedCCHPot {
         let n = self.customized.forward_graph().num_nodes();
 
         CCHPotential {
@@ -110,6 +110,8 @@ pub struct CCHPotential<'a, GF, GB> {
     num_pot_computations: usize,
 }
 
+pub type BorrowedCCHPot<'a> = CCHPotential<'a, BorrowedGraph<'a>, BorrowedGraph<'a>>;
+
 impl<'a, GF, GB> CCHPotential<'a, GF, GB> {
     pub fn num_pot_computations(&self) -> usize {
         self.num_pot_computations
@@ -124,14 +126,13 @@ where
     fn init(&mut self, target: NodeId) {
         let target = self.cch.node_order().rank(target);
         self.potentials.reset();
-        let mut bw_walk = EliminationTreeWalk::query(
+        for _ in EliminationTreeWalk::query(
             &self.backward_cch_graph,
             self.cch.elimination_tree(),
             &mut self.backward_distances,
             &mut self.backward_parents,
             target,
-        );
-        while let Some(_) = bw_walk.next() {}
+        ) {}
         self.num_pot_computations = 0;
     }
 
@@ -193,14 +194,13 @@ impl<'a> Potential for CCHPotentialWithPathUnpacking<'a> {
         let target = self.cch.node_order().rank(target);
         self.path_unpacked.clear();
         self.potentials.reset();
-        let mut bw_walk = EliminationTreeWalk::query(
+        for _ in EliminationTreeWalk::query(
             &self.backward_cch_graph,
             self.cch.elimination_tree(),
             &mut self.backward_distances,
             &mut self.backward_parents,
             target,
-        );
-        while let Some(_) = bw_walk.next() {}
+        ) {}
         self.num_pot_computations = 0;
     }
 
@@ -335,7 +335,7 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> Potential for CHPotential<GF, GB> {
         self.potentials.reset();
 
         let mut ops = DefaultOps();
-        let mut backward_dijkstra_run = DijkstraRun::query(
+        for _ in DijkstraRun::query(
             &self.backward,
             &mut self.dijkstra_data,
             &mut ops,
@@ -343,8 +343,7 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> Potential for CHPotential<GF, GB> {
                 from: self.order.rank(target),
                 to: std::u32::MAX,
             },
-        );
-        while let Some(_) = backward_dijkstra_run.next() {}
+        ) {}
     }
 
     fn potential(&mut self, node: NodeId) -> Option<Weight> {
@@ -563,7 +562,7 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> BucketCHPotential<GF, GB> {
                 index: i as u32,
             });
         }
-        while let Some(_) = backward_dijkstra_run.next() {}
+        for _ in backward_dijkstra_run {}
     }
 
     pub fn potential(&mut self, node: NodeId) -> &[Weight] {

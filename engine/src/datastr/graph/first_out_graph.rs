@@ -87,6 +87,7 @@ where
 }
 
 pub type OwnedGraph = FirstOutGraph<Vec<EdgeId>, Vec<NodeId>, Vec<Weight>>;
+pub type BorrowedGraph<'a> = FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>;
 
 impl OwnedGraph {
     pub fn from_adjancecy_lists(adjancecy_lists: Vec<Vec<Link>>) -> OwnedGraph {
@@ -158,9 +159,9 @@ impl ReconstructPrepared<OwnedGraph> for WeightedGraphReconstructor {
 }
 
 impl<FirstOutContainer, HeadContainer> FirstOutGraph<FirstOutContainer, HeadContainer, Vec<Weight>> {
-    pub fn swap_weights(&mut self, mut new_weights: &mut Vec<Weight>) {
+    pub fn swap_weights(&mut self, new_weights: &mut Vec<Weight>) {
         assert!(new_weights.len() == self.weight.len());
-        swap(&mut self.weight, &mut new_weights);
+        swap(&mut self.weight, new_weights);
     }
 }
 
@@ -519,7 +520,7 @@ impl LinkIterable<(NodeIdT, Reversed)> for ReversedGraphWithEdgeIds {
             .iter()
             .copied()
             .map(NodeIdT)
-            .zip(self.edge_ids[range.clone()].iter().copied().map(EdgeIdT).map(Reversed))
+            .zip(self.edge_ids[range].iter().copied().map(EdgeIdT).map(Reversed))
     }
 }
 

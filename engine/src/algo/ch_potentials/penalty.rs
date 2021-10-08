@@ -12,9 +12,7 @@ pub struct Penalty<P> {
     //     SymmetricBiDirPotential<RecyclingPotential<PotentialForPermutated<P>>, RecyclingPotential<PotentialForPermutated<P>>>,
     //     AlternatingDirs,
     // >,
-    shortest_path_penalized: query::MultiThreadedBiDirSkipLowDegServer<
-        SymmetricBiDirPotential<RecyclingPotential<PotentialForPermutated<P>>, RecyclingPotential<PotentialForPermutated<P>>>,
-    >,
+    shortest_path_penalized: query::MultiThreadedBiDirSkipLowDegServer<BidirPenaltyPot<P>>,
     alternative_graph_dijkstra: query::SkipLowDegServer<AlternativeGraph<VirtualTopocoreGraph<OwnedGraph>>, DefaultOps, ZeroPotential, true, true>,
     reversed: ReversedGraphWithEdgeIds,
     tail: Vec<NodeId>,
@@ -22,6 +20,9 @@ pub struct Penalty<P> {
     nodes_to_reset: Vec<NodeId>,
     reverse_dijkstra_data: DijkstraData<Weight>,
 }
+
+type PenaltyPot<P> = RecyclingPotential<PotentialForPermutated<P>>;
+type BidirPenaltyPot<P> = SymmetricBiDirPotential<PenaltyPot<P>, PenaltyPot<P>>;
 
 impl<P: Potential + Send + Clone> Penalty<P> {
     pub fn new<G>(graph: &G, forward_potential: P, backward_potential: P) -> Self
@@ -78,8 +79,8 @@ impl<P: Potential + Send + Clone> Penalty<P> {
 
     pub fn alternatives(&mut self, mut query: Query) -> Option<()> {
         query.permutate(&self.virtual_topocore.order);
-        let core_from = self.virtual_topocore.bridge_node(query.from()).unwrap_or(query.from());
-        let core_to = self.virtual_topocore.bridge_node(query.to()).unwrap_or(query.to());
+        let core_from = self.virtual_topocore.bridge_node(query.from()).unwrap_or(query.from);
+        let core_to = self.virtual_topocore.bridge_node(query.to()).unwrap_or(query.to);
         let query = Query { from: core_from, to: core_to };
         self.alternative_graph_dijkstra.graph_mut().clear();
 
@@ -248,7 +249,7 @@ impl<P: Potential + Send + Clone> Penalty<P> {
                 contained_edges: &alternative_graph_dijkstra.graph().contained_edges,
                 weights: alternative_graph_dijkstra.graph().graph.graph.weight(),
             };
-            let mut dijk_run = DijkstraRun::query(
+            for _ in DijkstraRun::query(
                 &reversed_graph,
                 &mut self.reverse_dijkstra_data,
                 &mut ops,
@@ -256,8 +257,7 @@ impl<P: Potential + Send + Clone> Penalty<P> {
                     from: core_to,
                     to: self.reversed.num_nodes() as NodeId,
                 },
-            );
-            while let Some(_) = dijk_run.next() {}
+            ) {}
             let forward_dists = alternative_graph_dijkstra.one_to_all(core_from);
             let mut total_dist = 0.0;
             let mut avg_dist = 0;
@@ -297,7 +297,7 @@ impl<P: Potential + Send + Clone> Penalty<P> {
         }
     }
 
-    pub fn potentials(&self) -> impl Iterator<Item = &RecyclingPotential<PotentialForPermutated<P>>> {
+    pub fn potentials(&self) -> impl Iterator<Item = &PenaltyPot<P>> {
         // std::iter::once(self.shortest_path_penalized.potential())
         // let pots = self.shortest_path_penalized.potential();
         // vec![pots.forward(), pots.backward()].into_iter()
@@ -364,7 +364,7 @@ impl<'a, L, I: Iterator<Item = L>> Iterator for FilteredLinkIter<'a, I> {
     type Item = L;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some(e) = self.edge_ids.next() {
+        for e in self.edge_ids.by_ref() {
             let next = self.iter.next();
             if self.contained_edges.get(e) {
                 return next;
@@ -413,20 +413,7 @@ use crate::algo::minimal_nonshortest_subpaths::*;
 
 pub struct PenaltyIterative<'a, G> {
     virtual_topocore: VirtualTopocore,
-    shortest_path_penalized: query::MultiThreadedBiDirSkipLowDegServer<
-        SymmetricBiDirPotential<
-            RecyclingPotential<
-                PotentialForPermutated<
-                    CCHPotential<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>>,
-                >,
-            >,
-            RecyclingPotential<
-                PotentialForPermutated<
-                    CCHPotential<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>>,
-                >,
-            >,
-        >,
-    >,
+    shortest_path_penalized: query::MultiThreadedBiDirSkipLowDegServer<BidirPenaltyPot<BorrowedCCHPot<'a>>>,
     alternative_graph_dijkstra: query::SkipLowDegServer<AlternativeGraph<VirtualTopocoreGraph<OwnedGraph>>, DefaultOps, ZeroPotential, true, true>,
     reversed: ReversedGraphWithEdgeIds,
     tail: Vec<NodeId>,
@@ -487,10 +474,10 @@ impl<'a, G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> PenaltyIterative<'a, G> {
         }
     }
 
-    pub fn alternatives(&mut self, mut query: Query) -> Option<()> {
+    pub fn alternatives(&mut self, mut query: Query) -> Option<Vec<NodeId>> {
         query.permutate(&self.virtual_topocore.order);
-        let core_from = self.virtual_topocore.bridge_node(query.from()).unwrap_or(query.from());
-        let core_to = self.virtual_topocore.bridge_node(query.to()).unwrap_or(query.to());
+        let core_from = self.virtual_topocore.bridge_node(query.from()).unwrap_or(query.from);
+        let core_to = self.virtual_topocore.bridge_node(query.to()).unwrap_or(query.to);
         let query = Query { from: core_from, to: core_to };
         self.alternative_graph_dijkstra.graph_mut().clear();
 
@@ -519,7 +506,7 @@ impl<'a, G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> PenaltyIterative<'a, G> {
             let mut iterations_ctxt = push_collection_context("iterations".to_string());
 
             let mut i = 0;
-            let alternative = loop {
+            let mut alternative = loop {
                 i += 1;
                 let _iteration_ctxt = iterations_ctxt.push_collection_item();
                 report!("iteration", i);
@@ -625,15 +612,15 @@ impl<'a, G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> PenaltyIterative<'a, G> {
             report!("num_iterations", i);
             report!("success", alternative.is_some());
 
-            if let Some(mut alternative) = alternative {
-                for node in &mut alternative {
+            if let Some(alternative) = &mut alternative {
+                for node in alternative.iter_mut() {
                     *node = self.virtual_topocore.order.node(*node);
                 }
                 let path_stats = &mut self.path_stats;
                 let original_graph = self.original_graph;
                 report!(
                     "local_optimality_percent",
-                    report_time_with_key("path_stats", "path_stats", || path_stats.local_optimality(&alternative, original_graph) * 100
+                    report_time_with_key("path_stats", "path_stats", || path_stats.local_optimality(alternative, original_graph) * 100
                         / base_dist)
                 );
             }
@@ -650,21 +637,13 @@ impl<'a, G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> PenaltyIterative<'a, G> {
                 }
             }
 
-            Some(())
+            alternative
         } else {
             None
         }
     }
 
-    pub fn potentials(
-        &self,
-    ) -> impl Iterator<
-        Item = &RecyclingPotential<
-            PotentialForPermutated<
-                CCHPotential<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>>,
-            >,
-        >,
-    > {
+    pub fn potentials(&self) -> impl Iterator<Item = &PenaltyPot<BorrowedCCHPot>> {
         let pots = self.shortest_path_penalized.potentials();
         vec![pots.0.forward(), pots.0.backward(), pots.1.forward(), pots.1.backward()].into_iter()
     }
