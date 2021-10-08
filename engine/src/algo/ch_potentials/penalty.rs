@@ -409,9 +409,7 @@ impl LinkIterable<Link> for ReversedAlternativeGraph<'_> {
     }
 }
 
-use crate::algo::minimal_nonshortest_subpaths::*;
-
-pub struct PenaltyIterative<'a, G> {
+pub struct PenaltyIterative<'a> {
     virtual_topocore: VirtualTopocore,
     shortest_path_penalized: query::MultiThreadedBiDirSkipLowDegServer<BidirPenaltyPot<BorrowedCCHPot<'a>>>,
     alternative_graph_dijkstra: query::SkipLowDegServer<AlternativeGraph<VirtualTopocoreGraph<OwnedGraph>>, DefaultOps, ZeroPotential, true, true>,
@@ -419,12 +417,10 @@ pub struct PenaltyIterative<'a, G> {
     tail: Vec<NodeId>,
     times_penalized: Vec<u8>,
     nodes_to_reset: Vec<NodeId>,
-    path_stats: MinimalNonShortestSubPaths<'a>,
-    original_graph: &'a G,
 }
 
-impl<'a, G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> PenaltyIterative<'a, G> {
-    pub fn new(graph: &'a G, cch_pot: &'a CCHPotData) -> Self
+impl<'a> PenaltyIterative<'a> {
+    pub fn new<G>(graph: &'a G, cch_pot: &'a CCHPotData) -> Self
     where
         G: LinkIterable<NodeIdT>,
         OwnedGraph: BuildPermutated<G>,
@@ -443,7 +439,6 @@ impl<'a, G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> PenaltyIterative<'a, G> {
             }
         }
         Self {
-            path_stats: MinimalNonShortestSubPaths::new(cch_pot),
             shortest_path_penalized: query::MultiThreadedBiDirSkipLowDegServer::new(
                 main_graph.clone(),
                 SymmetricBiDirPotential::new(
@@ -470,7 +465,6 @@ impl<'a, G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> PenaltyIterative<'a, G> {
             times_penalized: vec![0; n],
             nodes_to_reset: Vec::new(),
             tail,
-            original_graph: graph,
         }
     }
 
@@ -508,7 +502,7 @@ impl<'a, G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> PenaltyIterative<'a, G> {
             let mut i = 0;
             let mut alternative = loop {
                 i += 1;
-                let _iteration_ctxt = iterations_ctxt.push_collection_item();
+                let iteration_ctxt = iterations_ctxt.push_collection_item();
                 report!("iteration", i);
 
                 for &EdgeIdT(edge) in &path_edges {
@@ -567,6 +561,8 @@ impl<'a, G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> PenaltyIterative<'a, G> {
 
                 if !any_penalized {
                     dbg!("saturated");
+                    drop(iteration_ctxt);
+                    drop(iterations_ctxt);
                     break None;
                 }
 
@@ -576,6 +572,8 @@ impl<'a, G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> PenaltyIterative<'a, G> {
                     result
                 } else {
                     dbg!("search pruned to death");
+                    drop(iteration_ctxt);
+                    drop(iterations_ctxt);
                     break None;
                 };
                 let penalty_dist = result.distance();
@@ -593,6 +591,8 @@ impl<'a, G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> PenaltyIterative<'a, G> {
                 if path_orig_len > max_orig_dist || penalty_dist > max_penalized_dist {
                     dbg!(path_orig_len > max_orig_dist);
                     dbg!(penalty_dist > max_penalized_dist);
+                    drop(iteration_ctxt);
+                    drop(iterations_ctxt);
                     break None;
                 }
 
@@ -603,11 +603,17 @@ impl<'a, G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> PenaltyIterative<'a, G> {
                     .sum();
 
                 if nonshared_length > path_orig_len / 5 {
+                    drop(iteration_ctxt);
+                    drop(iterations_ctxt);
+                    let num_differing_segments = path_edges
+                        .split(|&EdgeIdT(edge)| alternative_graph_dijkstra.graph().contained_edges.get(edge as usize))
+                        .filter(|part| !part.is_empty())
+                        .count();
+                    report!("sharing_percent", (path_orig_len - nonshared_length) * 100 / base_dist);
+                    report!("num_differing_segments", num_differing_segments);
                     break Some(path);
                 }
             };
-
-            drop(iterations_ctxt);
 
             report!("num_iterations", i);
             report!("success", alternative.is_some());
@@ -616,13 +622,6 @@ impl<'a, G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> PenaltyIterative<'a, G> {
                 for node in alternative.iter_mut() {
                     *node = self.virtual_topocore.order.node(*node);
                 }
-                let path_stats = &mut self.path_stats;
-                let original_graph = self.original_graph;
-                report!(
-                    "local_optimality_percent",
-                    report_time_with_key("path_stats", "path_stats", || path_stats.local_optimality(alternative, original_graph) * 100
-                        / base_dist)
-                );
             }
 
             for node in self.nodes_to_reset.drain(..) {

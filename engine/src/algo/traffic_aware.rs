@@ -7,7 +7,7 @@ use crate::{
         dijkstra::{generic_dijkstra::ComplexDijkstraRun, *},
         minimal_nonshortest_subpaths::*,
     },
-    datastr::timestamped_vector::*,
+    datastr::{graph::first_out_graph::BorrowedGraph, timestamped_vector::*},
     report::*,
     util::with_index,
 };
@@ -160,9 +160,9 @@ impl BlockedPathsDijkstra {
 }
 
 impl<G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> ComplexDijkstraOps<G> for BlockedPathsDijkstra {
-    type Label = Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths))>;
+    type Label = Vec<ForbiddenPathLabel>;
     type Arc = (NodeIdT, EdgeIdT);
-    type LinkResult = Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths))>;
+    type LinkResult = Vec<ForbiddenPathLabel>;
     type PredecessorLink = ();
 
     fn link(
@@ -432,24 +432,21 @@ impl GenQuery<Weight> for TrafficAwareQuery {
     }
 }
 
+type ForbiddenPathLabel = (Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths));
+
 pub struct TrafficAwareServer<'a> {
     ubs_checker: MinimalNonShortestSubPaths<'a>,
-    dijkstra_data: DijkstraData<Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths))>>,
+    dijkstra_data: DijkstraData<Vec<ForbiddenPathLabel>>,
     // dijkstra_data: DijkstraData<Weight>,
-    live_pot: CCHPotential<'a, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>, FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>>,
-    live_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>,
-    smooth_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>,
+    live_pot: BorrowedCCHPot<'a>,
+    live_graph: BorrowedGraph<'a>,
+    smooth_graph: BorrowedGraph<'a>,
     dijkstra_ops: BlockedPathsDijkstra,
     // dijkstra_ops: PseudoBlockedPathsDijkstra,
 }
 
 impl<'a> TrafficAwareServer<'a> {
-    pub fn new(
-        smooth_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>,
-        live_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>,
-        smooth_cch_pot: &'a CCHPotData,
-        live_cch_pot: &'a CCHPotData,
-    ) -> Self {
+    pub fn new(smooth_graph: BorrowedGraph<'a>, live_graph: BorrowedGraph<'a>, smooth_cch_pot: &'a CCHPotData, live_cch_pot: &'a CCHPotData) -> Self {
         let n = smooth_graph.num_nodes();
         let m = smooth_graph.num_arcs();
         Self {

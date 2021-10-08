@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate rust_road_router;
 use rust_road_router::{
-    algo::{ch_potentials::*, customizable_contraction_hierarchy::*, *},
+    algo::{ch_potentials::*, customizable_contraction_hierarchy::*, minimal_nonshortest_subpaths::*, *},
     cli::CliErr,
     datastr::{graph::*, node_order::*},
     experiments,
@@ -39,6 +39,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let _prepro_ctxt = algo_runs_ctxt.push_collection_item();
         penalty::PenaltyIterative::new(&graph, &cch_pot)
     };
+    let mut path_stats = MinimalNonShortestSubPaths::new(&cch_pot);
 
     let mut total_query_time = Duration::zero();
     let num_queries = experiments::chpot::num_queries();
@@ -52,12 +53,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         report!("from", from);
         report!("to", to);
 
-        let (_, time) = measure(|| penalty_server.alternatives(Query { from, to }));
+        let (res, time) = measure(|| penalty_server.alternatives(Query { from, to }));
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         report!(
             "pot_evals",
             penalty_server.potentials().map(|p| p.inner().inner().num_pot_computations()).sum::<usize>()
         );
+        if let Some(alternative) = res {
+            let (lo, ubs) = path_stats.suboptimal_stats(&alternative, &graph);
+            report!("local_optimality_percent", lo * 100.0);
+            report!("ubs", ubs);
+        }
         eprintln!();
 
         total_query_time = total_query_time + time;

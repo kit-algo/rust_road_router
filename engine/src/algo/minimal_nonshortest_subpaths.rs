@@ -71,7 +71,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
         violating
     }
 
-    pub fn local_optimality<G>(&mut self, path: &[NodeId], graph: &G) -> Weight
+    pub fn local_optimality<G>(&mut self, path: &[NodeId], graph: &G) -> f64
     where
         G: EdgeIdGraph + EdgeRandomAccessGraph<Link>,
     {
@@ -88,7 +88,8 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
         }
 
         let dists = path_dists(path, graph);
-        let mut local_optimality = *dists.last().unwrap();
+        let base_dist = *dists.last().unwrap();
+        let mut local_optimality = base_dist;
 
         self.tree_find_minimal_nonshortest(path, &dists, |_range, path_dist, shortest_dist| {
             if path_dist != shortest_dist {
@@ -103,7 +104,47 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
             self.path_ranks[node as usize] = InRangeOption::new(None);
         }
 
-        local_optimality
+        local_optimality as f64 / base_dist as f64
+    }
+
+    pub fn suboptimal_stats<G>(&mut self, path: &[NodeId], graph: &G) -> (f64, f64)
+    where
+        G: EdgeIdGraph + EdgeRandomAccessGraph<Link>,
+    {
+        for rank in &self.path_ranks {
+            debug_assert!(rank.value().is_none());
+        }
+        let path_ranks = &mut self.path_ranks;
+
+        for (rank, &node) in path.iter().enumerate() {
+            if let Some(prev_rank) = path_ranks[node as usize].value() {
+                panic!("Found Cycle of len: {}", rank - prev_rank);
+            }
+            path_ranks[node as usize] = InRangeOption::new(Some(rank));
+        }
+
+        let dists = path_dists(path, graph);
+        let base_dist = *dists.last().unwrap();
+        let mut local_optimality = base_dist;
+        let mut ubs = 0.0;
+
+        self.tree_find_minimal_nonshortest(path, &dists, |_range, path_dist, shortest_dist| {
+            debug_assert_ne!(shortest_dist, 0);
+            if path_dist != shortest_dist {
+                local_optimality = std::cmp::min(local_optimality, path_dist);
+                let new_ubs = (path_dist - shortest_dist) as f64 / (shortest_dist as f64);
+                if new_ubs > ubs {
+                    ubs = new_ubs;
+                }
+            }
+            false
+        });
+
+        for &node in path {
+            self.path_ranks[node as usize] = InRangeOption::new(None);
+        }
+
+        (local_optimality as f64 / base_dist as f64, ubs + 1.0)
     }
 
     fn tree_find_minimal_nonshortest(&mut self, path: &[NodeId], dists: &[Weight], mut found_violating: impl FnMut(Range<usize>, Weight, Weight) -> bool) {
