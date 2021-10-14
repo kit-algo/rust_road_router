@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     {
         let _exp_ctx = exps_ctxt.push_collection_item();
-        report!("experiment", "no_tunnels");
+        report!("experiment", "bidir_no_tunnels");
 
         run(path, |_graph, _rng, travel_time| {
             for (weight, &category) in travel_time.iter_mut().zip(arc_category.iter()) {
@@ -44,7 +44,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     {
         let _exp_ctx = exps_ctxt.push_collection_item();
-        report!("experiment", "no_highways");
+        report!("experiment", "bidir_no_highways");
 
         run(path, |_graph, _rng, travel_time| {
             for (weight, &category) in travel_time.iter_mut().zip(arc_category.iter()) {
