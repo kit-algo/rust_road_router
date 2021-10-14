@@ -68,8 +68,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut topocore = CatchDisconnectedTarget::new(topocore, &exp_graph);
     drop(virtual_topocore_ctxt);
 
+    let n = exp_graph.num_nodes();
     experiments::run_random_queries_with_callbacks(
-        exp_graph.num_nodes(),
+        n,
         &mut topocore,
         &mut rng,
         &mut algo_runs_ctxt,
@@ -96,7 +97,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut server = DijkServer::<_, DefaultOps>::new(exp_graph);
 
     experiments::run_random_queries(
-        graph.num_nodes(),
+        n,
         &mut server,
         &mut rng,
         &mut &mut algo_runs_ctxt,

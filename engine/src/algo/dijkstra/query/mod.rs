@@ -51,9 +51,9 @@ pub mod disconnected_targets {
             Self::dfs(&self.reversed, target, &mut self.visited, &mut |node| {
                 if node == source {
                     reachable = true;
-                    return false;
+                    return true;
                 }
-                if counter < 100 {
+                if counter < 200 {
                     counter += 1;
                     false
                 } else {
