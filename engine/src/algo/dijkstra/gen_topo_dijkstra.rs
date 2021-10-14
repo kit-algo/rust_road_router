@@ -118,7 +118,7 @@ where
                 let mut chain = Some(ChainStep {
                     prev_node: (node, self.ops.predecessor_link(&edge)),
                     next_node: edge.head(),
-                    next_distance: self.ops.link(&self.graph, &self.distances[node as usize], &edge),
+                    next_distance: self.ops.link(self.graph, &self.distances[node as usize], &edge),
                 });
                 let mut deg_three = None;
                 let mut had_deg_three = false;
@@ -187,7 +187,7 @@ where
                             chain = Some(ChainStep {
                                 prev_node: (next_node, self.ops.predecessor_link(&next_edge)),
                                 next_node: next_edge.head(),
-                                next_distance: self.ops.link(&self.graph, next_distance, &next_edge),
+                                next_distance: self.ops.link(self.graph, next_distance, &next_edge),
                             });
                         } else if endpoint {
                             if improve_callback(next_node, next_distance) {
@@ -210,7 +210,7 @@ where
                             edge_callback(&edge);
                             chain = Some(ChainStep {
                                 prev_node: (deg_three_node, self.ops.predecessor_link(&edge)),
-                                next_distance: self.ops.link(&self.graph, &self.distances[deg_three_node as usize], &edge),
+                                next_distance: self.ops.link(self.graph, &self.distances[deg_three_node as usize], &edge),
                                 next_node: edge.head(),
                             });
                         }
@@ -235,7 +235,7 @@ where
     }
 
     pub fn queue(&self) -> &IndexdMinHeap<State<<Ops::Label as super::Label>::Key>> {
-        &self.queue
+        self.queue
     }
 
     pub fn num_relaxed_arcs(&self) -> usize {
@@ -396,7 +396,7 @@ where
                 let mut chain = Some(ChainStep {
                     prev_node: (node, self.ops.predecessor_link(&edge)),
                     next_node: edge.head(),
-                    next_distance: self.ops.link(&self.graph, &self.distances.get(node as usize), &edge),
+                    next_distance: self.ops.link(self.graph, &self.distances.get(node as usize), &edge),
                 });
                 let mut deg_three = None;
                 let mut had_deg_three = false;
@@ -466,7 +466,7 @@ where
                             chain = Some(ChainStep {
                                 prev_node: (next_node, self.ops.predecessor_link(&next_edge)),
                                 next_node: next_edge.head(),
-                                next_distance: self.ops.link(&self.graph, &next_distance, &next_edge),
+                                next_distance: self.ops.link(self.graph, &next_distance, &next_edge),
                             });
                         } else if endpoint {
                             if improve_callback(next_node, &next_distance) {
@@ -489,7 +489,7 @@ where
                             edge_callback(&edge);
                             chain = Some(ChainStep {
                                 prev_node: (deg_three_node, self.ops.predecessor_link(&edge)),
-                                next_distance: self.ops.link(&self.graph, &self.distances.get(deg_three_node as usize), &edge),
+                                next_distance: self.ops.link(self.graph, &self.distances.get(deg_three_node as usize), &edge),
                                 next_node: edge.head(),
                             });
                         }
@@ -510,7 +510,7 @@ where
     }
 
     pub fn queue(&self) -> &IndexdMinHeap<State<<Ops::Label as super::Label>::Key>> {
-        &self.queue
+        self.queue
     }
 
     pub fn num_relaxed_arcs(&self) -> usize {

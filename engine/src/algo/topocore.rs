@@ -43,7 +43,7 @@ impl<'b, L, G: LinkIterable<L>, H: LinkIterable<L>> LinkIterable<L> for Undirect
 }
 
 #[allow(clippy::cognitive_complexity)]
-pub fn preprocess<'c, Graph: LinkIterGraph + LinkIterable<NodeIdT>, ReorderBCC: Bool, Deg1: Bool, Deg2: Bool, Deg3: Bool>(graph: &Graph) -> Topocore {
+pub fn preprocess<Graph: LinkIterGraph + LinkIterable<NodeIdT>, ReorderBCC: Bool, Deg1: Bool, Deg2: Bool, Deg3: Bool>(graph: &Graph) -> Topocore {
     let order = dfs_pre_order(graph);
 
     let n = graph.num_nodes();
@@ -312,7 +312,7 @@ pub fn preprocess<'c, Graph: LinkIterGraph + LinkIterable<NodeIdT>, ReorderBCC: 
                 .chain(node_ins.iter())
                 .map(|&Link { node, .. }| node)
                 .collect::<Vec<_>>()
-                .tap(|neighborhood| neighborhood.sort())
+                .tap(|neighborhood| neighborhood.sort_unstable())
                 .tap(|neighborhood| neighborhood.dedup())
         };
 
@@ -480,23 +480,52 @@ impl VirtualTopocore {
     }
 }
 
+fn symmetric_degree(fw_iter: impl Iterator<Item = NodeIdT>, bw_iter: impl Iterator<Item = NodeIdT>) -> usize {
+    let mut fw_heads: Vec<_> = fw_iter.collect();
+    let mut bw_heads: Vec<_> = bw_iter.collect();
+    fw_heads.sort_unstable();
+    bw_heads.sort_unstable();
+    let mut deg = 0;
+    let mut fw_iter = fw_heads.iter().peekable();
+    let mut bw_iter = bw_heads.iter().peekable();
+
+    loop {
+        match (fw_iter.peek(), bw_iter.peek()) {
+            (Some(NodeIdT(fw_head)), Some(NodeIdT(bw_head))) => {
+                deg += 1;
+                use std::cmp::Ordering::*;
+                match fw_head.cmp(bw_head) {
+                    Equal => {
+                        fw_iter.next();
+                        bw_iter.next()
+                    }
+                    Less => fw_iter.next(),
+                    Greater => bw_iter.next(),
+                };
+            }
+            (Some(NodeIdT(_)), None) => {
+                fw_iter.next();
+                deg += 1;
+            }
+            (None, Some(NodeIdT(_))) => {
+                bw_iter.next();
+                deg += 1;
+            }
+            _ => break,
+        }
+    }
+    deg
+}
+
 #[allow(clippy::cognitive_complexity)]
-pub fn virtual_topocore<'c, Graph: LinkIterable<NodeIdT>>(graph: &Graph) -> VirtualTopocore {
+pub fn virtual_topocore<Graph: LinkIterable<NodeIdT>>(graph: &Graph) -> VirtualTopocore {
     let order = dfs_pre_order(graph);
     let n = graph.num_nodes();
 
     let reversed = UnweightedOwnedGraph::reversed(graph);
 
     let symmetric_degrees = (0..graph.num_nodes())
-        .map(|node| {
-            graph
-                .link_iter(node as NodeId)
-                .chain(LinkIterable::<NodeIdT>::link_iter(&reversed, node as NodeId))
-                .collect::<Vec<NodeIdT>>()
-                .tap(|neighbors| neighbors.sort_unstable())
-                .tap(|neighbors| neighbors.dedup())
-                .len() as u8
-        })
+        .map(|node| symmetric_degree(graph.link_iter(node as NodeId), LinkIterable::<NodeIdT>::link_iter(&reversed, node as NodeId)) as u8)
         .collect::<Vec<u8>>();
 
     let biggest = biconnected(&UndirectedGraph { ins: &reversed, outs: graph })
@@ -611,11 +640,11 @@ impl<Graph> VirtualTopocoreGraph<Graph> {
         let topocore = virtual_topocore(graph);
         (
             VirtualTopocoreGraph {
-                graph: <Graph as BuildPermutated<G>>::permutated(&graph, &topocore.order),
+                graph: <Graph as BuildPermutated<G>>::permutated(graph, &topocore.order),
                 virtual_topocore: topocore.clone(),
             },
             VirtualTopocoreGraph {
-                graph: <Graph as BuildPermutated<G>>::permutated_filtered(&graph, &topocore.order, Box::new(|_, _| false)),
+                graph: <Graph as BuildPermutated<G>>::permutated_filtered(graph, &topocore.order, Box::new(|_, _| false)),
                 virtual_topocore: topocore.clone(),
             },
             topocore,
