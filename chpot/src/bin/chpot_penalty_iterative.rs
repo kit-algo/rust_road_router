@@ -49,7 +49,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         let from: NodeId = rng.gen_range(0..graph.num_nodes() as NodeId);
         let to: NodeId = rng.gen_range(0..graph.num_nodes() as NodeId);
 
-        eprintln!();
         report!("from", from);
         report!("to", to);
 
@@ -64,7 +63,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             report!("local_optimality_percent", lo * 100.0);
             report!("ubs", ubs);
         }
-        eprintln!();
 
         total_query_time = total_query_time + time;
     }

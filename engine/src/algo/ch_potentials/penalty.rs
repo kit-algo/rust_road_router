@@ -84,7 +84,7 @@ impl<P: Potential + Send + Clone> Penalty<P> {
         let query = Query { from: core_from, to: core_to };
         self.alternative_graph_dijkstra.graph_mut().clear();
 
-        if let Some(mut result) = report_time_with_key("initial_query", "initial_query", || self.shortest_path_penalized.query(query)).found() {
+        if let Some(mut result) = silent_report_time_with_key("initial_query", || self.shortest_path_penalized.query(query)).found() {
             let base_dist = result.distance();
             report!("base_dist", base_dist);
 
@@ -170,7 +170,7 @@ impl<P: Potential + Send + Clone> Penalty<P> {
                 }
 
                 if !any_penalized {
-                    dbg!("saturated");
+                    // dbg!("saturated");
                     break;
                 }
 
@@ -180,7 +180,7 @@ impl<P: Potential + Send + Clone> Penalty<P> {
                 let mut result = if let Some(result) = result.found() {
                     result
                 } else {
-                    dbg!("search pruned to death");
+                    // dbg!("search pruned to death");
                     break;
                 };
                 let penalty_dist = result.distance();
@@ -232,9 +232,9 @@ impl<P: Potential + Send + Clone> Penalty<P> {
                 report!("feasable", feasable);
 
                 if path_orig_len > max_orig_dist || penalty_dist > max_penalized_dist || s >= 10 {
-                    dbg!(path_orig_len > max_orig_dist);
-                    dbg!(penalty_dist > max_penalized_dist);
-                    dbg!(s >= 10);
+                    // dbg!(path_orig_len > max_orig_dist);
+                    // dbg!(penalty_dist > max_penalized_dist);
+                    // dbg!(s >= 10);
                     break;
                 }
             }
@@ -475,7 +475,7 @@ impl<'a> PenaltyIterative<'a> {
         let query = Query { from: core_from, to: core_to };
         self.alternative_graph_dijkstra.graph_mut().clear();
 
-        if let Some(mut result) = report_time_with_key("initial_query", "initial_query", || self.shortest_path_penalized.query(query)).found() {
+        if let Some(mut result) = silent_report_time_with_key("initial_query", || self.shortest_path_penalized.query(query)).found() {
             let base_dist = result.distance();
             report!("base_dist", base_dist);
 
@@ -560,7 +560,7 @@ impl<'a> PenaltyIterative<'a> {
                 }
 
                 if !any_penalized {
-                    dbg!("saturated");
+                    // dbg!("saturated");
                     drop(iteration_ctxt);
                     drop(iterations_ctxt);
                     break None;
@@ -571,7 +571,7 @@ impl<'a> PenaltyIterative<'a> {
                 let mut result = if let Some(result) = result.found() {
                     result
                 } else {
-                    dbg!("search pruned to death");
+                    // dbg!("search pruned to death");
                     drop(iteration_ctxt);
                     drop(iterations_ctxt);
                     break None;
@@ -589,8 +589,8 @@ impl<'a> PenaltyIterative<'a> {
                 debug_assert!(path_orig_len >= base_dist);
 
                 if path_orig_len > max_orig_dist || penalty_dist > max_penalized_dist {
-                    dbg!(path_orig_len > max_orig_dist);
-                    dbg!(penalty_dist > max_penalized_dist);
+                    // dbg!(path_orig_len > max_orig_dist);
+                    // dbg!(penalty_dist > max_penalized_dist);
                     drop(iteration_ctxt);
                     drop(iterations_ctxt);
                     break None;
