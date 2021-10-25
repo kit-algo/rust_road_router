@@ -314,12 +314,12 @@ impl<G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> ComplexDijkstraOps<G> for Blo
     fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {}
 }
 
-pub struct PseudoBlockedPathsDijkstra {
+pub struct BlockedDetoursDijkstra {
     node_forbidden_paths: Vec<Vec<Box<[NodeIdT]>>>,
     forbidden_paths_end_nodes: Vec<NodeIdT>,
 }
 
-impl PseudoBlockedPathsDijkstra {
+impl BlockedDetoursDijkstra {
     pub fn new(n: usize) -> Self {
         Self {
             node_forbidden_paths: vec![Vec::new(); n],
@@ -344,7 +344,7 @@ impl PseudoBlockedPathsDijkstra {
     }
 }
 
-impl<G> ComplexDijkstraOps<G> for PseudoBlockedPathsDijkstra {
+impl<G> ComplexDijkstraOps<G> for BlockedDetoursDijkstra {
     type Label = Weight;
     type Arc = Link;
     type LinkResult = Weight;
@@ -437,12 +437,10 @@ type ForbiddenPathLabel = (Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbitt
 pub struct TrafficAwareServer<'a> {
     ubs_checker: MinimalNonShortestSubPaths<'a>,
     dijkstra_data: DijkstraData<Vec<ForbiddenPathLabel>>,
-    // dijkstra_data: DijkstraData<Weight>,
     live_pot: BorrowedCCHPot<'a>,
     live_graph: BorrowedGraph<'a>,
     smooth_graph: BorrowedGraph<'a>,
     dijkstra_ops: BlockedPathsDijkstra,
-    // dijkstra_ops: PseudoBlockedPathsDijkstra,
 }
 
 impl<'a> TrafficAwareServer<'a> {
@@ -456,7 +454,6 @@ impl<'a> TrafficAwareServer<'a> {
             live_graph,
             smooth_graph,
             dijkstra_ops: BlockedPathsDijkstra::new(n, m),
-            // dijkstra_ops: PseudoBlockedPathsDijkstra::new(n),
         }
     }
 
@@ -496,7 +493,6 @@ impl<'a> TrafficAwareServer<'a> {
                 while let Some(node) = dijk_run.next_step_with_potential(|node| live_pot.potential(node)) {
                     num_queue_pops += 1;
                     num_labels_in_search_space += dijk_run.tentative_distance(node).len();
-                    // num_labels_in_search_space += 1;
                     if node == query.to {
                         break;
                     }
@@ -510,13 +506,10 @@ impl<'a> TrafficAwareServer<'a> {
             explore_time = explore_time + time;
 
             if self.dijkstra_data.distances[query.to as usize].is_empty() {
-                // if self.dijkstra_data.distances[query.to as usize] == INFINITY {
                 break None;
             }
 
-            // final_live_dist = self.dijkstra_data.distances[query.to as usize];
             final_live_dist = self.dijkstra_data.distances[query.to as usize][0].0;
-            // let path = self.dijkstra_data.node_path(query.from, query.to);
 
             // let mut cycle_pruning_broke_shortest_path = false;
 
@@ -574,13 +567,111 @@ impl<'a> TrafficAwareServer<'a> {
             for violating_range in violating {
                 self.dijkstra_ops
                     .add_forbidden_path(&path[violating_range.start..=violating_range.end], &self.smooth_graph);
-                // .add_forbidden_path(&path[violating_range.start..=violating_range.end]);
             }
             // if cycle_pruning_broke_shortest_path {
             // self.dijkstra_ops.block_cycles(&self.smooth_graph);
             // } else {
             //     self.dijkstra_ops.cycles.clear();
             // }
+        };
+        drop(iterations_ctxt);
+        report!("failed", result.is_none());
+        report!("num_iterations", i);
+        report!("num_forbidden_paths", self.dijkstra_ops.num_forbidden_paths());
+        report!(
+            "length_increase_percent",
+            (final_live_dist - base_live_dist) as f64 / base_live_dist as f64 * 100.0
+        );
+        report!("total_exploration_time_ms", explore_time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        report!("total_ubs_time_ms", ubs_time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        result
+    }
+}
+
+pub struct HeuristicTrafficAwareServer<'a> {
+    ubs_checker: MinimalNonShortestSubPaths<'a>,
+    dijkstra_data: DijkstraData<Weight>,
+    live_pot: BorrowedCCHPot<'a>,
+    live_graph: BorrowedGraph<'a>,
+    smooth_graph: BorrowedGraph<'a>,
+    dijkstra_ops: BlockedDetoursDijkstra,
+}
+
+impl<'a> HeuristicTrafficAwareServer<'a> {
+    pub fn new(smooth_graph: BorrowedGraph<'a>, live_graph: BorrowedGraph<'a>, smooth_cch_pot: &'a CCHPotData, live_cch_pot: &'a CCHPotData) -> Self {
+        let n = smooth_graph.num_nodes();
+        Self {
+            ubs_checker: MinimalNonShortestSubPaths::new(smooth_cch_pot),
+            dijkstra_data: DijkstraData::new(n),
+            live_pot: live_cch_pot.forward_potential(),
+            live_graph,
+            smooth_graph,
+            dijkstra_ops: BlockedDetoursDijkstra::new(n),
+        }
+    }
+
+    pub fn query(&mut self, query: Query, epsilon: f64) -> Option<()> {
+        self.dijkstra_ops.reset();
+
+        self.live_pot.init(query.to);
+        let base_live_dist = self.live_pot.potential(query.from)?;
+        let mut final_live_dist = base_live_dist;
+
+        let mut explore_time = time::Duration::zero();
+        let mut ubs_time = time::Duration::zero();
+
+        let mut i = 0;
+        let mut iterations_ctxt = push_collection_context("iterations".to_string());
+        let result = loop {
+            if i > 200 {
+                break None;
+            }
+
+            let _it_ctxt = iterations_ctxt.push_collection_item();
+            i += 1;
+            report!("iteration", i);
+            let live_pot = &mut self.live_pot;
+            let mut dijk_run = ComplexDijkstraRun::query(
+                &self.live_graph,
+                &mut self.dijkstra_data,
+                &mut self.dijkstra_ops,
+                TrafficAwareQuery(query),
+                |node| live_pot.potential(node),
+            );
+
+            let mut num_queue_pops = 0;
+            let (_, time) = measure(|| {
+                while let Some(node) = dijk_run.next_step_with_potential(|node| live_pot.potential(node)) {
+                    num_queue_pops += 1;
+                    if node == query.to {
+                        break;
+                    }
+                }
+            });
+
+            report!("num_queue_pops", num_queue_pops);
+            report!("exploration_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+            explore_time = explore_time + time;
+
+            if self.dijkstra_data.distances[query.to as usize] == INFINITY {
+                break None;
+            }
+
+            final_live_dist = self.dijkstra_data.distances[query.to as usize];
+            let path = self.dijkstra_data.node_path(query.from, query.to);
+            report!("num_nodes_on_path", path.len());
+
+            let (violating, time) = measure(|| self.ubs_checker.find_ubs_violating_subpaths(&path, &self.smooth_graph, epsilon));
+            report!("ubs_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+            ubs_time = ubs_time + time;
+
+            if violating.is_empty() {
+                break Some(());
+            }
+
+            for violating_range in violating {
+                self.dijkstra_ops.add_forbidden_path(&path[violating_range.start..=violating_range.end]);
+            }
         };
         drop(iterations_ctxt);
         report!("failed", result.is_none());
