@@ -428,12 +428,7 @@ impl Reconstruct for CHPotLoader {
 }
 
 impl CHPotLoader {
-    pub fn potentials(
-        &self,
-    ) -> (
-        CHPotential<FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>, FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>>,
-        CHPotential<FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>, FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>>,
-    ) {
+    pub fn potentials(&self) -> (CHPotential<BorrowedGraph, BorrowedGraph>, CHPotential<BorrowedGraph, BorrowedGraph>) {
         (
             CHPotential::new(
                 FirstOutGraph::new(&self.forward_first_out[..], &self.forward_head[..], &self.forward_weight[..]),
@@ -448,7 +443,7 @@ impl CHPotLoader {
         )
     }
 
-    pub fn bucket_ch_pot(&self) -> BucketCHPotential<FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>, FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]>> {
+    pub fn bucket_ch_pot(&self) -> BucketCHPotential<BorrowedGraph, BorrowedGraph> {
         BucketCHPotential::new(
             FirstOutGraph::new(&self.forward_first_out[..], &self.forward_head[..], &self.forward_weight[..]),
             FirstOutGraph::new(&self.backward_first_out[..], &self.backward_head[..], &self.backward_weight[..]),
@@ -465,12 +460,12 @@ pub struct BucketCHPotential<GF, GB> {
     to_clear: Vec<NodeId>,
     forward: GF,
     backward: GB,
-    dijkstra_data: DijkstraData<Vec<(NodeId, Weight)>>,
+    dijkstra_data: BucketCHSelectionData,
     num_pot_computations: usize,
     num_targets: usize,
 }
 
-impl<GF: LinkIterGraph, GB: LinkIterGraph> BucketCHPotential<GF, GB> {
+impl<GF: LinkIterGraph, GB: LinkIterGraph + LinkIterable<(NodeIdT, EdgeIdT)> + EdgeRandomAccessGraph<Link>> BucketCHPotential<GF, GB> {
     pub fn new(forward: GF, backward: GB, order: NodeOrder) -> Self {
         let n = forward.num_nodes();
         Self {
@@ -480,7 +475,7 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> BucketCHPotential<GF, GB> {
             to_clear: Vec::new(),
             forward,
             backward,
-            dijkstra_data: DijkstraData::new(n),
+            dijkstra_data: BucketCHSelectionData::new(n),
             num_pot_computations: 0,
             num_targets: 0,
         }
@@ -492,7 +487,7 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> BucketCHPotential<GF, GB> {
 
     fn compute_dists(
         potentials: &mut [Option<Box<[Weight]>>],
-        dijkstra_data: &DijkstraData<Vec<(NodeId, Weight)>>,
+        dijkstra_data: &BucketCHSelectionData,
         forward: &GF,
         pot_final: &mut FastClearBitVec,
         to_clear: &mut Vec<NodeId>,
@@ -546,23 +541,8 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> BucketCHPotential<GF, GB> {
         }
         self.pot_final.clear();
 
-        let mut ops = SimulBucketCHOps();
-        let mut backward_dijkstra_run = DijkstraRun::query(
-            &self.backward,
-            &mut self.dijkstra_data,
-            &mut ops,
-            SimulBucketQuery {
-                node: self.order.rank(targets[0]),
-                index: 0,
-            },
-        );
-        for (i, &target) in targets.iter().enumerate().skip(1) {
-            backward_dijkstra_run.add_start_node(SimulBucketQuery {
-                node: self.order.rank(target),
-                index: i as u32,
-            });
-        }
-        for _ in backward_dijkstra_run {}
+        let order = &self.order;
+        for _ in BucketCHSelectionRun::query(&self.backward, &mut self.dijkstra_data, targets.iter().map(|&node| order.rank(node))) {}
     }
 
     pub fn potential(&mut self, node: NodeId) -> &[Weight] {
@@ -583,99 +563,100 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> BucketCHPotential<GF, GB> {
     }
 }
 
-struct SimulBucketQuery {
-    node: NodeId,
-    index: u32,
-}
+use crate::datastr::index_heap::*;
 
-impl GenQuery<Vec<(NodeId, Weight)>> for SimulBucketQuery {
-    fn new(_from: NodeId, _to: NodeId, _initial_state: Vec<(NodeId, Weight)>) -> Self {
-        unimplemented!()
-    }
-    fn from(&self) -> NodeId {
-        self.node
-    }
-    fn to(&self) -> NodeId {
-        unimplemented!()
-    }
-    fn initial_state(&self) -> Vec<(NodeId, Weight)> {
-        vec![(self.index, 0)]
-    }
-    fn permutate(&mut self, _order: &NodeOrder) {
-        unimplemented!()
+impl Indexing for NodeIdT {
+    #[inline(always)]
+    fn as_index(&self) -> usize {
+        self.0 as usize
     }
 }
 
-struct SimulBucketCHOps();
+#[derive(Clone)]
+struct BucketCHSelectionData {
+    distances: TimestampedVector<Vec<(NodeId, Weight)>>,
+    queue: IndexdMinHeap<NodeIdT>,
+    incoming: Vec<Vec<(NodeIdT, EdgeIdT)>>,
+    terminal_dists: Vec<Weight>,
+    used_terminals: Vec<NodeIdT>,
+}
 
-impl<G: LinkIterGraph> DijkstraOps<G> for SimulBucketCHOps {
-    type Label = Vec<(NodeId, Weight)>;
-    type Arc = Link;
-    type LinkResult = Vec<(NodeId, Weight)>;
-    type PredecessorLink = ();
+impl BucketCHSelectionData {
+    pub fn new(n: usize) -> Self {
+        Self {
+            distances: TimestampedVector::new(n, Vec::new()),
+            queue: IndexdMinHeap::new(n),
+            incoming: vec![Vec::new(); n],
+            terminal_dists: vec![INFINITY; n],
+            used_terminals: Vec::new(),
+        }
+    }
+}
 
-    #[inline(always)]
-    fn link(&mut self, _graph: &G, label: &Vec<(NodeId, Weight)>, link: &Link) -> Self::LinkResult {
-        label.iter().map(move |&(n, w)| (n, w + link.weight)).collect()
+struct BucketCHSelectionRun<'a, G> {
+    graph: &'a G,
+    distances: &'a mut TimestampedVector<Vec<(NodeId, Weight)>>,
+    queue: &'a mut IndexdMinHeap<NodeIdT>,
+    incoming: &'a mut [Vec<(NodeIdT, EdgeIdT)>],
+    terminal_dists: &'a mut [Weight],
+    used_terminals: &'a mut Vec<NodeIdT>,
+}
+
+impl<'a, G: LinkIterable<(NodeIdT, EdgeIdT)> + EdgeRandomAccessGraph<Link>> BucketCHSelectionRun<'a, G> {
+    pub fn query(graph: &'a G, data: &'a mut BucketCHSelectionData, terminals: impl Iterator<Item = NodeId>) -> Self {
+        let mut s = Self {
+            graph,
+            distances: &mut data.distances,
+            queue: &mut data.queue,
+            incoming: &mut data.incoming,
+            terminal_dists: &mut data.terminal_dists,
+            used_terminals: &mut data.used_terminals,
+        };
+        s.initialize(terminals);
+        s
     }
 
-    #[inline(always)]
-    fn merge<'g, 'l, 'a>(&mut self, label: &mut Vec<(NodeId, Weight)>, linked: Self::LinkResult) -> bool {
-        let mut improved = false;
-        let mut res: Self::Label = Vec::with_capacity(label.len() + linked.len());
+    fn initialize(&mut self, terminals: impl Iterator<Item = NodeId>) {
+        self.queue.clear();
+        self.distances.reset();
+        for (i, terminal) in terminals.enumerate() {
+            self.queue.push(NodeIdT(terminal));
+            self.distances[terminal as usize].push((i as u32, 0));
+        }
+    }
 
-        let mut cur_iter = label.iter().peekable();
-        let mut linked_iter = linked.iter().peekable();
-
-        loop {
-            use std::cmp::*;
-            match (cur_iter.peek(), linked_iter.peek()) {
-                (Some(&&(cur_node, cur_dist)), Some(&&(linked_node, linked_dist))) => match cur_node.cmp(&linked_node) {
-                    Ordering::Less => {
-                        res.push((cur_node, cur_dist));
-                        cur_iter.next();
-                    }
-                    Ordering::Greater => {
-                        improved = true;
-                        res.push((linked_node, linked_dist));
-                        linked_iter.next();
-                    }
-                    Ordering::Equal => {
-                        if linked_dist < cur_dist {
-                            improved = true;
-                        }
-                        res.push((cur_node, min(cur_dist, linked_dist)));
-                        cur_iter.next();
-                        linked_iter.next();
-                    }
-                },
-                (Some(&&(cur_node, cur_dist)), None) => {
-                    res.push((cur_node, cur_dist));
-                    cur_iter.next();
-                }
-                (None, Some(&&(linked_node, linked_dist))) => {
-                    improved = true;
-                    res.push((linked_node, linked_dist));
-                    linked_iter.next();
-                }
-                _ => break,
+    fn settle_next_node(&mut self) -> Option<NodeIdT> {
+        self.queue.pop().map(|NodeIdT(node)| {
+            for (NodeIdT(head), edge_id) in LinkIterable::<(NodeIdT, EdgeIdT)>::link_iter(self.graph, node) {
+                self.incoming[head as usize].push((NodeIdT(node), edge_id));
+                self.queue.push_unless_contained(NodeIdT(head));
             }
-        }
 
-        if improved {
-            *label = res;
-        }
-        improved
+            for (NodeIdT(low_neighbor), EdgeIdT(edge_id)) in self.incoming[node as usize].drain(..) {
+                let weight = self.graph.link(edge_id).weight;
+
+                for &(terminal, dist) in &self.distances[low_neighbor as usize] {
+                    if self.terminal_dists[terminal as usize] == INFINITY {
+                        self.used_terminals.push(NodeIdT(terminal));
+                    }
+                    self.terminal_dists[terminal as usize] = std::cmp::min(self.terminal_dists[terminal as usize], dist + weight);
+                }
+            }
+
+            for NodeIdT(terminal) in self.used_terminals.drain(..) {
+                self.distances[node as usize].push((terminal, self.terminal_dists[terminal as usize]));
+                self.terminal_dists[terminal as usize] = INFINITY;
+            }
+
+            NodeIdT(node)
+        })
     }
-
-    #[inline(always)]
-    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {}
 }
 
-impl Label for Vec<(NodeId, Weight)> {
-    type Key = ();
-    fn neutral() -> Self {
-        Vec::new()
+impl<'a, G: LinkIterable<(NodeIdT, EdgeIdT)> + EdgeRandomAccessGraph<Link>> Iterator for BucketCHSelectionRun<'a, G> {
+    type Item = NodeIdT;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.settle_next_node()
     }
-    fn key(&self) -> Self::Key {}
 }
