@@ -166,7 +166,7 @@ where
     }
 
     pub fn queue(&self) -> &IndexdMinHeap<State<<Ops::Label as super::Label>::Key>> {
-        &self.queue
+        self.queue
     }
 
     pub fn num_relaxed_arcs(&self) -> usize {
@@ -332,8 +332,8 @@ where
                     self.num_relaxed_arcs += 1;
                     let linked = self.ops.link(
                         self.graph.borrow(),
-                        &self.distances,
-                        &self.predecessors,
+                        self.distances,
+                        self.predecessors,
                         NodeIdT(node),
                         key - potential(node).unwrap(),
                         &self.distances[node as usize],
@@ -392,7 +392,7 @@ where
     }
 
     pub fn queue(&self) -> &IndexdMinHeap<State<<Ops::Label as super::Label>::Key>> {
-        &self.queue
+        self.queue
     }
 
     pub fn num_relaxed_arcs(&self) -> usize {

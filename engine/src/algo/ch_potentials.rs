@@ -541,8 +541,7 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph + LinkIterable<(NodeIdT, EdgeIdT)> + E
         }
         self.pot_final.clear();
 
-        let order = &self.order;
-        for _ in BucketCHSelectionRun::query(&self.backward, &mut self.dijkstra_data, targets.iter().map(|&node| order.rank(node))) {}
+        for _ in BucketCHSelectionRun::query(&self.backward, &mut self.dijkstra_data, targets.iter().map(|&node| self.order.rank(node))) {}
     }
 
     pub fn potential(&mut self, node: NodeId) -> &[Weight] {

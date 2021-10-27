@@ -2,7 +2,7 @@
 name = "rust_road_router"
 version = "0.1.0"
 authors = ["Tim 'tim3z' Zeitz <mail@tim3z.net>"]
-edition = "2018"
+edition = "2021"
 build = "build.rs"
 
 [features]

@@ -84,8 +84,8 @@ where
             // if not, split at the separator, process all subcells independently in parallel and the separator afterwards
             let mut sub_offset = offset;
             let mut sub_edge_offset = edge_offset;
-            let mut sub_upward = &mut upward[..];
-            let mut sub_downward = &mut downward[..];
+            let mut sub_upward = &mut *upward;
+            let mut sub_downward = &mut *downward;
 
             rayon::scope(|s| {
                 for sub in &sep_tree.children {
@@ -183,8 +183,8 @@ where
             let mut sub_offset = offset;
             let mut sub_forward_edge_offset = forward_edge_offset;
             let mut sub_backward_edge_offset = backward_edge_offset;
-            let mut sub_upward = &mut upward[..];
-            let mut sub_downward = &mut downward[..];
+            let mut sub_upward = &mut *upward;
+            let mut sub_downward = &mut *downward;
 
             rayon::scope(|s| {
                 for sub in &sep_tree.children {
@@ -307,7 +307,12 @@ where
 
             rayon::scope(|s| {
                 for sub in sep_tree.children.iter().rev() {
-                    s.spawn(move |_| self.customize_tree(sub, end_next, upward.0, downward.0));
+                    s.spawn(move |_| {
+                        // force capturing the wrapper so closure is send/sync
+                        let _ = &upward;
+                        let _ = &downward;
+                        self.customize_tree(sub, end_next, upward.0, downward.0)
+                    });
                     end_next -= sub.num_nodes;
                 }
             });
