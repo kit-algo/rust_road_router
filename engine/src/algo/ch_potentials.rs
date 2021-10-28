@@ -642,8 +642,13 @@ impl<'a, G: LinkIterable<(NodeIdT, EdgeIdT)> + EdgeRandomAccessGraph<Link>> Buck
                 }
             }
 
+            self.distances[node as usize].extend(
+                self.used_terminals
+                    .iter()
+                    .map(|&NodeIdT(terminal)| (terminal, self.terminal_dists[terminal as usize])),
+            );
+
             for NodeIdT(terminal) in self.used_terminals.drain(..) {
-                self.distances[node as usize].push((terminal, self.terminal_dists[terminal as usize]));
                 self.terminal_dists[terminal as usize] = INFINITY;
             }
 
