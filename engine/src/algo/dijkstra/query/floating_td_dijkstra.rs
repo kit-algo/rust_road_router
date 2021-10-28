@@ -56,8 +56,7 @@ impl Server {
     }
 
     fn path(&self, query: TDQuery<Timestamp>) -> Vec<(NodeId, Timestamp)> {
-        let mut path = Vec::new();
-        path.push((query.to, self.data.distances[query.to as usize]));
+        let mut path = vec![(query.to, self.data.distances[query.to as usize])];
 
         while path.last().unwrap().0 != query.from {
             let next = self.data.predecessors[path.last().unwrap().0 as usize].0;
@@ -92,6 +91,7 @@ impl TDQueryServer<Timestamp, FlWeight> for Server {
     }
 }
 
+#[derive(Default)]
 struct FlTDDijkstraOps();
 
 impl DijkstraOps<TDGraph> for FlTDDijkstraOps {
@@ -115,15 +115,7 @@ impl DijkstraOps<TDGraph> for FlTDDijkstraOps {
     }
 
     #[inline(always)]
-    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {
-        ()
-    }
-}
-
-impl Default for FlTDDijkstraOps {
-    fn default() -> Self {
-        FlTDDijkstraOps {}
-    }
+    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {}
 }
 
 impl Label for Timestamp {
