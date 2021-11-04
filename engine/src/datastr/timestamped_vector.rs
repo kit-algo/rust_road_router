@@ -1,6 +1,30 @@
 //! A fast resettable vector based on timestamps.
 
+use crate::{datastr::graph::*, util::in_range_option::*};
 use std::ops::{Index, IndexMut};
+
+pub trait Reset: Clone {
+    const DEFAULT: Self;
+    fn reset(&mut self) {
+        *self = Self::DEFAULT;
+    }
+}
+
+impl Reset for Weight {
+    const DEFAULT: Self = INFINITY;
+}
+impl Reset for InRangeOption<u32> {
+    const DEFAULT: Self = InRangeOption::NONE;
+}
+impl Reset for bool {
+    const DEFAULT: Self = false;
+}
+impl<T: Clone> Reset for Vec<T> {
+    const DEFAULT: Self = vec![];
+    fn reset(&mut self) {
+        self.clear()
+    }
+}
 
 /// A fast resettable vector based on 32bit timestamps.
 /// When only few entries are modified, a clearlist based approach may actually be preferable
@@ -16,14 +40,14 @@ pub struct TimestampedVector<T> {
     default: T,
 }
 
-impl<T: Clone> TimestampedVector<T> {
+impl<T: Reset> TimestampedVector<T> {
     /// Create a new `TimestampedVector` with `size` elements of the default
-    pub fn new(size: usize, default: T) -> TimestampedVector<T> {
+    pub fn new(size: usize) -> TimestampedVector<T> {
         TimestampedVector {
-            data: vec![default.clone(); size],
+            data: vec![T::DEFAULT; size],
             current: 0,
             timestamps: vec![0; size],
-            default,
+            default: T::DEFAULT,
         }
     }
 
@@ -36,7 +60,7 @@ impl<T: Clone> TimestampedVector<T> {
         // we have to reset all values manually on overflow, because we now might encounter old timestamps again
         if overflow {
             for element in &mut self.data {
-                *element = self.default.clone();
+                element.reset();
             }
         }
     }
@@ -60,7 +84,7 @@ impl<T: Clone> TimestampedVector<T> {
     }
 }
 
-impl<T: Clone> Index<usize> for TimestampedVector<T> {
+impl<T: Reset> Index<usize> for TimestampedVector<T> {
     type Output = T;
 
     fn index(&self, index: usize) -> &T {
@@ -74,16 +98,16 @@ impl<T: Clone> Index<usize> for TimestampedVector<T> {
     }
 }
 
-impl<T: Clone> IndexMut<usize> for TimestampedVector<T> {
+impl<T: Reset> IndexMut<usize> for TimestampedVector<T> {
     fn index_mut(&mut self, index: usize) -> &mut T {
         if self.timestamps[index] != self.current {
-            self.set(index, self.default.clone());
+            self.timestamps[index] = self.current;
+            self.data[index].reset();
         }
         &mut self.data[index]
     }
 }
 
-use crate::datastr::graph::*;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Debug)]

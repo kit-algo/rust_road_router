@@ -4,7 +4,7 @@ use crate::{
     algo::{
         a_star::*,
         ch_potentials::*,
-        dijkstra::{generic_dijkstra::ComplexDijkstraRun, *},
+        dijkstra::{generic_dijkstra::*, *},
         minimal_nonshortest_subpaths::*,
     },
     datastr::{graph::first_out_graph::BorrowedGraph, timestamped_vector::*},
@@ -392,8 +392,8 @@ impl<G> ComplexDijkstraOps<G> for BlockedDetoursDijkstra {
 
 pub struct TrafficAwareQuery(Query);
 
-impl GenQuery<Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths))>> for TrafficAwareQuery {
-    fn new(from: NodeId, to: NodeId, _initial_state: Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths))>) -> Self {
+impl GenQuery<Vec<ForbiddenPathLabel>> for TrafficAwareQuery {
+    fn new(from: NodeId, to: NodeId, _initial_state: Vec<ForbiddenPathLabel>) -> Self {
         TrafficAwareQuery(Query { from, to })
     }
 
@@ -403,7 +403,7 @@ impl GenQuery<Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths)
     fn to(&self) -> NodeId {
         self.0.to
     }
-    fn initial_state(&self) -> Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths))> {
+    fn initial_state(&self) -> Vec<ForbiddenPathLabel> {
         vec![(0, ActiveForbittenPaths::new(0), (NodeIdT(self.0.from), ActiveForbittenPaths::new(0)))]
     }
     fn permutate(&mut self, order: &NodeOrder) {

@@ -32,7 +32,7 @@ impl<W> Indexing for State<W> {
     }
 }
 
-pub trait Label: Clone {
+pub trait Label: Reset {
     type Key: Ord;
     fn neutral() -> Self;
     fn key(&self) -> Self::Key;
@@ -68,7 +68,7 @@ impl<L: Label, PredLink: Copy> DijkstraData<L, PredLink> {
 
     pub fn new_with_pred_link(n: usize, pred_link_init: PredLink) -> Self {
         Self {
-            distances: TimestampedVector::new(n, L::neutral()),
+            distances: TimestampedVector::new(n),
             predecessors: vec![(n as NodeId, pred_link_init); n],
             queue: IndexdMinHeap::new(n),
         }

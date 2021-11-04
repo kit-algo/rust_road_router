@@ -118,6 +118,10 @@ impl DijkstraOps<TDGraph> for FlTDDijkstraOps {
     fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {}
 }
 
+impl Reset for Timestamp {
+    const DEFAULT: Self = Self::NEVER;
+}
+
 impl Label for Timestamp {
     type Key = Self;
 

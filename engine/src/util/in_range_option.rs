@@ -36,6 +36,8 @@ impl Sentinel for usize {
 pub struct InRangeOption<T: Sentinel + Debug>(T);
 
 impl<T: Sentinel + Debug> InRangeOption<T> {
+    pub const NONE: Self = InRangeOption(T::SENTINEL);
+
     #[inline]
     pub fn new(value: Option<T>) -> InRangeOption<T> {
         match value {

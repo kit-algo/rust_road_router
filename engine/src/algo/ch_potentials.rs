@@ -38,10 +38,10 @@ impl CCHPotData {
             cch: self.customized.cch(),
             stack: Vec::new(),
             forward_cch_graph: self.customized.forward_graph(),
-            backward_distances: TimestampedVector::new(n, INFINITY),
+            backward_distances: TimestampedVector::new(n),
             backward_parents: vec![n as NodeId; n],
             backward_cch_graph: self.customized.backward_graph(),
-            potentials: TimestampedVector::new(n, InRangeOption::new(None)),
+            potentials: TimestampedVector::new(n),
             num_pot_computations: 0,
         }
     }
@@ -53,10 +53,10 @@ impl CCHPotData {
             cch: self.customized.cch(),
             stack: Vec::new(),
             forward_cch_graph: self.customized.backward_graph(),
-            backward_distances: TimestampedVector::new(n, INFINITY),
+            backward_distances: TimestampedVector::new(n),
             backward_parents: vec![n as NodeId; n],
             backward_cch_graph: self.customized.forward_graph(),
-            potentials: TimestampedVector::new(n, InRangeOption::new(None)),
+            potentials: TimestampedVector::new(n),
             num_pot_computations: 0,
         }
     }
@@ -68,10 +68,10 @@ impl CCHPotData {
             cch: self.customized.cch(),
             stack: Vec::new(),
             forward_cch_graph: self.customized.forward_graph(),
-            backward_distances: TimestampedVector::new(n, INFINITY),
+            backward_distances: TimestampedVector::new(n),
             backward_parents: vec![n as NodeId; n],
             backward_cch_graph: self.customized.backward_graph(),
-            potentials: TimestampedVector::new(n, InRangeOption::new(None)),
+            potentials: TimestampedVector::new(n),
             num_pot_computations: 0,
             path_unpacked: FastClearBitVec::new(n),
             forward_inverted: self.customized.cch().forward_inverted(),
@@ -86,10 +86,10 @@ impl CCHPotData {
             cch: self.customized.cch(),
             stack: Vec::new(),
             forward_cch_graph: self.customized.backward_graph(),
-            backward_distances: TimestampedVector::new(n, INFINITY),
+            backward_distances: TimestampedVector::new(n),
             backward_parents: vec![n as NodeId; n],
             backward_cch_graph: self.customized.forward_graph(),
-            potentials: TimestampedVector::new(n, InRangeOption::new(None)),
+            potentials: TimestampedVector::new(n),
             num_pot_computations: 0,
             path_unpacked: FastClearBitVec::new(n),
             forward_inverted: self.customized.cch().backward_inverted(),
@@ -315,7 +315,7 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> CHPotential<GF, GB> {
         let n = forward.num_nodes();
         Self {
             order,
-            potentials: TimestampedVector::new(n, InRangeOption::new(None)),
+            potentials: TimestampedVector::new(n),
             forward,
             backward,
             dijkstra_data: DijkstraData::new(n),
@@ -583,7 +583,7 @@ struct BucketCHSelectionData {
 impl BucketCHSelectionData {
     pub fn new(n: usize) -> Self {
         Self {
-            distances: TimestampedVector::new(n, Vec::new()),
+            distances: TimestampedVector::new(n),
             queue: IndexdMinHeap::new(n),
             incoming: vec![Vec::new(); n],
             terminal_dists: vec![INFINITY; n],

@@ -20,8 +20,8 @@ impl<'a, CCH: CCHT, CCHB: std::borrow::Borrow<CCH>> Server<CCH, CCHB> {
         let n = customized.forward_graph().num_nodes();
         Server {
             customized,
-            fw_distances: TimestampedVector::new(n, INFINITY),
-            bw_distances: TimestampedVector::new(n, INFINITY),
+            fw_distances: TimestampedVector::new(n),
+            bw_distances: TimestampedVector::new(n),
             fw_parents: vec![n as NodeId; n],
             bw_parents: vec![n as NodeId; n],
             meeting_node: 0,

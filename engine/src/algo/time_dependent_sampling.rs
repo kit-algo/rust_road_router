@@ -59,7 +59,7 @@ impl<'a> Server<'a> {
         .collect();
 
         Server {
-            active_edges: TimestampedVector::new(graph.num_arcs(), false),
+            active_edges: TimestampedVector::new(graph.num_arcs()),
             dijkstra_data: DijkstraData::new(graph.num_nodes()),
             samples,
             graph,
