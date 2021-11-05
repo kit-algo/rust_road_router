@@ -60,7 +60,7 @@ pub struct DijkstraData<L: Label, PredLink = (), NodeData = L> {
     pub queue: IndexdMinHeap<State<L::Key>>,
 }
 
-impl<L: Label, PredLink: Copy, NodeData: Label> DijkstraData<L, PredLink, NodeData> {
+impl<L: Label, PredLink: Copy, NodeData: Reset> DijkstraData<L, PredLink, NodeData> {
     pub fn new(n: usize) -> Self
     where
         PredLink: Default,
@@ -113,26 +113,6 @@ pub trait DijkstraOps<Graph> {
     fn link(&mut self, graph: &Graph, parents: &[(NodeId, Self::PredecessorLink)], tail: NodeIdT, label: &Self::Label, link: &Self::Arc) -> Self::LinkResult;
     fn merge(&mut self, label: &mut Self::Label, linked: Self::LinkResult) -> bool;
     fn predecessor_link(&self, link: &Self::Arc) -> Self::PredecessorLink;
-}
-
-pub trait ComplexDijkstraOps<Graph> {
-    type Label: Label;
-    type Arc: Arc;
-    type LinkResult;
-    type PredecessorLink: Default + Copy;
-
-    fn link(
-        &mut self,
-        graph: &Graph,
-        labels: &TimestampedVector<Self::Label>,
-        parents: &[(NodeId, Self::PredecessorLink)],
-        tail: NodeIdT,
-        key: <Self::Label as Label>::Key,
-        label: &Self::Label,
-        link: &Self::Arc,
-    ) -> Self::LinkResult;
-    fn merge(&mut self, label: &mut Self::Label, linked: Self::LinkResult) -> Option<<Self::Label as Label>::Key>;
-    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink;
 }
 
 pub trait MultiCritDijkstraOps<Graph> {
