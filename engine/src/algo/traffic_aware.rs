@@ -64,6 +64,41 @@ impl Label for Vec<(Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths
     }
 }
 
+impl Reset for ForbiddenPathLabel {
+    const DEFAULT: Self = (INFINITY, ActiveForbittenPaths::One(0), (NodeIdT(0), ActiveForbittenPaths::One(0)));
+}
+
+impl Label for ForbiddenPathLabel {
+    type Key = Weight;
+    fn neutral() -> Self {
+        (INFINITY, ActiveForbittenPaths::new(0), (NodeIdT(0), ActiveForbittenPaths::new(0)))
+    }
+    fn key(&self) -> Self::Key {
+        self.0
+    }
+}
+
+impl<T: Clone> Reset for MultiCritNodeData<T>
+where
+    NodeQueueLabelOrder<T>: Ord,
+{
+    const DEFAULT: Self = Self::new();
+
+    fn reset(&mut self) {
+        self.clear();
+    }
+}
+
+impl Label for MultiCritNodeData<ForbiddenPathLabel> {
+    type Key = Weight;
+    fn neutral() -> Self {
+        Self::new()
+    }
+    fn key(&self) -> Self::Key {
+        self.peek().map(|l| l.0 .0).unwrap_or(INFINITY)
+    }
+}
+
 pub struct BlockedPathsDijkstra {
     // Next Node, Next Node Local Offset
     forbidden_paths: Vec<Vec<(NodeIdT, u32)>>,
@@ -71,6 +106,7 @@ pub struct BlockedPathsDijkstra {
     edge_forbidden_paths: Vec<Vec<(usize, usize, u32)>>,
     node_forbidden_path_counter: Vec<usize>,
     cycles: Vec<Vec<NodeId>>,
+    num_labels_pushed: usize,
 }
 
 impl BlockedPathsDijkstra {
@@ -80,6 +116,7 @@ impl BlockedPathsDijkstra {
             edge_forbidden_paths: vec![Vec::new(); m],
             node_forbidden_path_counter: vec![0; n],
             cycles: Vec::new(),
+            num_labels_pushed: 0,
         }
     }
 
@@ -127,6 +164,8 @@ impl BlockedPathsDijkstra {
     }
 
     pub fn reset(&mut self, graph: &impl EdgeIdGraph) {
+        self.num_labels_pushed = 0;
+
         for path in self.forbidden_paths.drain(..) {
             for &[(NodeIdT(tail), _), (NodeIdT(head), _)] in path.array_windows::<2>() {
                 for EdgeIdT(link_id) in graph.edge_indices(tail, head) {
@@ -137,6 +176,10 @@ impl BlockedPathsDijkstra {
                 self.node_forbidden_path_counter[node as usize] = 0;
             }
         }
+    }
+
+    pub fn num_labels_pushed(&self) -> usize {
+        self.num_labels_pushed
     }
 
     pub fn num_forbidden_paths(&self) -> usize {
@@ -185,6 +228,7 @@ impl<G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> ComplexDijkstraOps<G> for Blo
             if l.0 < key {
                 continue;
             }
+            self.num_labels_pushed += 1;
             let mut illegal = false;
             let mut head_active_forbidden_paths = ActiveForbittenPaths::new(self.node_forbidden_path_counter[head as usize]);
             let active_forbidden_paths = &l.1;
@@ -314,6 +358,85 @@ impl<G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> ComplexDijkstraOps<G> for Blo
     fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {}
 }
 
+impl<G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> MultiCritDijkstraOps<G> for BlockedPathsDijkstra {
+    type Label = ForbiddenPathLabel;
+    type Arc = (NodeIdT, EdgeIdT);
+    type LinkResult = Option<ForbiddenPathLabel>;
+    type PredecessorLink = ();
+
+    fn link(
+        &mut self,
+        #[allow(unused)] graph: &G,
+        #[allow(unused)] labels: &TimestampedVector<MultiCritNodeData<Self::Label>>,
+        _parents: &[(NodeId, Self::PredecessorLink)],
+        NodeIdT(tail): NodeIdT,
+        _key: Weight,
+        label: &Self::Label,
+        &(NodeIdT(head), EdgeIdT(link_id)): &Self::Arc,
+    ) -> Self::LinkResult {
+        self.num_labels_pushed += 1;
+        let weight = graph.link(link_id).weight;
+
+        let mut illegal = false;
+        let mut head_active_forbidden_paths = ActiveForbittenPaths::new(self.node_forbidden_path_counter[head as usize]);
+        let active_forbidden_paths = &label.1;
+
+        for &(global_id, current_edge_path_offset, tail_local_idx) in &self.edge_forbidden_paths[link_id as usize] {
+            if current_edge_path_offset == 1 || active_forbidden_paths.get(tail_local_idx as usize) {
+                if self.forbidden_paths[global_id].len() == current_edge_path_offset + 1 {
+                    illegal = true;
+                    break;
+                } else {
+                    head_active_forbidden_paths.set(self.forbidden_paths[global_id][current_edge_path_offset].1 as usize);
+                }
+            }
+        }
+        if !illegal {
+            Some((label.0 + weight, head_active_forbidden_paths, (NodeIdT(tail), label.1.clone())))
+        } else {
+            None
+        }
+    }
+    fn merge(&mut self, label: &mut MultiCritNodeData<Self::Label>, linked: Self::LinkResult) -> Option<Weight> {
+        let linked = linked?;
+        let mut dominated = false;
+
+        label.retain(|NodeQueueLabelOrder(old_l)| {
+            if old_l.0 <= linked.0 && old_l.1.is_subset(&linked.1) {
+                dominated = true;
+            }
+            dominated || old_l.0 < linked.0 || !linked.1.is_subset(&old_l.1)
+        });
+
+        if dominated {
+            None
+        } else {
+            let update_dist = linked.0;
+            label.push(NodeQueueLabelOrder(linked));
+            Some(update_dist)
+        }
+    }
+    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {}
+}
+
+impl PartialEq for NodeQueueLabelOrder<ForbiddenPathLabel> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 .0.eq(&other.0 .0)
+    }
+}
+impl PartialOrd for NodeQueueLabelOrder<ForbiddenPathLabel> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        // switched for reversing
+        other.0 .0.partial_cmp(&self.0 .0)
+    }
+}
+impl Eq for NodeQueueLabelOrder<ForbiddenPathLabel> {}
+impl Ord for NodeQueueLabelOrder<ForbiddenPathLabel> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
 pub struct BlockedDetoursDijkstra {
     node_forbidden_paths: Vec<Vec<Box<[NodeIdT]>>>,
     forbidden_paths_end_nodes: Vec<NodeIdT>,
@@ -412,6 +535,26 @@ impl GenQuery<Vec<ForbiddenPathLabel>> for TrafficAwareQuery {
     }
 }
 
+impl GenQuery<ForbiddenPathLabel> for TrafficAwareQuery {
+    fn new(from: NodeId, to: NodeId, _initial_state: ForbiddenPathLabel) -> Self {
+        TrafficAwareQuery(Query { from, to })
+    }
+
+    fn from(&self) -> NodeId {
+        self.0.from
+    }
+    fn to(&self) -> NodeId {
+        self.0.to
+    }
+    fn initial_state(&self) -> ForbiddenPathLabel {
+        (0, ActiveForbittenPaths::new(0), (NodeIdT(self.0.from), ActiveForbittenPaths::new(0)))
+    }
+    fn permutate(&mut self, order: &NodeOrder) {
+        self.0.from = order.rank(self.0.from);
+        self.0.to = order.rank(self.0.to);
+    }
+}
+
 impl GenQuery<Weight> for TrafficAwareQuery {
     fn new(from: NodeId, to: NodeId, _initial_state: Weight) -> Self {
         TrafficAwareQuery(Query { from, to })
@@ -436,7 +579,8 @@ type ForbiddenPathLabel = (Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbitt
 
 pub struct TrafficAwareServer<'a> {
     ubs_checker: MinimalNonShortestSubPaths<'a>,
-    dijkstra_data: DijkstraData<Vec<ForbiddenPathLabel>>,
+    dijkstra_data: DijkstraData<ForbiddenPathLabel, (), MultiCritNodeData<ForbiddenPathLabel>>,
+    // dijkstra_data: DijkstraData<Vec<ForbiddenPathLabel>>,
     live_pot: BorrowedCCHPot<'a>,
     live_graph: BorrowedGraph<'a>,
     smooth_graph: BorrowedGraph<'a>,
@@ -469,6 +613,7 @@ impl<'a> TrafficAwareServer<'a> {
         let mut ubs_time = time::Duration::zero();
 
         let mut i = 0;
+        let mut total_queue_pops = 0usize;
         let mut iterations_ctxt = push_collection_context("iterations".to_string());
         let result = loop {
             if i > 200 {
@@ -479,7 +624,8 @@ impl<'a> TrafficAwareServer<'a> {
             i += 1;
             report!("iteration", i);
             let live_pot = &mut self.live_pot;
-            let mut dijk_run = ComplexDijkstraRun::query(
+            let mut dijk_run = MultiCritDijkstraRun::query(
+                // let mut dijk_run = ComplexDijkstraRun::query(
                 &self.live_graph,
                 &mut self.dijkstra_data,
                 &mut self.dijkstra_ops,
@@ -488,11 +634,10 @@ impl<'a> TrafficAwareServer<'a> {
             );
 
             let mut num_queue_pops = 0;
-            let mut num_labels_in_search_space = 0;
             let (_, time) = measure(|| {
                 while let Some(node) = dijk_run.next_step_with_potential(|node| live_pot.potential(node)) {
                     num_queue_pops += 1;
-                    num_labels_in_search_space += dijk_run.tentative_distance(node).len();
+                    total_queue_pops += 1;
                     if node == query.to {
                         break;
                     }
@@ -501,15 +646,16 @@ impl<'a> TrafficAwareServer<'a> {
 
             report!("num_pruned_cycles", self.dijkstra_ops.cycles.len());
             report!("num_queue_pops", num_queue_pops);
-            report!("num_labels_in_search_space", num_labels_in_search_space);
             report!("exploration_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
             explore_time = explore_time + time;
 
-            if self.dijkstra_data.distances[query.to as usize].is_empty() {
+            if self.dijkstra_data.distances[query.to as usize].popped().is_empty() {
+                // if self.dijkstra_data.distances[query.to as usize].is_empty() {
                 break None;
             }
 
-            final_live_dist = self.dijkstra_data.distances[query.to as usize][0].0;
+            // final_live_dist = self.dijkstra_data.distances[query.to as usize][0].0;
+            final_live_dist = self.dijkstra_data.distances[query.to as usize].popped()[0].0 .0;
 
             // let mut cycle_pruning_broke_shortest_path = false;
 
@@ -517,7 +663,9 @@ impl<'a> TrafficAwareServer<'a> {
 
             let mut label_idx = 0;
             while *path.last().unwrap() != query.from {
-                let (dist, _, (NodeIdT(parent), parent_active_forb_paths)) = &self.dijkstra_data.distances[*path.last().unwrap() as usize][label_idx];
+                // let (dist, _, (NodeIdT(parent), parent_active_forb_paths)) = &self.dijkstra_data.distances[*path.last().unwrap() as usize][label_idx];
+                let (dist, _, (NodeIdT(parent), parent_active_forb_paths)) =
+                    &self.dijkstra_data.distances[*path.last().unwrap() as usize].popped()[label_idx].0;
 
                 let min_weight_edge = self
                     .live_graph
@@ -526,12 +674,13 @@ impl<'a> TrafficAwareServer<'a> {
                     .unwrap();
 
                 if let Some(parent_label_idx) = self.dijkstra_data.distances[*parent as usize]
+                    .popped()
                     .iter()
                     // why is_subset instead of ==
                     // because at node u, a better label (without some forbidden path [..., u, w])
                     // with same dist might get merged but when linking this new label along uv this will not cause a merge at v
                     // because its not on that forbidden path and thus both labels have the same bitsets.
-                    .position(|l| l.0 == dist - self.live_graph.link(min_weight_edge.0).weight && l.1.is_subset(parent_active_forb_paths))
+                    .position(|NodeQueueLabelOrder(l)| l.0 == dist - self.live_graph.link(min_weight_edge.0).weight && l.1.is_subset(parent_active_forb_paths))
                 {
                     label_idx = parent_label_idx;
                 } else {
@@ -577,6 +726,8 @@ impl<'a> TrafficAwareServer<'a> {
         drop(iterations_ctxt);
         report!("failed", result.is_none());
         report!("num_iterations", i);
+        report!("num_labels_pushed", self.dijkstra_ops.num_labels_pushed());
+        report!("total_queue_pops", total_queue_pops);
         report!("num_forbidden_paths", self.dijkstra_ops.num_forbidden_paths());
         report!(
             "length_increase_percent",
@@ -695,11 +846,12 @@ mod tests {
     fn test_linking_forbidden_paths() {
         let graph = FirstOutGraph::new(&[0, 1, 2], &[1, 0], &[1, 1]);
         let mut ops = BlockedPathsDijkstra::new(2, 2);
-        let dd = DijkstraData::new(2);
+        let dd = DijkstraData::<Vec<ForbiddenPathLabel>>::new(2);
         ops.add_forbidden_path(&[0, 1], &graph);
 
         assert_eq!(
-            ops.link(
+            ComplexDijkstraOps::link(
+                &mut ops,
                 &graph,
                 &dd.distances,
                 &dd.predecessors,
@@ -714,7 +866,8 @@ mod tests {
         let mut ops = BlockedPathsDijkstra::new(2, 2);
         ops.add_forbidden_path(&[0, 1, 0], &graph);
         assert_eq!(
-            ops.link(
+            ComplexDijkstraOps::link(
+                &mut ops,
                 &graph,
                 &dd.distances,
                 &dd.predecessors,
@@ -726,7 +879,8 @@ mod tests {
             vec![(1, ActiveForbittenPaths::One(1), (NodeIdT(0), ActiveForbittenPaths::One(0)))]
         );
         assert_eq!(
-            ops.link(
+            ComplexDijkstraOps::link(
+                &mut ops,
                 &graph,
                 &dd.distances,
                 &dd.predecessors,

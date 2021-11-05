@@ -1,5 +1,7 @@
 //! Several variants of Dijkstra
 
+use self::generic_dijkstra::MultiCritNodeData;
+
 use super::*;
 use crate::datastr::{index_heap::*, timestamped_vector::*};
 use crate::report::*;
@@ -52,13 +54,13 @@ impl Label for Weight {
 }
 
 #[derive(Clone)]
-pub struct DijkstraData<L: Label, PredLink = ()> {
-    pub distances: TimestampedVector<L>,
+pub struct DijkstraData<L: Label, PredLink = (), NodeData = L> {
+    pub distances: TimestampedVector<NodeData>,
     pub predecessors: Vec<(NodeId, PredLink)>,
     pub queue: IndexdMinHeap<State<L::Key>>,
 }
 
-impl<L: Label, PredLink: Copy> DijkstraData<L, PredLink> {
+impl<L: Label, PredLink: Copy, NodeData: Label> DijkstraData<L, PredLink, NodeData> {
     pub fn new(n: usize) -> Self
     where
         PredLink: Default,
@@ -130,6 +132,26 @@ pub trait ComplexDijkstraOps<Graph> {
         link: &Self::Arc,
     ) -> Self::LinkResult;
     fn merge(&mut self, label: &mut Self::Label, linked: Self::LinkResult) -> Option<<Self::Label as Label>::Key>;
+    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink;
+}
+
+pub trait MultiCritDijkstraOps<Graph> {
+    type Label: Label;
+    type Arc: Arc;
+    type LinkResult;
+    type PredecessorLink: Default + Copy;
+
+    fn link(
+        &mut self,
+        graph: &Graph,
+        labels: &TimestampedVector<MultiCritNodeData<Self::Label>>,
+        parents: &[(NodeId, Self::PredecessorLink)],
+        tail: NodeIdT,
+        key: <Self::Label as Label>::Key,
+        label: &Self::Label,
+        link: &Self::Arc,
+    ) -> Self::LinkResult;
+    fn merge(&mut self, label: &mut MultiCritNodeData<Self::Label>, linked: Self::LinkResult) -> Option<<Self::Label as Label>::Key>;
     fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink;
 }
 
