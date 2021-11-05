@@ -113,7 +113,9 @@ where
             for link in self.graph.link_iter(node) {
                 if edge_predicate(&link) {
                     self.num_relaxed_arcs += 1;
-                    let linked = self.ops.link(self.graph, &self.distances[node as usize], &link);
+                    let linked = self
+                        .ops
+                        .link(self.graph, self.predecessors, NodeIdT(node), &self.distances[node as usize], &link);
 
                     if self.ops.merge(&mut self.distances[link.head() as usize], linked) {
                         self.predecessors[link.head() as usize] = (node, self.ops.predecessor_link(&link));

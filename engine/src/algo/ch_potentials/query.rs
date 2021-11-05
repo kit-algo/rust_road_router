@@ -338,8 +338,15 @@ where
     type PredecessorLink = O::PredecessorLink;
 
     #[inline(always)]
-    fn link(&mut self, graph: &VirtualTopocoreGraph<G>, label: &Self::Label, link: &Self::Arc) -> Self::LinkResult {
-        self.0.link(&graph.graph, label, link)
+    fn link(
+        &mut self,
+        graph: &VirtualTopocoreGraph<G>,
+        parents: &[(NodeId, Self::PredecessorLink)],
+        tail: NodeIdT,
+        label: &Self::Label,
+        link: &Self::Arc,
+    ) -> Self::LinkResult {
+        self.0.link(&graph.graph, parents, tail, label, link)
     }
 
     #[inline(always)]

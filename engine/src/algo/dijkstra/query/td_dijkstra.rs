@@ -10,7 +10,7 @@ impl DijkstraOps<TDGraph> for TDDijkstraOps {
     type PredecessorLink = ();
 
     #[inline(always)]
-    fn link(&mut self, graph: &TDGraph, label: &Weight, link: &Self::Arc) -> Self::LinkResult {
+    fn link(&mut self, graph: &TDGraph, _parents: &[(NodeId, Self::PredecessorLink)], _tail: NodeIdT, label: &Weight, link: &Self::Arc) -> Self::LinkResult {
         label + graph.travel_time_function(link.1 .0).eval(*label)
     }
 
@@ -24,9 +24,7 @@ impl DijkstraOps<TDGraph> for TDDijkstraOps {
     }
 
     #[inline(always)]
-    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {
-        ()
-    }
+    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {}
 }
 
 impl Default for TDDijkstraOps {
@@ -44,7 +42,14 @@ impl DijkstraOps<LiveTDGraph> for LiveTDDijkstraOps {
     type PredecessorLink = ();
 
     #[inline(always)]
-    fn link(&mut self, graph: &LiveTDGraph, label: &Weight, link: &Self::Arc) -> Self::LinkResult {
+    fn link(
+        &mut self,
+        graph: &LiveTDGraph,
+        _parents: &[(NodeId, Self::PredecessorLink)],
+        _tail: NodeIdT,
+        label: &Weight,
+        link: &Self::Arc,
+    ) -> Self::LinkResult {
         label + graph.eval(link.1 .0, *label)
     }
 
@@ -58,9 +63,7 @@ impl DijkstraOps<LiveTDGraph> for LiveTDDijkstraOps {
     }
 
     #[inline(always)]
-    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {
-        ()
-    }
+    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {}
 }
 
 impl Default for LiveTDDijkstraOps {
