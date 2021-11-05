@@ -2,7 +2,6 @@
 
 use super::*;
 use crate::algo::dijkstra::gen_topo_dijkstra::Neutral;
-use std::borrow::Borrow;
 
 pub struct DijkstraRun<'a, Graph = OwnedGraph, Ops = DefaultOps>
 where
@@ -111,10 +110,10 @@ where
         O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
     {
         self.queue.pop().map(|State { node, .. }| {
-            for link in self.graph.borrow().link_iter(node) {
+            for link in self.graph.link_iter(node) {
                 if edge_predicate(&link) {
                     self.num_relaxed_arcs += 1;
-                    let linked = self.ops.link(self.graph.borrow(), &self.distances[node as usize], &link);
+                    let linked = self.ops.link(self.graph, &self.distances[node as usize], &link);
 
                     if self.ops.merge(&mut self.distances[link.head() as usize], linked) {
                         self.predecessors[link.head() as usize] = (node, self.ops.predecessor_link(&link));
@@ -162,7 +161,7 @@ where
     }
 
     pub fn graph(&self) -> &Graph {
-        self.graph.borrow()
+        self.graph
     }
 
     pub fn queue(&self) -> &IndexdMinHeap<State<<Ops::Label as super::Label>::Key>> {
@@ -327,11 +326,11 @@ where
         <Ops::Label as super::Label>::Key: std::ops::Sub<O, Output = <Ops::Label as super::Label>::Key> + Copy,
     {
         self.queue.pop().map(|State { node, key }| {
-            for link in self.graph.borrow().link_iter(node) {
+            for link in self.graph.link_iter(node) {
                 if edge_predicate(&link) {
                     self.num_relaxed_arcs += 1;
                     let linked = self.ops.link(
-                        self.graph.borrow(),
+                        self.graph,
                         self.distances,
                         self.predecessors,
                         NodeIdT(node),
@@ -388,7 +387,7 @@ where
     }
 
     pub fn graph(&self) -> &Graph {
-        self.graph.borrow()
+        self.graph
     }
 
     pub fn queue(&self) -> &IndexdMinHeap<State<<Ops::Label as super::Label>::Key>> {
@@ -581,11 +580,11 @@ where
                 })
             }
 
-            for link in self.graph.borrow().link_iter(node) {
+            for link in self.graph.link_iter(node) {
                 if edge_predicate(&link) {
                     self.num_relaxed_arcs += 1;
                     let linked = self.ops.link(
-                        self.graph.borrow(),
+                        self.graph,
                         self.distances,
                         self.predecessors,
                         NodeIdT(node),
@@ -644,7 +643,7 @@ where
     }
 
     pub fn graph(&self) -> &Graph {
-        self.graph.borrow()
+        self.graph
     }
 
     pub fn queue(&self) -> &IndexdMinHeap<State<<Ops::Label as super::Label>::Key>> {
