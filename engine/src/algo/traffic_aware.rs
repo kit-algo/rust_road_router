@@ -467,7 +467,7 @@ impl BlockedDetoursDijkstra {
     }
 }
 
-impl<G> ComplexDijkstraOps<G> for BlockedDetoursDijkstra {
+impl<G> DijkstraOps<G> for BlockedDetoursDijkstra {
     type Label = Weight;
     type Arc = Link;
     type LinkResult = Weight;
@@ -476,10 +476,8 @@ impl<G> ComplexDijkstraOps<G> for BlockedDetoursDijkstra {
     fn link(
         &mut self,
         _graph: &G,
-        _labels: &TimestampedVector<Self::Label>,
         parents: &[(NodeId, Self::PredecessorLink)],
         NodeIdT(tail): NodeIdT,
-        _key: Weight,
         label: &Self::Label,
         link: &Self::Arc,
     ) -> Self::LinkResult {
@@ -503,12 +501,12 @@ impl<G> ComplexDijkstraOps<G> for BlockedDetoursDijkstra {
             label + link.weight
         }
     }
-    fn merge(&mut self, label: &mut Self::Label, linked: Self::LinkResult) -> Option<Weight> {
+    fn merge(&mut self, label: &mut Self::Label, linked: Self::LinkResult) -> bool {
         if linked < *label {
             *label = linked;
-            return Some(*label);
+            return true;
         }
-        None
+        false
     }
     fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {}
 }
@@ -782,13 +780,7 @@ impl<'a> HeuristicTrafficAwareServer<'a> {
             i += 1;
             report!("iteration", i);
             let live_pot = &mut self.live_pot;
-            let mut dijk_run = ComplexDijkstraRun::query(
-                &self.live_graph,
-                &mut self.dijkstra_data,
-                &mut self.dijkstra_ops,
-                TrafficAwareQuery(query),
-                |node| live_pot.potential(node),
-            );
+            let mut dijk_run = DijkstraRun::query(&self.live_graph, &mut self.dijkstra_data, &mut self.dijkstra_ops, TrafficAwareQuery(query));
 
             let mut num_queue_pops = 0;
             let (_, time) = measure(|| {
