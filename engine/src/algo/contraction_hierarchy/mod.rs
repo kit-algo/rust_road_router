@@ -374,7 +374,10 @@ impl<'a> Iterator for LinkMappingIterator<'a> {
 }
 
 impl<'a> LinkIterable<Link> for ForwardWrapper<'a> {
-    type Iter<'b> = LinkMappingIterator<'b>;
+    type Iter<'b>
+    where
+        Self: 'b,
+    = LinkMappingIterator<'b>;
 
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         LinkMappingIterator {
@@ -385,7 +388,10 @@ impl<'a> LinkIterable<Link> for ForwardWrapper<'a> {
 }
 
 impl<'a> LinkIterable<Link> for BackwardWrapper<'a> {
-    type Iter<'b> = LinkMappingIterator<'b>;
+    type Iter<'b>
+    where
+        Self: 'b,
+    = LinkMappingIterator<'b>;
 
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         LinkMappingIterator {

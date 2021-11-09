@@ -81,7 +81,9 @@ pub trait Graph {
 
 pub trait LinkIterable<Link>: Graph {
     /// Type of the outgoing neighbor iterator.
-    type Iter<'a>: Iterator<Item = Link>;
+    type Iter<'a>: Iterator<Item = Link>
+    where
+        Self: 'a;
 
     /// Get a iterator over the outgoing links of the given node.
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_>;
@@ -226,7 +228,10 @@ impl<G: Graph> Graph for InfinityFilteringGraph<G> {
 }
 
 impl<G: LinkIterable<Link>> LinkIterable<Link> for InfinityFilteringGraph<G> {
-    type Iter<'a> = std::iter::Filter<<G as LinkIterable<Link>>::Iter<'a>, fn(&Link) -> bool>;
+    type Iter<'a>
+    where
+        Self: 'a,
+    = std::iter::Filter<<G as LinkIterable<Link>>::Iter<'a>, fn(&Link) -> bool>;
 
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         self.0.link_iter(node).filter(|l| l.weight < INFINITY)
@@ -234,7 +239,10 @@ impl<G: LinkIterable<Link>> LinkIterable<Link> for InfinityFilteringGraph<G> {
 }
 
 impl<G: LinkIterable<Link>> LinkIterable<NodeIdT> for InfinityFilteringGraph<G> {
-    type Iter<'a> = std::iter::Map<<Self as LinkIterable<Link>>::Iter<'a>, fn(Link) -> NodeIdT>;
+    type Iter<'a>
+    where
+        Self: 'a,
+    = std::iter::Map<<Self as LinkIterable<Link>>::Iter<'a>, fn(Link) -> NodeIdT>;
 
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         LinkIterable::<Link>::link_iter(self, node).map(|l| NodeIdT(l.node))

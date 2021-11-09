@@ -192,7 +192,10 @@ where
     WeightContainer: AsRef<[Weight]>,
 {
     #[allow(clippy::type_complexity)]
-    type Iter<'a> = impl Iterator<Item = Link> + 'a;
+    type Iter<'a>
+    where
+        Self: 'a,
+    = impl Iterator<Item = Link> + 'a;
 
     #[inline]
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
@@ -210,7 +213,10 @@ where
     HeadContainer: AsRef<[NodeId]>,
     WeightContainer: AsRef<[Weight]>,
 {
-    type Iter<'a> = impl Iterator<Item = NodeIdT> + 'a;
+    type Iter<'a>
+    where
+        Self: 'a,
+    = impl Iterator<Item = NodeIdT> + 'a;
 
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         self.head()[SlcsIdx(self.first_out()).range(node as usize)].iter().copied().map(NodeIdT)
@@ -248,9 +254,10 @@ where
     HeadContainer: AsRef<[NodeId]>,
     WeightContainer: AsRef<[Weight]>,
 {
-    // https://github.com/rust-lang/rustfmt/issues/4911
-    #[rustfmt::skip]
-    type IdxIter<'a> where Self: 'a = impl Iterator<Item = EdgeIdT> + 'a;
+    type IdxIter<'a>
+    where
+        Self: 'a,
+    = impl Iterator<Item = EdgeIdT> + 'a;
 
     fn edge_indices(&self, from: NodeId, to: NodeId) -> Self::IdxIter<'_> {
         self.neighbor_edge_indices(from).filter(move |&e| self.head()[e as usize] == to).map(EdgeIdT)
@@ -283,7 +290,10 @@ where
     HeadContainer: AsRef<[NodeId]>,
     WeightContainer: AsRef<[Weight]>,
 {
-    type Iter<'a> = impl Iterator<Item = (NodeIdT, EdgeIdT)> + 'a;
+    type Iter<'a>
+    where
+        Self: 'a,
+    = impl Iterator<Item = (NodeIdT, EdgeIdT)> + 'a;
 
     #[inline]
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
@@ -303,7 +313,10 @@ where
     WeightContainer: AsRef<[Weight]>,
 {
     #[allow(clippy::type_complexity)]
-    type Iter<'a> = impl Iterator<Item = (NodeIdT, (Weight, EdgeIdT))> + 'a;
+    type Iter<'a>
+    where
+        Self: 'a,
+    = impl Iterator<Item = (NodeIdT, (Weight, EdgeIdT))> + 'a;
 
     #[inline]
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
@@ -382,7 +395,10 @@ where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
 {
-    type Iter<'a> = impl Iterator<Item = NodeIdT>;
+    type Iter<'a>
+    where
+        Self: 'a,
+    = impl Iterator<Item = NodeIdT>;
 
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         self.head()[self.neighbor_edge_indices_usize(node)].iter().copied().map(NodeIdT)
@@ -394,7 +410,10 @@ where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
 {
-    type Iter<'a> = impl Iterator<Item = (NodeIdT, EdgeIdT)> + 'a;
+    type Iter<'a>
+    where
+        Self: 'a,
+    = impl Iterator<Item = (NodeIdT, EdgeIdT)> + 'a;
 
     #[inline]
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {

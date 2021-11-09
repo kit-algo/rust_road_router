@@ -336,7 +336,10 @@ impl<G: Graph> Graph for AlternativeGraph<G> {
 }
 
 impl<G: LinkIterable<L> + EdgeIdGraph, L> LinkIterable<L> for AlternativeGraph<G> {
-    type Iter<'a> = FilteredLinkIter<'a, <G as LinkIterable<L>>::Iter<'a>>;
+    type Iter<'a>
+    where
+        Self: 'a,
+    = FilteredLinkIter<'a, <G as LinkIterable<L>>::Iter<'a>>;
 
     #[inline(always)]
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
@@ -393,7 +396,10 @@ impl Graph for ReversedAlternativeGraph<'_> {
 }
 
 impl LinkIterable<Link> for ReversedAlternativeGraph<'_> {
-    type Iter<'a> = impl Iterator<Item = Link> + 'a;
+    type Iter<'a>
+    where
+        Self: 'a,
+    = impl Iterator<Item = Link> + 'a;
 
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         self.graph.link_iter(node).filter_map(move |(NodeIdT(head), Reversed(EdgeIdT(edge_id)))| {
