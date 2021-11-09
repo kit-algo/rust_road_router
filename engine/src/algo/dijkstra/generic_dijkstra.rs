@@ -347,12 +347,8 @@ where
         <Ops::Label as super::Label>::Key: std::ops::Sub<O, Output = <Ops::Label as super::Label>::Key> + Copy,
     {
         self.queue.pop().map(|State { node, key }| {
-            let mut node_labels = MultiCritNodeData::<Ops::Label>::new();
-            // this is only valid when there are no loop edges...
-            std::mem::swap(&mut self.distances[node as usize], &mut node_labels);
-            let _ = node_labels.pop().unwrap();
-            let NodeQueueLabelOrder(label) = &node_labels.popped()[0];
-            if let Some(NodeQueueLabelOrder(next_label)) = node_labels.peek() {
+            let _ = self.distances[node as usize].pop().unwrap();
+            if let Some(NodeQueueLabelOrder(next_label)) = self.distances[node as usize].peek() {
                 self.queue.push(State {
                     node,
                     key: potential(node).unwrap() + next_label.key(),
@@ -360,7 +356,8 @@ where
             }
 
             for link in self.graph.link_iter(node) {
-                if edge_predicate(&link) {
+                // we assume that a loop arc will never be used
+                if edge_predicate(&link) && link.head() != node {
                     self.num_relaxed_arcs += 1;
                     let linked = self.ops.link(
                         self.graph,
@@ -368,7 +365,7 @@ where
                         self.predecessors,
                         NodeIdT(node),
                         key - potential(node).unwrap(),
-                        label,
+                        &self.distances[node as usize].popped()[0].0,
                         &link,
                     );
 
@@ -392,8 +389,6 @@ where
                     }
                 }
             }
-
-            std::mem::swap(&mut self.distances[node as usize], &mut node_labels);
 
             node
         })
