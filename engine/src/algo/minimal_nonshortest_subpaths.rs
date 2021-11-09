@@ -162,11 +162,11 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
             i += 1;
             let &start = path.first().unwrap();
             let &end = path.last().unwrap();
-            self.target_pot.init(end);
-            self.source_pot.init(start);
 
+            self.target_pot.init(end);
             let mut target_earliest_deviation_rank = None;
             let mut target_earliest_suboptimal_rank = path_ranks[start as usize].value().unwrap();
+
             for &[node, next_on_path] in path.array_windows::<2>() {
                 let path_dist = dists[path_ranks[end as usize].value().unwrap()] - dists[path_ranks[node as usize].value().unwrap() as usize];
                 let shortest_dist = self.target_pot.potential(node).unwrap();
@@ -213,8 +213,10 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
             }
 
             // sp tree from source
+            self.source_pot.init(start);
             let mut source_earliest_deviation_rank = None;
             let mut source_earliest_suboptimal_rank = path_ranks[end as usize].value().unwrap();
+
             for &[prev_on_path, node] in path.array_windows::<2>().rev() {
                 let path_dist = dists[path_ranks[node as usize].value().unwrap() as usize] - dists[path_ranks[start as usize].value().unwrap()];
                 let shortest_dist = self.source_pot.potential(node).unwrap();
