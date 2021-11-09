@@ -191,7 +191,6 @@ impl<'a> CCHPotentialWithPathUnpacking<'a> {
 
 impl<'a> Potential for CCHPotentialWithPathUnpacking<'a> {
     fn init(&mut self, target: NodeId) {
-        let target = self.cch.node_order().rank(target);
         self.path_unpacked.clear();
         self.potentials.reset();
         for _ in EliminationTreeWalk::query(
@@ -205,12 +204,6 @@ impl<'a> Potential for CCHPotentialWithPathUnpacking<'a> {
     }
 
     fn potential(&mut self, node: NodeId) -> Option<u32> {
-        self.potential_int(self.cch.node_order().rank(node))
-    }
-}
-
-impl<'a> CCHPotentialWithPathUnpacking<'a> {
-    fn potential_int(&mut self, node: NodeId) -> Option<u32> {
         let mut cur_node = node;
         while self.potentials[cur_node as usize].value().is_none() {
             self.num_pot_computations += 1;
@@ -243,23 +236,21 @@ impl<'a> CCHPotentialWithPathUnpacking<'a> {
             None
         }
     }
+}
 
+impl<'a> CCHPotentialWithPathUnpacking<'a> {
     pub fn unpack_path(&mut self, NodeIdT(node): NodeIdT) {
-        self.unpack_path_int(NodeIdT(self.cch.node_order().rank(node)))
-    }
-
-    fn unpack_path_int(&mut self, NodeIdT(node): NodeIdT) {
         if self.path_unpacked.get(node as usize) {
             return;
         }
-        let self_dist = self.potential_int(node).unwrap();
+        let self_dist = self.potential(node).unwrap();
         let parent = self.backward_parents[node as usize];
         if parent == node {
             self.path_unpacked.set(node as usize);
             return;
         }
-        let parent_dist = self.potential_int(parent).unwrap();
-        self.unpack_path_int(NodeIdT(parent));
+        let parent_dist = self.potential(parent).unwrap();
+        self.unpack_path(NodeIdT(parent));
 
         debug_assert!(self_dist >= parent_dist, "{:#?}", (node, parent, self_dist, parent_dist));
         if let Some((middle, _down, _up)) = unpack_arc(
@@ -274,18 +265,18 @@ impl<'a> CCHPotentialWithPathUnpacking<'a> {
             self.backward_parents[node as usize] = middle;
 
             if !self.path_unpacked.get(middle as usize) {
-                // will be called in the unpack_path_int call
+                // will be called in the unpack_path call
                 // but we need to make sure that the parent of middle is parent
-                // so we call potential_int first, then set the parent
+                // so we call potential first, then set the parent
                 // and then the call in unpack_path won't override it again.
                 // This is only a problem with zero arcs and the induced non-unique shortest paths
-                self.potential_int(middle);
+                self.potential(middle);
                 self.backward_parents[middle as usize] = parent;
-                self.unpack_path_int(NodeIdT(middle));
+                self.unpack_path(NodeIdT(middle));
             }
 
-            debug_assert_eq!(self.potential_int(middle).unwrap(), parent_dist + _up,);
-            self.unpack_path_int(NodeIdT(node));
+            debug_assert_eq!(self.potential(middle).unwrap(), parent_dist + _up,);
+            self.unpack_path(NodeIdT(node));
         }
         self.path_unpacked.set(node as usize);
     }
@@ -296,6 +287,14 @@ impl<'a> CCHPotentialWithPathUnpacking<'a> {
 
     pub fn cch(&self) -> &DirectedCCH {
         self.cch
+    }
+
+    pub fn forward_cch_graph(&self) -> &BorrowedGraph {
+        &self.forward_cch_graph
+    }
+
+    pub fn backward_cch_graph(&self) -> &BorrowedGraph {
+        &self.backward_cch_graph
     }
 }
 

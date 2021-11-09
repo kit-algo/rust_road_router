@@ -56,7 +56,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
 
-    let mut server = TrafficAwareServer::new(graph.borrowed(), live_graph, &smooth_cch_pot, &live_cch_pot);
+    let mut server = TrafficAwareServer::new(live_graph, &smooth_cch_pot, &live_cch_pot);
 
     let mut total_query_time = Duration::zero();
 

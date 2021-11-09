@@ -325,26 +325,24 @@ pub struct TrafficAwareServer<'a> {
     dijkstra_data: DijkstraData<ForbiddenPathLabel, (), MultiCritNodeData<ForbiddenPathLabel>>,
     live_pot: BorrowedCCHPot<'a>,
     live_graph: BorrowedGraph<'a>,
-    smooth_graph: BorrowedGraph<'a>,
     dijkstra_ops: BlockedPathsDijkstra,
 }
 
 impl<'a> TrafficAwareServer<'a> {
-    pub fn new(smooth_graph: BorrowedGraph<'a>, live_graph: BorrowedGraph<'a>, smooth_cch_pot: &'a CCHPotData, live_cch_pot: &'a CCHPotData) -> Self {
-        let n = smooth_graph.num_nodes();
-        let m = smooth_graph.num_arcs();
+    pub fn new(live_graph: BorrowedGraph<'a>, smooth_cch_pot: &'a CCHPotData, live_cch_pot: &'a CCHPotData) -> Self {
+        let n = live_graph.num_nodes();
+        let m = live_graph.num_arcs();
         Self {
             ubs_checker: MinimalNonShortestSubPaths::new(smooth_cch_pot),
             dijkstra_data: DijkstraData::new(n),
             live_pot: live_cch_pot.forward_potential(),
             live_graph,
-            smooth_graph,
             dijkstra_ops: BlockedPathsDijkstra::new(n, m),
         }
     }
 
     pub fn query(&mut self, query: Query, epsilon: f64) -> Option<()> {
-        self.dijkstra_ops.reset(&self.smooth_graph);
+        self.dijkstra_ops.reset(&self.live_graph);
 
         self.live_pot.init(query.to);
         let base_live_dist = self.live_pot.potential(query.from)?;
@@ -427,7 +425,7 @@ impl<'a> TrafficAwareServer<'a> {
             path.reverse();
             report!("num_nodes_on_path", path.len());
 
-            let (violating, time) = measure(|| self.ubs_checker.find_ubs_violating_subpaths(&path, &self.smooth_graph, epsilon));
+            let (violating, time) = measure(|| self.ubs_checker.find_ubs_violating_subpaths(&path, epsilon));
             report!("ubs_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
             ubs_time = ubs_time + time;
 
@@ -437,7 +435,7 @@ impl<'a> TrafficAwareServer<'a> {
 
             for violating_range in violating {
                 self.dijkstra_ops
-                    .add_forbidden_path(&path[violating_range.start..=violating_range.end], &self.smooth_graph);
+                    .add_forbidden_path(&path[violating_range.start..=violating_range.end], &self.live_graph);
             }
         };
         drop(iterations_ctxt);
@@ -460,17 +458,15 @@ use crate::algo::ch_potentials::query::Server as TopoDijkServer;
 
 pub struct HeuristicTrafficAwareServer<'a> {
     ubs_checker: MinimalNonShortestSubPaths<'a>,
-    smooth_graph: BorrowedGraph<'a>,
     shortest_path: TopoDijkServer<OwnedGraph, BlockedDetoursDijkstra, RecyclingPotential<BorrowedCCHPot<'a>>, true, true, true>,
 }
 
 impl<'a> HeuristicTrafficAwareServer<'a> {
-    pub fn new(smooth_graph: BorrowedGraph<'a>, live_graph: BorrowedGraph<'a>, smooth_cch_pot: &'a CCHPotData, live_cch_pot: &'a CCHPotData) -> Self {
-        let n = smooth_graph.num_nodes();
+    pub fn new(live_graph: BorrowedGraph<'a>, smooth_cch_pot: &'a CCHPotData, live_cch_pot: &'a CCHPotData) -> Self {
+        let n = live_graph.num_nodes();
         let _blocked = block_reporting();
         Self {
             ubs_checker: MinimalNonShortestSubPaths::new(smooth_cch_pot),
-            smooth_graph,
             shortest_path: TopoDijkServer::new(
                 &live_graph,
                 RecyclingPotential::new(live_cch_pot.forward_potential()),
@@ -517,7 +513,7 @@ impl<'a> HeuristicTrafficAwareServer<'a> {
             let mut path = res.node_path();
             report!("num_nodes_on_path", path.len());
 
-            let (violating, time) = measure(|| self.ubs_checker.find_ubs_violating_subpaths(&path, &self.smooth_graph, epsilon));
+            let (violating, time) = measure(|| self.ubs_checker.find_ubs_violating_subpaths(&path, epsilon));
             report!("ubs_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
             ubs_time = ubs_time + time;
 

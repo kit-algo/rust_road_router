@@ -59,7 +59,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             penalty_server.potentials().map(|p| p.inner().inner().num_pot_computations()).sum::<usize>()
         );
         if let Some(alternative) = res {
-            let (lo, ubs) = path_stats.suboptimal_stats(&alternative, &graph);
+            let (lo, ubs) = path_stats.suboptimal_stats(&alternative);
             report!("local_optimality_percent", lo * 100.0);
             report!("ubs", ubs);
         }

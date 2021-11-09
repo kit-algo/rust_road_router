@@ -26,10 +26,10 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
         }
     }
 
-    pub fn find_ubs_violating_subpaths<G>(&mut self, path: &[NodeId], graph: &G, epsilon: f64) -> Vec<Range<usize>>
-    where
-        G: EdgeIdGraph + EdgeRandomAccessGraph<Link>,
-    {
+    pub fn find_ubs_violating_subpaths(&mut self, path: &[NodeId], epsilon: f64) -> Vec<Range<usize>> {
+        let path: Vec<_> = path.iter().map(|&node| self.target_pot.cch().node_order().rank(node)).collect();
+        let path = &path[..];
+
         for rank in &self.path_ranks {
             debug_assert!(rank.value().is_none());
         }
@@ -51,7 +51,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
             return violating;
         }
 
-        let dists = path_dists(path, graph);
+        let dists = self.path_dists(path);
 
         self.tree_find_minimal_nonshortest(path, &dists, |range, path_dist, shortest_dist| {
             debug_assert!(path_dist >= shortest_dist);
@@ -71,10 +71,10 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
         violating
     }
 
-    pub fn local_optimality<G>(&mut self, path: &[NodeId], graph: &G) -> f64
-    where
-        G: EdgeIdGraph + EdgeRandomAccessGraph<Link>,
-    {
+    pub fn local_optimality(&mut self, path: &[NodeId]) -> f64 {
+        let path: Vec<_> = path.iter().map(|&node| self.target_pot.cch().node_order().rank(node)).collect();
+        let path = &path[..];
+
         for rank in &self.path_ranks {
             debug_assert!(rank.value().is_none());
         }
@@ -87,7 +87,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
             path_ranks[node as usize] = InRangeOption::new(Some(rank));
         }
 
-        let dists = path_dists(path, graph);
+        let dists = self.path_dists(path);
         let base_dist = *dists.last().unwrap();
         let mut local_optimality = base_dist;
 
@@ -107,10 +107,10 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
         local_optimality as f64 / base_dist as f64
     }
 
-    pub fn suboptimal_stats<G>(&mut self, path: &[NodeId], graph: &G) -> (f64, f64)
-    where
-        G: EdgeIdGraph + EdgeRandomAccessGraph<Link>,
-    {
+    pub fn suboptimal_stats(&mut self, path: &[NodeId]) -> (f64, f64) {
+        let path: Vec<_> = path.iter().map(|&node| self.target_pot.cch().node_order().rank(node)).collect();
+        let path = &path[..];
+
         for rank in &self.path_ranks {
             debug_assert!(rank.value().is_none());
         }
@@ -123,7 +123,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
             path_ranks[node as usize] = InRangeOption::new(Some(rank));
         }
 
-        let dists = path_dists(path, graph);
+        let dists = self.path_dists(path);
         let base_dist = *dists.last().unwrap();
         let mut local_optimality = base_dist;
         let mut ubs = 0.0;
@@ -177,18 +177,15 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
                 target_earliest_suboptimal_rank = path_ranks[node as usize].value().unwrap() as usize;
                 self.target_pot.unpack_path(NodeIdT(node));
 
-                let next_on_path = self.target_pot.cch().node_order().rank(next_on_path);
-                let node = self.target_pot.cch().node_order().rank(node);
                 if self.target_pot.target_shortest_path_tree()[node as usize] != next_on_path && shortest_dist != path_dist {
-                    let cch_order = self.target_pot.cch().node_order();
-                    path_parent(node, self.target_pot.target_shortest_path_tree(), &mut self.path_parent_cache, |cch_rank| {
-                        path_ranks[cch_order.node(cch_rank) as usize].value().map_or(false, |path_rank| {
+                    path_parent(node, self.target_pot.target_shortest_path_tree(), &mut self.path_parent_cache, |node| {
+                        path_ranks[node as usize].value().map_or(false, |path_rank| {
                             path_rank >= path_ranks[start as usize].value().unwrap() && path_rank <= path_ranks[end as usize].value().unwrap()
                         })
                     });
 
                     let path_parent = self.path_parent_cache[node as usize].value().unwrap();
-                    let path_parent_rank = path_ranks[self.target_pot.cch().node_order().node(path_parent) as usize].value().unwrap();
+                    let path_parent_rank = path_ranks[path_parent as usize].value().unwrap();
                     if let Some(target_earliest_deviation_rank_inner) = target_earliest_deviation_rank {
                         target_earliest_deviation_rank = Some(std::cmp::max(target_earliest_deviation_rank_inner, path_parent_rank));
                     } else {
@@ -198,11 +195,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
             }
 
             for &node in path {
-                reset_path_parent_cache(
-                    self.target_pot.cch().node_order().rank(node),
-                    self.target_pot.target_shortest_path_tree(),
-                    &mut self.path_parent_cache,
-                );
+                reset_path_parent_cache(node, self.target_pot.target_shortest_path_tree(), &mut self.path_parent_cache);
             }
             for pp in &self.path_parent_cache {
                 debug_assert_eq!(pp.value(), None);
@@ -227,18 +220,15 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
                 source_earliest_suboptimal_rank = path_ranks[node as usize].value().unwrap() as usize;
                 self.source_pot.unpack_path(NodeIdT(node));
 
-                let prev_on_path = self.target_pot.cch().node_order().rank(prev_on_path);
-                let node = self.target_pot.cch().node_order().rank(node);
                 if self.source_pot.target_shortest_path_tree()[node as usize] != prev_on_path && shortest_dist != path_dist {
-                    let cch_order = self.target_pot.cch().node_order();
-                    path_parent(node, self.source_pot.target_shortest_path_tree(), &mut self.path_parent_cache, |cch_rank| {
-                        path_ranks[cch_order.node(cch_rank) as usize].value().map_or(false, |path_rank| {
+                    path_parent(node, self.source_pot.target_shortest_path_tree(), &mut self.path_parent_cache, |node| {
+                        path_ranks[node as usize].value().map_or(false, |path_rank| {
                             path_rank >= path_ranks[start as usize].value().unwrap() && path_rank <= path_ranks[end as usize].value().unwrap()
                         })
                     });
 
                     let path_parent = self.path_parent_cache[node as usize].value().unwrap();
-                    let path_parent_rank = path_ranks[self.target_pot.cch().node_order().node(path_parent) as usize].value().unwrap();
+                    let path_parent_rank = path_ranks[path_parent as usize].value().unwrap();
                     if let Some(source_earliest_deviation_rank_inner) = source_earliest_deviation_rank {
                         source_earliest_deviation_rank = Some(std::cmp::min(source_earliest_deviation_rank_inner, path_parent_rank));
                     } else {
@@ -248,11 +238,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
             }
 
             for &node in path {
-                reset_path_parent_cache(
-                    self.target_pot.cch().node_order().rank(node),
-                    self.source_pot.target_shortest_path_tree(),
-                    &mut self.path_parent_cache,
-                );
+                reset_path_parent_cache(node, self.source_pot.target_shortest_path_tree(), &mut self.path_parent_cache);
             }
             for pp in &self.path_parent_cache {
                 debug_assert_eq!(pp.value(), None);
@@ -295,6 +281,27 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
         }
         report!("num_ubs_tree_iterations", i);
     }
+
+    fn path_dists(&self, path: &[NodeId]) -> Vec<Weight> {
+        let mut dists = Vec::with_capacity(path.len());
+        dists.push(0);
+        for node_pair in path.windows(2) {
+            let mut min_edge_weight = INFINITY;
+            let (graph, iter) = if node_pair[0] < node_pair[1] {
+                let g = self.target_pot.forward_cch_graph();
+                (g, g.edge_indices(node_pair[0], node_pair[1]))
+            } else {
+                let g = self.target_pot.backward_cch_graph();
+                (g, g.edge_indices(node_pair[1], node_pair[0]))
+            };
+            for EdgeIdT(edge_id) in iter {
+                min_edge_weight = std::cmp::min(min_edge_weight, graph.link(edge_id).weight);
+            }
+            debug_assert_ne!(min_edge_weight, INFINITY);
+            dists.push(dists.last().unwrap() + min_edge_weight);
+        }
+        dists
+    }
 }
 
 pub fn filter_covered(ranges: &mut Vec<Range<usize>>) {
@@ -325,23 +332,6 @@ pub fn filter_covered(ranges: &mut Vec<Range<usize>>) {
     }
 
     ranges.retain(with_index(|index, _| !covered.get(index)));
-}
-
-fn path_dists<G>(path: &[NodeId], graph: &G) -> Vec<Weight>
-where
-    G: EdgeIdGraph + EdgeRandomAccessGraph<Link>,
-{
-    let mut dists = Vec::with_capacity(path.len());
-    dists.push(0);
-    for node_pair in path.windows(2) {
-        let mut min_edge_weight = INFINITY;
-        for EdgeIdT(edge_id) in graph.edge_indices(node_pair[0], node_pair[1]) {
-            min_edge_weight = std::cmp::min(min_edge_weight, graph.link(edge_id).weight);
-        }
-        debug_assert_ne!(min_edge_weight, INFINITY);
-        dists.push(dists.last().unwrap() + min_edge_weight);
-    }
-    dists
 }
 
 pub fn path_parent(node: NodeId, predecessors: &[NodeId], path_parent_cache: &mut [InRangeOption<NodeId>], mut on_path: impl FnMut(NodeId) -> bool) -> NodeId {
