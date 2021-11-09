@@ -24,10 +24,9 @@ impl Server {
             &self.graph,
             &mut self.data,
             &mut ops,
-            TDQuery {
-                from,
-                to: self.graph.num_nodes() as NodeId,
-                departure: departure_time,
+            DijkstraInit {
+                source: NodeIdT(from),
+                initial_state: departure_time,
             },
         );
 
@@ -44,7 +43,7 @@ impl Server {
     fn distance(&mut self, query: TDQuery<Timestamp>) -> Option<FlWeight> {
         report!("algo", "Floating TD-Dijkstra");
         let mut ops = FlTDDijkstraOps();
-        let mut dijkstra = DijkstraRun::query(&self.graph, &mut self.data, &mut ops, query);
+        let mut dijkstra = DijkstraRun::query(&self.graph, &mut self.data, &mut ops, DijkstraInit::from_query(&query));
 
         while let Some(node) = dijkstra.next() {
             if node == query.to {

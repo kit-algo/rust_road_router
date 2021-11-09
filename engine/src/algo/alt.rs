@@ -183,12 +183,11 @@ impl ALTPotData {
     {
         report!("algo", "Farthest Landmarks");
         report!("num_landmarks", num_landmarks);
-        let n = graph.num_nodes() as NodeId;
         let mut landmarks = Vec::with_capacity(num_landmarks);
         let mut dijkstra_data = DijkstraData::new(graph.num_nodes());
 
         let mut ops = DefaultOps();
-        let mut dijkstra = DijkstraRun::query(graph, &mut dijkstra_data, &mut ops, Query { from: initial_landmark, to: n });
+        let mut dijkstra = DijkstraRun::query(graph, &mut dijkstra_data, &mut ops, DijkstraInit::from(initial_landmark));
 
         let mut last_node = initial_landmark;
 
@@ -198,9 +197,9 @@ impl ALTPotData {
                     last_node = node;
                 }
 
-                dijkstra.initialize(Query { from: last_node, to: n });
+                dijkstra.initialize(DijkstraInit::from(last_node));
                 for &l in &landmarks {
-                    dijkstra.add_start_node(Query { from: l, to: n })
+                    dijkstra.add_start_node(DijkstraInit::from(l))
                 }
                 landmarks.push(last_node);
             }

@@ -53,6 +53,29 @@ impl Label for Weight {
     }
 }
 
+pub struct DijkstraInit<L> {
+    pub source: NodeIdT,
+    pub initial_state: L,
+}
+
+impl<L> DijkstraInit<L> {
+    pub fn from_query(q: &impl GenQuery<L>) -> Self {
+        Self {
+            source: NodeIdT(q.from()),
+            initial_state: q.initial_state(),
+        }
+    }
+}
+
+impl DijkstraInit<Weight> {
+    pub fn from(node: NodeId) -> Self {
+        Self {
+            source: NodeIdT(node),
+            initial_state: 0,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct DijkstraData<L: Label, PredLink = (), NodeData = L> {
     pub distances: TimestampedVector<NodeData>,

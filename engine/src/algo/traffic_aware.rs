@@ -318,48 +318,6 @@ impl<G> DijkstraOps<G> for BlockedDetoursDijkstra {
     fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {}
 }
 
-pub struct TrafficAwareQuery(Query);
-
-impl GenQuery<ForbiddenPathLabel> for TrafficAwareQuery {
-    fn new(from: NodeId, to: NodeId, _initial_state: ForbiddenPathLabel) -> Self {
-        TrafficAwareQuery(Query { from, to })
-    }
-
-    fn from(&self) -> NodeId {
-        self.0.from
-    }
-    fn to(&self) -> NodeId {
-        self.0.to
-    }
-    fn initial_state(&self) -> ForbiddenPathLabel {
-        (0, ActiveForbittenPaths::new(0), (NodeIdT(self.0.from), ActiveForbittenPaths::new(0)))
-    }
-    fn permutate(&mut self, order: &NodeOrder) {
-        self.0.from = order.rank(self.0.from);
-        self.0.to = order.rank(self.0.to);
-    }
-}
-
-impl GenQuery<Weight> for TrafficAwareQuery {
-    fn new(from: NodeId, to: NodeId, _initial_state: Weight) -> Self {
-        TrafficAwareQuery(Query { from, to })
-    }
-
-    fn from(&self) -> NodeId {
-        self.0.from
-    }
-    fn to(&self) -> NodeId {
-        self.0.to
-    }
-    fn initial_state(&self) -> Weight {
-        0
-    }
-    fn permutate(&mut self, order: &NodeOrder) {
-        self.0.from = order.rank(self.0.from);
-        self.0.to = order.rank(self.0.to);
-    }
-}
-
 type ForbiddenPathLabel = (Weight, ActiveForbittenPaths, (NodeIdT, ActiveForbittenPaths));
 
 pub struct TrafficAwareServer<'a> {
@@ -411,7 +369,10 @@ impl<'a> TrafficAwareServer<'a> {
                 &self.live_graph,
                 &mut self.dijkstra_data,
                 &mut self.dijkstra_ops,
-                TrafficAwareQuery(query),
+                DijkstraInit {
+                    source: NodeIdT(query.from),
+                    initial_state: (0, ActiveForbittenPaths::new(0), (NodeIdT(query.from), ActiveForbittenPaths::new(0))),
+                },
                 |node| live_pot.potential(node),
             );
 
@@ -538,7 +499,12 @@ impl<'a> HeuristicTrafficAwareServer<'a> {
             i += 1;
             report!("iteration", i);
             let live_pot = &mut self.live_pot;
-            let mut dijk_run = DijkstraRun::query(&self.live_graph, &mut self.dijkstra_data, &mut self.dijkstra_ops, TrafficAwareQuery(query));
+            let mut dijk_run = DijkstraRun::query(
+                &self.live_graph,
+                &mut self.dijkstra_data,
+                &mut self.dijkstra_ops,
+                DijkstraInit::from_query(&query),
+            );
 
             let mut num_queue_pops = 0;
             let (_, time) = measure(|| {

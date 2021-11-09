@@ -1,10 +1,5 @@
 use rand::prelude::*;
-use rust_road_router::{
-    algo::{dijkstra::*, *},
-    cli::CliErr,
-    datastr::graph::*,
-    io::*,
-};
+use rust_road_router::{algo::dijkstra::*, cli::CliErr, datastr::graph::*, io::*};
 use std::{env, error::Error, path::Path};
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -39,15 +34,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut ops = DefaultOps::default();
     for _ in 0..num_queries {
         let from = rng.gen_range(0..graph.num_nodes() as NodeId);
-        let mut dijkstra = DijkstraRun::query(
-            &graph,
-            &mut dijk_data,
-            &mut ops,
-            Query {
-                from,
-                to: graph.num_nodes() as NodeId,
-            },
-        );
+        let mut dijkstra = DijkstraRun::query(&graph, &mut dijk_data, &mut ops, DijkstraInit::from(from));
 
         let mut i: usize = 0;
         let mut tt_greater_1h = false;

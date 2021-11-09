@@ -47,7 +47,7 @@ where
         report!("algo", "Dijkstra Query");
         let to = query.to();
         let mut ops = Ops::default();
-        let mut dijkstra = DijkstraRun::query(self.graph.borrow(), &mut self.dijkstra, &mut ops, query);
+        let mut dijkstra = DijkstraRun::query(self.graph.borrow(), &mut self.dijkstra, &mut ops, DijkstraInit::from_query(&query));
         self.potential.init(to);
 
         let potential = &mut self.potential;
@@ -82,15 +82,7 @@ where
         F: (FnMut(NodeId, Weight, usize)),
     {
         let mut ops = Ops::default();
-        let mut dijkstra = DijkstraRun::query(
-            self.graph.borrow(),
-            &mut self.dijkstra,
-            &mut ops,
-            Query {
-                from,
-                to: self.graph.borrow().num_nodes() as NodeId,
-            },
-        );
+        let mut dijkstra = DijkstraRun::query(self.graph.borrow(), &mut self.dijkstra, &mut ops, DijkstraInit::from(from));
 
         let mut i: usize = 0;
         while let Some(node) = dijkstra.next() {

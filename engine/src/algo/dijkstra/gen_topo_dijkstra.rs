@@ -23,7 +23,7 @@ where
     Ops: DijkstraOps<Graph>,
     Graph: LinkIterable<NodeIdT> + LinkIterable<Ops::Arc> + SymmetricDegreeGraph,
 {
-    pub fn query(graph: &'b Graph, data: &'b mut DijkstraData<Ops::Label, Ops::PredecessorLink>, ops: &'b mut Ops, query: impl GenQuery<Ops::Label>) -> Self {
+    pub fn query(graph: &'b Graph, data: &'b mut DijkstraData<Ops::Label, Ops::PredecessorLink>, ops: &'b mut Ops, init: DijkstraInit<Ops::Label>) -> Self {
         let mut s = Self {
             graph,
             ops,
@@ -33,7 +33,7 @@ where
             num_relaxed_arcs: 0,
             num_queue_pushs: 0,
         };
-        s.initialize(query);
+        s.initialize(init);
         s
     }
 
@@ -51,17 +51,20 @@ where
         s
     }
 
-    fn initialize(&mut self, query: impl GenQuery<Ops::Label>) {
+    fn initialize(&mut self, init: DijkstraInit<Ops::Label>) {
         self.queue.clear();
         self.distances.reset();
-        self.add_start_node(query);
+        self.add_start_node(init);
     }
 
-    pub fn add_start_node(&mut self, query: impl GenQuery<Ops::Label>) {
-        let from = query.from();
-        let init = query.initial_state();
-        self.queue.push(State { key: init.key(), node: from });
-        self.distances[from as usize] = init;
+    pub fn add_start_node(&mut self, init: DijkstraInit<Ops::Label>) {
+        let NodeIdT(from) = init.source;
+        let initial = init.initial_state;
+        self.queue.push(State {
+            key: initial.key(),
+            node: from,
+        });
+        self.distances[from as usize] = initial;
         self.predecessors[from as usize].0 = from;
     }
 
@@ -320,7 +323,7 @@ where
         predecessors: &'b mut [(NodeId, Ops::PredecessorLink)],
         queue: &'b mut IndexdMinHeap<State<Weight>>,
         ops: &'b mut Ops,
-        query: impl GenQuery<Ops::Label>,
+        init: DijkstraInit<Ops::Label>,
     ) -> Self {
         let mut s = Self {
             graph,
@@ -331,35 +334,24 @@ where
             num_relaxed_arcs: 0,
             num_queue_pushs: 0,
         };
-        s.initialize(query);
+        s.initialize(init);
         s
     }
 
-    // pub fn continue_query(graph: &'b Graph, data: &'b mut SyncDijkstraData, ops: &'b mut Ops, node: NodeId) -> Self {
-    //     let mut s = Self {
-    //         graph,
-    //         ops,
-    //         predecessors: &mut data.predecessors,
-    //         queue: &mut data.queue,
-    //         distances: &mut data.distances,
-    //         num_relaxed_arcs: 0,
-    //         num_queue_pushs: 0,
-    //     };
-    //     s.reinit_queue(node);
-    //     s
-    // }
-
-    fn initialize(&mut self, query: impl GenQuery<Ops::Label>) {
+    fn initialize(&mut self, init: DijkstraInit<Ops::Label>) {
         self.queue.clear();
         // self.distances.reset();
-        self.add_start_node(query);
+        self.add_start_node(init);
     }
 
-    pub fn add_start_node(&mut self, query: impl GenQuery<Ops::Label>) {
-        let from = query.from();
-        let init = query.initial_state();
-        self.queue.push(State { key: init.key(), node: from });
-        self.distances.set(from as usize, init);
+    pub fn add_start_node(&mut self, init: DijkstraInit<Ops::Label>) {
+        let NodeIdT(from) = init.source;
+        let initial = init.initial_state;
+        self.queue.push(State {
+            key: initial.key(),
+            node: from,
+        });
+        self.distances.set(from as usize, initial);
         self.predecessors[from as usize].0 = from;
     }
 

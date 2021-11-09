@@ -24,7 +24,7 @@ where
     Graph: LinkIterable<Ops::Arc>,
     Ops: DijkstraOps<Graph>,
 {
-    pub fn query(graph: &'b Graph, data: &'b mut DijkstraData<Ops::Label, Ops::PredecessorLink>, ops: &'b mut Ops, query: impl GenQuery<Ops::Label>) -> Self {
+    pub fn query(graph: &'b Graph, data: &'b mut DijkstraData<Ops::Label, Ops::PredecessorLink>, ops: &'b mut Ops, init: DijkstraInit<Ops::Label>) -> Self {
         let mut s = Self {
             graph,
             ops,
@@ -34,7 +34,7 @@ where
             num_relaxed_arcs: 0,
             num_queue_pushs: 0,
         };
-        s.initialize(query);
+        s.initialize(init);
         s
     }
 
@@ -52,17 +52,20 @@ where
         s
     }
 
-    pub fn initialize(&mut self, query: impl GenQuery<Ops::Label>) {
+    pub fn initialize(&mut self, init: DijkstraInit<Ops::Label>) {
         self.queue.clear();
         self.distances.reset();
-        self.add_start_node(query);
+        self.add_start_node(init);
     }
 
-    pub fn add_start_node(&mut self, query: impl GenQuery<Ops::Label>) {
-        let from = query.from();
-        let init = query.initial_state();
-        self.queue.push(State { key: init.key(), node: from });
-        self.distances[from as usize] = init;
+    pub fn add_start_node(&mut self, init: DijkstraInit<Ops::Label>) {
+        let NodeIdT(from) = init.source;
+        let initial = init.initial_state;
+        self.queue.push(State {
+            key: initial.key(),
+            node: from,
+        });
+        self.distances[from as usize] = initial;
         self.predecessors[from as usize].0 = from;
     }
 
@@ -222,7 +225,7 @@ where
         graph: &'b Graph,
         data: &'b mut DijkstraData<Ops::Label, Ops::PredecessorLink, MultiCritNodeData<Ops::Label>>,
         ops: &'b mut Ops,
-        query: impl GenQuery<Ops::Label>,
+        init: DijkstraInit<Ops::Label>,
         potential: P,
     ) -> Self
     where
@@ -238,7 +241,7 @@ where
             num_relaxed_arcs: 0,
             num_queue_pushs: 0,
         };
-        s.initialize(query, potential);
+        s.initialize(init, potential);
         s
     }
 
@@ -261,28 +264,28 @@ where
         s
     }
 
-    pub fn initialize<P, O>(&mut self, query: impl GenQuery<Ops::Label>, potential: P)
+    pub fn initialize<P, O>(&mut self, init: DijkstraInit<Ops::Label>, potential: P)
     where
         P: FnMut(NodeId) -> Option<O>,
         O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
     {
         self.queue.clear();
         self.distances.reset();
-        self.add_start_node(query, potential);
+        self.add_start_node(init, potential);
     }
 
-    pub fn add_start_node<P, O>(&mut self, query: impl GenQuery<Ops::Label>, mut potential: P)
+    pub fn add_start_node<P, O>(&mut self, init: DijkstraInit<Ops::Label>, mut potential: P)
     where
         P: FnMut(NodeId) -> Option<O>,
         O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
     {
-        let from = query.from();
-        let init = query.initial_state();
-        if let Some(key) = potential(from).map(|p| p + init.key()) {
+        let NodeIdT(from) = init.source;
+        let initial = init.initial_state;
+        if let Some(key) = potential(from).map(|p| p + initial.key()) {
             self.queue.push(State { key, node: from });
         }
         let mut node_queue = crate::datastr::heap::Heap::new();
-        node_queue.push(NodeQueueLabelOrder(init));
+        node_queue.push(NodeQueueLabelOrder(initial));
         self.distances[from as usize] = node_queue;
         self.predecessors[from as usize].0 = from;
     }

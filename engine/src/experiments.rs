@@ -209,15 +209,7 @@ pub fn gen_many_to_many_queries(
 
     for _ in 0..num_queries {
         let source_center = rng.gen_range(0..n as NodeId);
-        let dijk_run = DijkstraRun::query(
-            graph,
-            &mut dijk_data,
-            &mut ops,
-            Query {
-                from: source_center,
-                to: n as NodeId,
-            },
-        );
+        let dijk_run = DijkstraRun::query(graph, &mut dijk_data, &mut ops, DijkstraInit::from(source_center));
         let ball: Vec<_> = dijk_run.take(ball_size).collect();
         let sources = ball.choose_multiple(rng, set_size).copied().collect();
 

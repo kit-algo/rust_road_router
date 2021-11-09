@@ -335,15 +335,7 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> Potential for CHPotential<GF, GB> {
         self.potentials.reset();
 
         let mut ops = DefaultOps();
-        for _ in DijkstraRun::query(
-            &self.backward,
-            &mut self.dijkstra_data,
-            &mut ops,
-            Query {
-                from: self.order.rank(target),
-                to: std::u32::MAX,
-            },
-        ) {}
+        for _ in DijkstraRun::query(&self.backward, &mut self.dijkstra_data, &mut ops, DijkstraInit::from(self.order.rank(target))) {}
     }
 
     fn potential(&mut self, node: NodeId) -> Option<Weight> {

@@ -83,7 +83,15 @@ impl<'a> Server<'a> {
 
         // dijkstra on subgraph
         let mut ops = TDDijkstraOps();
-        let mut dijkstra = DijkstraRun::query(&self.graph, &mut self.dijkstra_data, &mut ops, TDQuery { from, to, departure });
+        let mut dijkstra = DijkstraRun::query(
+            &self.graph,
+            &mut self.dijkstra_data,
+            &mut ops,
+            DijkstraInit {
+                source: NodeIdT(from),
+                initial_state: departure,
+            },
+        );
 
         let active_edges = &self.active_edges;
         while let Some(node) = dijkstra.next_filtered_edges(|&(_, edge_id)| active_edges[edge_id.0 as usize]) {

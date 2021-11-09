@@ -2,12 +2,7 @@
 
 use std::{env, error::Error, path::Path};
 
-use rust_road_router::{
-    algo::{dijkstra::*, Query},
-    cli::CliErr,
-    datastr::graph::*,
-    io::*,
-};
+use rust_road_router::{algo::dijkstra::*, cli::CliErr, datastr::graph::*, io::*};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args().skip(1);
@@ -64,15 +59,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut ops = DefaultOps();
     let mut data = DijkstraData::<Weight>::new(graph.num_nodes());
-    let dijkstra = DijkstraRun::query(
-        &graph,
-        &mut data,
-        &mut ops,
-        Query {
-            from: start_node as NodeId,
-            to: std::u32::MAX,
-        },
-    );
+    let dijkstra = DijkstraRun::query(&graph, &mut data, &mut ops, DijkstraInit::from(start_node as NodeId));
 
     let mut counter = 0;
     for node in dijkstra {

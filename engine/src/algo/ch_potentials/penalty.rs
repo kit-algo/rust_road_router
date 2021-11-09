@@ -249,15 +249,7 @@ impl<P: Potential + Send + Clone> Penalty<P> {
                 contained_edges: &alternative_graph_dijkstra.graph().contained_edges,
                 weights: alternative_graph_dijkstra.graph().graph.graph.weight(),
             };
-            for _ in DijkstraRun::query(
-                &reversed_graph,
-                &mut self.reverse_dijkstra_data,
-                &mut ops,
-                Query {
-                    from: core_to,
-                    to: self.reversed.num_nodes() as NodeId,
-                },
-            ) {}
+            for _ in DijkstraRun::query(&reversed_graph, &mut self.reverse_dijkstra_data, &mut ops, DijkstraInit::from(core_to)) {}
             let forward_dists = alternative_graph_dijkstra.one_to_all(core_from);
             let mut total_dist = 0.0;
             let mut avg_dist = 0;

@@ -67,10 +67,7 @@ impl Potential for BaselinePotential {
                 &self.graph,
                 &mut self.data,
                 &mut ops,
-                Query {
-                    from: target,
-                    to: self.graph.num_nodes() as NodeId,
-                },
+                DijkstraInit::from(target),
             );
             for _ in dijkstra {}
         })

@@ -96,7 +96,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut forward_settled_nodes = BitVec::new(graph.num_nodes());
     let mut fw_ops = DefaultOps();
     let mut fw_data = DijkstraData::new(graph.num_nodes());
-    let forward_dijkstra = DijkstraRun::query(&up, &mut fw_data, &mut fw_ops, Query { from: 0, to: std::u32::MAX });
+    let forward_dijkstra = DijkstraRun::query(&up, &mut fw_data, &mut fw_ops, DijkstraInit::from(0));
     for node in forward_dijkstra {
         forward_settled_nodes.set(node as usize);
     }
@@ -104,7 +104,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut backward_settled_nodes = BitVec::new(graph.num_nodes());
     let mut bw_ops = DefaultOps();
     let mut bw_data = DijkstraData::new(graph.num_nodes());
-    let backward_dijkstra = DijkstraRun::query(&up, &mut bw_data, &mut bw_ops, Query { from: 100, to: std::u32::MAX });
+    let backward_dijkstra = DijkstraRun::query(&up, &mut bw_data, &mut bw_ops, DijkstraInit::from(100));
     for node in backward_dijkstra {
         backward_settled_nodes.set(node as usize);
     }

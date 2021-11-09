@@ -40,8 +40,8 @@ impl Server {
 
         let mut fw_ops = DefaultOps();
         let mut bw_ops = DefaultOps();
-        let mut forward_dijkstra = DijkstraRun::query(&self.forward, &mut self.forward_data, &mut fw_ops, Query { from, to });
-        let mut backward_dijkstra = DijkstraRun::query(&self.backward, &mut self.backward_data, &mut bw_ops, Query { from: to, to: from });
+        let mut forward_dijkstra = DijkstraRun::query(&self.forward, &mut self.forward_data, &mut fw_ops, DijkstraInit::from(from));
+        let mut backward_dijkstra = DijkstraRun::query(&self.backward, &mut self.backward_data, &mut bw_ops, DijkstraInit::from(to));
 
         let mut forward_progress = 0;
         let mut backward_progress = 0;
