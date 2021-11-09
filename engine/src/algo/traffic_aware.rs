@@ -434,6 +434,7 @@ impl<'a> TrafficAwareServer<'a> {
                 break None;
             }
 
+            debug_assert_eq!(self.dijkstra_data.distances[query.to as usize].popped().len(), 1);
             final_live_dist = self.dijkstra_data.distances[query.to as usize].popped()[0].0 .0;
 
             let mut path = vec![query.to];

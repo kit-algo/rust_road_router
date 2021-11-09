@@ -345,6 +345,7 @@ where
     {
         self.queue.pop().map(|State { node, key }| {
             let mut node_labels = MultiCritNodeData::<Ops::Label>::new();
+            // this is only valid when there are no loop edges...
             std::mem::swap(&mut self.distances[node as usize], &mut node_labels);
             let _ = node_labels.pop().unwrap();
             let NodeQueueLabelOrder(label) = &node_labels.popped()[0];
@@ -364,7 +365,7 @@ where
                         self.predecessors,
                         NodeIdT(node),
                         key - potential(node).unwrap(),
-                        &label,
+                        label,
                         &link,
                     );
 
