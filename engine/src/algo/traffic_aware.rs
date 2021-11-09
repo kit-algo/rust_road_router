@@ -456,34 +456,34 @@ impl<'a> TrafficAwareServer<'a> {
     }
 }
 
+use crate::algo::ch_potentials::query::Server as TopoDijkServer;
+
 pub struct HeuristicTrafficAwareServer<'a> {
     ubs_checker: MinimalNonShortestSubPaths<'a>,
-    dijkstra_data: DijkstraData<Weight>,
-    live_pot: BorrowedCCHPot<'a>,
-    live_graph: BorrowedGraph<'a>,
     smooth_graph: BorrowedGraph<'a>,
-    dijkstra_ops: BlockedDetoursDijkstra,
+    shortest_path: TopoDijkServer<OwnedGraph, BlockedDetoursDijkstra, RecyclingPotential<BorrowedCCHPot<'a>>, true, true, true>,
 }
 
 impl<'a> HeuristicTrafficAwareServer<'a> {
     pub fn new(smooth_graph: BorrowedGraph<'a>, live_graph: BorrowedGraph<'a>, smooth_cch_pot: &'a CCHPotData, live_cch_pot: &'a CCHPotData) -> Self {
         let n = smooth_graph.num_nodes();
+        let _blocked = block_reporting();
         Self {
             ubs_checker: MinimalNonShortestSubPaths::new(smooth_cch_pot),
-            dijkstra_data: DijkstraData::new(n),
-            live_pot: live_cch_pot.forward_potential(),
-            live_graph,
             smooth_graph,
-            dijkstra_ops: BlockedDetoursDijkstra::new(n),
+            shortest_path: TopoDijkServer::new(
+                &live_graph,
+                RecyclingPotential::new(live_cch_pot.forward_potential()),
+                BlockedDetoursDijkstra::new(n),
+            ),
         }
     }
 
     pub fn query(&mut self, query: Query, epsilon: f64) -> Option<()> {
-        self.dijkstra_ops.reset();
+        self.shortest_path.ops().reset();
 
-        self.live_pot.init(query.to);
-        let base_live_dist = self.live_pot.potential(query.from)?;
-        let mut final_live_dist = base_live_dist;
+        let mut base_live_dist = None;
+        let mut final_live_dist = INFINITY;
 
         let mut explore_time = time::Duration::zero();
         let mut ubs_time = time::Duration::zero();
@@ -498,34 +498,23 @@ impl<'a> HeuristicTrafficAwareServer<'a> {
             let _it_ctxt = iterations_ctxt.push_collection_item();
             i += 1;
             report!("iteration", i);
-            let live_pot = &mut self.live_pot;
-            let mut dijk_run = DijkstraRun::query(
-                &self.live_graph,
-                &mut self.dijkstra_data,
-                &mut self.dijkstra_ops,
-                DijkstraInit::from_query(&query),
-            );
 
-            let mut num_queue_pops = 0;
-            let (_, time) = measure(|| {
-                while let Some(node) = dijk_run.next_step_with_potential(|node| live_pot.potential(node)) {
-                    num_queue_pops += 1;
-                    if node == query.to {
-                        break;
-                    }
-                }
-            });
+            let (res, time) = measure(|| self.shortest_path.query(query));
 
-            report!("num_queue_pops", num_queue_pops);
             report!("exploration_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
             explore_time = explore_time + time;
 
-            if self.dijkstra_data.distances[query.to as usize] == INFINITY {
+            let mut res = if let Some(res) = res.found() {
+                res
+            } else {
                 break None;
-            }
+            };
 
-            final_live_dist = self.dijkstra_data.distances[query.to as usize];
-            let path = self.dijkstra_data.node_path(query.from, query.to);
+            final_live_dist = res.distance();
+            if base_live_dist.is_none() {
+                base_live_dist = Some(res.distance());
+            }
+            let mut path = res.node_path();
             report!("num_nodes_on_path", path.len());
 
             let (violating, time) = measure(|| self.ubs_checker.find_ubs_violating_subpaths(&path, &self.smooth_graph, epsilon));
@@ -536,18 +525,23 @@ impl<'a> HeuristicTrafficAwareServer<'a> {
                 break Some(());
             }
 
+            for node in &mut path {
+                *node = self.shortest_path.order().rank(*node);
+            }
             for violating_range in violating {
-                self.dijkstra_ops.add_forbidden_path(&path[violating_range.start..=violating_range.end]);
+                self.shortest_path.ops().add_forbidden_path(&path[violating_range.start..=violating_range.end]);
             }
         };
         drop(iterations_ctxt);
         report!("failed", result.is_none());
         report!("num_iterations", i);
-        report!("num_forbidden_paths", self.dijkstra_ops.num_forbidden_paths());
-        report!(
-            "length_increase_percent",
-            (final_live_dist - base_live_dist) as f64 / base_live_dist as f64 * 100.0
-        );
+        report!("num_forbidden_paths", self.shortest_path.ops().num_forbidden_paths());
+        if let Some(base_live_dist) = base_live_dist {
+            report!(
+                "length_increase_percent",
+                (final_live_dist - base_live_dist) as f64 / base_live_dist as f64 * 100.0
+            );
+        }
         report!("total_exploration_time_ms", explore_time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         report!("total_ubs_time_ms", ubs_time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
         result

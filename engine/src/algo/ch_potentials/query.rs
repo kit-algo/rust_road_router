@@ -225,6 +225,14 @@ where
         let rank = self.virtual_topocore.order.rank(node);
         self.core_search.dijkstra_data.predecessors[rank as usize].0
     }
+
+    pub fn ops(&mut self) -> &mut Ops {
+        &mut self.core_search.ops.0
+    }
+
+    pub fn order(&self) -> &NodeOrder {
+        &self.virtual_topocore.order
+    }
 }
 
 pub struct PathServerWrapper<'s, G, O: DijkstraOps<G>, P, Q, const BCC_CORE: bool, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool>(
