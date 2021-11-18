@@ -355,7 +355,7 @@ impl<'a> TrafficAwareServer<'a> {
         let mut total_queue_pops = 0usize;
         let mut iterations_ctxt = push_collection_context("iterations".to_string());
         let result = loop {
-            if i > 200 {
+            if i > 250 {
                 break None;
             }
 
@@ -487,7 +487,7 @@ impl<'a> HeuristicTrafficAwareServer<'a> {
         let mut i = 0;
         let mut iterations_ctxt = push_collection_context("iterations".to_string());
         let result = loop {
-            if i > 200 {
+            if i > 250 {
                 break None;
             }
 

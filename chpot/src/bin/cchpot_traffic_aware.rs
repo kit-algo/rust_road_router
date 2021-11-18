@@ -6,31 +6,42 @@ use rust_road_router::{
     algo::{ch_potentials::*, customizable_contraction_hierarchy::*, traffic_aware::*, *},
     cli::CliErr,
     datastr::{graph::*, node_order::*},
-    experiments::{chpot::FakeTraffic, *},
+    experiments::*,
     io::*,
     report::*,
 };
 use std::{env, error::Error, path::Path};
 use time::Duration;
 
-#[allow(unused_braces)]
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting("traffic_aware");
     let mut rng = rng(Default::default());
-    let mut modify_rng = rng.clone();
-    let q = chpot::num_queries();
+    let num_queries = chpot::num_queries();
 
-    let arg = &env::args().skip(1).next().ok_or(CliErr("No graph directory arg given"))?;
+    let mut args = env::args().skip(1);
+    let arg = &args.next().ok_or(CliErr("No graph directory arg given"))?;
     let path = Path::new(arg);
+    let epsilon = args.next().map(|arg| arg.parse().expect("could not parse epsilon")).unwrap_or(1.0);
+    report!("epsilon", epsilon);
+    let live_weight_file = args.next().unwrap_or("live_travel_time".to_string());
+    report!("live_weight_file", live_weight_file);
+    let queries = args.next();
+    report!("queries", queries.as_deref().unwrap_or("rand"));
 
     let mut graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
     for w in graph.weights_mut() {
         *w = std::cmp::max(1, *w);
     }
     let n = graph.num_nodes();
-    let geo_distance = Vec::<Weight>::load_from(path.join("geo_distance"))?;
-    let tt_units_per_s = Vec::<u32>::load_from(path.join("tt_units_per_s"))?[0];
-    let dist_units_per_m = Vec::<u32>::load_from(path.join("dist_units_per_m"))?[0];
+
+    let sources = queries
+        .as_ref()
+        .map(|queries| Vec::<NodeId>::load_from(path.join(queries).join("source")).unwrap())
+        .unwrap_or_else(|| std::iter::from_fn(|| Some(rng.gen_range(0..n as NodeId))).take(num_queries).collect());
+    let targets = queries
+        .as_ref()
+        .map(|queries| Vec::<NodeId>::load_from(path.join(queries).join("target")).unwrap())
+        .unwrap_or_else(|| std::iter::from_fn(|| Some(rng.gen_range(0..n as NodeId))).take(num_queries).collect());
 
     let cch = {
         let _blocked = block_reporting();
@@ -42,8 +53,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         CCHPotData::new(&cch, &graph)
     };
 
-    let mut modified_travel_time = graph.weight().to_vec();
-    FakeTraffic::new(tt_units_per_s, dist_units_per_m, 30.0, 0.005, 5.0).simulate(&mut modify_rng, &mut modified_travel_time, &geo_distance);
+    let mut modified_travel_time = Vec::<Weight>::load_from(path.join(live_weight_file))?;
+    for (w, smooth) in modified_travel_time.iter_mut().zip(graph.weight().iter()) {
+        if *w == 0 {
+            *w = *smooth;
+        }
+    }
     let live_graph = FirstOutGraph::new(graph.first_out(), graph.head(), &modified_travel_time[..]);
     for &w in live_graph.weight() {
         assert!(w > 0);
@@ -54,30 +69,47 @@ fn main() -> Result<(), Box<dyn Error>> {
         CCHPotData::new(&cch, &live_graph)
     };
 
+    let num_queries = std::cmp::min(num_queries, sources.len());
     let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
+
+    let mut server = HeuristicTrafficAwareServer::new(live_graph.clone(), &smooth_cch_pot, &live_cch_pot);
+
+    let mut total_query_time = Duration::zero();
+
+    for (&from, &to) in sources.iter().zip(targets.iter()).take(num_queries) {
+        let _query_ctxt = algo_runs_ctxt.push_collection_item();
+
+        report!("from", from);
+        report!("to", to);
+
+        let (_, time) = measure(|| server.query(Query { from, to }, epsilon));
+        report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+
+        total_query_time = total_query_time + time;
+    }
+
+    if num_queries > 0 {
+        eprintln!("Heuristic: Avg. query time {}", total_query_time / (num_queries as i32))
+    };
 
     let mut server = TrafficAwareServer::new(live_graph, &smooth_cch_pot, &live_cch_pot);
 
     let mut total_query_time = Duration::zero();
 
-    for _i in 0..q {
+    for (&from, &to) in sources.iter().zip(targets.iter()).take(num_queries) {
         let _query_ctxt = algo_runs_ctxt.push_collection_item();
-        let from: NodeId = rng.gen_range(0..n as NodeId);
-        let to: NodeId = rng.gen_range(0..n as NodeId);
 
-        eprintln!();
         report!("from", from);
         report!("to", to);
 
-        let (_, time) = measure(|| server.query(Query { from, to }, 0.25));
+        let (_, time) = measure(|| server.query(Query { from, to }, epsilon));
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-        eprintln!();
 
         total_query_time = total_query_time + time;
     }
 
-    if q > 0 {
-        eprintln!("Avg. query time {}", total_query_time / (q as i32))
+    if num_queries > 0 {
+        eprintln!("Exact: Avg. query time {}", total_query_time / (num_queries as i32))
     };
 
     Ok(())

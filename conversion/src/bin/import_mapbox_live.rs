@@ -67,7 +67,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     dbg!(total, found);
 
-    live.write_to(&path.join("live_travel_time"))?;
+    live.write_to(&path.join(args.next().as_deref().unwrap_or("live_travel_time")))?;
 
     Ok(())
 }
