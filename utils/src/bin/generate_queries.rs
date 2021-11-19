@@ -14,15 +14,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut rng = StdRng::from_entropy();
 
-    let num_queries = 1000;
+    let num_queries = args.next().map(|arg| arg.parse().expect("could not parse num_queries")).unwrap_or(1000);
     let uniform_random_sources: Vec<_> = std::iter::repeat_with(|| rng.gen_range(0..graph.num_nodes() as NodeId))
         .take(num_queries)
         .collect();
     let uniform_random_targets: Vec<_> = std::iter::repeat_with(|| rng.gen_range(0..graph.num_nodes() as NodeId))
         .take(num_queries)
         .collect();
-
-    let num_queries = 1000;
 
     let mut rank_sources = Vec::<NodeId>::with_capacity(30 * num_queries);
     let mut rank_targets = Vec::<NodeId>::with_capacity(30 * num_queries);
@@ -31,6 +29,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut sources_1h = Vec::<NodeId>::with_capacity(num_queries);
     let mut targets_1h = Vec::<NodeId>::with_capacity(num_queries);
 
+    let mut sources_4h = Vec::<NodeId>::with_capacity(num_queries);
+    let mut targets_4h = Vec::<NodeId>::with_capacity(num_queries);
+
     let mut ops = DefaultOps::default();
     for _ in 0..num_queries {
         let from = rng.gen_range(0..graph.num_nodes() as NodeId);
@@ -38,6 +39,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let mut i: usize = 0;
         let mut tt_greater_1h = false;
+        let mut tt_greater_4h = false;
         while let Some(node) = dijkstra.next() {
             i += 1;
             if (i & (i - 1)) == 0 {
@@ -49,6 +51,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                 tt_greater_1h = true;
                 sources_1h.push(from);
                 targets_1h.push(node);
+            }
+            if !tt_greater_4h && *dijkstra.tentative_distance(node) > 4 * 3600 * tt_units_per_s {
+                tt_greater_4h = true;
+                sources_4h.push(from);
+                targets_4h.push(node);
             }
         }
     }
@@ -71,6 +78,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     shuffled_rank_ranks.write_to(&path.join("queries/rank/rank"))?;
     sources_1h.write_to(&path.join("queries/1h/source"))?;
     targets_1h.write_to(&path.join("queries/1h/target"))?;
+    sources_4h.write_to(&path.join("queries/4h/source"))?;
+    targets_4h.write_to(&path.join("queries/4h/target"))?;
 
     Ok(())
 }
