@@ -21,8 +21,8 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
         Self {
             target_pot: smooth_cch_pot.forward_path_potential(),
             source_pot: smooth_cch_pot.backward_path_potential(),
-            path_parent_cache: vec![InRangeOption::new(None); n],
-            path_ranks: vec![InRangeOption::new(None); n],
+            path_parent_cache: vec![InRangeOption::NONE; n],
+            path_ranks: vec![InRangeOption::NONE; n],
         }
     }
 
@@ -41,12 +41,12 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
                 eprintln!("Found Cycle of len: {}", rank - prev_rank);
                 violating.push(prev_rank..rank)
             }
-            path_ranks[node as usize] = InRangeOption::new(Some(rank));
+            path_ranks[node as usize] = InRangeOption::some(rank);
         }
 
         if !violating.is_empty() {
             for &node in path {
-                self.path_ranks[node as usize] = InRangeOption::new(None);
+                self.path_ranks[node as usize] = InRangeOption::NONE;
             }
             return violating;
         }
@@ -64,7 +64,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
         });
 
         for &node in path {
-            self.path_ranks[node as usize] = InRangeOption::new(None);
+            self.path_ranks[node as usize] = InRangeOption::NONE;
         }
 
         filter_covered(&mut violating);
@@ -84,7 +84,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
             if let Some(prev_rank) = path_ranks[node as usize].value() {
                 panic!("Found Cycle of len: {}", rank - prev_rank);
             }
-            path_ranks[node as usize] = InRangeOption::new(Some(rank));
+            path_ranks[node as usize] = InRangeOption::some(rank);
         }
 
         let dists = self.path_dists(path);
@@ -101,7 +101,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
         });
 
         for &node in path {
-            self.path_ranks[node as usize] = InRangeOption::new(None);
+            self.path_ranks[node as usize] = InRangeOption::NONE;
         }
 
         local_optimality as f64 / base_dist as f64
@@ -120,7 +120,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
             if let Some(prev_rank) = path_ranks[node as usize].value() {
                 panic!("Found Cycle of len: {}", rank - prev_rank);
             }
-            path_ranks[node as usize] = InRangeOption::new(Some(rank));
+            path_ranks[node as usize] = InRangeOption::some(rank);
         }
 
         let dists = self.path_dists(path);
@@ -141,7 +141,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
         });
 
         for &node in path {
-            self.path_ranks[node as usize] = InRangeOption::new(None);
+            self.path_ranks[node as usize] = InRangeOption::NONE;
         }
 
         (local_optimality as f64 / base_dist as f64, ubs + 1.0)
@@ -340,18 +340,18 @@ pub fn path_parent(node: NodeId, predecessors: &[NodeId], path_parent_cache: &mu
     }
 
     if on_path(predecessors[node as usize]) {
-        path_parent_cache[node as usize] = InRangeOption::new(Some(predecessors[node as usize]));
+        path_parent_cache[node as usize] = InRangeOption::some(predecessors[node as usize]);
         return predecessors[node as usize];
     }
 
     let pp = path_parent(predecessors[node as usize], predecessors, path_parent_cache, on_path);
-    path_parent_cache[node as usize] = InRangeOption::new(Some(pp));
+    path_parent_cache[node as usize] = InRangeOption::some(pp);
     pp
 }
 
 pub fn reset_path_parent_cache(node: NodeId, predecessors: &[NodeId], path_parent_cache: &mut [InRangeOption<NodeId>]) {
     if path_parent_cache[node as usize].value().is_some() {
-        path_parent_cache[node as usize] = InRangeOption::new(None);
+        path_parent_cache[node as usize] = InRangeOption::NONE;
         reset_path_parent_cache(predecessors[node as usize], predecessors, path_parent_cache);
     }
 }

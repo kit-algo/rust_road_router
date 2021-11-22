@@ -555,7 +555,7 @@ pub fn virtual_topocore<Graph: LinkIterable<NodeIdT>>(graph: &Graph) -> VirtualT
                 for NodeIdT(neighbor) in (UndirectedGraph { ins: &reversed, outs: graph }).link_iter(node as NodeId) {
                     if biggest_bcc.get(neighbor as usize) {
                         if bridge.len() < component_idx as usize {
-                            bridge.push(InRangeOption::new(Some(neighbor)));
+                            bridge.push(InRangeOption::some(neighbor));
                         } else {
                             debug_assert_eq!(bridge.last().unwrap().value().unwrap(), neighbor);
                         }
@@ -571,7 +571,7 @@ pub fn virtual_topocore<Graph: LinkIterable<NodeIdT>>(graph: &Graph) -> VirtualT
             }
 
             if bridge.len() < component_idx as usize {
-                bridge.push(InRangeOption::new(None));
+                bridge.push(InRangeOption::NONE);
             }
         }
     }
@@ -613,7 +613,7 @@ pub fn virtual_topocore<Graph: LinkIterable<NodeIdT>>(graph: &Graph) -> VirtualT
 
     for bridge_node in &mut bridge {
         if let Some(bridge) = bridge_node.value() {
-            *bridge_node = InRangeOption::new(Some(order.rank(bridge)));
+            *bridge_node = InRangeOption::some(order.rank(bridge));
         }
     }
 
@@ -835,7 +835,7 @@ fn biconnected<Graph: LinkIterable<NodeIdT>>(graph: &Graph) -> Vec<Vec<(NodeId, 
         while let Some(&mut (node, ref mut neighbors)) = stack.last_mut() {
             if dfs_num[node].value().is_none() {
                 dfs_low[node] = dfs_num_counter;
-                dfs_num[node] = InRangeOption::new(Some(dfs_num_counter));
+                dfs_num[node] = InRangeOption::some(dfs_num_counter);
                 dfs_num_counter += 1;
             }
 

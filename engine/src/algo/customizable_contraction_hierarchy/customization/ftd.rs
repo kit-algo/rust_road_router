@@ -133,7 +133,7 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
                 let current_node = current_node as NodeId;
                 // store mapping of head node to corresponding outgoing edge id
                 for (node, edge_id) in cch.neighbor_iter(current_node).zip(cch.neighbor_edge_indices(current_node)) {
-                    node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
+                    node_edge_ids[node as usize] = InRangeOption::some(edge_id);
                 }
 
                 for (node, edge_id) in cch.neighbor_iter(current_node).zip(cch.neighbor_edge_indices(current_node)) {
@@ -186,7 +186,7 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
 
                 // reset the mapping
                 for node in cch.neighbor_iter(current_node) {
-                    node_edge_ids[node as usize] = InRangeOption::new(None);
+                    node_edge_ids[node as usize] = InRangeOption::NONE;
                 }
             }
         });
@@ -223,7 +223,7 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
             let downward_preliminary_bounds: Vec<_> = downward.iter().map(|s| s.lower_bound).collect();
 
             static_perfect_customization.customize(&mut upward, &mut downward, |cb| {
-                PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::new(None); n as usize]), || cb());
+                PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::NONE; n as usize]), || cb());
             });
 
             upward.par_iter_mut().zip(upward_preliminary_bounds.par_iter()).for_each(disable_dominated);
@@ -391,7 +391,7 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
             let downward_preliminary_bounds: Vec<_> = downward.iter().map(|s| s.lower_bound).collect();
 
             static_perfect_customization.customize(&mut upward, &mut downward, |cb| {
-                PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::new(None); n as usize]), || cb());
+                PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::NONE; n as usize]), || cb());
             });
 
             // routine to disable shortcuts for which the perfect precustomization determined them to be irrelevant
@@ -776,7 +776,7 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
                 let current_node = current_node as NodeId;
                 // store mapping of head node to corresponding outgoing edge id
                 for (node, edge_id) in cch.neighbor_iter(current_node).zip(cch.neighbor_edge_indices(current_node)) {
-                    node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
+                    node_edge_ids[node as usize] = InRangeOption::some(edge_id);
                 }
 
                 for (node, edge_id) in cch.neighbor_iter(current_node).zip(cch.neighbor_edge_indices(current_node)) {
@@ -868,7 +868,7 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
 
                 // reset the mapping
                 for node in cch.neighbor_iter(current_node) {
-                    node_edge_ids[node as usize] = InRangeOption::new(None);
+                    node_edge_ids[node as usize] = InRangeOption::NONE;
                 }
             }
         });
@@ -949,7 +949,7 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
             let downward_preliminary_bounds: Vec<_> = downward.iter().map(|s| s.lower_bound).collect();
 
             static_perfect_customization.customize(&mut pre_upward, &mut pre_downward, |cb| {
-                PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::new(None); n as usize]), || cb());
+                PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::NONE; n as usize]), || cb());
             });
 
             mark_for_unpacking.customize(&mut pre_upward[..], &mut pre_downward[..], |cb| cb());

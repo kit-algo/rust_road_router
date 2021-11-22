@@ -63,7 +63,7 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> RPHAST<GF, GB> {
 
         // local ids, reversed
         for (local_idx, &node) in self.restricted_nodes.iter().rev().enumerate() {
-            self.restricted_ids[node as usize] = InRangeOption::new(Some(local_idx as NodeId));
+            self.restricted_ids[node as usize] = InRangeOption::some(local_idx as NodeId);
         }
         for head in &mut self.restricted_head {
             *head = self.restricted_ids[*head as usize].value().unwrap();

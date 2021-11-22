@@ -248,7 +248,7 @@ pub fn customize_perfect(mut customized: Customized<CCH, &CCH>) -> Customized<Di
                 let current_node = current_node as NodeId;
                 // store mapping of head node to corresponding outgoing edge id
                 for (node, edge_id) in cch.neighbor_iter(current_node).zip(cch.neighbor_edge_indices(current_node)) {
-                    node_edge_ids[node as usize] = InRangeOption::new(Some(edge_id));
+                    node_edge_ids[node as usize] = InRangeOption::some(edge_id);
                 }
 
                 for (node, edge_id) in cch.neighbor_iter(current_node).zip(cch.neighbor_edge_indices(current_node)) {
@@ -285,7 +285,7 @@ pub fn customize_perfect(mut customized: Customized<CCH, &CCH>) -> Customized<Di
 
                 // reset the mapping
                 for node in cch.neighbor_iter(current_node) {
-                    node_edge_ids[node as usize] = InRangeOption::new(None);
+                    node_edge_ids[node as usize] = InRangeOption::NONE;
                 }
             }
         });
@@ -300,7 +300,7 @@ pub fn customize_perfect(mut customized: Customized<CCH, &CCH>) -> Customized<Di
 
     report_time_with_key("CCH Perfect Customization", "perfect_customization", || {
         static_perfect_customization.customize(upward, downward, |cb| {
-            PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::new(None); n as usize]), || cb());
+            PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::NONE; n as usize]), cb);
         });
     });
 

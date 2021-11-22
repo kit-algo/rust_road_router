@@ -453,16 +453,16 @@ impl From<ShortcutSource> for ShortcutSourceData {
     fn from(source: ShortcutSource) -> Self {
         match source {
             ShortcutSource::Shortcut(down, up) => ShortcutSourceData {
-                down_arc: InRangeOption::new(Some(down)),
-                up_arc: InRangeOption::new(Some(up)),
+                down_arc: InRangeOption::some(down),
+                up_arc: InRangeOption::some(up),
             },
             ShortcutSource::OriginalEdge(edge) => ShortcutSourceData {
-                down_arc: InRangeOption::new(None),
-                up_arc: InRangeOption::new(Some(edge)),
+                down_arc: InRangeOption::NONE,
+                up_arc: InRangeOption::some(edge),
             },
             ShortcutSource::None => ShortcutSourceData {
-                down_arc: InRangeOption::new(None),
-                up_arc: InRangeOption::new(None),
+                down_arc: InRangeOption::NONE,
+                up_arc: InRangeOption::NONE,
             },
         }
     }
@@ -483,8 +483,8 @@ impl From<ShortcutSourceData> for ShortcutSource {
 impl Default for ShortcutSourceData {
     fn default() -> Self {
         Self {
-            down_arc: InRangeOption::new(None),
-            up_arc: InRangeOption::new(None),
+            down_arc: InRangeOption::NONE,
+            up_arc: InRangeOption::NONE,
         }
     }
 }

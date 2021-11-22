@@ -157,7 +157,7 @@ where
                 dist = std::cmp::min(dist, edge.weight + self.potentials[edge.node as usize].value().unwrap())
             }
 
-            self.potentials[node as usize] = InRangeOption::new(Some(dist));
+            self.potentials[node as usize] = InRangeOption::some(dist);
         }
 
         let dist = self.potentials[node as usize].value().unwrap();
@@ -226,7 +226,7 @@ impl<'a> Potential for CCHPotentialWithPathUnpacking<'a> {
                 }
             }
 
-            self.potentials[node as usize] = InRangeOption::new(Some(dist));
+            self.potentials[node as usize] = InRangeOption::some(dist);
         }
 
         let dist = self.potentials[node as usize].value().unwrap();
@@ -361,7 +361,7 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> Potential for CHPotential<GF, GB> {
                 }
                 if !missing {
                     self.num_pot_computations += 1;
-                    self.potentials[node as usize] = InRangeOption::new(Some(dist));
+                    self.potentials[node as usize] = InRangeOption::some(dist);
                     self.stack.pop();
                 }
             }

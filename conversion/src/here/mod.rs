@@ -274,7 +274,7 @@ pub fn read_graph(source: &dyn RdfDataSource, (min_lat, min_lon): (i64, i64), (m
     let mut travel_times: Vec<Weight> = vec![0; m as usize];
     let mut link_lengths: Vec<f64> = vec![0.0; m as usize];
     let mut functional_road_classes: Vec<u8> = vec![0; m as usize];
-    let mut here_rank_to_link_id: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)> = vec![(InRangeOption::new(None), InRangeOption::new(None)); links.len()];
+    let mut here_rank_to_link_id: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)> = vec![(InRangeOption::NONE, InRangeOption::NONE); links.len()];
 
     eprintln!("calculate weights");
     // iterate over all links and insert head and weight
@@ -301,7 +301,7 @@ pub fn read_graph(source: &dyn RdfDataSource, (min_lat, min_lon): (i64, i64), (m
                     travel_times[first_out[from_node] as usize] = from_weight;
                     link_lengths[first_out[from_node] as usize] = length;
                     functional_road_classes[first_out[from_node] as usize] = nav_link.functional_class;
-                    here_rank_to_link_id[link_index].0 = InRangeOption::new(Some(first_out[from_node]));
+                    here_rank_to_link_id[link_index].0 = InRangeOption::some(first_out[from_node]);
                     first_out[from_node] += 1;
                 }
                 RdfLinkDirection::ToRef => {
@@ -309,7 +309,7 @@ pub fn read_graph(source: &dyn RdfDataSource, (min_lat, min_lon): (i64, i64), (m
                     travel_times[first_out[to_node] as usize] = to_weight;
                     link_lengths[first_out[to_node] as usize] = length;
                     functional_road_classes[first_out[to_node] as usize] = nav_link.functional_class;
-                    here_rank_to_link_id[link_index].1 = InRangeOption::new(Some(first_out[to_node]));
+                    here_rank_to_link_id[link_index].1 = InRangeOption::some(first_out[to_node]);
                     first_out[to_node] += 1;
                 }
                 RdfLinkDirection::Both => {
@@ -317,14 +317,14 @@ pub fn read_graph(source: &dyn RdfDataSource, (min_lat, min_lon): (i64, i64), (m
                     travel_times[first_out[from_node] as usize] = from_weight;
                     link_lengths[first_out[from_node] as usize] = length;
                     functional_road_classes[first_out[from_node] as usize] = nav_link.functional_class;
-                    here_rank_to_link_id[link_index].0 = InRangeOption::new(Some(first_out[from_node]));
+                    here_rank_to_link_id[link_index].0 = InRangeOption::some(first_out[from_node]);
                     first_out[from_node] += 1;
 
                     head[first_out[to_node] as usize] = from_node as NodeId;
                     travel_times[first_out[to_node] as usize] = to_weight;
                     link_lengths[first_out[to_node] as usize] = length;
                     functional_road_classes[first_out[to_node] as usize] = nav_link.functional_class;
-                    here_rank_to_link_id[link_index].1 = InRangeOption::new(Some(first_out[to_node]));
+                    here_rank_to_link_id[link_index].1 = InRangeOption::some(first_out[to_node]);
                     first_out[to_node] += 1;
                 }
             }
