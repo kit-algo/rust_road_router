@@ -419,27 +419,27 @@ impl Reconstruct for CHPotLoader {
 }
 
 impl CHPotLoader {
+    pub fn forward_graph(&self) -> BorrowedGraph {
+        FirstOutGraph::new(&self.forward_first_out[..], &self.forward_head[..], &self.forward_weight[..])
+    }
+
+    pub fn backward_graph(&self) -> BorrowedGraph {
+        FirstOutGraph::new(&self.backward_first_out[..], &self.backward_head[..], &self.backward_weight[..])
+    }
+
+    pub fn order(&self) -> &NodeOrder {
+        &self.order
+    }
+
     pub fn potentials(&self) -> (CHPotential<BorrowedGraph, BorrowedGraph>, CHPotential<BorrowedGraph, BorrowedGraph>) {
         (
-            CHPotential::new(
-                FirstOutGraph::new(&self.forward_first_out[..], &self.forward_head[..], &self.forward_weight[..]),
-                FirstOutGraph::new(&self.backward_first_out[..], &self.backward_head[..], &self.backward_weight[..]),
-                self.order.clone(),
-            ),
-            CHPotential::new(
-                FirstOutGraph::new(&self.backward_first_out[..], &self.backward_head[..], &self.backward_weight[..]),
-                FirstOutGraph::new(&self.forward_first_out[..], &self.forward_head[..], &self.forward_weight[..]),
-                self.order.clone(),
-            ),
+            CHPotential::new(self.forward_graph(), self.backward_graph(), self.order.clone()),
+            CHPotential::new(self.backward_graph(), self.forward_graph(), self.order.clone()),
         )
     }
 
     pub fn bucket_ch_pot(&self) -> BucketCHPotential<BorrowedGraph, BorrowedGraph> {
-        BucketCHPotential::new(
-            FirstOutGraph::new(&self.forward_first_out[..], &self.forward_head[..], &self.forward_weight[..]),
-            FirstOutGraph::new(&self.backward_first_out[..], &self.backward_head[..], &self.backward_weight[..]),
-            self.order.clone(),
-        )
+        BucketCHPotential::new(self.forward_graph(), self.backward_graph(), self.order.clone())
     }
 }
 
