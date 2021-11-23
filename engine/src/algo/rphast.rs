@@ -3,10 +3,9 @@ use crate::{algo::dijkstra::*, util::in_range_option::InRangeOption};
 
 pub struct RPHAST<GF, GB> {
     order: NodeOrder,
-    restricted_distances: Box<[Weight]>,
     forward: GF,
     backward: GB,
-    dijkstra_data: DijkstraData<Weight>,
+
     selection_stack: Vec<NodeId>,
     restricted_ids: Vec<InRangeOption<NodeId>>,
     restricted_nodes: Vec<NodeId>,
@@ -15,15 +14,13 @@ pub struct RPHAST<GF, GB> {
     restricted_weight: Vec<Weight>,
 }
 
-impl<GF: LinkIterGraph, GB: LinkIterGraph> RPHAST<GF, GB> {
+impl<GF, GB: LinkIterGraph> RPHAST<GF, GB> {
     pub fn new(forward: GF, backward: GB, order: NodeOrder) -> Self {
-        let n = forward.num_nodes();
+        let n = backward.num_nodes();
         Self {
             order,
             forward,
             backward,
-            restricted_distances: std::iter::repeat(INFINITY).take(n).collect(),
-            dijkstra_data: DijkstraData::new(n),
             selection_stack: Vec::new(),
             restricted_ids: vec![InRangeOption::NONE; n],
             restricted_nodes: Vec::new(),
@@ -78,43 +75,59 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> RPHAST<GF, GB> {
             }
         }
     }
+}
 
-    pub fn query(&mut self, node: NodeId) -> RPHASTResult<GF, GB> {
-        for dist in self.restricted_distances[0..self.restricted_nodes.len()].iter_mut() {
+pub struct RPHASTQuery {
+    restricted_distances: Box<[Weight]>,
+    dijkstra_data: DijkstraData<Weight>,
+}
+
+impl RPHASTQuery {
+    pub fn new<GF: Graph, GB>(rphast: &RPHAST<GF, GB>) -> Self {
+        let n = rphast.forward.num_nodes();
+        Self {
+            restricted_distances: std::iter::repeat(INFINITY).take(n).collect(),
+            dijkstra_data: DijkstraData::new(n),
+        }
+    }
+
+    pub fn query<'a, GF: LinkIterGraph, GB>(&'a mut self, node: NodeId, selection: &'a RPHAST<GF, GB>) -> RPHASTResult<GF, GB> {
+        for dist in self.restricted_distances[0..selection.restricted_nodes.len()].iter_mut() {
             *dist = INFINITY;
         }
         let mut ops = DefaultOps();
-        let mut query = DijkstraRun::query(&self.forward, &mut self.dijkstra_data, &mut ops, DijkstraInit::from(self.order.rank(node)));
+        let mut query = DijkstraRun::query(
+            &selection.forward,
+            &mut self.dijkstra_data,
+            &mut ops,
+            DijkstraInit::from(selection.order.rank(node)),
+        );
         while let Some(node) = query.next() {
-            if let Some(restricted_id) = self.restricted_ids[node as usize].value() {
+            if let Some(restricted_id) = selection.restricted_ids[node as usize].value() {
                 self.restricted_distances[restricted_id as usize] = *query.tentative_distance(node);
             }
         }
 
-        for node in 0..self.restricted_nodes.len() {
+        for node in 0..selection.restricted_nodes.len() {
             unsafe {
                 let min_dist: *mut Weight = self.restricted_distances.get_unchecked_mut(node);
-                for edge_idx in *self.restricted_first_out.get_unchecked(node)..*self.restricted_first_out.get_unchecked(node + 1) {
-                    let head = *self.restricted_head.get_unchecked(edge_idx as usize);
-                    let weight = *self.restricted_weight.get_unchecked(edge_idx as usize);
+                for edge_idx in *selection.restricted_first_out.get_unchecked(node)..*selection.restricted_first_out.get_unchecked(node + 1) {
+                    let head = *selection.restricted_head.get_unchecked(edge_idx as usize);
+                    let weight = *selection.restricted_weight.get_unchecked(edge_idx as usize);
                     let head_dist = *self.restricted_distances.get_unchecked(head as usize);
                     *min_dist = std::cmp::min(*min_dist, head_dist + weight)
                 }
             }
         }
 
-        RPHASTResult(self)
-    }
-
-    fn distance(&self, node: NodeId) -> Weight {
-        self.restricted_distances[self.restricted_ids[self.order.rank(node) as usize].value().unwrap() as usize]
+        RPHASTResult(self, selection)
     }
 }
 
-pub struct RPHASTResult<'a, GF, GB>(&'a RPHAST<GF, GB>);
+pub struct RPHASTResult<'a, GF, GB>(&'a RPHASTQuery, &'a RPHAST<GF, GB>);
 
 impl<GF: LinkIterGraph, GB: LinkIterGraph> RPHASTResult<'_, GF, GB> {
     pub fn distance(&self, node: NodeId) -> Weight {
-        self.0.distance(node)
+        self.0.restricted_distances[self.1.restricted_ids[self.1.order.rank(node) as usize].value().unwrap() as usize]
     }
 }

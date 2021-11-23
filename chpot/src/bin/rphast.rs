@@ -2,7 +2,10 @@
 extern crate rust_road_router;
 use rand::prelude::*;
 use rust_road_router::{
-    algo::{ch_potentials::*, rphast::RPHAST},
+    algo::{
+        ch_potentials::*,
+        rphast::{RPHASTQuery, RPHAST},
+    },
     cli::CliErr,
     datastr::graph::*,
     experiments,
@@ -24,8 +27,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut exps_ctxt = push_collection_context("experiments".to_string());
 
-    for target_set_size_exp in [10, 12, 14] {
-        for ball_size_exp in 14..=24 {
+    // for target_set_size_exp in [10, 12, 14] {
+    for target_set_size_exp in [14] {
+        // for ball_size_exp in 14..=24 {
+        for ball_size_exp in 20..=20 {
             let _exp_ctx = exps_ctxt.push_collection_item();
 
             report!("experiment", "lazy_rphast");
@@ -38,6 +43,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             let mut algos_ctxt = push_collection_context("algo_runs".to_string());
             let mut rphast = RPHAST::new(chpot_data.backward_graph(), chpot_data.forward_graph(), chpot_data.order().clone());
+            let mut rphast_query = RPHASTQuery::new(&rphast);
 
             let mut total_query_time = Duration::zero();
             let mut total_selection_time = Duration::zero();
@@ -55,7 +61,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 for &target in targets.choose_multiple(&mut rng, num_queries) {
                     let _alg_ctx = algos_ctxt.push_collection_item();
                     report!("algo", "rphast_query");
-                    let (_rphast_result, time) = measure(|| rphast.query(target));
+                    let (_rphast_result, time) = measure(|| rphast_query.query(target, &rphast));
                     report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
                     total_query_time = total_query_time + time;
                 }
