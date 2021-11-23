@@ -563,7 +563,7 @@ impl Indexing for NodeIdT {
 }
 
 #[derive(Clone)]
-struct BucketCHSelectionData {
+pub struct BucketCHSelectionData {
     distances: TimestampedVector<Vec<(NodeId, Weight)>>,
     queue: IndexdMinHeap<NodeIdT>,
     incoming: Vec<Vec<(NodeIdT, EdgeIdT)>>,
@@ -583,7 +583,7 @@ impl BucketCHSelectionData {
     }
 }
 
-struct BucketCHSelectionRun<'a, G> {
+pub struct BucketCHSelectionRun<'a, G> {
     graph: &'a G,
     distances: &'a mut TimestampedVector<Vec<(NodeId, Weight)>>,
     queue: &'a mut IndexdMinHeap<NodeIdT>,
@@ -645,6 +645,10 @@ impl<'a, G: LinkIterable<(NodeIdT, EdgeIdT)> + EdgeRandomAccessGraph<Link>> Buck
 
             NodeIdT(node)
         })
+    }
+
+    pub fn tentative_distance(&self, node: NodeId) -> &[(u32, Weight)] {
+        &self.distances[node as usize][..]
     }
 }
 

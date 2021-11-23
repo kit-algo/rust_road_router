@@ -131,3 +131,65 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph> RPHASTResult<'_, GF, GB> {
         self.0.restricted_distances[self.1.restricted_ids[self.1.order.rank(node) as usize].value().unwrap() as usize]
     }
 }
+
+use crate::algo::ch_potentials::*;
+
+pub struct SSERPHASTQuery {
+    dijkstra_data: BucketCHSelectionData,
+    restricted_distances: Vec<Weight>,
+}
+
+impl SSERPHASTQuery {
+    pub fn new<GF: Graph, GB>(rphast: &RPHAST<GF, GB>) -> Self {
+        let n = rphast.forward.num_nodes();
+        Self {
+            restricted_distances: Vec::new(),
+            dijkstra_data: BucketCHSelectionData::new(n),
+        }
+    }
+
+    pub fn query<'a, GF: LinkIterable<(NodeIdT, EdgeIdT)> + EdgeRandomAccessGraph<Link>, GB>(
+        &'a mut self,
+        nodes: &[NodeId],
+        selection: &'a RPHAST<GF, GB>,
+    ) -> SSERPHASTResult<GF, GB> {
+        self.restricted_distances.resize(selection.restricted_nodes.len() * nodes.len(), INFINITY);
+        for dist in self.restricted_distances.iter_mut() {
+            *dist = INFINITY;
+        }
+        let mut query = BucketCHSelectionRun::query(
+            &selection.forward,
+            &mut self.dijkstra_data,
+            nodes.iter().map(|&node| selection.order.rank(node)),
+        );
+        while let Some(NodeIdT(node)) = query.next() {
+            if let Some(restricted_id) = selection.restricted_ids[node as usize].value() {
+                for &(i, dist) in query.tentative_distance(node) {
+                    self.restricted_distances[restricted_id as usize * nodes.len() + i as usize] = dist;
+                }
+            }
+        }
+
+        for node in 0..selection.restricted_nodes.len() {
+            let (final_dists, cur_dists) = self.restricted_distances.split_at_mut(node * nodes.len());
+            for edge_idx in selection.restricted_first_out[node]..selection.restricted_first_out[node + 1] {
+                let head = unsafe { *selection.restricted_head.get_unchecked(edge_idx as usize) } as usize;
+                let weight = unsafe { *selection.restricted_weight.get_unchecked(edge_idx as usize) };
+                for (head_dist, cur_dist) in final_dists[head * nodes.len()..(head + 1) * nodes.len()].iter().zip(cur_dists.iter_mut()) {
+                    *cur_dist = std::cmp::min(*cur_dist, head_dist + weight);
+                }
+            }
+        }
+
+        SSERPHASTResult(self, selection, nodes.len())
+    }
+}
+
+pub struct SSERPHASTResult<'a, GF, GB>(&'a SSERPHASTQuery, &'a RPHAST<GF, GB>, usize);
+
+impl<GF: LinkIterGraph, GB: LinkIterGraph> SSERPHASTResult<'_, GF, GB> {
+    pub fn distances(&self, node: NodeId) -> &[Weight] {
+        let restricted_id = self.1.restricted_ids[self.1.order.rank(node) as usize].value().unwrap() as usize;
+        &self.0.restricted_distances[restricted_id * self.2..(restricted_id + 1) * self.2]
+    }
+}
