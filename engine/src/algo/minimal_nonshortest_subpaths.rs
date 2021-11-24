@@ -52,11 +52,11 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
 
         for (u_idx, &u) in path[..path.len() - 1].iter().enumerate() {
             self.source_pot.init(u);
-            for (v_idx, &v) in path.iter().skip(u_idx + 1).enumerate() {
+            for (v_idx, &v) in path.iter().enumerate().skip(u_idx + 1) {
                 let shortest_dist = self.source_pot.potential(v).unwrap();
                 let path_dist = dists[v_idx] - dists[u_idx];
 
-                debug_assert!(path_dist >= shortest_dist);
+                debug_assert!(path_dist >= shortest_dist, "{} {}", path_dist, shortest_dist);
                 debug_assert!(shortest_dist > 0);
                 if path_dist - shortest_dist > (shortest_dist as f64 * epsilon) as Weight {
                     violating.push(u_idx..v_idx);
@@ -452,10 +452,7 @@ impl<'a> MinimalNonShortestSubPathsSSERphast<'a> {
     }
 
     pub fn find_ubs_violating_subpaths_sse_rphast(&mut self, path: &[NodeId], epsilon: f64) -> Vec<Range<usize>> {
-        let dists = path_dists(path, &self.smooth_graph);
-        let path: Vec<_> = path.iter().map(|&node| self.rphast.order().rank(node)).collect();
         let mut violating = Vec::new();
-
         let path_ranks = &mut self.path_ranks;
 
         for (rank, &node) in path.iter().enumerate() {
@@ -466,22 +463,24 @@ impl<'a> MinimalNonShortestSubPathsSSERphast<'a> {
             path_ranks[node as usize] = InRangeOption::some(rank);
         }
 
-        for &node in &path {
+        for &node in path {
             self.path_ranks[node as usize] = InRangeOption::NONE;
         }
         if !violating.is_empty() {
             return violating;
         }
 
-        self.rphast.select(&path);
-        let distances = self.rphast_query.query(&path, &self.rphast);
+        let dists = path_dists(path, &self.smooth_graph);
+
+        self.rphast.select(path);
+        let distances = self.rphast_query.query(path, &self.rphast);
 
         for (u_idx, &u) in path[..path.len() - 1].iter().enumerate() {
-            for (v_idx, &_) in path.iter().skip(u_idx + 1).enumerate() {
+            for (v_idx, &_) in path.iter().enumerate().skip(u_idx + 1) {
                 let shortest_dist = distances.distances(u)[v_idx];
                 let path_dist = dists[v_idx] - dists[u_idx];
 
-                debug_assert!(path_dist >= shortest_dist);
+                debug_assert!(path_dist >= shortest_dist, "{} {}", path_dist, shortest_dist);
                 debug_assert!(shortest_dist > 0);
                 if path_dist - shortest_dist > (shortest_dist as f64 * epsilon) as Weight {
                     violating.push(u_idx..v_idx);

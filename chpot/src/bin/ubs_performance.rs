@@ -100,7 +100,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    let mut ubs_checker = MinimalNonShortestSubPathsSSERphast::new(&smooth_cch_pot, graph.borrowed());
+    let mut ubs_checker_rphast = MinimalNonShortestSubPathsSSERphast::new(&smooth_cch_pot, graph.borrowed());
 
     for (rank, paths) in rank_paths.iter().enumerate() {
         for p in paths {
@@ -108,12 +108,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             report!("algo", "sse_rphast");
             report!("rank", rank);
             report!("num_nodes_on_path", p.len());
-            let num_violating = silent_report_time(|| ubs_checker.find_ubs_violating_subpaths_sse_rphast(p, epsilon).len());
+            let num_violating = silent_report_time(|| ubs_checker_rphast.find_ubs_violating_subpaths_sse_rphast(p, epsilon).len());
             report!("num_violating_segments", num_violating);
         }
     }
 
-    let mut ubs_checker = MinimalNonShortestSubPathsDijkstra::new(graph.borrowed());
+    let mut ubs_checker_dijk = MinimalNonShortestSubPathsDijkstra::new(graph.borrowed());
 
     for (rank, paths) in rank_paths.iter().enumerate() {
         for p in paths {
@@ -121,10 +121,23 @@ fn main() -> Result<(), Box<dyn Error>> {
             report!("algo", "dijkstra_tree");
             report!("rank", rank);
             report!("num_nodes_on_path", p.len());
-            let num_violating = silent_report_time(|| ubs_checker.find_ubs_violating_subpaths(p, epsilon).len());
+            let num_violating = silent_report_time(|| ubs_checker_dijk.find_ubs_violating_subpaths(p, epsilon).len());
             report!("num_violating_segments", num_violating);
         }
     }
+
+    // for (paths) in rank_paths.iter() {
+    //     for p in paths {
+    //         let _algo_run = block_reporting();
+    //         let v1 = ubs_checker.find_ubs_violating_subpaths(p, epsilon);
+    //         let v2 = ubs_checker.find_ubs_violating_subpaths_lazy_rphast_naive(p, epsilon);
+    //         let v3 = ubs_checker_rphast.find_ubs_violating_subpaths_sse_rphast(p, epsilon);
+    //         let v4 = ubs_checker_dijk.find_ubs_violating_subpaths(p, epsilon);
+    //         assert_eq!(v1, v2);
+    //         assert_eq!(v2, v3);
+    //         assert_eq!(v3, v4);
+    //     }
+    // }
 
     Ok(())
 }
