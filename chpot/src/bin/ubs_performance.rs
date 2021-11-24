@@ -32,7 +32,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let sources = Vec::<NodeId>::load_from(path.join("queries/rank/source"))?;
     let targets = Vec::<NodeId>::load_from(path.join("queries/rank/target"))?;
-    let ranks = Vec::<u32>::load_from(path.join("queries/rank/target"))?;
+    let ranks = Vec::<u32>::load_from(path.join("queries/rank/rank"))?;
 
     let cch = {
         let _blocked = block_reporting();
@@ -62,7 +62,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let num_queries = std::cmp::min(num_queries, sources.len());
 
-    let mut rank_paths = vec![Vec::new(); *ranks.iter().max().unwrap() as usize];
+    let mut rank_paths = vec![Vec::new(); *ranks.iter().max().unwrap() as usize + 1];
 
     let mut server = HeuristicTrafficAwareServer::new(graph.borrowed(), live_graph.clone(), &smooth_cch_pot, &live_cch_pot);
     for ((&from, &to), &rank) in sources.iter().zip(targets.iter()).zip(ranks.iter()).take(num_queries) {
