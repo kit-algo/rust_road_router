@@ -82,7 +82,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         report!("from", from);
         report!("to", to);
 
-        let (_, time) = measure(|| server.query(Query { from, to }, epsilon));
+        let (_, time) = measure(|| server.query(Query { from, to }, epsilon, |_| ()));
         report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
 
         total_query_time = total_query_time + time;

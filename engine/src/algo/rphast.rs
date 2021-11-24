@@ -75,6 +75,18 @@ impl<GF, GB: LinkIterGraph> RPHAST<GF, GB> {
             }
         }
     }
+
+    pub fn forward_graph(&self) -> &GF {
+        &self.forward
+    }
+
+    pub fn backward_graph(&self) -> &GB {
+        &self.backward
+    }
+
+    pub fn order(&self) -> &NodeOrder {
+        &self.order
+    }
 }
 
 pub struct RPHASTQuery {

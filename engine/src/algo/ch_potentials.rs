@@ -96,6 +96,10 @@ impl CCHPotData {
             backward_inverted: self.customized.cch().forward_inverted(),
         }
     }
+
+    pub fn customized(&self) -> &Customized<DirectedCCH, DirectedCCH> {
+        &self.customized
+    }
 }
 
 #[derive(Clone)]
