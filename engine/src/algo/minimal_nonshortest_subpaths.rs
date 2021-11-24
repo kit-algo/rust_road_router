@@ -13,23 +13,25 @@ pub struct MinimalNonShortestSubPaths<'a> {
     source_pot: CCHPotentialWithPathUnpacking<'a>,
     path_parent_cache: Vec<InRangeOption<NodeId>>,
     path_ranks: Vec<InRangeOption<usize>>,
+    smooth_graph: BorrowedGraph<'a>,
 }
 
 impl<'a> MinimalNonShortestSubPaths<'a> {
-    pub fn new(smooth_cch_pot: &'a CCHPotData) -> Self {
+    pub fn new(smooth_cch_pot: &'a CCHPotData, smooth_graph: BorrowedGraph<'a>) -> Self {
         let n = smooth_cch_pot.num_nodes();
         Self {
             target_pot: smooth_cch_pot.forward_path_potential(),
             source_pot: smooth_cch_pot.backward_path_potential(),
             path_parent_cache: vec![InRangeOption::NONE; n],
             path_ranks: vec![InRangeOption::NONE; n],
+            smooth_graph,
         }
     }
 
     pub fn find_ubs_violating_subpaths_lazy_rphast_naive(&mut self, path: &[NodeId], epsilon: f64) -> Vec<Range<usize>> {
+        let dists = self.path_dists(path);
         let path: Vec<_> = path.iter().map(|&node| self.target_pot.cch().node_order().rank(node)).collect();
         let mut violating = Vec::new();
-        let dists = self.path_dists(&path);
 
         let path_ranks = &mut self.path_ranks;
 
@@ -67,8 +69,8 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
         violating
     }
 
-    pub fn find_ubs_violating_subpaths(&mut self, path: &[NodeId], epsilon: f64) -> Vec<Range<usize>> {
-        let path: Vec<_> = path.iter().map(|&node| self.target_pot.cch().node_order().rank(node)).collect();
+    pub fn find_ubs_violating_subpaths(&mut self, orig_path: &[NodeId], epsilon: f64) -> Vec<Range<usize>> {
+        let path: Vec<_> = orig_path.iter().map(|&node| self.target_pot.cch().node_order().rank(node)).collect();
         let path = &path[..];
 
         for rank in &self.path_ranks {
@@ -92,7 +94,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
             return violating;
         }
 
-        let dists = self.path_dists(path);
+        let dists = self.path_dists(orig_path);
 
         self.tree_find_minimal_nonshortest(path, &dists, |range, path_dist, shortest_dist| {
             debug_assert!(path_dist >= shortest_dist);
@@ -113,8 +115,8 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
         violating
     }
 
-    pub fn local_optimality(&mut self, path: &[NodeId]) -> f64 {
-        let path: Vec<_> = path.iter().map(|&node| self.target_pot.cch().node_order().rank(node)).collect();
+    pub fn local_optimality(&mut self, orig_path: &[NodeId]) -> f64 {
+        let path: Vec<_> = orig_path.iter().map(|&node| self.target_pot.cch().node_order().rank(node)).collect();
         let path = &path[..];
 
         for rank in &self.path_ranks {
@@ -129,7 +131,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
             path_ranks[node as usize] = InRangeOption::some(rank);
         }
 
-        let dists = self.path_dists(path);
+        let dists = self.path_dists(orig_path);
         let base_dist = *dists.last().unwrap();
         let mut local_optimality = base_dist;
 
@@ -149,8 +151,8 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
         local_optimality as f64 / base_dist as f64
     }
 
-    pub fn suboptimal_stats(&mut self, path: &[NodeId]) -> (f64, f64) {
-        let path: Vec<_> = path.iter().map(|&node| self.target_pot.cch().node_order().rank(node)).collect();
+    pub fn suboptimal_stats(&mut self, orig_path: &[NodeId]) -> (f64, f64) {
+        let path: Vec<_> = orig_path.iter().map(|&node| self.target_pot.cch().node_order().rank(node)).collect();
         let path = &path[..];
 
         for rank in &self.path_ranks {
@@ -165,7 +167,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
             path_ranks[node as usize] = InRangeOption::some(rank);
         }
 
-        let dists = self.path_dists(path);
+        let dists = self.path_dists(orig_path);
         let base_dist = *dists.last().unwrap();
         let mut local_optimality = base_dist;
         let mut ubs = 0.0;
@@ -325,23 +327,16 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
     }
 
     fn path_dists(&self, path: &[NodeId]) -> Vec<Weight> {
-        ch_path_dists(path, self.target_pot.forward_cch_graph(), self.target_pot.backward_cch_graph())
+        path_dists(path, &self.smooth_graph)
     }
 }
 
-fn ch_path_dists(path: &[NodeId], upward: &BorrowedGraph, downward: &BorrowedGraph) -> Vec<Weight> {
+pub fn path_dists(path: &[NodeId], graph: &BorrowedGraph) -> Vec<Weight> {
     let mut dists = Vec::with_capacity(path.len());
     dists.push(0);
     for node_pair in path.windows(2) {
         let mut min_edge_weight = INFINITY;
-        let (graph, iter) = if node_pair[0] < node_pair[1] {
-            let g = upward;
-            (g, g.edge_indices(node_pair[0], node_pair[1]))
-        } else {
-            let g = downward;
-            (g, g.edge_indices(node_pair[1], node_pair[0]))
-        };
-        for EdgeIdT(edge_id) in iter {
+        for EdgeIdT(edge_id) in graph.edge_indices(node_pair[0], node_pair[1]) {
             min_edge_weight = std::cmp::min(min_edge_weight, graph.link(edge_id).weight);
         }
         debug_assert_ne!(min_edge_weight, INFINITY);
@@ -436,10 +431,11 @@ pub struct MinimalNonShortestSubPathsSSERphast<'a> {
     rphast: RPHAST<BorrowedGraph<'a>, BorrowedGraph<'a>>,
     rphast_query: SSERPHASTQuery,
     path_ranks: Vec<InRangeOption<usize>>,
+    smooth_graph: BorrowedGraph<'a>,
 }
 
 impl<'a> MinimalNonShortestSubPathsSSERphast<'a> {
-    pub fn new(smooth_cch_pot: &'a CCHPotData) -> Self {
+    pub fn new(smooth_cch_pot: &'a CCHPotData, smooth_graph: BorrowedGraph<'a>) -> Self {
         let n = smooth_cch_pot.num_nodes();
         let rphast = RPHAST::new(
             // flipped for better cache efficiency when reading results
@@ -451,13 +447,14 @@ impl<'a> MinimalNonShortestSubPathsSSERphast<'a> {
             rphast_query: SSERPHASTQuery::new(&rphast),
             rphast,
             path_ranks: vec![InRangeOption::NONE; n],
+            smooth_graph,
         }
     }
 
     pub fn find_ubs_violating_subpaths_sse_rphast(&mut self, path: &[NodeId], epsilon: f64) -> Vec<Range<usize>> {
-        let ch_path: Vec<_> = path.iter().map(|&node| self.rphast.order().rank(node)).collect();
+        let dists = path_dists(path, &self.smooth_graph);
+        let path: Vec<_> = path.iter().map(|&node| self.rphast.order().rank(node)).collect();
         let mut violating = Vec::new();
-        let dists = ch_path_dists(&ch_path, self.rphast.backward_graph(), self.rphast.forward_graph());
 
         let path_ranks = &mut self.path_ranks;
 
@@ -469,15 +466,15 @@ impl<'a> MinimalNonShortestSubPathsSSERphast<'a> {
             path_ranks[node as usize] = InRangeOption::some(rank);
         }
 
-        for &node in path {
+        for &node in &path {
             self.path_ranks[node as usize] = InRangeOption::NONE;
         }
         if !violating.is_empty() {
             return violating;
         }
 
-        self.rphast.select(path);
-        let distances = self.rphast_query.query(path, &self.rphast);
+        self.rphast.select(&path);
+        let distances = self.rphast_query.query(&path, &self.rphast);
 
         for (u_idx, &u) in path[..path.len() - 1].iter().enumerate() {
             for (v_idx, &_) in path.iter().skip(u_idx + 1).enumerate() {
@@ -722,16 +719,6 @@ impl<'a> MinimalNonShortestSubPathsDijkstra<'a> {
     }
 
     fn path_dists(&self, path: &[NodeId]) -> Vec<Weight> {
-        let mut dists = Vec::with_capacity(path.len());
-        dists.push(0);
-        for node_pair in path.windows(2) {
-            let mut min_edge_weight = INFINITY;
-            for EdgeIdT(edge_id) in self.forward_graph.edge_indices(node_pair[0], node_pair[1]) {
-                min_edge_weight = std::cmp::min(min_edge_weight, self.forward_graph.link(edge_id).weight);
-            }
-            debug_assert_ne!(min_edge_weight, INFINITY);
-            dists.push(dists.last().unwrap() + min_edge_weight);
-        }
-        dists
+        path_dists(path, &self.forward_graph)
     }
 }

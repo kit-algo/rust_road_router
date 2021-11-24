@@ -64,7 +64,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut rank_paths = vec![Vec::new(); *ranks.iter().max().unwrap() as usize];
 
-    let mut server = HeuristicTrafficAwareServer::new(live_graph.clone(), &smooth_cch_pot, &live_cch_pot);
+    let mut server = HeuristicTrafficAwareServer::new(graph.borrowed(), live_graph.clone(), &smooth_cch_pot, &live_cch_pot);
     for ((&from, &to), &rank) in sources.iter().zip(targets.iter()).zip(ranks.iter()).take(num_queries) {
         let _blocked = block_reporting();
         server.query(Query { from, to }, epsilon, |p| rank_paths[rank as usize].push(p.to_vec()));
@@ -76,7 +76,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         paths.shuffle(&mut rng);
     }
 
-    let mut ubs_checker = MinimalNonShortestSubPaths::new(&smooth_cch_pot);
+    let mut ubs_checker = MinimalNonShortestSubPaths::new(&smooth_cch_pot, graph.borrowed());
 
     for (rank, paths) in rank_paths.iter().enumerate() {
         for p in paths {
@@ -100,7 +100,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    let mut ubs_checker = MinimalNonShortestSubPathsSSERphast::new(&smooth_cch_pot);
+    let mut ubs_checker = MinimalNonShortestSubPathsSSERphast::new(&smooth_cch_pot, graph.borrowed());
 
     for (rank, paths) in rank_paths.iter().enumerate() {
         for p in paths {

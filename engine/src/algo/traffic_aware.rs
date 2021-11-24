@@ -329,11 +329,11 @@ pub struct TrafficAwareServer<'a> {
 }
 
 impl<'a> TrafficAwareServer<'a> {
-    pub fn new(live_graph: BorrowedGraph<'a>, smooth_cch_pot: &'a CCHPotData, live_cch_pot: &'a CCHPotData) -> Self {
+    pub fn new(smooth_graph: BorrowedGraph<'a>, live_graph: BorrowedGraph<'a>, smooth_cch_pot: &'a CCHPotData, live_cch_pot: &'a CCHPotData) -> Self {
         let n = live_graph.num_nodes();
         let m = live_graph.num_arcs();
         Self {
-            ubs_checker: MinimalNonShortestSubPaths::new(smooth_cch_pot),
+            ubs_checker: MinimalNonShortestSubPaths::new(smooth_cch_pot, smooth_graph),
             dijkstra_data: DijkstraData::new(n),
             live_pot: live_cch_pot.forward_potential(),
             live_graph,
@@ -462,11 +462,11 @@ pub struct HeuristicTrafficAwareServer<'a> {
 }
 
 impl<'a> HeuristicTrafficAwareServer<'a> {
-    pub fn new(live_graph: BorrowedGraph<'a>, smooth_cch_pot: &'a CCHPotData, live_cch_pot: &'a CCHPotData) -> Self {
+    pub fn new(smooth_graph: BorrowedGraph<'a>, live_graph: BorrowedGraph<'a>, smooth_cch_pot: &'a CCHPotData, live_cch_pot: &'a CCHPotData) -> Self {
         let n = live_graph.num_nodes();
         let _blocked = block_reporting();
         Self {
-            ubs_checker: MinimalNonShortestSubPaths::new(smooth_cch_pot),
+            ubs_checker: MinimalNonShortestSubPaths::new(smooth_cch_pot, smooth_graph),
             shortest_path: TopoDijkServer::new(
                 &live_graph,
                 RecyclingPotential::new(live_cch_pot.forward_potential()),

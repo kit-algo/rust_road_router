@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let _prepro_ctxt = algo_runs_ctxt.push_collection_item();
         penalty::PenaltyIterative::new(&graph, &cch_pot)
     };
-    let mut path_stats = MinimalNonShortestSubPaths::new(&cch_pot);
+    let mut path_stats = MinimalNonShortestSubPaths::new(&cch_pot, graph.borrowed());
 
     let mut total_query_time = Duration::zero();
     let num_queries = experiments::chpot::num_queries();
