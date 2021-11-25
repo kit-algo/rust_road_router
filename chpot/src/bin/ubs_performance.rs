@@ -60,14 +60,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         CCHPotData::new(&cch, &live_graph)
     };
 
-    let num_queries = std::cmp::min(num_queries, sources.len());
-
-    let mut rank_paths = vec![Vec::new(); *ranks.iter().max().unwrap() as usize + 1];
+    let max_rank = *ranks.iter().max().unwrap() as usize;
+    let mut rank_paths = vec![Vec::new(); max_rank + 1];
+    let mut rank_query_counts = vec![0; max_rank + 1];
 
     let mut server = HeuristicTrafficAwareServer::new(graph.borrowed(), live_graph.clone(), &smooth_cch_pot, &live_cch_pot);
-    for ((&from, &to), &rank) in sources.iter().zip(targets.iter()).zip(ranks.iter()).take(num_queries) {
+    for ((&from, &to), &rank) in sources.iter().zip(targets.iter()).zip(ranks.iter()) {
+        if rank_query_counts[rank as usize] > num_queries {
+            continue;
+        }
         let _blocked = block_reporting();
         server.query(Query { from, to }, epsilon, |p| rank_paths[rank as usize].push(p.to_vec()));
+        rank_query_counts[rank as usize] += 1;
     }
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
