@@ -342,6 +342,7 @@ impl<'a> TrafficAwareServer<'a> {
     }
 
     pub fn query(&mut self, query: Query, epsilon: f64) -> Option<()> {
+        report!("algo", "iterative_path_blocking");
         self.dijkstra_ops.reset(&self.live_graph);
 
         self.live_pot.init(query.to);
@@ -476,6 +477,7 @@ impl<'a> HeuristicTrafficAwareServer<'a> {
     }
 
     pub fn query(&mut self, query: Query, epsilon: f64, mut path_cb: impl FnMut(&[NodeId])) -> Option<()> {
+        report!("algo", "iterative_detour_blocking");
         self.shortest_path.ops().reset();
 
         let mut base_live_dist = None;
