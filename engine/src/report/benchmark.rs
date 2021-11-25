@@ -11,8 +11,9 @@ pub fn report_time<Out, F: FnOnce() -> Out>(name: &str, f: F) -> Out {
     let start = time::now();
     eprintln!("starting {}", name);
     let res = f();
-    let t_passed = (time::now() - start).num_milliseconds();
+    let t_passed = time::now() - start;
     compiler_fence(SeqCst);
+    let t_passed = t_passed.to_std().unwrap().as_nanos() as f64 / 1_000_000.0;
     eprintln!("{} done - took: {}ms", name, t_passed);
     report!("running_time_ms", t_passed);
     res
@@ -25,8 +26,9 @@ pub fn report_time_with_key<Out, F: FnOnce() -> Out>(name: &str, key: &str, f: F
     let start = time::now();
     eprintln!("starting {}", name);
     let res = f();
-    let t_passed = (time::now() - start).num_milliseconds();
+    let t_passed = time::now() - start;
     compiler_fence(SeqCst);
+    let t_passed = t_passed.to_std().unwrap().as_nanos() as f64 / 1_000_000.0;
     eprintln!("{} done - took: {}ms", name, t_passed);
     report!(format!("{}_running_time_ms", key), t_passed);
     res
@@ -38,8 +40,9 @@ pub fn silent_report_time<Out, F: FnOnce() -> Out>(f: F) -> Out {
     compiler_fence(SeqCst);
     let start = time::now();
     let res = f();
-    let t_passed = (time::now() - start).num_milliseconds();
+    let t_passed = time::now() - start;
     compiler_fence(SeqCst);
+    let t_passed = t_passed.to_std().unwrap().as_nanos() as f64 / 1_000_000.0;
     report_silent!("running_time_ms", t_passed);
     res
 }
@@ -50,8 +53,9 @@ pub fn silent_report_time_with_key<Out, F: FnOnce() -> Out>(key: &str, f: F) -> 
     compiler_fence(SeqCst);
     let start = time::now();
     let res = f();
-    let t_passed = (time::now() - start).num_milliseconds();
+    let t_passed = time::now() - start;
     compiler_fence(SeqCst);
+    let t_passed = t_passed.to_std().unwrap().as_nanos() as f64 / 1_000_000.0;
     report_silent!(format!("{}_running_time_ms", key), t_passed);
     res
 }
