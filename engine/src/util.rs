@@ -82,6 +82,49 @@ impl<T> TapOps for T where T: Sized {}
 
 use std::convert::TryFrom;
 
+#[derive(Clone)]
+pub struct Vecs<T> {
+    first_idx: Vec<usize>,
+    data: Vec<T>,
+}
+
+impl<T> Vecs<T> {
+    pub fn from_iters<Inner: Iterator<Item = T>, Outer: Iterator<Item = Inner>>(iters: Outer) -> Self {
+        let mut first_idx = Vec::with_capacity(iters.size_hint().0 + 1);
+        first_idx.push(0);
+        let mut data = Vec::new();
+
+        for iter in iters {
+            data.extend(iter);
+            first_idx.push(data.len());
+        }
+
+        Self { first_idx, data }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &[T]> {
+        self.first_idx.array_windows::<2>().map(|&[from, to]| &self.data[from..to])
+    }
+}
+
+use rayon::prelude::*;
+
+impl<T> Vecs<T>
+where
+    T: Sync,
+{
+    pub fn par_iter(&self) -> impl IndexedParallelIterator<Item = &[T]> {
+        self.first_idx.par_windows(2).map(|idxs| &self.data[idxs[0]..idxs[1]])
+    }
+}
+
+impl<T> std::ops::Index<usize> for Vecs<T> {
+    type Output = [T];
+    fn index(&self, idx: usize) -> &<Self as std::ops::Index<usize>>::Output {
+        &self.data[SlcsIdx(&self.first_idx).range(idx)]
+    }
+}
+
 pub struct SlcsIdx<'a, Idx>(pub &'a [Idx]);
 
 impl<'a, Idx> SlcsIdx<'a, Idx>

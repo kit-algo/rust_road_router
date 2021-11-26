@@ -67,12 +67,16 @@ where
     report_time_with_key("CCH apply weights", "respecting", || {
         upward_weights
             .par_iter_mut()
-            .zip(downward_weights.par_iter_mut())
-            .zip(cch.cch_edge_to_orig_arc.par_iter())
-            .for_each(|((up_weight, down_weight), (up_arcs, down_arcs))| {
+            .zip(cch.forward_cch_edge_to_orig_arc.par_iter())
+            .for_each(|(up_weight, up_arcs)| {
                 for &EdgeIdT(up_arc) in up_arcs {
                     *up_weight = min(metric.link(up_arc).weight, *up_weight);
                 }
+            });
+        downward_weights
+            .par_iter_mut()
+            .zip(cch.backward_cch_edge_to_orig_arc.par_iter())
+            .for_each(|(down_weight, down_arcs)| {
                 for &EdgeIdT(down_arc) in down_arcs {
                     *down_weight = min(metric.link(down_arc).weight, *down_weight);
                 }
@@ -108,12 +112,16 @@ fn prepare_zero_weights(cch: &CCH, upward_weights: &mut [Weight], downward_weigh
     report_time_with_key("CCH apply weights", "respecting", || {
         upward_weights
             .par_iter_mut()
-            .zip(downward_weights.par_iter_mut())
-            .zip(cch.cch_edge_to_orig_arc.par_iter())
-            .for_each(|((up_weight, down_weight), (up_arcs, down_arcs))| {
+            .zip(cch.forward_cch_edge_to_orig_arc.par_iter())
+            .for_each(|(up_weight, up_arcs)| {
                 if !up_arcs.is_empty() {
                     *up_weight = 0;
                 }
+            });
+        downward_weights
+            .par_iter_mut()
+            .zip(cch.backward_cch_edge_to_orig_arc.par_iter())
+            .for_each(|(down_weight, down_arcs)| {
                 if !down_arcs.is_empty() {
                     *down_weight = 0;
                 }
@@ -221,7 +229,7 @@ fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weig
         customization.customize(&mut upward_weights, &mut downward_weights, |cb| {
             // create workspace vectors for the scope of the customization
             UPWARD_WORKSPACE.set(&RefCell::new(vec![INFINITY; n as usize]), || {
-                DOWNWARD_WORKSPACE.set(&RefCell::new(vec![INFINITY; n as usize]), || cb());
+                DOWNWARD_WORKSPACE.set(&RefCell::new(vec![INFINITY; n as usize]), cb);
             });
             // everything will be dropped here
         });
@@ -312,44 +320,43 @@ pub fn customize_perfect(mut customized: Customized<CCH, &CCH>) -> Customized<Di
         forward_first_out.push(0);
         let mut forward_head = Vec::with_capacity(m);
         let mut forward_weight = Vec::with_capacity(m);
-        let mut forward_cch_edge_to_orig_arc = Vec::with_capacity(m);
 
         let mut backward_first_out = Vec::with_capacity(cch.first_out.len());
         backward_first_out.push(0);
         let mut backward_head = Vec::with_capacity(m);
         let mut backward_weight = Vec::with_capacity(m);
-        let mut backward_cch_edge_to_orig_arc = Vec::with_capacity(m);
 
-        let mut forward_edge_counter = 0;
-        let mut backward_edge_counter = 0;
+        let forward_cch_edge_to_orig_arc = Vecs::from_iters(
+            cch.forward_cch_edge_to_orig_arc
+                .iter()
+                .zip(forward.weight().iter())
+                .filter(|(_, w)| **w < INFINITY)
+                .map(|(slc, _)| slc.iter().copied()),
+        );
+        let backward_cch_edge_to_orig_arc = Vecs::from_iters(
+            cch.backward_cch_edge_to_orig_arc
+                .iter()
+                .zip(backward.weight().iter())
+                .filter(|(_, w)| **w < INFINITY)
+                .map(|(slc, _)| slc.iter().copied()),
+        );
 
         for node in 0..n as NodeId {
             let edge_ids = cch.neighbor_edge_indices_usize(node);
-            let orig_arcs = &cch.cch_edge_to_orig_arc[edge_ids.clone()];
-            for ((link, (forward_orig_arcs, _)), &customized_weight) in LinkIterable::<Link>::link_iter(&forward, node)
-                .zip(orig_arcs.iter())
-                .zip(&upward_orig[edge_ids.clone()])
-            {
-                if link.weight < INFINITY && !(link.weight < customized_weight) {
+            for (link, &customized_weight) in LinkIterable::<Link>::link_iter(&forward, node).zip(&upward_orig[edge_ids.clone()]) {
+                if link.weight < INFINITY && link.weight >= customized_weight {
                     forward_head.push(link.node);
                     forward_weight.push(link.weight);
-                    forward_cch_edge_to_orig_arc.push(forward_orig_arcs.clone());
-                    forward_edge_counter += 1;
                 }
             }
-            for ((link, (_, backward_orig_arcs)), &customized_weight) in LinkIterable::<Link>::link_iter(&backward, node)
-                .zip(orig_arcs.iter())
-                .zip(&downward_orig[edge_ids.clone()])
-            {
-                if link.weight < INFINITY && !(link.weight < customized_weight) {
+            for (link, &customized_weight) in LinkIterable::<Link>::link_iter(&backward, node).zip(&downward_orig[edge_ids.clone()]) {
+                if link.weight < INFINITY && link.weight >= customized_weight {
                     backward_head.push(link.node);
                     backward_weight.push(link.weight);
-                    backward_cch_edge_to_orig_arc.push(backward_orig_arcs.clone());
-                    backward_edge_counter += 1;
                 }
             }
-            forward_first_out.push(forward_edge_counter);
-            backward_first_out.push(backward_edge_counter);
+            forward_first_out.push(forward_head.len() as EdgeId);
+            backward_first_out.push(backward_head.len() as EdgeId);
         }
 
         let forward_inverted = ReversedGraphWithEdgeIds::reversed(&UnweightedFirstOutGraph::new(&forward_first_out[..], &forward_head[..]));

@@ -33,7 +33,8 @@ pub struct CCH {
     head: Vec<NodeId>,
     tail: Vec<NodeId>,
     node_order: NodeOrder,
-    cch_edge_to_orig_arc: Vec<(Vec<EdgeIdT>, Vec<EdgeIdT>)>,
+    forward_cch_edge_to_orig_arc: Vecs<EdgeIdT>,
+    backward_cch_edge_to_orig_arc: Vecs<EdgeIdT>,
     elimination_tree: Vec<InRangeOption<NodeId>>,
     inverted: ReversedGraphWithEdgeIds,
 }
@@ -85,17 +86,15 @@ impl CCH {
         let m = contracted_graph.num_arcs();
         let mut tail = vec![0; m];
 
-        let cch_edge_to_orig_arc = (0..n)
-            .flat_map(|node| {
-                let node_order = &node_order;
-                LinkIterable::<NodeIdT>::link_iter(&contracted_graph, node).map(move |NodeIdT(neighbor)| {
-                    (
-                        original_graph.edge_indices(node_order.node(node), node_order.node(neighbor)).collect(),
-                        original_graph.edge_indices(node_order.node(neighbor), node_order.node(node)).collect(),
-                    )
-                })
-            })
-            .collect();
+        let order = &node_order;
+        let forward_cch_edge_to_orig_arc = Vecs::from_iters((0..n).flat_map(|node| {
+            LinkIterable::<NodeIdT>::link_iter(&contracted_graph, node)
+                .map(move |NodeIdT(neighbor)| original_graph.edge_indices(order.node(node), order.node(neighbor)))
+        }));
+        let backward_cch_edge_to_orig_arc = Vecs::from_iters((0..n).flat_map(|node| {
+            LinkIterable::<NodeIdT>::link_iter(&contracted_graph, node)
+                .map(move |NodeIdT(neighbor)| original_graph.edge_indices(order.node(neighbor), order.node(node)))
+        }));
 
         for node in 0..n {
             tail[contracted_graph.neighbor_edge_indices_usize(node)]
@@ -110,7 +109,8 @@ impl CCH {
             first_out,
             head,
             node_order,
-            cch_edge_to_orig_arc,
+            forward_cch_edge_to_orig_arc,
+            backward_cch_edge_to_orig_arc,
             elimination_tree,
             tail,
             inverted,
@@ -189,34 +189,31 @@ impl CCH {
         let mut forward_first_out = Vec::with_capacity(self.first_out.len());
         forward_first_out.push(0);
         let mut forward_head = Vec::with_capacity(self.head.len());
-        let mut forward_cch_edge_to_orig_arc = Vec::with_capacity(self.head.len());
 
         let mut backward_first_out = Vec::with_capacity(self.first_out.len());
         backward_first_out.push(0);
         let mut backward_head = Vec::with_capacity(self.head.len());
-        let mut backward_cch_edge_to_orig_arc = Vec::with_capacity(self.head.len());
 
-        let mut forward_edge_counter = 0;
-        let mut backward_edge_counter = 0;
+        let forward_cch_edge_to_orig_arc = Vecs::from_iters(
+            self.forward_cch_edge_to_orig_arc
+                .iter()
+                .zip(forward.weight().iter())
+                .filter(|(_, w)| **w < INFINITY)
+                .map(|(slc, _)| slc.iter().copied()),
+        );
+        let backward_cch_edge_to_orig_arc = Vecs::from_iters(
+            self.backward_cch_edge_to_orig_arc
+                .iter()
+                .zip(backward.weight().iter())
+                .filter(|(_, w)| **w < INFINITY)
+                .map(|(slc, _)| slc.iter().copied()),
+        );
 
         for node in 0..self.num_nodes() as NodeId {
-            let orig_arcs = &self.cch_edge_to_orig_arc[self.neighbor_edge_indices_usize(node)];
-            for (link, (forward_orig_arcs, _)) in LinkIterable::<Link>::link_iter(&forward, node).zip(orig_arcs.iter()) {
-                if link.weight < INFINITY {
-                    forward_head.push(link.node);
-                    forward_cch_edge_to_orig_arc.push(forward_orig_arcs.clone());
-                    forward_edge_counter += 1;
-                }
-            }
-            for (link, (_, backward_orig_arcs)) in LinkIterable::<Link>::link_iter(&backward, node).zip(orig_arcs.iter()) {
-                if link.weight < INFINITY {
-                    backward_head.push(link.node);
-                    backward_cch_edge_to_orig_arc.push(backward_orig_arcs.clone());
-                    backward_edge_counter += 1;
-                }
-            }
-            forward_first_out.push(forward_edge_counter);
-            backward_first_out.push(backward_edge_counter);
+            forward_head.extend(LinkIterable::<Link>::link_iter(&forward, node).filter(|l| l.weight < INFINITY).map(|l| l.node));
+            backward_head.extend(LinkIterable::<Link>::link_iter(&backward, node).filter(|l| l.weight < INFINITY).map(|l| l.node));
+            forward_first_out.push(forward_head.len() as EdgeId);
+            backward_first_out.push(backward_head.len() as EdgeId);
         }
 
         let forward_inverted = ReversedGraphWithEdgeIds::reversed(&UnweightedFirstOutGraph::new(&forward_first_out[..], &forward_head[..]));
@@ -387,8 +384,8 @@ pub struct DirectedCCH {
     backward_first_out: Vec<EdgeId>,
     backward_head: Vec<NodeId>,
     node_order: NodeOrder,
-    forward_cch_edge_to_orig_arc: Vec<Vec<EdgeIdT>>,
-    backward_cch_edge_to_orig_arc: Vec<Vec<EdgeIdT>>,
+    forward_cch_edge_to_orig_arc: Vecs<EdgeIdT>,
+    backward_cch_edge_to_orig_arc: Vecs<EdgeIdT>,
     elimination_tree: Vec<InRangeOption<NodeId>>,
     forward_inverted: ReversedGraphWithEdgeIds,
     backward_inverted: ReversedGraphWithEdgeIds,

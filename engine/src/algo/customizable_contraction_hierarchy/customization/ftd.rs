@@ -38,14 +38,18 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
     report_time("TD-CCH apply weights", || {
         upward
             .par_iter_mut()
-            .zip(downward.par_iter_mut())
-            .zip(cch.cch_edge_to_orig_arc.par_iter())
-            .for_each(|((up_weight, down_weight), (up_arcs, down_arcs))| {
+            .zip(cch.forward_cch_edge_to_orig_arc.par_iter())
+            .for_each(|(up_weight, up_arcs)| {
                 assert!(up_arcs.len() <= 1);
-                assert!(down_arcs.len() <= 1);
                 for &EdgeIdT(up_arc) in up_arcs {
                     *up_weight = Shortcut::new(Some(up_arc), metric);
                 }
+            });
+        downward
+            .par_iter_mut()
+            .zip(cch.backward_cch_edge_to_orig_arc.par_iter())
+            .for_each(|(down_weight, down_arcs)| {
+                assert!(down_arcs.len() <= 1);
                 for &EdgeIdT(down_arc) in down_arcs {
                     *down_weight = Shortcut::new(Some(down_arc), metric);
                 }
@@ -642,16 +646,20 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
     report_time("CATCHUp Live respecting", || {
         upward
             .par_iter_mut()
-            .zip(downward.par_iter_mut())
-            .zip(cch.cch_edge_to_orig_arc.par_iter())
-            .for_each(|((up_weight, down_weight), (up_arcs, down_arcs))| {
+            .zip(cch.forward_cch_edge_to_orig_arc.par_iter())
+            .for_each(|(up_weight, up_arcs)| {
                 assert!(up_arcs.len() <= 1);
-                assert!(down_arcs.len() <= 1);
                 for &EdgeIdT(up_arc) in up_arcs {
-                    *up_weight = LiveShortcut::new(Some(up_arc), &metric);
+                    *up_weight = LiveShortcut::new(Some(up_arc), metric);
                 }
+            });
+        downward
+            .par_iter_mut()
+            .zip(cch.backward_cch_edge_to_orig_arc.par_iter())
+            .for_each(|(down_weight, down_arcs)| {
+                assert!(down_arcs.len() <= 1);
                 for &EdgeIdT(down_arc) in down_arcs {
-                    *down_weight = LiveShortcut::new(Some(down_arc), &metric);
+                    *down_weight = LiveShortcut::new(Some(down_arc), metric);
                 }
             });
     });
