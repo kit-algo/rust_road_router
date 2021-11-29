@@ -13,7 +13,6 @@ use rust_road_router::{
     report::*,
 };
 use std::{env, error::Error, path::Path};
-use time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting("rphast");
@@ -45,8 +44,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             let mut rphast = RPHAST::new(chpot_data.backward_graph(), chpot_data.forward_graph(), chpot_data.order().clone());
             let mut rphast_query = RPHASTQuery::new(&rphast);
 
-            let mut total_query_time = Duration::zero();
-            let mut total_selection_time = Duration::zero();
+            let mut total_query_time = std::time::Duration::ZERO;
+            let mut total_selection_time = std::time::Duration::ZERO;
 
             for (sources, targets) in &queries {
                 {
@@ -55,21 +54,24 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let (_, time) = measure(|| {
                         rphast.select(&sources);
                     });
-                    report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+                    report!("running_time_ms", time.as_secs_f64() * 1000.0);
                     total_selection_time = total_selection_time + time;
                 }
                 for &target in targets.choose_multiple(&mut rng, num_queries) {
                     let _alg_ctx = algos_ctxt.push_collection_item();
                     report!("algo", "rphast_query");
                     let (_rphast_result, time) = measure(|| rphast_query.query(target, &rphast));
-                    report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+                    report!("running_time_ms", time.as_secs_f64() * 1000.0);
                     total_query_time = total_query_time + time;
                 }
             }
 
             if num_queries > 0 {
-                eprintln!("Avg. selection time {}", total_selection_time / num_queries as i32);
-                eprintln!("Avg. query time {}", total_query_time / ((num_queries * num_queries) as i32));
+                eprintln!("Avg. selection time {}ms", (total_selection_time / num_queries as u32).as_secs_f64() * 1000.0);
+                eprintln!(
+                    "Avg. query time {}ms",
+                    (total_query_time / ((num_queries * num_queries) as u32)).as_secs_f64() * 1000.0
+                );
             };
         }
     }

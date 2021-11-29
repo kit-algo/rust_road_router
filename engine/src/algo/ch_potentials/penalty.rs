@@ -176,7 +176,7 @@ impl<P: Potential + Send + Clone> Penalty<P> {
 
                 let (result, time) = measure(|| shortest_path_penalized.distance_with_cap(query, max_penalized_dist, Some(max_orig_dist)));
                 // let (result, time) = measure(|| shortest_path_penalized.distance_with_cap(query, max_penalized_dist));
-                report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+                report!("running_time_ms", time.as_secs_f64() * 1000.0);
                 let mut result = if let Some(result) = result.found() {
                     result
                 } else {
@@ -565,7 +565,7 @@ impl<'a> PenaltyIterative<'a> {
                 }
 
                 let (result, time) = measure(|| shortest_path_penalized.distance_with_cap(query, max_penalized_dist, Some(max_orig_dist)));
-                report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+                report!("running_time_ms", time.as_secs_f64() * 1000.0);
                 let mut result = if let Some(result) = result.found() {
                     result
                 } else {

@@ -54,7 +54,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             report!("from", from);
             report!("to", to);
             report!("rank", rank);
-            report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+            report!("running_time_ms", time.as_secs_f64() * 1000.0);
             let dist = res.distance();
             report!("result", dist);
             res.node_path().expect("Dijkstra Rank Query should always have a path");

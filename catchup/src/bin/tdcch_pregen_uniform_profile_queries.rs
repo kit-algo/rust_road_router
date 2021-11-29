@@ -7,7 +7,7 @@ use std::{env, error::Error, path::Path};
 extern crate rust_road_router;
 use rust_road_router::{algo::catchup::profiles::Server, cli::CliErr, experiments::catchup::setup, io::*, report::*};
 
-use time::Duration;
+use std::time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting("tdcch_pregen_uniform_profile_queries");
@@ -31,7 +31,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
 
         if let Some(path) = query_dir {
-            let mut tdcch_time = Duration::zero();
+            let mut tdcch_time = Duration::ZERO;
 
             let from = Vec::load_from(path.join("source_node"))?;
             let to = Vec::load_from(path.join("target_node"))?;
@@ -45,7 +45,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                 let ((_, _, paths), time) = measure(|| server.distance(from, to));
 
-                report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+                report!("running_time_ms", time.as_secs_f64() * 1000.0);
                 tdcch_time = tdcch_time + time;
 
                 if paths.is_empty() {
@@ -63,7 +63,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
 
             if num_queries > 0 {
-                eprintln!("TDCCH Profile {}", tdcch_time / num_queries);
+                eprintln!("TDCCH Profile {}s", (tdcch_time / num_queries).as_secs_f64());
             }
         }
 

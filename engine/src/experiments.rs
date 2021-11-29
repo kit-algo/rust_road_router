@@ -5,7 +5,7 @@ pub fn num_dijkstra_queries() -> usize {
 }
 
 use rand::{distributions::uniform::SampleUniform, prelude::*};
-use time::Duration;
+use std::time::Duration;
 
 use crate::{
     algo::{dijkstra::*, *},
@@ -82,7 +82,7 @@ pub fn run_queries<S: QueryServer>(
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[0]);
 
-    let mut total_query_time = Duration::zero();
+    let mut total_query_time = Duration::ZERO;
     let mut num_queries = 0;
 
     for (from, to) in query_iter {
@@ -95,7 +95,7 @@ pub fn run_queries<S: QueryServer>(
         pre_query(from, to, server);
 
         let (res, time) = measure(|| server.query(Query { from, to }));
-        report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        report!("running_time_ms", time.as_secs_f64() * 1000.0);
         let dist = res.distance();
         report!("result", dist);
 
@@ -105,11 +105,11 @@ pub fn run_queries<S: QueryServer>(
 
         // with_result(&mut res);
 
-        total_query_time = total_query_time + time;
+        total_query_time += time;
     }
 
     if num_queries > 0 {
-        eprintln!("Avg. query time {}", total_query_time / (num_queries as i32))
+        eprintln!("Avg. query time {}ms", (total_query_time / num_queries as u32).as_secs_f64() * 1000.0)
     };
 }
 
@@ -156,7 +156,7 @@ pub fn run_td_queries<T: Copy + serde::ser::Serialize, W: Copy + Eq + std::fmt::
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[0]);
 
-    let mut total_query_time = Duration::zero();
+    let mut total_query_time = Duration::ZERO;
     let mut num_queries = 0;
 
     for (from, to, at) in query_iter {
@@ -170,7 +170,7 @@ pub fn run_td_queries<T: Copy + serde::ser::Serialize, W: Copy + Eq + std::fmt::
         pre_query(from, to, server);
 
         let (res, time) = measure(|| server.td_query(TDQuery { from, to, departure: at }));
-        report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        report!("running_time_ms", time.as_secs_f64() * 1000.0);
         let dist = res.distance();
         report!("result", dist);
 
@@ -180,11 +180,11 @@ pub fn run_td_queries<T: Copy + serde::ser::Serialize, W: Copy + Eq + std::fmt::
 
         // with_result(&mut res);
 
-        total_query_time = total_query_time + time;
+        total_query_time += time;
     }
 
     if num_queries > 0 {
-        eprintln!("Avg. query time {}", total_query_time / (num_queries as i32))
+        eprintln!("Avg. query time {}ms", (total_query_time / num_queries as u32).as_secs_f64() * 1000.0)
     };
 }
 

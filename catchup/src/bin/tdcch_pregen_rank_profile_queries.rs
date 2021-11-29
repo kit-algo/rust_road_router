@@ -55,7 +55,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     report!("num_distinct_paths", paths.len());
                 }
 
-                report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+                report!("running_time_ms", time.as_secs_f64() * 1000.0);
             }
         }
 

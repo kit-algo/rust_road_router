@@ -53,16 +53,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                 report!("to", to);
                 report!("rank", rank[q_idx]);
                 report!("departure_time", f64::from(at));
-                report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+                report!("running_time_ms", time.as_secs_f64() * 1000.0);
                 if let Some(mut result) = result.found() {
                     report!("earliest_arrival", f64::from(result.distance() + at));
 
                     let (path, unpacking_duration) = measure(|| result.node_path());
                     report!("num_nodes_on_shortest_path", path.len());
-                    report!(
-                        "unpacking_running_time_ms",
-                        unpacking_duration.to_std().unwrap().as_nanos() as f64 / 1_000_000.0
-                    );
+                    report!("unpacking_running_time_ms", unpacking_duration.as_secs_f64() * 1000.0);
                 }
             }
         }

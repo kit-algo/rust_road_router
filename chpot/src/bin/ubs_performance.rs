@@ -83,7 +83,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut ubs_checker = MinimalNonShortestSubPaths::new(&smooth_cch_pot, graph.borrowed());
 
     for (rank, paths) in rank_paths.iter().enumerate() {
-        let start = time::now();
+        let start = std::time::Instant::now();
         for p in paths {
             let _algo_run = algo_runs_ctxt.push_collection_item();
             report!("algo", "lazy_rphast_tree");
@@ -92,14 +92,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             let num_violating = silent_report_time(|| ubs_checker.find_ubs_violating_subpaths(p, epsilon).len());
             report!("num_violating_segments", num_violating);
 
-            if (time::now() - start) > time::Duration::hours(1) {
+            if start.elapsed().as_secs() > 3600 {
                 break;
             }
         }
     }
 
     for (rank, paths) in rank_paths.iter().enumerate() {
-        let start = time::now();
+        let start = std::time::Instant::now();
         for p in paths {
             let _algo_run = algo_runs_ctxt.push_collection_item();
             report!("algo", "lazy_rphast_naive");
@@ -108,7 +108,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let num_violating = silent_report_time(|| ubs_checker.find_ubs_violating_subpaths_lazy_rphast_naive(p, epsilon).len());
             report!("num_violating_segments", num_violating);
 
-            if (time::now() - start) > time::Duration::hours(1) {
+            if start.elapsed().as_secs() > 3600 {
                 break;
             }
         }
@@ -117,7 +117,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut ubs_checker_rphast = MinimalNonShortestSubPathsSSERphast::new(&smooth_cch_pot, graph.borrowed());
 
     for (rank, paths) in rank_paths.iter().enumerate() {
-        let start = time::now();
+        let start = std::time::Instant::now();
         for p in paths {
             let _algo_run = algo_runs_ctxt.push_collection_item();
             report!("algo", "sse_rphast");
@@ -126,7 +126,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let num_violating = silent_report_time(|| ubs_checker_rphast.find_ubs_violating_subpaths_sse_rphast(p, epsilon).len());
             report!("num_violating_segments", num_violating);
 
-            if (time::now() - start) > time::Duration::hours(1) {
+            if start.elapsed().as_secs() > 3600 {
                 break;
             }
         }
@@ -135,7 +135,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut ubs_checker_dijk = MinimalNonShortestSubPathsDijkstra::new(graph.borrowed());
 
     for (rank, paths) in rank_paths.iter().enumerate() {
-        let start = time::now();
+        let start = std::time::Instant::now();
         for p in paths {
             let _algo_run = algo_runs_ctxt.push_collection_item();
             report!("algo", "dijkstra_tree");
@@ -144,7 +144,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let num_violating = silent_report_time(|| ubs_checker_dijk.find_ubs_violating_subpaths(p, epsilon).len());
             report!("num_violating_segments", num_violating);
 
-            if (time::now() - start) > time::Duration::hours(1) {
+            if start.elapsed().as_secs() > 3600 {
                 break;
             }
         }

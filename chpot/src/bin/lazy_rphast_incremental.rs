@@ -64,7 +64,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     if (i & (i - 1)) == 0 {
                         let _state_ctx = progress.push_collection_item();
                         report!("terminal_rank", i.trailing_zeros());
-                        report!("passed_time_mus", timer.get_passed().num_microseconds().unwrap());
+                        report!("passed_time_mus", timer.get_passed().as_micros());
                     }
                 }
             }
@@ -89,7 +89,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     if (i & (i - 1)) == 0 {
                         let _state_ctx = progress.push_collection_item();
                         report!("terminal_rank", i.trailing_zeros());
-                        report!("passed_time_mus", timer.get_passed().num_microseconds().unwrap());
+                        report!("passed_time_mus", timer.get_passed().as_micros());
                     }
                 }
             }

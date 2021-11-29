@@ -311,7 +311,7 @@ pub fn enable_reporting(program: &str) -> ReportingGuard {
     }
 
     report!("program", program);
-    report!("start_time", format!("{}", time::now_utc().rfc822()));
+    report!("start_time", chrono::prelude::Utc::now().to_rfc3339());
     report!("args", std::env::args().collect::<Vec<String>>());
 
     ReportingGuard(())
