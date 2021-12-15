@@ -37,7 +37,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
 
         for (rank, &node) in path.iter().enumerate() {
             if let Some(prev_rank) = path_ranks[node as usize].value() {
-                eprintln!("Found Cycle of len: {}", rank - prev_rank);
+                // eprintln!("Found Cycle of len: {}", rank - prev_rank);
                 violating.push(prev_rank..rank)
             }
             path_ranks[node as usize] = InRangeOption::some(rank);
@@ -81,7 +81,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
 
         for (rank, &node) in path.iter().enumerate() {
             if let Some(prev_rank) = path_ranks[node as usize].value() {
-                eprintln!("Found Cycle of len: {}", rank - prev_rank);
+                // eprintln!("Found Cycle of len: {}", rank - prev_rank);
                 violating.push(prev_rank..rank)
             }
             path_ranks[node as usize] = InRangeOption::some(rank);
@@ -113,6 +113,73 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
 
         filter_covered(&mut violating);
         violating
+    }
+
+    pub fn fix_violating_subpaths(&mut self, orig_path: &[NodeId], epsilon: f64) -> Result<Option<Vec<NodeId>>, Vec<NodeId>> {
+        let mut result = None;
+
+        let mut iterations_ctxt = push_collection_context("iterations".to_string());
+        let mut i = 0;
+        while let Some(fixed) = {
+            let _blocked = block_reporting();
+            self.fix_violating_subpaths_int(result.as_deref().unwrap_or(orig_path), epsilon)
+        } {
+            let _it = iterations_ctxt.push_collection_item();
+            i += 1;
+            if i > 250 {
+                report!("num_iterations", i);
+                return Err(fixed);
+            }
+            report!("iteration", i);
+            result = Some(fixed);
+            drop(_it);
+        }
+        drop(iterations_ctxt);
+        report!("num_iterations", i);
+        Ok(result)
+    }
+
+    fn fix_violating_subpaths_int(&mut self, orig_path: &[NodeId], epsilon: f64) -> Option<Vec<NodeId>> {
+        let mut violating = self.find_ubs_violating_subpaths(orig_path, epsilon);
+        if violating.is_empty() {
+            return None;
+        }
+        violating.sort_unstable_by_key(|r| r.start);
+
+        let mut covered_until = 0;
+        violating.retain(|r| {
+            if r.start >= covered_until {
+                covered_until = r.end;
+                true
+            } else {
+                false
+            }
+        });
+        report!("num_fixed_segments", violating.len());
+
+        let order = self.source_pot.cch().node_order();
+        let mut fixed_path = Vec::new();
+        let mut pushed_until = 0;
+
+        for r in violating {
+            fixed_path.extend_from_slice(&orig_path[pushed_until..=r.start]);
+
+            let segment_end = order.rank(orig_path[r.end]);
+            let segment_start = order.rank(orig_path[r.start]);
+            self.target_pot.init(segment_end);
+            self.target_pot.unpack_path(NodeIdT(segment_start));
+
+            while *fixed_path.last().unwrap() != orig_path[r.end] {
+                let last = *fixed_path.last().unwrap();
+                let parent = order.node(self.target_pot.target_shortest_path_tree()[order.rank(last) as usize]);
+                fixed_path.push(parent);
+            }
+
+            pushed_until = r.end + 1;
+        }
+        fixed_path.extend_from_slice(&orig_path[pushed_until..]);
+
+        Some(fixed_path)
     }
 
     pub fn local_optimality(&mut self, orig_path: &[NodeId]) -> f64 {
@@ -332,17 +399,20 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
 }
 
 pub fn path_dists(path: &[NodeId], graph: &BorrowedGraph) -> Vec<Weight> {
-    let mut dists = Vec::with_capacity(path.len());
-    dists.push(0);
-    for node_pair in path.windows(2) {
+    path_dist_iter(path, graph).collect()
+}
+
+pub fn path_dist_iter<'a>(path: &'a [NodeId], graph: &'a BorrowedGraph) -> impl Iterator<Item = Weight> + 'a {
+    std::iter::once(0).chain(path.windows(2).scan(0, move |state, node_pair| {
         let mut min_edge_weight = INFINITY;
         for EdgeIdT(edge_id) in graph.edge_indices(node_pair[0], node_pair[1]) {
             min_edge_weight = std::cmp::min(min_edge_weight, graph.link(edge_id).weight);
         }
         debug_assert_ne!(min_edge_weight, INFINITY);
-        dists.push(dists.last().unwrap() + min_edge_weight);
-    }
-    dists
+
+        *state += min_edge_weight;
+        Some(*state)
+    }))
 }
 
 pub fn filter_covered(ranges: &mut Vec<Range<usize>>) {
@@ -457,7 +527,7 @@ impl<'a> MinimalNonShortestSubPathsSSERphast<'a> {
 
         for (rank, &node) in path.iter().enumerate() {
             if let Some(prev_rank) = path_ranks[node as usize].value() {
-                eprintln!("Found Cycle of len: {}", rank - prev_rank);
+                // eprintln!("Found Cycle of len: {}", rank - prev_rank);
                 violating.push(prev_rank..rank)
             }
             path_ranks[node as usize] = InRangeOption::some(rank);
@@ -527,7 +597,7 @@ impl<'a> MinimalNonShortestSubPathsDijkstra<'a> {
 
         for (rank, &node) in path.iter().enumerate() {
             if let Some(prev_rank) = path_ranks[node as usize].value() {
-                eprintln!("Found Cycle of len: {}", rank - prev_rank);
+                // eprintln!("Found Cycle of len: {}", rank - prev_rank);
                 violating.push(prev_rank..rank)
             }
             path_ranks[node as usize] = InRangeOption::some(rank);

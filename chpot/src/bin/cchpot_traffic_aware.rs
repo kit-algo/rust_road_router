@@ -94,7 +94,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         )
     };
 
-    let mut server = TrafficAwareServer::new(graph.borrowed(), live_graph, &smooth_cch_pot, &live_cch_pot);
+    let mut server = TrafficAwareServer::new(graph.borrowed(), live_graph.clone(), &smooth_cch_pot, &live_cch_pot);
 
     let mut total_query_time = std::time::Duration::ZERO;
 
@@ -112,6 +112,26 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     if num_queries > 0 {
         eprintln!("Exact: Avg. query time {}ms", (total_query_time / (num_queries as u32)).as_secs_f64() * 1000.0)
+    };
+
+    let mut server = IterativePathFixing::new(graph.borrowed(), live_graph, &smooth_cch_pot, &live_cch_pot);
+
+    let mut total_query_time = std::time::Duration::ZERO;
+
+    for (&from, &to) in sources.iter().zip(targets.iter()).take(num_queries) {
+        let _query_ctxt = algo_runs_ctxt.push_collection_item();
+
+        report!("from", from);
+        report!("to", to);
+
+        let (_, time) = measure(|| server.query(Query { from, to }, epsilon));
+        report!("running_time_ms", time.as_secs_f64() * 1000.0);
+
+        total_query_time = total_query_time + time;
+    }
+
+    if num_queries > 0 {
+        eprintln!("IPF: Avg. query time {}ms", (total_query_time / (num_queries as u32)).as_secs_f64() * 1000.0)
     };
 
     Ok(())

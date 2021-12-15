@@ -110,7 +110,7 @@ impl BlockedPathsDijkstra {
                                 if head == *path.last().unwrap() {
                                     panic!("path already forbidden: {:#?}", path);
                                 } else {
-                                    dbg!("subpath already forbidden");
+                                    // dbg!("subpath already forbidden");
                                     return;
                                 }
                             } else {
@@ -500,7 +500,7 @@ impl<'a> HeuristicTrafficAwareServer<'a> {
             let (res, time) = measure(|| self.shortest_path.query(query));
 
             report!("exploration_time_ms", time.as_secs_f64() * 1000.0);
-            explore_time = explore_time + time;
+            explore_time += time;
 
             let mut res = if let Some(res) = res.found() {
                 res
@@ -517,7 +517,7 @@ impl<'a> HeuristicTrafficAwareServer<'a> {
 
             let (violating, time) = measure(|| self.ubs_checker.find_ubs_violating_subpaths(&path, epsilon));
             report!("ubs_time_ms", time.as_secs_f64() * 1000.0);
-            ubs_time = ubs_time + time;
+            ubs_time += time;
 
             path_cb(&path);
 
@@ -545,6 +545,59 @@ impl<'a> HeuristicTrafficAwareServer<'a> {
         report!("total_exploration_time_ms", explore_time.as_secs_f64() * 1000.0);
         report!("total_ubs_time_ms", ubs_time.as_secs_f64() * 1000.0);
         result
+    }
+}
+
+pub struct IterativePathFixing<'a> {
+    ubs_checker: MinimalNonShortestSubPaths<'a>,
+    shortest_path: TopoDijkServer<OwnedGraph, DefaultOps, BorrowedCCHPot<'a>, true, true, true>,
+    live_graph: BorrowedGraph<'a>,
+}
+
+impl<'a> IterativePathFixing<'a> {
+    pub fn new(smooth_graph: BorrowedGraph<'a>, live_graph: BorrowedGraph<'a>, smooth_cch_pot: &'a CCHPotData, live_cch_pot: &'a CCHPotData) -> Self {
+        let _blocked = block_reporting();
+        Self {
+            ubs_checker: MinimalNonShortestSubPaths::new(smooth_cch_pot, smooth_graph),
+            shortest_path: TopoDijkServer::new(&live_graph, live_cch_pot.forward_potential(), DefaultOps()),
+            live_graph,
+        }
+    }
+
+    pub fn query(&mut self, query: Query, epsilon: f64) -> Option<()> {
+        report!("algo", "iterative_path_fixing");
+
+        let (res, time) = measure(|| {
+            let _expl_ctxt = push_context("exploration".to_string());
+            self.shortest_path.query(query)
+        });
+        report!("exploration_time_ms", time.as_secs_f64() * 1000.0);
+
+        let mut res = res.found()?;
+
+        let base_live_dist = Some(res.distance());
+        let path = res.node_path();
+        report!("num_nodes_on_path", path.len());
+
+        let (fixed, time) = measure(|| self.ubs_checker.fix_violating_subpaths(&path, epsilon));
+        report!("total_ubs_time_ms", time.as_secs_f64() * 1000.0);
+
+        let final_path = match &fixed {
+            Ok(None) => &path,
+            Ok(Some(fixed)) => fixed,
+            Err(fixed) => fixed,
+        };
+
+        let final_live_dist = path_dist_iter(final_path, &self.live_graph).last().unwrap();
+
+        report!("failed", fixed.is_err());
+        if let Some(base_live_dist) = base_live_dist {
+            report!(
+                "length_increase_percent",
+                (final_live_dist - base_live_dist) as f64 / base_live_dist as f64 * 100.0
+            );
+        }
+        Some(())
     }
 }
 
