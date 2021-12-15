@@ -14,7 +14,7 @@ use rust_road_router::{
     report::*,
 };
 
-use time::Duration;
+use std::time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting("tdcch_pregen_uniform_queries");
@@ -38,7 +38,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
 
         if let Some(path) = query_dir {
-            let mut tdcch_time = Duration::zero();
+            let mut tdcch_time = Duration::ZERO;
 
             let from = Vec::load_from(path.join("source_node"))?;
             let at = Vec::<u32>::load_from(path.join("source_time"))?;
@@ -55,23 +55,20 @@ fn main() -> Result<(), Box<dyn Error>> {
                 report!("from", from);
                 report!("to", to);
                 report!("departure_time", f64::from(at));
-                report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+                report!("running_time_ms", time.as_secs_f64() * 1000.0);
                 tdcch_time = tdcch_time + time;
                 if let Some(mut result) = result.found() {
                     report!("earliest_arrival", f64::from(result.distance() + at));
                     let (path, unpacking_duration) = measure(|| result.node_path());
                     report!("num_nodes_on_shortest_path", path.len());
-                    report!(
-                        "unpacking_running_time_ms",
-                        unpacking_duration.to_std().unwrap().as_nanos() as f64 / 1_000_000.0
-                    );
+                    report!("unpacking_running_time_ms", unpacking_duration.as_secs_f64() * 1000.0);
                 }
 
                 num_queries += 1;
             }
 
             if num_queries > 0 {
-                eprintln!("TDCCH {}", tdcch_time / num_queries);
+                eprintln!("TDCCH {}ms", (tdcch_time / num_queries).as_secs_f64() * 1000.0);
             }
         }
 

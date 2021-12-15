@@ -16,7 +16,6 @@ use rust_road_router::{
 };
 
 use rand::prelude::*;
-use time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting("tdcch_profiles");
@@ -27,7 +26,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut server = Server::new(&cch, &td_cch_graph);
         let mut ea_server = EAServer::new(&cch, &td_cch_graph);
 
-        let mut tdcch_time = Duration::zero();
+        let mut tdcch_time = std::time::Duration::ZERO;
 
         let n = g.num_nodes();
 
@@ -41,7 +40,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             let ((shortcut, tt, paths), time) = measure(|| server.distance(from, to));
 
-            report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+            report!("running_time_ms", time.as_secs_f64() * 1000.0);
             tdcch_time = tdcch_time + time;
             report!("num_sources", shortcut.num_sources());
             if paths.is_empty() {
@@ -70,7 +69,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
 
-        eprintln!("Avg CATCHUp Profile Time {}", tdcch_time / (50i32));
+        eprintln!("Avg CATCHUp Profile Time {}s", (tdcch_time / 50).as_secs_f64());
 
         Ok(())
     })

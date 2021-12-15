@@ -224,7 +224,7 @@ impl<'a> Server<'a> {
             report!("num_meeting_nodes", self.meeting_nodes.len());
         }
 
-        report!("elimination_tree_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        report!("elimination_tree_time", timer.get_passed().as_secs_f64() * 1000.0);
         timer.restart();
 
         // elimination tree query done, now we want to retrieve the corridor
@@ -424,7 +424,7 @@ impl<'a> Server<'a> {
             lower_and_upper_node,
         );
 
-        report!("contract_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        report!("contract_time", timer.get_passed().as_secs_f64() * 1000.0);
         timer.restart();
 
         let st_shortcut = profile_graph.up_shortcuts.last();
@@ -437,7 +437,7 @@ impl<'a> Server<'a> {
         }
         report!("profile_complexity", target.len());
 
-        report!("exact_profile_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        report!("exact_profile_time", timer.get_passed().as_secs_f64() * 1000.0);
         timer.restart();
 
         let paths = if st_shortcut.is_valid_path() {
@@ -446,7 +446,7 @@ impl<'a> Server<'a> {
         } else {
             Vec::new()
         };
-        report!("switchpoints_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        report!("switchpoints_time", timer.get_passed().as_secs_f64() * 1000.0);
         timer.restart();
 
         while let Some(node) = self.backward_tree_path.pop() {

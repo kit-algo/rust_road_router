@@ -11,7 +11,6 @@ use rust_road_router::{
 use std::{env, error::Error, path::Path};
 
 use rand::prelude::*;
-use time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting("chpot_penalty_iterative");
@@ -41,7 +40,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     let mut path_stats = MinimalNonShortestSubPaths::new(&cch_pot, graph.borrowed());
 
-    let mut total_query_time = Duration::zero();
+    let mut total_query_time = std::time::Duration::ZERO;
     let num_queries = experiments::chpot::num_queries();
 
     for _i in 0..num_queries {
@@ -53,7 +52,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         report!("to", to);
 
         let (res, time) = measure(|| penalty_server.alternatives(Query { from, to }));
-        report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        report!("running_time_ms", time.as_secs_f64() * 1000.0);
         report!(
             "pot_evals",
             penalty_server.potentials().map(|p| p.inner().inner().num_pot_computations()).sum::<usize>()
@@ -68,7 +67,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     if num_queries > 0 {
-        eprintln!("Avg. query time {}", total_query_time / (num_queries as i32))
+        eprintln!("Avg. query time {}ms", (total_query_time / num_queries as u32).as_secs_f64() * 1000.0);
     };
 
     Ok(())

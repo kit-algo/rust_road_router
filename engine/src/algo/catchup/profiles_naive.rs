@@ -14,7 +14,7 @@ use crate::datastr::index_heap::{IndexdMinHeap, Indexing};
 use crate::datastr::rank_select_map::{BitVec, FastClearBitVec};
 #[cfg(feature = "tdcch-query-detailed-timing")]
 use crate::report::benchmark::Timer;
-use time::Duration;
+use std::time::Duration;
 
 /// Query server struct for CATCHUp.
 /// Implements the common query trait.
@@ -328,8 +328,8 @@ impl<'a> Server<'a> {
         });
 
         let mut relax_timer = Timer::new();
-        let mut unpack_time = Duration::zero();
-        let mut link_merge_time = Duration::zero();
+        let mut unpack_time = Duration::ZERO;
+        let mut link_merge_time = Duration::ZERO;
 
         // while there is a node in the queue
         while let Some(State { node, .. }) = self.closest_node_priority_queue.pop() {
@@ -531,8 +531,8 @@ impl<'a> Server<'a> {
 
         eprintln!(
             "unpack: {}ms, link/merge: {}ms",
-            unpack_time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0,
-            link_merge_time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0
+            unpack_time.as_secs_f64() * 1000.0,
+            link_merge_time.as_secs_f64() * 1000.0
         );
 
         if cfg!(feature = "detailed-stats") {

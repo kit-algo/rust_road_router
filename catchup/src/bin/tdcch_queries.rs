@@ -14,7 +14,7 @@ use rust_road_router::{
 };
 
 use rand::prelude::*;
-use time::Duration;
+use std::time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
     // let _reporter = enable_reporting();
@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 report!("departure_time", f64::from(at));
                 report!("rank", rank);
                 report!("ground_truth", f64::from(ea_ground_truth));
-                report!("running_time_ms", duration.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+                report!("running_time_ms", duration.as_secs_f64() * 1000.0);
 
                 let ea = at + result.distance();
                 report!("earliest_arrival", f64::from(ea));
@@ -47,10 +47,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 assert!(ea_ground_truth.fuzzy_eq(ea), "{} {} {:?}", from, to, at);
 
                 let (path, unpacking_duration) = measure(|| result.node_path());
-                report!(
-                    "unpacking_running_time_ms",
-                    unpacking_duration.to_std().unwrap().as_nanos() as f64 / 1_000_000.0
-                );
+                report!("unpacking_running_time_ms", unpacking_duration.as_secs_f64() * 1000.0);
                 rank_times[rank].push((duration, unpacking_duration));
                 g.check_path(&path);
             });
@@ -61,17 +58,22 @@ fn main() -> Result<(), Box<dyn Error>> {
             if count > 0 {
                 let (sum, sum_unpacking) = rank_times
                     .into_iter()
-                    .fold((Duration::zero(), Duration::zero()), |(acc1, acc2), (t1, t2)| (acc1 + t1, acc2 + t2));
-                let avg = sum / count as i32;
-                let avg_unpacking = sum_unpacking / count as i32;
-                eprintln!("rank: {} - avg running time: {} - avg unpacking time: {}", rank, avg, avg_unpacking);
+                    .fold((Duration::ZERO, Duration::ZERO), |(acc1, acc2), (t1, t2)| (acc1 + t1, acc2 + t2));
+                let avg = sum / count as u32;
+                let avg_unpacking = sum_unpacking / count as u32;
+                eprintln!(
+                    "rank: {} - avg running time: {}ms - avg unpacking time: {}ms",
+                    rank,
+                    avg.as_secs_f64() * 1000.0,
+                    avg_unpacking.as_secs_f64() * 1000.0
+                );
             }
         }
 
         let num_queries = 50;
 
-        let mut dijkstra_time = Duration::zero();
-        let mut tdcch_time = Duration::zero();
+        let mut dijkstra_time = Duration::ZERO;
+        let mut tdcch_time = Duration::ZERO;
 
         for _ in 0..num_queries {
             let from: NodeId = rng.gen_range(0..g.num_nodes() as NodeId);
@@ -84,7 +86,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             report!("from", from);
             report!("to", to);
             report!("departure_time", f64::from(at));
-            report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+            report!("running_time_ms", time.as_secs_f64() * 1000.0);
             if let Some(ground_truth) = ground_truth {
                 report!("earliest_arrival", f64::from(ground_truth));
             }
@@ -99,7 +101,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             report!("from", from);
             report!("to", to);
             report!("departure_time", f64::from(at));
-            report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+            report!("running_time_ms", time.as_secs_f64() * 1000.0);
             if let Some(ground_truth) = ground_truth {
                 report!("ground_truth", f64::from(ground_truth));
             }
@@ -112,8 +114,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             assert!(ea.fuzzy_eq(ground_truth.unwrap_or(Timestamp::NEVER)));
         }
-        eprintln!("Dijkstra {}", dijkstra_time / (num_queries as i32));
-        eprintln!("TDCCH {}", tdcch_time / (num_queries as i32));
+        eprintln!("Dijkstra {}ms", (dijkstra_time / num_queries).as_secs_f64() * 1000.0);
+        eprintln!("TDCCH {}ms", (tdcch_time / num_queries).as_secs_f64() * 1000.0);
         Ok(())
     })
 }

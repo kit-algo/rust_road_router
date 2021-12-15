@@ -349,8 +349,8 @@ impl<'a> TrafficAwareServer<'a> {
         let base_live_dist = self.live_pot.potential(query.from)?;
         let mut final_live_dist = base_live_dist;
 
-        let mut explore_time = time::Duration::zero();
-        let mut ubs_time = time::Duration::zero();
+        let mut explore_time = std::time::Duration::ZERO;
+        let mut ubs_time = std::time::Duration::ZERO;
 
         let mut i = 0;
         let mut total_queue_pops = 0usize;
@@ -387,7 +387,7 @@ impl<'a> TrafficAwareServer<'a> {
             });
 
             report!("num_queue_pops", num_queue_pops);
-            report!("exploration_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+            report!("exploration_time_ms", time.as_secs_f64() * 1000.0);
             explore_time = explore_time + time;
 
             if self.dijkstra_data.distances[query.to as usize].popped().is_empty() {
@@ -427,7 +427,7 @@ impl<'a> TrafficAwareServer<'a> {
             report!("num_nodes_on_path", path.len());
 
             let (violating, time) = measure(|| self.ubs_checker.find_ubs_violating_subpaths(&path, epsilon));
-            report!("ubs_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+            report!("ubs_time_ms", time.as_secs_f64() * 1000.0);
             ubs_time = ubs_time + time;
 
             if violating.is_empty() {
@@ -449,8 +449,8 @@ impl<'a> TrafficAwareServer<'a> {
             "length_increase_percent",
             (final_live_dist - base_live_dist) as f64 / base_live_dist as f64 * 100.0
         );
-        report!("total_exploration_time_ms", explore_time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-        report!("total_ubs_time_ms", ubs_time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        report!("total_exploration_time_ms", explore_time.as_secs_f64() * 1000.0);
+        report!("total_ubs_time_ms", ubs_time.as_secs_f64() * 1000.0);
         result
     }
 }
@@ -483,8 +483,8 @@ impl<'a> HeuristicTrafficAwareServer<'a> {
         let mut base_live_dist = None;
         let mut final_live_dist = INFINITY;
 
-        let mut explore_time = time::Duration::zero();
-        let mut ubs_time = time::Duration::zero();
+        let mut explore_time = std::time::Duration::ZERO;
+        let mut ubs_time = std::time::Duration::ZERO;
 
         let mut i = 0;
         let mut iterations_ctxt = push_collection_context("iterations".to_string());
@@ -499,7 +499,7 @@ impl<'a> HeuristicTrafficAwareServer<'a> {
 
             let (res, time) = measure(|| self.shortest_path.query(query));
 
-            report!("exploration_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+            report!("exploration_time_ms", time.as_secs_f64() * 1000.0);
             explore_time = explore_time + time;
 
             let mut res = if let Some(res) = res.found() {
@@ -516,7 +516,7 @@ impl<'a> HeuristicTrafficAwareServer<'a> {
             report!("num_nodes_on_path", path.len());
 
             let (violating, time) = measure(|| self.ubs_checker.find_ubs_violating_subpaths(&path, epsilon));
-            report!("ubs_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+            report!("ubs_time_ms", time.as_secs_f64() * 1000.0);
             ubs_time = ubs_time + time;
 
             path_cb(&path);
@@ -542,8 +542,8 @@ impl<'a> HeuristicTrafficAwareServer<'a> {
                 (final_live_dist - base_live_dist) as f64 / base_live_dist as f64 * 100.0
             );
         }
-        report!("total_exploration_time_ms", explore_time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-        report!("total_ubs_time_ms", ubs_time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        report!("total_exploration_time_ms", explore_time.as_secs_f64() * 1000.0);
+        report!("total_ubs_time_ms", ubs_time.as_secs_f64() * 1000.0);
         result
     }
 }

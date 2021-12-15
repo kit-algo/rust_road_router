@@ -10,7 +10,6 @@ use rust_road_router::{
     report::*,
 };
 use std::{env, error::Error, path::Path};
-use time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting("lazy_rphast");
@@ -50,7 +49,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             many_to_one.init(*queries.last().unwrap().1.last().unwrap());
             many_to_one.potential(*queries.last().unwrap().0.last().unwrap());
 
-            let mut total_query_time = Duration::zero();
+            let mut total_query_time = std::time::Duration::ZERO;
 
             for (sources, targets) in &queries {
                 for &target in targets.choose_multiple(&mut rng, num_queries) {
@@ -64,20 +63,23 @@ fn main() -> Result<(), Box<dyn Error>> {
                             many_to_one.potential(s);
                         }
                     });
-                    report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+                    report!("running_time_ms", time.as_secs_f64() * 1000.0);
                     total_query_time = total_query_time + time;
                 }
             }
 
             if num_queries > 0 {
-                eprintln!("Avg. query time {}", total_query_time / ((num_queries * num_queries) as i32))
+                eprintln!(
+                    "Avg. query time {}ms",
+                    (total_query_time / (num_queries * num_queries) as u32).as_secs_f64() * 1000.0
+                )
             };
 
             let mut many_to_one = cch_pot_data.forward_potential();
             many_to_one.init(*queries.last().unwrap().1.last().unwrap());
             many_to_one.potential(*queries.last().unwrap().0.last().unwrap());
 
-            let mut total_query_time = Duration::zero();
+            let mut total_query_time = std::time::Duration::ZERO;
 
             for (sources, targets) in &queries {
                 for &target in targets.choose_multiple(&mut rng, num_queries) {
@@ -91,19 +93,22 @@ fn main() -> Result<(), Box<dyn Error>> {
                             many_to_one.potential(s);
                         }
                     });
-                    report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+                    report!("running_time_ms", time.as_secs_f64() * 1000.0);
                     total_query_time = total_query_time + time;
                 }
             }
 
             if num_queries > 0 {
-                eprintln!("Avg. query time {}", total_query_time / ((num_queries * num_queries) as i32))
+                eprintln!(
+                    "Avg. query time {}ms",
+                    (total_query_time / (num_queries * num_queries) as u32).as_secs_f64() * 1000.0
+                )
             };
 
             let mut many_to_many = chpot_data.bucket_ch_pot();
             many_to_many.init(&queries.last().unwrap().1);
             many_to_many.potential(*queries.last().unwrap().0.last().unwrap());
-            let mut total_query_time = Duration::zero();
+            let mut total_query_time = std::time::Duration::ZERO;
 
             for (sources, targets) in &queries {
                 let _alg_ctx = algos_ctxt.push_collection_item();
@@ -121,12 +126,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                         });
                     }
                 });
-                report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+                report!("running_time_ms", time.as_secs_f64() * 1000.0);
                 total_query_time = total_query_time + time;
             }
 
             if num_queries > 0 {
-                eprintln!("Avg. query time {}", total_query_time / (num_queries as i32))
+                eprintln!("Avg. query time {}ms", (total_query_time / num_queries as u32).as_secs_f64() * 1000.0)
             };
         }
     }

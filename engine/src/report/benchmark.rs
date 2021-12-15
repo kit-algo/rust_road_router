@@ -3,17 +3,18 @@
 
 use super::*;
 use std::sync::atomic::{compiler_fence, Ordering::SeqCst};
+use std::time::*;
 
 /// This function will measure how long it takes to execute the given lambda,
 /// print the time and return the result of the lambda.
 pub fn report_time<Out, F: FnOnce() -> Out>(name: &str, f: F) -> Out {
     compiler_fence(SeqCst);
-    let start = time::now();
+    let start = Instant::now();
     eprintln!("starting {}", name);
     let res = f();
-    let t_passed = time::now() - start;
+    let t_passed = start.elapsed();
     compiler_fence(SeqCst);
-    let t_passed = t_passed.to_std().unwrap().as_nanos() as f64 / 1_000_000.0;
+    let t_passed = t_passed.as_secs_f64() * 1000.0;
     eprintln!("{} done - took: {}ms", name, t_passed);
     report!("running_time_ms", t_passed);
     res
@@ -23,12 +24,12 @@ pub fn report_time<Out, F: FnOnce() -> Out>(name: &str, f: F) -> Out {
 /// print the time, report it under the given key and return the result of the lambda.
 pub fn report_time_with_key<Out, F: FnOnce() -> Out>(name: &str, key: &str, f: F) -> Out {
     compiler_fence(SeqCst);
-    let start = time::now();
+    let start = Instant::now();
     eprintln!("starting {}", name);
     let res = f();
-    let t_passed = time::now() - start;
+    let t_passed = start.elapsed();
     compiler_fence(SeqCst);
-    let t_passed = t_passed.to_std().unwrap().as_nanos() as f64 / 1_000_000.0;
+    let t_passed = t_passed.as_secs_f64() * 1000.0;
     eprintln!("{} done - took: {}ms", name, t_passed);
     report!(format!("{}_running_time_ms", key), t_passed);
     res
@@ -38,11 +39,11 @@ pub fn report_time_with_key<Out, F: FnOnce() -> Out>(name: &str, key: &str, f: F
 /// print the time and return the result of the lambda.
 pub fn silent_report_time<Out, F: FnOnce() -> Out>(f: F) -> Out {
     compiler_fence(SeqCst);
-    let start = time::now();
+    let start = Instant::now();
     let res = f();
-    let t_passed = time::now() - start;
+    let t_passed = start.elapsed();
     compiler_fence(SeqCst);
-    let t_passed = t_passed.to_std().unwrap().as_nanos() as f64 / 1_000_000.0;
+    let t_passed = t_passed.as_secs_f64() * 1000.0;
     report_silent!("running_time_ms", t_passed);
     res
 }
@@ -51,27 +52,27 @@ pub fn silent_report_time<Out, F: FnOnce() -> Out>(f: F) -> Out {
 /// print the time, report it under the given key and return the result of the lambda.
 pub fn silent_report_time_with_key<Out, F: FnOnce() -> Out>(key: &str, f: F) -> Out {
     compiler_fence(SeqCst);
-    let start = time::now();
+    let start = Instant::now();
     let res = f();
-    let t_passed = time::now() - start;
+    let t_passed = start.elapsed();
     compiler_fence(SeqCst);
-    let t_passed = t_passed.to_std().unwrap().as_nanos() as f64 / 1_000_000.0;
+    let t_passed = t_passed.as_secs_f64() * 1000.0;
     report_silent!(format!("{}_running_time_ms", key), t_passed);
     res
 }
 
 /// This function will measure how long it takes to execute the given lambda
 /// and return a tuple of the result of the lambda and a duration object.
-pub fn measure<Out, F: FnOnce() -> Out>(f: F) -> (Out, time::Duration) {
-    let start = time::now();
+pub fn measure<Out, F: FnOnce() -> Out>(f: F) -> (Out, Duration) {
+    let start = Instant::now();
     let res = f();
-    (res, time::now() - start)
+    (res, start.elapsed())
 }
 
 /// A struct to repeatedly measure the time passed since the timer was started
 #[derive(Debug)]
 pub struct Timer {
-    start: time::Tm,
+    start: Instant,
 }
 
 impl Default for Timer {
@@ -83,26 +84,26 @@ impl Default for Timer {
 impl Timer {
     /// Create and start a new `Timer`
     pub fn new() -> Timer {
-        Timer { start: time::now() }
+        Timer { start: Instant::now() }
     }
 
     /// Reset the `Timer`
     pub fn restart(&mut self) {
-        self.start = time::now();
+        self.start = Instant::now();
     }
 
     /// Print the passed time in ms since the timer was started
     pub fn report_passed_ms(&self) {
-        eprintln!("{}ms", (time::now() - self.start).num_milliseconds());
+        eprintln!("{}ms", self.start.elapsed().as_secs_f64() * 1000.0);
     }
 
     /// Return the number of ms passed since the timer was started as a `i64`
-    pub fn get_passed_ms(&self) -> i64 {
-        (time::now() - self.start).num_milliseconds()
+    pub fn get_passed_ms(&self) -> u128 {
+        self.start.elapsed().as_millis()
     }
 
     /// Return the number of ms passed since the timer was started as a Duration
-    pub fn get_passed(&self) -> time::Duration {
-        time::now() - self.start
+    pub fn get_passed(&self) -> Duration {
+        self.start.elapsed()
     }
 }

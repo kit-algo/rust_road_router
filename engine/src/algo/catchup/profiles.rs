@@ -12,7 +12,6 @@ use crate::datastr::index_heap::*;
 use crate::datastr::rank_select_map::{BitVec, FastClearBitVec};
 #[cfg(feature = "tdcch-query-detailed-timing")]
 use crate::report::benchmark::Timer;
-// use time::Duration;
 
 use std::convert::TryInto;
 
@@ -222,7 +221,7 @@ impl<'a> Server<'a> {
             report!("num_meeting_nodes", self.meeting_nodes.len());
         }
 
-        report!("elimination_tree_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        report!("elimination_tree_time", timer.get_passed().as_secs_f64() * 1000.0);
         timer.restart();
 
         // elimination tree query done, now we want to retrieve the corridor
@@ -345,7 +344,7 @@ impl<'a> Server<'a> {
         }
 
         report!("num_points_cached", reconstruction_graph.num_points_cached());
-        report!("reconstruct_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        report!("reconstruct_time", timer.get_passed().as_secs_f64() * 1000.0);
         timer.restart();
 
         let forward = &self.forward;
@@ -436,7 +435,7 @@ impl<'a> Server<'a> {
             up_shortcuts: &mut up_shortcuts[..],
         };
 
-        report!("transfer_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        report!("transfer_time", timer.get_passed().as_secs_f64() * 1000.0);
         timer.restart();
 
         let forward_tree_path = &self.forward_tree_path;
@@ -528,7 +527,7 @@ impl<'a> Server<'a> {
             },
         );
 
-        report!("contract_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        report!("contract_time", timer.get_passed().as_secs_f64() * 1000.0);
         timer.restart();
 
         let profile_graph = ProfileGraphWrapper {
@@ -570,7 +569,7 @@ impl<'a> Server<'a> {
             )
         }
 
-        report!("st_contract_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        report!("st_contract_time", timer.get_passed().as_secs_f64() * 1000.0);
         timer.restart();
 
         let mut target = self.buffers.unpacking_target.push_plf();
@@ -579,7 +578,7 @@ impl<'a> Server<'a> {
         }
         report!("profile_complexity", target.len());
 
-        report!("exact_profile_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        report!("exact_profile_time", timer.get_passed().as_secs_f64() * 1000.0);
         timer.restart();
 
         let paths = if st_shortcut.is_valid_path() {
@@ -588,7 +587,7 @@ impl<'a> Server<'a> {
         } else {
             Vec::new()
         };
-        report!("switchpoints_time", timer.get_passed().to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+        report!("switchpoints_time", timer.get_passed().as_secs_f64() * 1000.0);
         timer.restart();
 
         while let Some(node) = self.backward_tree_path.pop() {
