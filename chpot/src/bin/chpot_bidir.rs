@@ -41,7 +41,6 @@ macro_rules! bidir_pre_callback {
                 "num_pot_computations",
                 res.data().potential().forward().inner().num_pot_computations() + res.data().potential().backward().inner().num_pot_computations()
             );
-            report!("lower_bound", res.data().lower_bound(from));
         }
     };
 }
@@ -57,7 +56,6 @@ macro_rules! unidir_pre_callback {
             report!("num_pot_computations", res.data().potential().num_pot_computations());
             #[cfg(feature = "chpot-oracle")]
             report!("num_pot_computations", res.data().potential().inner().num_pot_computations());
-            report!("lower_bound", res.data().lower_bound(from));
         }
     };
 }
