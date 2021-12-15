@@ -1,7 +1,7 @@
 use super::*;
 
 use crate::{
-    algo::{a_star::*, ch_potentials::*, customizable_contraction_hierarchy::*},
+    algo::{a_star::*, ch_potentials::*, customizable_contraction_hierarchy::*, traffic_aware::TRAFFIC_MAX_ITERATIONS},
     datastr::{graph::first_out_graph::BorrowedGraph, rank_select_map::BitVec},
     report::*,
     util::{in_range_option::InRangeOption, with_index},
@@ -126,7 +126,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
         } {
             let _it = iterations_ctxt.push_collection_item();
             i += 1;
-            if i > 250 {
+            if TRAFFIC_MAX_ITERATIONS.map(|m| i > m).unwrap_or(false) {
                 report!("num_iterations", i);
                 return Err(fixed);
             }

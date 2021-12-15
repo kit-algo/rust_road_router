@@ -11,6 +11,21 @@ use crate::{
     report::*,
 };
 
+/// Maximum number of iteration
+#[cfg(not(override_traffic_max_iterations))]
+pub const TRAFFIC_MAX_ITERATIONS: Option<usize> = Some(250);
+#[cfg(override_traffic_max_iterations)]
+pub const TRAFFIC_MAX_ITERATIONS: Option<usize> = parse_max_traffic_iterations(include!(concat!(env!("OUT_DIR"), "/TRAFFIC_MAX_ITERATIONS")));
+
+#[cfg(override_traffic_max_iterations)]
+const fn parse_max_traffic_iterations(input: usize) -> Option<usize> {
+    if input == 0 {
+        None
+    } else {
+        Some(input)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum ActiveForbittenPaths {
     One(u128),
@@ -356,7 +371,7 @@ impl<'a> TrafficAwareServer<'a> {
         let mut total_queue_pops = 0usize;
         let mut iterations_ctxt = push_collection_context("iterations".to_string());
         let result = loop {
-            if i > 250 {
+            if TRAFFIC_MAX_ITERATIONS.map(|m| i > m).unwrap_or(false) {
                 break None;
             }
 
@@ -388,7 +403,7 @@ impl<'a> TrafficAwareServer<'a> {
 
             report!("num_queue_pops", num_queue_pops);
             report!("exploration_time_ms", time.as_secs_f64() * 1000.0);
-            explore_time = explore_time + time;
+            explore_time += time;
 
             if self.dijkstra_data.distances[query.to as usize].popped().is_empty() {
                 break None;
@@ -428,7 +443,7 @@ impl<'a> TrafficAwareServer<'a> {
 
             let (violating, time) = measure(|| self.ubs_checker.find_ubs_violating_subpaths(&path, epsilon));
             report!("ubs_time_ms", time.as_secs_f64() * 1000.0);
-            ubs_time = ubs_time + time;
+            ubs_time += time;
 
             if violating.is_empty() {
                 break Some(());
@@ -489,7 +504,7 @@ impl<'a> HeuristicTrafficAwareServer<'a> {
         let mut i = 0;
         let mut iterations_ctxt = push_collection_context("iterations".to_string());
         let result = loop {
-            if i > 250 {
+            if TRAFFIC_MAX_ITERATIONS.map(|m| i > m).unwrap_or(false) {
                 break None;
             }
 
