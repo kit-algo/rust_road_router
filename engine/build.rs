@@ -29,11 +29,11 @@ fn main() {
     }
     println!("cargo:rerun-if-env-changed=TDCCH_APPROX");
 
-    if let Ok(val) = env::var("TRAFFIC_MAX_ITERATIONS") {
-        let dest_path = Path::new(&out_dir).join("TRAFFIC_MAX_ITERATIONS");
+    if let Ok(val) = env::var("TRAFFIC_MAX_QUERY_TIME") {
+        let dest_path = Path::new(&out_dir).join("TRAFFIC_MAX_QUERY_TIME");
         let mut f = File::create(&dest_path).unwrap();
         f.write_all(val.as_bytes()).unwrap();
-        println!("cargo:rustc-cfg=override_traffic_max_iterations");
+        println!("cargo:rustc-cfg=override_traffic_max_query_time");
     }
-    println!("cargo:rerun-if-env-changed=TRAFFIC_MAX_ITERATIONS");
+    println!("cargo:rerun-if-env-changed=TRAFFIC_MAX_QUERY_TIME");
 }

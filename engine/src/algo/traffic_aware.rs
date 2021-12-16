@@ -11,14 +11,14 @@ use crate::{
     report::*,
 };
 
-/// Maximum number of iteration
-#[cfg(not(override_traffic_max_iterations))]
-pub const TRAFFIC_MAX_ITERATIONS: Option<usize> = Some(250);
-#[cfg(override_traffic_max_iterations)]
-pub const TRAFFIC_MAX_ITERATIONS: Option<usize> = parse_max_traffic_iterations(include!(concat!(env!("OUT_DIR"), "/TRAFFIC_MAX_ITERATIONS")));
+/// Maximum time (ms) per query
+#[cfg(not(override_traffic_max_query_time))]
+pub const TRAFFIC_MAX_QUERY_TIME: Option<u128> = Some(10000);
+#[cfg(override_traffic_max_query_time)]
+pub const TRAFFIC_MAX_QUERY_TIME: Option<u128> = parse_max_traffic_query_time(include!(concat!(env!("OUT_DIR"), "/TRAFFIC_MAX_QUERY_TIME")));
 
-#[cfg(override_traffic_max_iterations)]
-const fn parse_max_traffic_iterations(input: usize) -> Option<usize> {
+#[cfg(override_traffic_max_query_time)]
+const fn parse_max_traffic_query_time(input: u128) -> Option<u128> {
     if input == 0 {
         None
     } else {
@@ -357,6 +357,7 @@ impl<'a> TrafficAwareServer<'a> {
     }
 
     pub fn query(&mut self, query: Query, epsilon: f64) -> Option<()> {
+        let timer = Timer::new();
         report!("algo", "iterative_path_blocking");
         self.dijkstra_ops.reset(&self.live_graph);
 
@@ -371,7 +372,7 @@ impl<'a> TrafficAwareServer<'a> {
         let mut total_queue_pops = 0usize;
         let mut iterations_ctxt = push_collection_context("iterations".to_string());
         let result = loop {
-            if TRAFFIC_MAX_ITERATIONS.map(|m| i > m).unwrap_or(false) {
+            if TRAFFIC_MAX_QUERY_TIME.map(|m| timer.get_passed_ms() > m).unwrap_or(false) {
                 break None;
             }
 
@@ -492,6 +493,7 @@ impl<'a> HeuristicTrafficAwareServer<'a> {
     }
 
     pub fn query(&mut self, query: Query, epsilon: f64, mut path_cb: impl FnMut(&[NodeId])) -> Option<()> {
+        let timer = Timer::new();
         report!("algo", "iterative_detour_blocking");
         self.shortest_path.ops().reset();
 
@@ -504,7 +506,7 @@ impl<'a> HeuristicTrafficAwareServer<'a> {
         let mut i = 0;
         let mut iterations_ctxt = push_collection_context("iterations".to_string());
         let result = loop {
-            if TRAFFIC_MAX_ITERATIONS.map(|m| i > m).unwrap_or(false) {
+            if TRAFFIC_MAX_QUERY_TIME.map(|m| timer.get_passed_ms() > m).unwrap_or(false) {
                 break None;
             }
 

@@ -1,7 +1,7 @@
 use super::*;
 
 use crate::{
-    algo::{a_star::*, ch_potentials::*, customizable_contraction_hierarchy::*, traffic_aware::TRAFFIC_MAX_ITERATIONS},
+    algo::{a_star::*, ch_potentials::*, customizable_contraction_hierarchy::*, traffic_aware::TRAFFIC_MAX_QUERY_TIME},
     datastr::{graph::first_out_graph::BorrowedGraph, rank_select_map::BitVec},
     report::*,
     util::{in_range_option::InRangeOption, with_index},
@@ -116,6 +116,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
     }
 
     pub fn fix_violating_subpaths(&mut self, orig_path: &[NodeId], epsilon: f64) -> Result<Option<Vec<NodeId>>, Vec<NodeId>> {
+        let timer = Timer::new();
         let mut result = None;
 
         let mut iterations_ctxt = push_collection_context("iterations".to_string());
@@ -126,7 +127,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
         } {
             let _it = iterations_ctxt.push_collection_item();
             i += 1;
-            if TRAFFIC_MAX_ITERATIONS.map(|m| i > m).unwrap_or(false) {
+            if TRAFFIC_MAX_QUERY_TIME.map(|m| timer.get_passed_ms() > m).unwrap_or(false) {
                 report!("num_iterations", i);
                 return Err(fixed);
             }
