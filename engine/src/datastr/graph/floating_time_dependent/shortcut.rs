@@ -584,6 +584,9 @@ impl Sources {
 
         // intersections after the last old source
         for &(at, is_self_better) in intersection_iter {
+            if new_sources.last().map(|&(last_at, _)| last_at.fuzzy_eq(at)).unwrap_or(false) {
+                new_sources.pop();
+            }
             if is_self_better {
                 new_sources.push((at, prev_source));
             } else {
