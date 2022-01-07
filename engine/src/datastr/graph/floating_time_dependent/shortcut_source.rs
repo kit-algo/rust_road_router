@@ -143,9 +143,6 @@ impl ShortcutSource {
 
                 if second_start.fuzzy_eq(second_end) {
                     let second_val = shortcut_graph.evaluate(ShortcutId::Outgoing(up), second_start);
-                    for p in &first[..] {
-                        debug_assert!((p.at + p.val).fuzzy_eq(second_start));
-                    }
                     target.push(TTFPoint {
                         at: first.first().unwrap().at,
                         val: first.first().unwrap().val + second_val,
