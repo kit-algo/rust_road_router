@@ -216,7 +216,13 @@ fn speed_profile_to_tt_profile(speeds: &[(Timestamp, u32)], edge_len: u32) -> Ve
             let t_enter = Weight::try_from(u64::from(eval_at) * u64::from(delta_dt) / u64::from(delta_at)).unwrap() + last.0;
             let tt_enter = speeds[entered.back().unwrap() + 1].0 - t_enter;
 
-            profile.last().map(|&(t, _)| debug_assert!(t < t_enter));
+            if let Some(&(t, tt)) = profile.last() {
+                if t >= t_enter {
+                    assert_eq!(t, t_enter);
+                    assert_eq!(tt, tt_enter);
+                    profile.pop();
+                }
+            }
             profile.push((t_enter, tt_enter));
             entered.push_back(next_to_enter);
             next_to_enter += 1;
