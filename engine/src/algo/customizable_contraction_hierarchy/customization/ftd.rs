@@ -265,7 +265,7 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
 
                 loop {
                     // this actually reports to stderr and stores the data in the `events` `Vec`
-                    report!("at_s", timer.get_passed_ms() / 1000);
+                    report!("at_s", (timer.get_passed_ms() / 1000) as usize);
                     report!("nodes_customized", NODES_CUSTOMIZED.load(Ordering::Relaxed));
                     if cfg!(feature = "detailed-stats") {
                         report!("arcs_processed", ARCS_PROCESSED.load(Ordering::Relaxed));
@@ -282,7 +282,7 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
 
                     if cfg!(feature = "detailed-stats") {
                         events.push((
-                            timer.get_passed_ms() / 1000,
+                            (timer.get_passed_ms() / 1000) as usize,
                             NODES_CUSTOMIZED.load(Ordering::Relaxed),
                             ARCS_PROCESSED.load(Ordering::Relaxed),
                             TRIANGLES_PROCESSED.load(Ordering::Relaxed),
@@ -297,7 +297,7 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
                         ));
                     } else {
                         events.push((
-                            timer.get_passed_ms() / 1000,
+                            (timer.get_passed_ms() / 1000) as usize,
                             NODES_CUSTOMIZED.load(Ordering::Relaxed),
                             0,
                             0,
@@ -314,7 +314,7 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
 
                     if let Ok(()) | Err(RecvTimeoutError::Disconnected) = rx.recv_timeout(std::time::Duration::from_secs(3)) {
                         events.push((
-                            timer.get_passed_ms() / 1000,
+                            (timer.get_passed_ms() / 1000) as usize,
                             NODES_CUSTOMIZED.load(Ordering::Relaxed),
                             ARCS_PROCESSED.load(Ordering::Relaxed),
                             TRIANGLES_PROCESSED.load(Ordering::Relaxed),
@@ -1003,7 +1003,7 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
 
                 loop {
                     // this actually reports to stderr and stores the data in the `events` `Vec`
-                    report!("at_s", timer.get_passed_ms() / 1000);
+                    report!("at_s", (timer.get_passed_ms() / 1000) as usize);
                     report!("nodes_customized", NODES_CUSTOMIZED.load(Ordering::Relaxed));
                     if cfg!(feature = "detailed-stats") {
                         report!("num_ipps_stored", IPP_COUNT.load(Ordering::Relaxed));
@@ -1018,7 +1018,7 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
 
                     if cfg!(feature = "detailed-stats") {
                         events.push((
-                            timer.get_passed_ms() / 1000,
+                            (timer.get_passed_ms() / 1000) as usize,
                             NODES_CUSTOMIZED.load(Ordering::Relaxed),
                             IPP_COUNT.load(Ordering::Relaxed),
                             ACTIVE_SHORTCUTS.load(Ordering::Relaxed),
@@ -1030,7 +1030,18 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
                             UNNECESSARY_LINKED.load(Ordering::Relaxed),
                         ));
                     } else {
-                        events.push((timer.get_passed_ms() / 1000, NODES_CUSTOMIZED.load(Ordering::Relaxed), 0, 0, 0, 0, 0, 0, 0, 0));
+                        events.push((
+                            (timer.get_passed_ms() / 1000) as usize,
+                            NODES_CUSTOMIZED.load(Ordering::Relaxed),
+                            0,
+                            0,
+                            0,
+                            0,
+                            0,
+                            0,
+                            0,
+                            0,
+                        ));
                     }
 
                     if let Ok(()) | Err(RecvTimeoutError::Disconnected) = rx.recv_timeout(std::time::Duration::from_secs(3)) {
