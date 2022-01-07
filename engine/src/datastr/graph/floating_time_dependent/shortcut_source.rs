@@ -105,7 +105,7 @@ impl ShortcutSource {
     // Use two `ReusablePLFStorage`s to reduce allocations.
     // One storage will contain the functions of `up` and `down` - the other the result function.
     // That means when recursing, we need to use the two storages with flipped roles.
-    pub(super) fn reconstruct_exact_ttf<'g>(
+    pub(super) fn reconstruct_exact_ttf(
         &self,
         start: Timestamp,
         end: Timestamp,
@@ -136,7 +136,7 @@ impl ShortcutSource {
                     &first_target[..]
                 };
 
-                debug_assert!(!first.last().unwrap().at.fuzzy_lt(end), "{:#?}", (start, end, &first[..]));
+                debug_assert!(!first.last().unwrap().at.fuzzy_lt(end), "{:#?}", (start, end, first));
                 // for `up` PLF we need to shift the time range
                 let second_start = start + interpolate_linear(&first[0], &first[1], start);
                 let second_end = end + interpolate_linear(&first[first.len() - 2], &first[first.len() - 1], end);

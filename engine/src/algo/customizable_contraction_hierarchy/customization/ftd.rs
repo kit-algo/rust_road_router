@@ -219,7 +219,7 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
         report_time("TD-CCH Pre-Customization", || {
             static_customization.customize(&mut upward, &mut downward, |cb| {
                 UPWARD_WORKSPACE.set(&RefCell::new(vec![(FlWeight::INFINITY, FlWeight::INFINITY); n as usize]), || {
-                    DOWNWARD_WORKSPACE.set(&RefCell::new(vec![(FlWeight::INFINITY, FlWeight::INFINITY); n as usize]), || cb());
+                    DOWNWARD_WORKSPACE.set(&RefCell::new(vec![(FlWeight::INFINITY, FlWeight::INFINITY); n as usize]), cb);
                 });
             });
 
@@ -227,7 +227,7 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
             let downward_preliminary_bounds: Vec<_> = downward.iter().map(|s| s.lower_bound).collect();
 
             static_perfect_customization.customize(&mut upward, &mut downward, |cb| {
-                PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::NONE; n as usize]), || cb());
+                PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::NONE; n as usize]), cb);
             });
 
             upward.par_iter_mut().zip(upward_preliminary_bounds.par_iter()).for_each(disable_dominated);
@@ -250,10 +250,10 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
             cch,
             // routines created in this function
             // we customize many cells in parallel - so iterate over triangles sequentially
-            create_customization_fn(&cch, metric, SeqIter(&cch)),
+            create_customization_fn(cch, metric, SeqIter(cch)),
             // the final separator can only be customized, once everything else is done, but it still takes up a significant amount of time
             // But we can still parallelize the processing of edges from one node within this separator.
-            create_customization_fn(&cch, metric, ParIter(&cch)),
+            create_customization_fn(cch, metric, ParIter(cch)),
         );
 
         report_time("TD-CCH Customization", || {
@@ -395,7 +395,7 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
             let downward_preliminary_bounds: Vec<_> = downward.iter().map(|s| s.lower_bound).collect();
 
             static_perfect_customization.customize(&mut upward, &mut downward, |cb| {
-                PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::NONE; n as usize]), || cb());
+                PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::NONE; n as usize]), cb);
             });
 
             // routine to disable shortcuts for which the perfect precustomization determined them to be irrelevant
@@ -418,11 +418,11 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
                 let downward_active = &mut downward_above[0..cch.neighbor_edge_indices(current_node as NodeId).len()];
                 let shortcut_graph = PartialShortcutGraph::new(metric, upward_below, downward_below, 0);
 
-                for shortcut in &mut upward_active[..] {
+                for shortcut in upward_active {
                     shortcut.disable_if_unneccesary(&shortcut_graph);
                 }
 
-                for shortcut in &mut downward_active[..] {
+                for shortcut in downward_active {
                     shortcut.disable_if_unneccesary(&shortcut_graph);
                 }
             }
@@ -433,11 +433,11 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
                 let (downward_below, downward_above) = downward.split_at_mut(cch.first_out[current_node as usize] as usize);
                 let downward_active = &mut downward_above[0..cch.neighbor_edge_indices(current_node as NodeId).len()];
 
-                for shortcut in &mut upward_active[..] {
+                for shortcut in upward_active {
                     shortcut.reenable_required(downward_below, upward_below);
                 }
 
-                for shortcut in &mut downward_active[..] {
+                for shortcut in downward_active {
                     shortcut.reenable_required(downward_below, upward_below);
                 }
             }
@@ -514,7 +514,7 @@ where
                             debug_assert_eq!(cch.edge_id_to_tail(*edge_from_cur_id), *lower_from_current);
                             debug_assert_eq!(cch.edge_id_to_tail(*edge_from_oth_id), *lower_from_other);
 
-                            match lower_from_current.cmp(&lower_from_other) {
+                            match lower_from_current.cmp(lower_from_other) {
                                 Ord::Less => current_iter.next(),
                                 Ord::Greater => other_iter.next(),
                                 Ord::Equal => {
@@ -949,7 +949,7 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
         report_time("CATCHUp Live Pre-Customization", || {
             static_customization.customize(&mut pre_upward, &mut pre_downward, |cb| {
                 UPWARD_WORKSPACE_LIVE.set(&RefCell::new(vec![PreLiveShortcut::default(); n as usize]), || {
-                    DOWNWARD_WORKSPACE_LIVE.set(&RefCell::new(vec![PreLiveShortcut::default(); n as usize]), || cb());
+                    DOWNWARD_WORKSPACE_LIVE.set(&RefCell::new(vec![PreLiveShortcut::default(); n as usize]), cb);
                 });
             });
 
@@ -957,7 +957,7 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
             let downward_preliminary_bounds: Vec<_> = downward.iter().map(|s| s.lower_bound).collect();
 
             static_perfect_customization.customize(&mut pre_upward, &mut pre_downward, |cb| {
-                PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::NONE; n as usize]), || cb());
+                PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::NONE; n as usize]), cb);
             });
 
             mark_for_unpacking.customize(&mut pre_upward[..], &mut pre_downward[..], |cb| cb());
@@ -988,10 +988,10 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
             cch,
             // routines created in this function
             // we customize many cells in parallel - so iterate over triangles sequentially
-            create_live_customization_fn(&cch, metric, &upward_pred[..], &downward_pred[..], SeqIter(&cch)),
+            create_live_customization_fn(cch, metric, &upward_pred[..], &downward_pred[..], SeqIter(cch)),
             // the final separator can only be customized, once everything else is done, but it still takes up a significant amount of time
             // But we can still parallelize the processing of edges from one node within this separator.
-            create_live_customization_fn(&cch, metric, &upward_pred[..], &downward_pred[..], ParIter(&cch)),
+            create_live_customization_fn(cch, metric, &upward_pred[..], &downward_pred[..], ParIter(cch)),
         );
 
         report_time("CATCHUp Live Customization", || {
@@ -1157,7 +1157,7 @@ where
                             debug_assert_eq!(cch.edge_id_to_tail(*edge_from_cur_id), *lower_from_current);
                             debug_assert_eq!(cch.edge_id_to_tail(*edge_from_oth_id), *lower_from_other);
 
-                            match lower_from_current.cmp(&lower_from_other) {
+                            match lower_from_current.cmp(lower_from_other) {
                                 Ord::Less => current_iter.next(),
                                 Ord::Greater => other_iter.next(),
                                 Ord::Equal => {
