@@ -127,7 +127,6 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
             self.fix_violating_subpaths_int(result.as_deref().unwrap_or(orig_path), epsilon)
         } {
             let _it = iterations_ctxt.push_collection_item();
-            i += 1;
             if TRAFFIC_MAX_QUERY_TIME.map(|m| timer.get_passed_ms() > m).unwrap_or(false) {
                 report!("num_iterations", i);
                 return Err(fixed);
