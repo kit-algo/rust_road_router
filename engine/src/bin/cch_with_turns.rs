@@ -22,7 +22,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // use InertialFlowCutter with edge order (cut based) and separator reordering to obtain
     let order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_exp_perm"))?);
     let cch = CCH::fix_order_and_build(&graph, order);
-    let cch = cch.into_directed_cch();
+    let cch = cch.into_directed_cch(&graph);
 
     let mut server = Server::new(customize_directed(&cch, &graph));
 

@@ -36,23 +36,28 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
     // start with respecting - set shortcuts to respective original edge.
     let subctxt = push_context("weight_applying");
     report_time("TD-CCH apply weights", || {
+        let order = cch.node_order();
         upward
             .par_iter_mut()
-            .zip(cch.forward_cch_edge_to_orig_arc.par_iter())
-            .for_each(|(up_weight, up_arcs)| {
-                assert!(up_arcs.len() <= 1);
-                for &EdgeIdT(up_arc) in up_arcs {
+            .zip(cch.head().par_iter())
+            .zip(cch.tail().par_iter())
+            .for_each(|((up_weight, &head), &tail)| {
+                let mut iter = metric.edge_indices(order.node(tail), order.node(head));
+                if let Some(EdgeIdT(up_arc)) = iter.next() {
                     *up_weight = Shortcut::new(Some(up_arc), metric);
                 }
+                assert!(iter.next().is_none());
             });
         downward
             .par_iter_mut()
-            .zip(cch.backward_cch_edge_to_orig_arc.par_iter())
-            .for_each(|(down_weight, down_arcs)| {
-                assert!(down_arcs.len() <= 1);
-                for &EdgeIdT(down_arc) in down_arcs {
+            .zip(cch.head().par_iter())
+            .zip(cch.tail().par_iter())
+            .for_each(|((down_weight, &head), &tail)| {
+                let mut iter = metric.edge_indices(order.node(head), order.node(tail));
+                if let Some(EdgeIdT(down_arc)) = iter.next() {
                     *down_weight = Shortcut::new(Some(down_arc), metric);
                 }
+                assert!(iter.next().is_none());
             });
     });
     drop(subctxt);
@@ -644,23 +649,28 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
     // start with respecting - set shortcuts to respective original edge.
     let subctxt = push_context("weight_applying");
     report_time("CATCHUp Live respecting", || {
+        let order = cch.node_order();
         upward
             .par_iter_mut()
-            .zip(cch.forward_cch_edge_to_orig_arc.par_iter())
-            .for_each(|(up_weight, up_arcs)| {
-                assert!(up_arcs.len() <= 1);
-                for &EdgeIdT(up_arc) in up_arcs {
+            .zip(cch.head().par_iter())
+            .zip(cch.tail().par_iter())
+            .for_each(|((up_weight, &head), &tail)| {
+                let mut iter = metric.graph.edge_indices(order.node(tail), order.node(head));
+                if let Some(EdgeIdT(up_arc)) = iter.next() {
                     *up_weight = LiveShortcut::new(Some(up_arc), metric);
                 }
+                assert!(iter.next().is_none());
             });
         downward
             .par_iter_mut()
-            .zip(cch.backward_cch_edge_to_orig_arc.par_iter())
-            .for_each(|(down_weight, down_arcs)| {
-                assert!(down_arcs.len() <= 1);
-                for &EdgeIdT(down_arc) in down_arcs {
+            .zip(cch.head().par_iter())
+            .zip(cch.tail().par_iter())
+            .for_each(|((down_weight, &head), &tail)| {
+                let mut iter = metric.graph.edge_indices(order.node(head), order.node(tail));
+                if let Some(EdgeIdT(down_arc)) = iter.next() {
                     *down_weight = LiveShortcut::new(Some(down_arc), metric);
                 }
+                assert!(iter.next().is_none());
             });
     });
     drop(subctxt);

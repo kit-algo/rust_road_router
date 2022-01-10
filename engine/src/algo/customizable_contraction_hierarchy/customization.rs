@@ -49,13 +49,16 @@ where
 /// Customize with zero metric.
 /// Edges that have weight infinity after customization will have this weight
 /// for every metric and can be removed.
-pub fn always_infinity(cch: &CCH) -> Customized<CCH, &CCH> {
+pub fn always_infinity<'c, Graph>(cch: &'c CCH, metric: &Graph) -> Customized<CCH, &'c CCH>
+where
+    Graph: LinkIterGraph + EdgeRandomAccessGraph<Link> + Sync,
+{
     let m = cch.num_arcs();
     // buffers for the customized weights
     let mut upward_weights = vec![INFINITY; m];
     let mut downward_weights = vec![INFINITY; m];
 
-    prepare_zero_weights(cch, &mut upward_weights, &mut downward_weights);
+    prepare_zero_weights(cch, &mut upward_weights, &mut downward_weights, metric);
 
     customize_basic(cch, upward_weights, downward_weights)
 }
@@ -65,19 +68,22 @@ where
     Graph: LinkIterGraph + EdgeRandomAccessGraph<Link> + Sync,
 {
     report_time_with_key("CCH apply weights", "respecting_running_time_ms", || {
+        let order = cch.node_order();
         upward_weights
             .par_iter_mut()
-            .zip(cch.forward_cch_edge_to_orig_arc.par_iter())
-            .for_each(|(up_weight, up_arcs)| {
-                for &EdgeIdT(up_arc) in up_arcs {
+            .zip(cch.head().par_iter())
+            .zip(cch.tail().par_iter())
+            .for_each(|((up_weight, &head), &tail)| {
+                for EdgeIdT(up_arc) in metric.edge_indices(order.node(tail), order.node(head)) {
                     *up_weight = min(metric.link(up_arc).weight, *up_weight);
                 }
             });
         downward_weights
             .par_iter_mut()
-            .zip(cch.backward_cch_edge_to_orig_arc.par_iter())
-            .for_each(|(down_weight, down_arcs)| {
-                for &EdgeIdT(down_arc) in down_arcs {
+            .zip(cch.head().par_iter())
+            .zip(cch.tail().par_iter())
+            .for_each(|((down_weight, &head), &tail)| {
+                for EdgeIdT(down_arc) in metric.edge_indices(order.node(head), order.node(tail)) {
                     *down_weight = min(metric.link(down_arc).weight, *down_weight);
                 }
             });
@@ -89,40 +95,49 @@ where
     Graph: LinkIterGraph + EdgeRandomAccessGraph<Link> + Sync,
 {
     report_time_with_key("CCH apply weights", "respecting_running_time_ms", || {
+        let order = cch.node_order();
         upward_weights
             .par_iter_mut()
-            .zip(cch.forward_cch_edge_to_orig_arc.par_iter())
-            .for_each(|(up_weight, up_arcs)| {
-                for &EdgeIdT(up_arc) in up_arcs {
+            .zip(cch.forward_head().par_iter())
+            .zip(cch.forward_tail().par_iter())
+            .for_each(|((up_weight, &head), &tail)| {
+                for EdgeIdT(up_arc) in metric.edge_indices(order.node(tail), order.node(head)) {
                     *up_weight = min(metric.link(up_arc).weight, *up_weight);
                 }
             });
         downward_weights
             .par_iter_mut()
-            .zip(cch.backward_cch_edge_to_orig_arc.par_iter())
-            .for_each(|(down_weight, down_arcs)| {
-                for &EdgeIdT(down_arc) in down_arcs {
+            .zip(cch.backward_head().par_iter())
+            .zip(cch.backward_tail().par_iter())
+            .for_each(|((down_weight, &head), &tail)| {
+                for EdgeIdT(down_arc) in metric.edge_indices(order.node(head), order.node(tail)) {
                     *down_weight = min(metric.link(down_arc).weight, *down_weight);
                 }
             });
     });
 }
 
-fn prepare_zero_weights(cch: &CCH, upward_weights: &mut [Weight], downward_weights: &mut [Weight]) {
+fn prepare_zero_weights<Graph>(cch: &CCH, upward_weights: &mut [Weight], downward_weights: &mut [Weight], metric: &Graph)
+where
+    Graph: LinkIterGraph + EdgeRandomAccessGraph<Link> + Sync,
+{
     report_time_with_key("CCH apply weights", "respecting_running_time_ms", || {
+        let order = cch.node_order();
         upward_weights
             .par_iter_mut()
-            .zip(cch.forward_cch_edge_to_orig_arc.par_iter())
-            .for_each(|(up_weight, up_arcs)| {
-                if !up_arcs.is_empty() {
+            .zip(cch.head().par_iter())
+            .zip(cch.tail().par_iter())
+            .for_each(|((up_weight, &head), &tail)| {
+                if metric.edge_indices(order.node(tail), order.node(head)).next().is_some() {
                     *up_weight = 0;
                 }
             });
         downward_weights
             .par_iter_mut()
-            .zip(cch.backward_cch_edge_to_orig_arc.par_iter())
-            .for_each(|(down_weight, down_arcs)| {
-                if !down_arcs.is_empty() {
+            .zip(cch.head().par_iter())
+            .zip(cch.tail().par_iter())
+            .for_each(|((down_weight, &head), &tail)| {
+                if metric.edge_indices(order.node(head), order.node(tail)).next().is_some() {
                     *down_weight = 0;
                 }
             });
@@ -320,26 +335,28 @@ pub fn customize_perfect(mut customized: Customized<CCH, &CCH>) -> Customized<Di
         forward_first_out.push(0);
         let mut forward_head = Vec::with_capacity(m);
         let mut forward_weight = Vec::with_capacity(m);
+        let mut forward_tail = Vec::with_capacity(m);
 
         let mut backward_first_out = Vec::with_capacity(cch.first_out.len());
         backward_first_out.push(0);
         let mut backward_head = Vec::with_capacity(m);
         let mut backward_weight = Vec::with_capacity(m);
+        let mut backward_tail = Vec::with_capacity(m);
 
-        let forward_cch_edge_to_orig_arc = Vecs::from_iters(
-            cch.forward_cch_edge_to_orig_arc
-                .iter()
-                .zip(forward.weight().iter())
-                .filter(|(_, w)| **w < INFINITY)
-                .map(|(slc, _)| slc.iter().copied()),
-        );
-        let backward_cch_edge_to_orig_arc = Vecs::from_iters(
-            cch.backward_cch_edge_to_orig_arc
-                .iter()
-                .zip(backward.weight().iter())
-                .filter(|(_, w)| **w < INFINITY)
-                .map(|(slc, _)| slc.iter().copied()),
-        );
+        // let forward_cch_edge_to_orig_arc = Vecs::from_iters(
+        //     cch.forward_cch_edge_to_orig_arc
+        //         .iter()
+        //         .zip(forward.weight().iter())
+        //         .filter(|(_, w)| **w < INFINITY)
+        //         .map(|(slc, _)| slc.iter().copied()),
+        // );
+        // let backward_cch_edge_to_orig_arc = Vecs::from_iters(
+        //     cch.backward_cch_edge_to_orig_arc
+        //         .iter()
+        //         .zip(backward.weight().iter())
+        //         .filter(|(_, w)| **w < INFINITY)
+        //         .map(|(slc, _)| slc.iter().copied()),
+        // );
 
         for node in 0..n as NodeId {
             let edge_ids = cch.neighbor_edge_indices_usize(node);
@@ -347,12 +364,14 @@ pub fn customize_perfect(mut customized: Customized<CCH, &CCH>) -> Customized<Di
                 if link.weight < INFINITY && link.weight >= customized_weight {
                     forward_head.push(link.node);
                     forward_weight.push(link.weight);
+                    forward_tail.push(node);
                 }
             }
             for (link, &customized_weight) in LinkIterable::<Link>::link_iter(&backward, node).zip(&downward_orig[edge_ids.clone()]) {
                 if link.weight < INFINITY && link.weight >= customized_weight {
                     backward_head.push(link.node);
                     backward_weight.push(link.weight);
+                    backward_tail.push(node);
                 }
             }
             forward_first_out.push(forward_head.len() as EdgeId);
@@ -369,8 +388,8 @@ pub fn customize_perfect(mut customized: Customized<CCH, &CCH>) -> Customized<Di
                 backward_first_out,
                 backward_head,
                 node_order: cch.node_order.clone(),
-                forward_cch_edge_to_orig_arc,
-                backward_cch_edge_to_orig_arc,
+                forward_tail,
+                backward_tail,
                 elimination_tree: cch.elimination_tree.clone(),
                 forward_inverted,
                 backward_inverted,
