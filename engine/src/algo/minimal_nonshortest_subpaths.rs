@@ -115,6 +115,51 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
         violating
     }
 
+    pub fn find_longest_ubs_violating_subpaths(&mut self, orig_path: &[NodeId], epsilon: f64) -> Vec<Range<usize>> {
+        let path: Vec<_> = orig_path.iter().map(|&node| self.target_pot.cch().node_order().rank(node)).collect();
+        let path = &path[..];
+
+        for rank in &self.path_ranks {
+            debug_assert!(rank.value().is_none());
+        }
+        let mut violating = Vec::new();
+        let path_ranks = &mut self.path_ranks;
+
+        for (rank, &node) in path.iter().enumerate() {
+            if let Some(prev_rank) = path_ranks[node as usize].value() {
+                // eprintln!("Found Cycle of len: {}", rank - prev_rank);
+                violating.push(prev_rank..rank)
+            }
+            path_ranks[node as usize] = InRangeOption::some(rank);
+        }
+
+        if !violating.is_empty() {
+            for &node in path {
+                self.path_ranks[node as usize] = InRangeOption::NONE;
+            }
+            return violating;
+        }
+
+        let dists = self.path_dists(orig_path);
+
+        self.tree_find_maximal_nonshortest(path, &dists, |range, path_dist, shortest_dist| {
+            debug_assert!(path_dist >= shortest_dist);
+            debug_assert!(shortest_dist > 0);
+            if path_dist - shortest_dist > (shortest_dist as f64 * epsilon) as Weight {
+                violating.push(range);
+                true
+            } else {
+                false
+            }
+        });
+
+        for &node in path {
+            self.path_ranks[node as usize] = InRangeOption::NONE;
+        }
+
+        violating
+    }
+
     pub fn fix_violating_subpaths(&mut self, orig_path: &[NodeId], epsilon: f64) -> Result<Option<Vec<NodeId>>, Vec<NodeId>> {
         let timer = Timer::new();
         let mut result = None;
@@ -141,7 +186,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
     }
 
     fn fix_violating_subpaths_int(&mut self, orig_path: &[NodeId], epsilon: f64) -> Option<Vec<NodeId>> {
-        let mut violating = self.find_ubs_violating_subpaths(orig_path, epsilon);
+        let mut violating = self.find_longest_ubs_violating_subpaths(orig_path, epsilon);
         if violating.is_empty() {
             return None;
         }
@@ -390,6 +435,149 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
             }
 
             path = &full_path[source_earliest_deviation_rank + 1..target_earliest_deviation_rank];
+        }
+        report!("num_ubs_tree_iterations", i);
+    }
+
+    fn tree_find_maximal_nonshortest(&mut self, path: &[NodeId], dists: &[Weight], mut found_violating: impl FnMut(Range<usize>, Weight, Weight) -> bool) {
+        let path_ranks = &self.path_ranks;
+
+        for (rank, &node) in path.iter().enumerate() {
+            debug_assert_eq!(rank, path_ranks[node as usize].value().unwrap() as usize);
+        }
+
+        let full_path = path;
+        let mut path = path;
+
+        let mut i = 0;
+        while !path.is_empty() {
+            i += 1;
+            let &start = path.first().unwrap();
+            let &end = path.last().unwrap();
+
+            self.target_pot.init(end);
+            let mut target_earliest_deviation_rank = None;
+            let mut target_earliest_suboptimal_rank = path_ranks[start as usize].value().unwrap();
+
+            for &[node, next_on_path] in path.array_windows::<2>() {
+                let path_dist = dists[path_ranks[end as usize].value().unwrap()] - dists[path_ranks[node as usize].value().unwrap() as usize];
+                let shortest_dist = self.target_pot.potential(node).unwrap();
+
+                if path_dist == shortest_dist {
+                    break;
+                }
+                target_earliest_suboptimal_rank = path_ranks[node as usize].value().unwrap() as usize;
+                self.target_pot.unpack_path(NodeIdT(node));
+
+                if self.target_pot.target_shortest_path_tree()[node as usize] != next_on_path && shortest_dist != path_dist {
+                    path_parent(node, self.target_pot.target_shortest_path_tree(), &mut self.path_parent_cache, |node| {
+                        path_ranks[node as usize].value().map_or(false, |path_rank| {
+                            path_rank >= path_ranks[start as usize].value().unwrap() && path_rank <= path_ranks[end as usize].value().unwrap()
+                        })
+                    });
+
+                    let path_parent = self.path_parent_cache[node as usize].value().unwrap();
+                    let path_parent_rank = path_ranks[path_parent as usize].value().unwrap();
+                    if let Some(target_earliest_deviation_rank_inner) = target_earliest_deviation_rank {
+                        target_earliest_deviation_rank = Some(std::cmp::max(target_earliest_deviation_rank_inner, path_parent_rank));
+                    } else {
+                        target_earliest_deviation_rank = Some(path_parent_rank);
+                    }
+                }
+            }
+
+            for &node in path {
+                reset_path_parent_cache(node, self.target_pot.target_shortest_path_tree(), &mut self.path_parent_cache);
+            }
+            for pp in &self.path_parent_cache {
+                debug_assert_eq!(pp.value(), None);
+            }
+
+            if target_earliest_deviation_rank.is_none() {
+                break;
+            }
+
+            // sp tree from source
+            self.source_pot.init(start);
+            let mut source_earliest_deviation_rank = None;
+            let mut source_earliest_suboptimal_rank = path_ranks[end as usize].value().unwrap();
+
+            for &[prev_on_path, node] in path.array_windows::<2>().rev() {
+                let path_dist = dists[path_ranks[node as usize].value().unwrap() as usize] - dists[path_ranks[start as usize].value().unwrap()];
+                let shortest_dist = self.source_pot.potential(node).unwrap();
+
+                if path_dist == shortest_dist {
+                    break;
+                }
+                source_earliest_suboptimal_rank = path_ranks[node as usize].value().unwrap() as usize;
+                self.source_pot.unpack_path(NodeIdT(node));
+
+                if self.source_pot.target_shortest_path_tree()[node as usize] != prev_on_path && shortest_dist != path_dist {
+                    path_parent(node, self.source_pot.target_shortest_path_tree(), &mut self.path_parent_cache, |node| {
+                        path_ranks[node as usize].value().map_or(false, |path_rank| {
+                            path_rank >= path_ranks[start as usize].value().unwrap() && path_rank <= path_ranks[end as usize].value().unwrap()
+                        })
+                    });
+
+                    let path_parent = self.path_parent_cache[node as usize].value().unwrap();
+                    let path_parent_rank = path_ranks[path_parent as usize].value().unwrap();
+                    if let Some(source_earliest_deviation_rank_inner) = source_earliest_deviation_rank {
+                        source_earliest_deviation_rank = Some(std::cmp::min(source_earliest_deviation_rank_inner, path_parent_rank));
+                    } else {
+                        source_earliest_deviation_rank = Some(path_parent_rank);
+                    }
+                }
+            }
+
+            for &node in path {
+                reset_path_parent_cache(node, self.source_pot.target_shortest_path_tree(), &mut self.path_parent_cache);
+            }
+            for pp in &self.path_parent_cache {
+                debug_assert_eq!(pp.value(), None);
+            }
+
+            let target_earliest_deviation_rank = target_earliest_deviation_rank.unwrap();
+            let target_earliest_deviation_node = full_path[target_earliest_deviation_rank];
+            let source_earliest_deviation_rank = source_earliest_deviation_rank.unwrap();
+            let source_earliest_deviation_node = full_path[source_earliest_deviation_rank];
+
+            let target_path_base_dist = dists[path_ranks[end as usize].value().unwrap()] - dists[target_earliest_deviation_rank];
+            debug_assert_eq!(target_path_base_dist, self.target_pot.potential(target_earliest_deviation_node).unwrap());
+            let source_path_base_dist = dists[source_earliest_deviation_rank] - dists[path_ranks[start as usize].value().unwrap()];
+            debug_assert_eq!(source_path_base_dist, self.source_pot.potential(source_earliest_deviation_node).unwrap());
+
+            let mut next_path_start = source_earliest_deviation_rank + 1;
+            let mut next_path_end = target_earliest_deviation_rank - 1;
+
+            for &node in full_path[source_earliest_suboptimal_rank..=target_earliest_deviation_rank].iter().rev() {
+                let path_dist = dists[path_ranks[node as usize].value().unwrap()] - dists[path_ranks[start as usize].value().unwrap()] - source_path_base_dist;
+                let shortest_dist = self.source_pot.potential(node).unwrap() - source_path_base_dist;
+                if found_violating(
+                    source_earliest_deviation_rank..path_ranks[node as usize].value().unwrap(),
+                    path_dist,
+                    shortest_dist,
+                ) {
+                    next_path_start = path_ranks[node as usize].value().unwrap();
+                    break;
+                }
+            }
+            for &node in &full_path[source_earliest_deviation_rank..=target_earliest_suboptimal_rank] {
+                let path_dist = dists[path_ranks[end as usize].value().unwrap()] - dists[path_ranks[node as usize].value().unwrap()] - target_path_base_dist;
+                let shortest_dist = self.target_pot.potential(node).unwrap() - target_path_base_dist;
+                if found_violating(
+                    path_ranks[node as usize].value().unwrap()..target_earliest_deviation_rank,
+                    path_dist,
+                    shortest_dist,
+                ) {
+                    next_path_end = path_ranks[node as usize].value().unwrap();
+                    break;
+                }
+            }
+
+            if next_path_start >= next_path_end {
+                break;
+            }
+            path = &full_path[next_path_start..=next_path_end];
         }
         report!("num_ubs_tree_iterations", i);
     }
