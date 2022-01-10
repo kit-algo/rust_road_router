@@ -368,9 +368,9 @@ impl<'a> TrafficAwareServer<'a> {
         let mut explore_time = std::time::Duration::ZERO;
         let mut ubs_time = std::time::Duration::ZERO;
 
-        let mut i = 0;
+        let mut i: usize = 0;
         let mut total_queue_pops = 0usize;
-        let mut iterations_ctxt = push_collection_context("iterations".to_string());
+        let mut iterations_ctxt = push_collection_context("iterations");
         let result = loop {
             if TRAFFIC_MAX_QUERY_TIME.map(|m| timer.get_passed_ms() > m).unwrap_or(false) {
                 break None;
@@ -391,7 +391,7 @@ impl<'a> TrafficAwareServer<'a> {
                 |node| live_pot.potential(node),
             );
 
-            let mut num_queue_pops = 0;
+            let mut num_queue_pops: usize = 0;
             let (_, time) = measure(|| {
                 while let Some(node) = dijk_run.next_step_with_potential(|node| live_pot.potential(node)) {
                     num_queue_pops += 1;
@@ -503,8 +503,8 @@ impl<'a> HeuristicTrafficAwareServer<'a> {
         let mut explore_time = std::time::Duration::ZERO;
         let mut ubs_time = std::time::Duration::ZERO;
 
-        let mut i = 0;
-        let mut iterations_ctxt = push_collection_context("iterations".to_string());
+        let mut i: usize = 0;
+        let mut iterations_ctxt = push_collection_context("iterations");
         let result = loop {
             if TRAFFIC_MAX_QUERY_TIME.map(|m| timer.get_passed_ms() > m).unwrap_or(false) {
                 break None;
@@ -585,7 +585,7 @@ impl<'a> IterativePathFixing<'a> {
         report!("algo", "iterative_path_fixing");
 
         let (res, time) = measure(|| {
-            let _expl_ctxt = push_context("exploration".to_string());
+            let _expl_ctxt = push_context("exploration");
             self.shortest_path.query(query)
         });
         report!("exploration_time_ms", time.as_secs_f64() * 1000.0);

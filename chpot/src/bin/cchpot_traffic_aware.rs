@@ -69,7 +69,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let num_queries = std::cmp::min(num_queries, sources.len());
-    let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
+    let mut algo_runs_ctxt = push_collection_context("algo_runs");
 
     let mut server = HeuristicTrafficAwareServer::new(graph.borrowed(), live_graph.clone(), &smooth_cch_pot, &live_cch_pot);
 

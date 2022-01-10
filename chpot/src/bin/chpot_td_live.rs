@@ -34,7 +34,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .map(|edge_id| graph.travel_time_function(edge_id).lower_bound())
         .collect::<Vec<Weight>>();
 
-    let mut live_count = 0;
+    let mut live_count: usize = 0;
     let live = live_travel_time
         .iter()
         .zip(lower_bound.iter())
@@ -51,7 +51,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     report!("live_traffic", { "num_applied": live_count });
 
-    let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
+    let mut algo_runs_ctxt = push_collection_context("algo_runs");
 
     // let now = 15 * 3600 * 1000 + 41 * 60 * 1000;
     let now = 12 * 3600 * 1000;

@@ -74,7 +74,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         rank_query_counts[rank as usize] += 1;
     }
 
-    let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
+    let mut algo_runs_ctxt = push_collection_context("algo_runs");
 
     for paths in &mut rank_paths {
         paths.shuffle(&mut rng);

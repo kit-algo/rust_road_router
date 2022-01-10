@@ -22,7 +22,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let num_queries = 10;
 
-    let mut exps_ctxt = push_collection_context("experiments".to_string());
+    let mut exps_ctxt = push_collection_context("experiments");
 
     // for target_set_size_exp in [10, 12, 14] {
     for target_set_size_exp in [14] {
@@ -38,7 +38,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             let queries = experiments::gen_many_to_many_queries(&graph, num_queries, 2usize.pow(ball_size_exp), 2usize.pow(target_set_size_exp), &mut rng);
 
-            let mut algos_ctxt = push_collection_context("algo_runs".to_string());
+            let mut algos_ctxt = push_collection_context("algo_runs");
             let mut many_to_one = chpot_data.potentials().0;
             many_to_one.init(*queries.last().unwrap().1.last().unwrap());
             many_to_one.potential(*queries.last().unwrap().0.last().unwrap());
@@ -55,7 +55,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let _alg_ctx = algos_ctxt.push_collection_item();
                     report!("algo", "lazy_rphast_many_to_one");
                     let (_, time) = measure(|| {
-                        silent_report_time_with_key("selection", || {
+                        silent_report_time_with_key("selection_running_time_ms", || {
                             many_to_one.init(target);
                         });
                         for &s in sources {

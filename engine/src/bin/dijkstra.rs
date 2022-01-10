@@ -11,7 +11,7 @@ pub fn main() -> Result<(), Box<dyn Error>> {
 
     let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
 
-    let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
+    let mut algo_runs_ctxt = push_collection_context("algo_runs");
 
     let mut server = rust_road_router::algo::dijkstra::query::dijkstra::Server::<OwnedGraph, DefaultOps, _, &OwnedGraph>::new(&graph);
 

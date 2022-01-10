@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let increased_weights = graph.weight().iter().map(|&w| w * 15 / 10).collect::<Vec<_>>();
     let modified_graph = FirstOutGraph::new(graph.first_out(), graph.head(), &increased_weights[..]);
 
-    let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
+    let mut algo_runs_ctxt = push_collection_context("algo_runs");
 
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[0]);

@@ -32,7 +32,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         CCHPotData::new(&cch, &graph)
     };
 
-    let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
+    let mut algo_runs_ctxt = push_collection_context("algo_runs");
 
     let mut penalty_server = {
         let _prepro_ctxt = algo_runs_ctxt.push_collection_item();

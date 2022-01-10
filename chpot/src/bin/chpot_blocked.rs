@@ -24,7 +24,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let arc_category = Vec::<u8>::load_from(path.join("arc_category"))?;
 
-    let mut exps_ctxt = push_collection_context("experiments".to_string());
+    let mut exps_ctxt = push_collection_context("experiments");
 
     {
         let _exp_ctx = exps_ctxt.push_collection_item();
@@ -71,7 +71,7 @@ pub fn run(
     modify_travel_time(&graph.borrowed(), &mut rng, &mut modified_travel_time)?;
     let modified_graph = FirstOutGraph::new(graph.first_out(), graph.head(), &modified_travel_time[..]);
 
-    let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
+    let mut algo_runs_ctxt = push_collection_context("algo_runs");
 
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[0]);

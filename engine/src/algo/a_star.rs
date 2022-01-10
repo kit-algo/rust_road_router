@@ -61,7 +61,7 @@ impl BaselinePotential {
 
 impl Potential for BaselinePotential {
     fn init(&mut self, target: NodeId) {
-        report_time_with_key("BaselinePotential init", "baseline_pot_init", || {
+        report_time_with_key("BaselinePotential init", "baseline_pot_init_running_time_ms", || {
             let mut ops = DefaultOps();
             let dijkstra = DijkstraRun::query(
                 &self.graph,

@@ -95,7 +95,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     report!("skip_deg2", !cfg!(feature = "chpot-no-deg2"));
     report!("skip_deg3", !cfg!(feature = "chpot-no-deg3"));
     report!("potential", pot_name);
-    let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
+    let mut algo_runs_ctxt = push_collection_context("algo_runs");
 
     #[cfg(not(feature = "chpot-no-reorder"))]
     let mut server = {

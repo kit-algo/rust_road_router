@@ -61,7 +61,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Some(0)
     });
 
-    let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
+    let mut algo_runs_ctxt = push_collection_context("algo_runs");
 
     let cch = {
         let _blocked = block_reporting();

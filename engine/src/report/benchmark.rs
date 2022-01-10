@@ -22,7 +22,7 @@ pub fn report_time<Out, F: FnOnce() -> Out>(name: &str, f: F) -> Out {
 
 /// This function will measure how long it takes to execute the given lambda,
 /// print the time, report it under the given key and return the result of the lambda.
-pub fn report_time_with_key<Out, F: FnOnce() -> Out>(name: &str, key: &str, f: F) -> Out {
+pub fn report_time_with_key<Out, F: FnOnce() -> Out>(name: &str, key: &'static str, f: F) -> Out {
     compiler_fence(SeqCst);
     let start = Instant::now();
     eprintln!("starting {}", name);
@@ -31,7 +31,7 @@ pub fn report_time_with_key<Out, F: FnOnce() -> Out>(name: &str, key: &str, f: F
     compiler_fence(SeqCst);
     let t_passed = t_passed.as_secs_f64() * 1000.0;
     eprintln!("{} done - took: {}ms", name, t_passed);
-    report!(format!("{}_running_time_ms", key), t_passed);
+    report!(key, t_passed);
     res
 }
 
@@ -50,14 +50,14 @@ pub fn silent_report_time<Out, F: FnOnce() -> Out>(f: F) -> Out {
 
 /// This function will measure how long it takes to execute the given lambda,
 /// print the time, report it under the given key and return the result of the lambda.
-pub fn silent_report_time_with_key<Out, F: FnOnce() -> Out>(key: &str, f: F) -> Out {
+pub fn silent_report_time_with_key<Out, F: FnOnce() -> Out>(key: &'static str, f: F) -> Out {
     compiler_fence(SeqCst);
     let start = Instant::now();
     let res = f();
     let t_passed = start.elapsed();
     compiler_fence(SeqCst);
     let t_passed = t_passed.as_secs_f64() * 1000.0;
-    report_silent!(format!("{}_running_time_ms", key), t_passed);
+    report_silent!(key, t_passed);
     res
 }
 

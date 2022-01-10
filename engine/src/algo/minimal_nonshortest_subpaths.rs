@@ -119,9 +119,10 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
         let timer = Timer::new();
         let mut result = None;
 
-        let mut iterations_ctxt = push_collection_context("iterations".to_string());
-        let mut i = 0;
+        let mut iterations_ctxt = push_collection_context("iterations");
+        let mut i: usize = 0;
         while let Some(fixed) = {
+            i += 1;
             let _blocked = block_reporting();
             self.fix_violating_subpaths_int(result.as_deref().unwrap_or(orig_path), epsilon)
         } {

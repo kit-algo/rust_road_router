@@ -64,7 +64,7 @@ fn prepare_weights<Graph>(cch: &CCH, upward_weights: &mut [Weight], downward_wei
 where
     Graph: LinkIterGraph + EdgeRandomAccessGraph<Link> + Sync,
 {
-    report_time_with_key("CCH apply weights", "respecting", || {
+    report_time_with_key("CCH apply weights", "respecting_running_time_ms", || {
         upward_weights
             .par_iter_mut()
             .zip(cch.forward_cch_edge_to_orig_arc.par_iter())
@@ -88,7 +88,7 @@ fn prepare_weights_directed<Graph>(cch: &DirectedCCH, upward_weights: &mut [Weig
 where
     Graph: LinkIterGraph + EdgeRandomAccessGraph<Link> + Sync,
 {
-    report_time_with_key("CCH apply weights", "respecting", || {
+    report_time_with_key("CCH apply weights", "respecting_running_time_ms", || {
         upward_weights
             .par_iter_mut()
             .zip(cch.forward_cch_edge_to_orig_arc.par_iter())
@@ -109,7 +109,7 @@ where
 }
 
 fn prepare_zero_weights(cch: &CCH, upward_weights: &mut [Weight], downward_weights: &mut [Weight]) {
-    report_time_with_key("CCH apply weights", "respecting", || {
+    report_time_with_key("CCH apply weights", "respecting_running_time_ms", || {
         upward_weights
             .par_iter_mut()
             .zip(cch.forward_cch_edge_to_orig_arc.par_iter())
@@ -225,7 +225,7 @@ fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weig
     let customization = SeperatorBasedParallelCustomization::new(cch, customize, customize);
 
     // execute customization
-    report_time_with_key("CCH Customization", "basic_customization", || {
+    report_time_with_key("CCH Customization", "basic_customization_running_time_ms", || {
         customization.customize(&mut upward_weights, &mut downward_weights, |cb| {
             // create workspace vectors for the scope of the customization
             UPWARD_WORKSPACE.set(&RefCell::new(vec![INFINITY; n as usize]), || {
@@ -306,13 +306,13 @@ pub fn customize_perfect(mut customized: Customized<CCH, &CCH>) -> Customized<Di
     let upward_orig = upward.clone();
     let downward_orig = downward.clone();
 
-    report_time_with_key("CCH Perfect Customization", "perfect_customization", || {
+    report_time_with_key("CCH Perfect Customization", "perfect_customization_running_time_ms", || {
         static_perfect_customization.customize(upward, downward, |cb| {
             PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::NONE; n as usize]), cb);
         });
     });
 
-    report_time_with_key("Build Perfect Customized Graph", "graph_build", || {
+    report_time_with_key("Build Perfect Customized Graph", "graph_build_running_time_ms", || {
         let forward = customized.forward_graph();
         let backward = customized.backward_graph();
 
@@ -504,7 +504,7 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
     let customization = SeperatorBasedParallelDirectedCustomization::new(cch, customize, customize);
 
     // execute customization
-    report_time_with_key("CCH Customization", "basic_customization", || {
+    report_time_with_key("CCH Customization", "basic_customization_running_time_ms", || {
         customization.customize(&mut upward_weights, &mut downward_weights, |cb| {
             // create workspace vectors for the scope of the customization
             UPWARD_WORKSPACE.set(&RefCell::new(vec![INFINITY; n as usize]), || {

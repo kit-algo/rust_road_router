@@ -11,27 +11,45 @@
 //! JSON output is nice though.
 
 use crate::built_info;
-use serde_json::{Map, Value};
+use serde::{Serialize, Serializer};
+use serde_json::Value;
+use std::collections::BTreeMap;
 use std::{cell::RefCell, mem::swap};
 
 pub use serde_json::json;
 
-#[derive(Debug)]
+enum ReportingValue {
+    Collection(Vec<ReportingValue>),
+    Object(BTreeMap<&'static str, ReportingValue>),
+    Value(Value),
+}
+
+impl Serialize for ReportingValue {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            ReportingValue::Collection(v) => v.serialize(serializer),
+            ReportingValue::Object(v) => v.serialize(serializer),
+            ReportingValue::Value(v) => v.serialize(serializer),
+        }
+    }
+}
+
 enum ContextStackItem {
-    Key(String),
-    Collection(Vec<Value>),
-    Object(Map<String, Value>),
+    Key(&'static str),
+    Collection(Vec<ReportingValue>),
+    Object(BTreeMap<&'static str, ReportingValue>),
     Throwaway,
 }
 
-#[derive(Debug)]
 enum CurrentReportingContext {
-    Collection(Vec<Value>),
-    Object(Map<String, Value>),
+    Collection(Vec<ReportingValue>),
+    Object(BTreeMap<&'static str, ReportingValue>),
     Throwaway,
 }
 
-#[derive(Debug)]
 pub struct Reporter {
     current: CurrentReportingContext,
     context_stack: Vec<ContextStackItem>,
@@ -40,17 +58,17 @@ pub struct Reporter {
 impl Default for Reporter {
     fn default() -> Self {
         Reporter {
-            current: CurrentReportingContext::Object(Map::new()),
+            current: CurrentReportingContext::Object(BTreeMap::new()),
             context_stack: Vec::new(),
         }
     }
 }
 
 impl Reporter {
-    fn create_object_under_key(&mut self, key: String) {
+    fn create_object_under_key(&mut self, key: &'static str) {
         match &mut self.current {
             CurrentReportingContext::Object(object) => {
-                let mut tmp = Map::new();
+                let mut tmp = BTreeMap::new();
                 swap(&mut tmp, object);
                 self.context_stack.push(ContextStackItem::Object(tmp));
                 self.context_stack.push(ContextStackItem::Key(key));
@@ -62,10 +80,10 @@ impl Reporter {
         }
     }
 
-    fn create_collection_under_key(&mut self, key: String) {
+    fn create_collection_under_key(&mut self, key: &'static str) {
         match &mut self.current {
             CurrentReportingContext::Object(object) => {
-                let mut tmp = Map::new();
+                let mut tmp = BTreeMap::new();
                 swap(&mut tmp, object);
                 self.context_stack.push(ContextStackItem::Object(tmp));
                 self.context_stack.push(ContextStackItem::Key(key));
@@ -87,7 +105,7 @@ impl Reporter {
                 let mut tmp = Vec::new();
                 swap(&mut tmp, collection);
                 self.context_stack.push(ContextStackItem::Collection(tmp));
-                self.current = CurrentReportingContext::Object(Map::new());
+                self.current = CurrentReportingContext::Object(BTreeMap::new());
             }
             CurrentReportingContext::Throwaway => (),
         }
@@ -96,7 +114,7 @@ impl Reporter {
     fn block_reporting(&mut self) {
         match &mut self.current {
             CurrentReportingContext::Object(object) => {
-                let mut tmp = Map::new();
+                let mut tmp = BTreeMap::new();
                 swap(&mut tmp, object);
                 self.context_stack.push(ContextStackItem::Object(tmp));
                 self.current = CurrentReportingContext::Throwaway;
@@ -113,10 +131,10 @@ impl Reporter {
         }
     }
 
-    fn report(&mut self, key: String, val: Value) {
+    fn report(&mut self, key: &'static str, val: Value) {
         match &mut self.current {
             CurrentReportingContext::Object(object) => {
-                let prev = object.insert(key, val);
+                let prev = object.insert(key, ReportingValue::Value(val));
                 if !cfg!(feature = "report-allow-override") {
                     assert!(prev.is_none());
                 }
@@ -143,12 +161,12 @@ impl Reporter {
                     swap(&mut self.current, &mut prev_current);
 
                     let prev = match prev_current {
-                        CurrentReportingContext::Object(cur_object) => object.insert(key, Value::Object(cur_object)),
-                        CurrentReportingContext::Collection(collection) => object.insert(key, Value::Array(collection)),
+                        CurrentReportingContext::Object(cur_object) => object.insert(key, ReportingValue::Object(cur_object)),
+                        CurrentReportingContext::Collection(collection) => object.insert(key, ReportingValue::Collection(collection)),
                         CurrentReportingContext::Throwaway => None,
                     };
                     if !cfg!(feature = "report-allow-override") {
-                        assert_eq!(prev, None);
+                        assert!(prev.is_none());
                     }
 
                     self.current = CurrentReportingContext::Object(object);
@@ -162,7 +180,7 @@ impl Reporter {
 
                 match prev_current {
                     CurrentReportingContext::Object(cur_object) => {
-                        collection.push(Value::Object(cur_object));
+                        collection.push(ReportingValue::Object(cur_object));
                     }
                     CurrentReportingContext::Collection(_) => {
                         panic!("Cannot insert collection into collection");
@@ -206,7 +224,7 @@ impl Drop for ContextGuard {
     }
 }
 
-pub fn push_context(key: String) -> ContextGuard {
+pub fn push_context(key: &'static str) -> ContextGuard {
     REPORTER.with(|reporter| reporter.borrow_mut().as_mut().map(|r| r.create_object_under_key(key)));
     ContextGuard(())
 }
@@ -220,7 +238,7 @@ impl Drop for CollectionContextGuard {
     }
 }
 
-pub fn push_collection_context(key: String) -> CollectionContextGuard {
+pub fn push_collection_context(key: &'static str) -> CollectionContextGuard {
     REPORTER.with(|reporter| reporter.borrow_mut().as_mut().map(|r| r.create_collection_under_key(key)));
     CollectionContextGuard(())
 }
@@ -255,14 +273,14 @@ pub fn block_reporting() -> BlockedReportingContextGuard {
     BlockedReportingContextGuard()
 }
 
-pub fn report(key: String, val: Value) {
+pub fn report(key: &'static str, val: Value) {
     if cfg!(feature = "report-to-stderr") {
-        eprintln!("{}: {}", key, val.to_string());
+        eprintln!("{}: {}", key, val);
     }
     report_silent(key, val)
 }
 
-pub fn report_silent(key: String, val: Value) {
+pub fn report_silent(key: &'static str, val: Value) {
     REPORTER.with(|reporter| reporter.borrow_mut().as_mut().map(|r| r.report(key, val)));
 }
 
@@ -277,7 +295,7 @@ impl Drop for ReportingGuard {
                 let mut current = CurrentReportingContext::Object(Default::default());
                 swap(&mut current, &mut r.current);
                 if let CurrentReportingContext::Object(object) = current {
-                    println!("{}", Value::Object(object).to_string());
+                    println!("{}", serde_json::to_string(&object).unwrap());
                 } else {
                     panic!("broken root object for reporting");
                 }
@@ -288,12 +306,12 @@ impl Drop for ReportingGuard {
 
 #[macro_export]
 macro_rules! report {
-    ($k:expr, $($json:tt)+) => { report($k.to_string(), json!($($json)+)) };
+    ($k:expr, $($json:tt)+) => { report($k, json!($($json)+)) };
 }
 
 #[macro_export]
 macro_rules! report_silent {
-    ($k:expr, $($json:tt)+) => { report_silent($k.to_string(), json!($($json)+)) };
+    ($k:expr, $($json:tt)+) => { report_silent($k, json!($($json)+)) };
 }
 
 pub fn enable_reporting(program: &str) -> ReportingGuard {

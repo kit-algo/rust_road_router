@@ -21,7 +21,7 @@ impl ALTPotData {
         G: LinkIterable<Link>,
         OwnedGraph: BuildReversed<G>,
     {
-        let mut landmark_runs_ctxt = push_collection_context("landmark_dijkstras".to_string());
+        let mut landmark_runs_ctxt = push_collection_context("landmark_dijkstras");
         let n = graph.num_nodes() as NodeId;
         let reversed = OwnedGraph::reversed(graph);
         let mut server = Server::<G, DefaultOps, _, &G>::new(graph);
@@ -72,7 +72,7 @@ impl ALTPotData {
     {
         report!("algo", "Avoid Landmarks");
         report!("num_landmarks", num_landmarks);
-        let mut landmark_runs_ctxt = push_collection_context("landmark_dijkstras".to_string());
+        let mut landmark_runs_ctxt = push_collection_context("landmark_dijkstras");
         let n = graph.num_nodes() as NodeId;
         let reversed = OwnedGraph::reversed(graph);
         let mut server = Server::<G, DefaultOps, _, &G>::new(graph);

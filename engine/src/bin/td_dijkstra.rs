@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let graph = TDGraph::reconstruct_from(&path)?;
 
-    let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
+    let mut algo_runs_ctxt = push_collection_context("algo_runs");
 
     let mut server = Server::<_, TDDijkstraOps>::new(graph);
 

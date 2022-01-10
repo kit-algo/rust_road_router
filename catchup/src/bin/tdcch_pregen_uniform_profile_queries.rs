@@ -15,7 +15,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let path = Path::new(&arg);
 
     setup(Path::new(&env::args().skip(1).next().unwrap()), |_g, _rng, cch, td_cch_graph| {
-        let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
+        let mut algo_runs_ctxt = push_collection_context("algo_runs");
         let mut server = Server::new(&cch, &td_cch_graph);
 
         let mut query_dir = None;
@@ -49,8 +49,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 tdcch_time = tdcch_time + time;
 
                 if paths.is_empty() {
-                    report!("path_switches", 0);
-                    report!("num_distinct_paths", 0);
+                    report!("path_switches", 0usize);
+                    report!("num_distinct_paths", 0usize);
                 } else {
                     report!("path_switches", paths.len() - 1);
                     let mut paths: Vec<_> = paths.into_iter().map(|(_, path)| path).collect();

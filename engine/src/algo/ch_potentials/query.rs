@@ -38,7 +38,7 @@ where
         G: LinkIterable<NodeIdT>,
         Graph: BuildPermutated<G>,
     {
-        report_time_with_key("TopoDijkstra preprocessing", "topo_dijk_prepro", move || {
+        report_time_with_key("TopoDijkstra preprocessing", "topo_dijk_prepro_running_time_ms", move || {
             let (main_graph, comp_graph, virtual_topocore) = if BCC_CORE {
                 VirtualTopocoreGraph::new_topo_dijkstra_graphs(graph)
             } else {
@@ -84,7 +84,7 @@ where
         let potential = &mut self.core_search.potential;
 
         let departure = query.initial_state();
-        let mut num_queue_pops = 0;
+        let mut num_queue_pops: usize = 0;
         potential.init(query.to());
         report!("lower_bound", potential.potential(query.from()).unwrap_or(INFINITY));
 
@@ -121,7 +121,7 @@ where
         let to_core_relaxed = comp_search.num_relaxed_arcs();
 
         let core_dist = {
-            let _ctxt = push_context("core_search".to_string());
+            let _ctxt = push_context("core_search");
             let core_query = Q::new(into_core, out_of_core, *comp_search.tentative_distance(into_core));
             let mut core_search = TopoDijkstraRun::continue_query(
                 &self.core_search.graph,

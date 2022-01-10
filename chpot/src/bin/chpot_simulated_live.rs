@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     max_speed_idxs.reverse();
     max_speed_idxs.resize(std::cmp::min(100000, max_speed_idxs.len()), 0);
 
-    let mut exps_ctxt = push_collection_context("experiments".to_string());
+    let mut exps_ctxt = push_collection_context("experiments");
 
     {
         let _exp_ctx = exps_ctxt.push_collection_item();

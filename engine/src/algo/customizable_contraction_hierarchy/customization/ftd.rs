@@ -34,7 +34,7 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
     let mut downward: Vec<_> = std::iter::repeat_with(|| Shortcut::new(None, metric)).take(m).collect();
 
     // start with respecting - set shortcuts to respective original edge.
-    let subctxt = push_context("weight_applying".to_string());
+    let subctxt = push_context("weight_applying");
     report_time("TD-CCH apply weights", || {
         upward
             .par_iter_mut()
@@ -215,7 +215,7 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
 
     if cfg!(feature = "tdcch-precustomization") {
         // execute CATCHUp precustomization
-        let _subctxt = push_context("precustomization".to_string());
+        let _subctxt = push_context("precustomization");
         report_time("TD-CCH Pre-Customization", || {
             static_customization.customize(&mut upward, &mut downward, |cb| {
                 UPWARD_WORKSPACE.set(&RefCell::new(vec![(FlWeight::INFINITY, FlWeight::INFINITY); n as usize]), || {
@@ -237,7 +237,7 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
 
     // block for main CATCHUp customization
     {
-        let subctxt = push_context("main".to_string());
+        let subctxt = push_context("main");
 
         use std::sync::mpsc::{channel, RecvTimeoutError};
         use std::thread;
@@ -347,7 +347,7 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
         // actual reporting for experiements
         // silent because we already wrote everything to stderr
         for events in events_rx {
-            let mut events_ctxt = push_collection_context("events".to_string());
+            let mut events_ctxt = push_collection_context("events");
 
             for event in events {
                 let _event = events_ctxt.push_collection_item();
@@ -389,7 +389,7 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
 
     if cfg!(feature = "tdcch-postcustomization") {
         // do perfect bound based customization again, because we now have better bounds and can get rid of some additional shortcuts
-        let _subctxt = push_context("postcustomization".to_string());
+        let _subctxt = push_context("postcustomization");
         report_time("TD-CCH Post-Customization", || {
             let upward_preliminary_bounds: Vec<_> = upward.iter().map(|s| s.lower_bound).collect();
             let downward_preliminary_bounds: Vec<_> = downward.iter().map(|s| s.lower_bound).collect();
@@ -635,14 +635,14 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
     let t_live = metric.t_live();
 
     // Perfect customization is ok, because upper bounds for paths are not used for pruning
-    let subctxt = push_context("static".to_string());
+    let subctxt = push_context("static");
     let (upward_pred, downward_pred) = customize_internal(cch, &metric.graph);
     drop(subctxt);
     let mut upward: Vec<_> = std::iter::repeat_with(|| LiveShortcut::new(None, metric)).take(m).collect();
     let mut downward: Vec<_> = std::iter::repeat_with(|| LiveShortcut::new(None, metric)).take(m).collect();
 
     // start with respecting - set shortcuts to respective original edge.
-    let subctxt = push_context("weight_applying".to_string());
+    let subctxt = push_context("weight_applying");
     report_time("CATCHUp Live respecting", || {
         upward
             .par_iter_mut()
@@ -945,7 +945,7 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
 
     {
         // execute CATCHUp precustomization
-        let _subctxt = push_context("precustomization".to_string());
+        let _subctxt = push_context("precustomization");
         report_time("CATCHUp Live Pre-Customization", || {
             static_customization.customize(&mut pre_upward, &mut pre_downward, |cb| {
                 UPWARD_WORKSPACE_LIVE.set(&RefCell::new(vec![PreLiveShortcut::default(); n as usize]), || {
@@ -975,7 +975,7 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
 
     // block for main CATCHUp customization
     {
-        let subctxt = push_context("main".to_string());
+        let subctxt = push_context("main");
 
         use std::sync::mpsc::{channel, RecvTimeoutError};
         use std::thread;
@@ -1065,7 +1065,7 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
         // actual reporting for experiements
         // silent because we already wrote everything to stderr
         for events in events_rx {
-            let mut events_ctxt = push_collection_context("events".to_string());
+            let mut events_ctxt = push_collection_context("events");
 
             for event in events {
                 let _event = events_ctxt.push_collection_item();

@@ -31,10 +31,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let rng = rng(Default::default());
     let mut modify_rng = rng.clone();
-    let mut exps_ctxt = push_collection_context("experiments".to_string());
+    let mut exps_ctxt = push_collection_context("experiments");
 
     let run = |modified_travel_time: &[Weight]| {
-        let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
+        let mut algo_runs_ctxt = push_collection_context("algo_runs");
         let modified_graph = FirstOutGraph::new(graph.first_out(), graph.head(), modified_travel_time);
 
         let mut server = UniDir::<_, DefaultOps, _>::with_potential(modified_graph.clone(), chpot_data.potentials().0);

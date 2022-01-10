@@ -142,7 +142,7 @@ impl<'a, Graph: LinkIterable<NodeIdT>> ContractionGraph<'a, Graph> {
     /// Main preprocessing work - chordal completion
     pub fn contract(mut self) -> ContractedGraph<'a, Graph> {
         report!("algo", "CCH Contraction");
-        report_time_with_key("CCH Contraction", "contraction", || {
+        report_time_with_key("CCH Contraction", "contraction_running_time_ms", || {
             let mut num_shortcut_arcs = 0;
             // We utilize split borrows to make node contraction work well with rusts borrowing rules.
             // The graph representation already contains the node in order of increasing rank.

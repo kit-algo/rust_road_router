@@ -84,7 +84,7 @@ impl<P: Potential + Send + Clone> Penalty<P> {
         let query = Query { from: core_from, to: core_to };
         self.alternative_graph_dijkstra.graph_mut().clear();
 
-        if let Some(mut result) = silent_report_time_with_key("initial_query", || self.shortest_path_penalized.query(query)).found() {
+        if let Some(mut result) = silent_report_time_with_key("initial_query_running_time_ms", || self.shortest_path_penalized.query(query)).found() {
             let base_dist = result.distance();
             report!("base_dist", base_dist);
 
@@ -106,9 +106,9 @@ impl<P: Potential + Send + Clone> Penalty<P> {
                 .sum();
             debug_assert_eq!(base_dist, path_orig_len);
 
-            let mut iterations_ctxt = push_collection_context("iterations".to_string());
+            let mut iterations_ctxt = push_collection_context("iterations");
 
-            let mut i = 0;
+            let mut i: usize = 0;
             let mut s = 0;
             loop {
                 i += 1;
@@ -473,7 +473,7 @@ impl<'a> PenaltyIterative<'a> {
         let query = Query { from: core_from, to: core_to };
         self.alternative_graph_dijkstra.graph_mut().clear();
 
-        if let Some(mut result) = silent_report_time_with_key("initial_query", || self.shortest_path_penalized.query(query)).found() {
+        if let Some(mut result) = silent_report_time_with_key("initial_query_running_time_ms", || self.shortest_path_penalized.query(query)).found() {
             let base_dist = result.distance();
             report!("base_dist", base_dist);
 
@@ -495,9 +495,9 @@ impl<'a> PenaltyIterative<'a> {
                 .sum();
             debug_assert_eq!(base_dist, path_orig_len);
 
-            let mut iterations_ctxt = push_collection_context("iterations".to_string());
+            let mut iterations_ctxt = push_collection_context("iterations");
 
-            let mut i = 0;
+            let mut i: usize = 0;
             let mut alternative = loop {
                 i += 1;
                 let iteration_ctxt = iterations_ctxt.push_collection_item();

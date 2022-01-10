@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let graph = UnweightedOwnedGraph::reconstruct_from(&path)?;
 
-    let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
+    let mut algo_runs_ctxt = push_collection_context("algo_runs");
 
     let cch_folder = path.join("cch");
 

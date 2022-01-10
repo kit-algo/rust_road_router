@@ -22,7 +22,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let path = Path::new(&arg);
 
     setup(Path::new(&env::args().skip(1).next().unwrap()), |_g, _rng, cch, td_cch_graph| {
-        let mut algo_runs_ctxt = push_collection_context("algo_runs".to_string());
+        let mut algo_runs_ctxt = push_collection_context("algo_runs");
         let mut server = Server::new(&cch, &td_cch_graph);
 
         let mut query_dir = None;
