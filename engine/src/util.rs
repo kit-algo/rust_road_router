@@ -259,6 +259,46 @@ fn size_hint_add(a: (usize, Option<usize>), b: (usize, Option<usize>)) -> (usize
     (min, max)
 }
 
+pub fn coordinated_sweep_iter<T, I, J>(first: I, second: J) -> CoordinateSweepIter<I, J>
+where
+    T: Ord,
+    I: Iterator<Item = T>,
+    J: Iterator<Item = T>,
+{
+    CoordinateSweepIter {
+        first: first.peekable(),
+        second: second.peekable(),
+    }
+}
+
+pub struct CoordinateSweepIter<I: Iterator, J: Iterator> {
+    first: std::iter::Peekable<I>,
+    second: std::iter::Peekable<J>,
+}
+
+impl<T, I, J> Iterator for CoordinateSweepIter<I, J>
+where
+    T: Ord,
+    I: Iterator<Item = T>,
+    J: Iterator<Item = T>,
+{
+    type Item = (Option<T>, Option<T>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        use std::cmp::Ordering::*;
+        match (self.first.peek(), self.second.peek()) {
+            (Some(first), Some(second)) => match first.cmp(second) {
+                Less => Some((self.first.next(), None)),
+                Greater => Some((None, self.second.next())),
+                Equal => Some((self.first.next(), self.second.next())),
+            },
+            (Some(_), None) => Some((self.first.next(), None)),
+            (None, Some(_)) => Some((None, self.second.next())),
+            (None, None) => None,
+        }
+    }
+}
+
 pub trait MyFrom<T>: Sized {
     /// Performs the conversion.
     fn mfrom(_: T) -> Self;
