@@ -100,6 +100,7 @@ pub struct BlockedPathsDijkstra {
     edge_forbidden_paths: Vec<Vec<(usize, usize, u32)>>,
     node_forbidden_path_counter: Vec<usize>,
     num_labels_pushed: usize,
+    // num_forbidden_paths_with_shared_terminal_edges: usize,
 }
 
 impl BlockedPathsDijkstra {
@@ -109,10 +110,32 @@ impl BlockedPathsDijkstra {
             edge_forbidden_paths: vec![Vec::new(); m],
             node_forbidden_path_counter: vec![0; n],
             num_labels_pushed: 0,
+            // num_forbidden_paths_with_shared_terminal_edges: 0,
         }
     }
 
     pub fn add_forbidden_path(&mut self, path: &[NodeId], graph: &impl EdgeIdGraph) {
+        // let first_tail = path[0];
+        // let first_head = path[1];
+        // let last_head = path[path.len() - 1];
+        // let last_tail = path[path.len() - 2];
+        // let EdgeIdT(first_link_id) = graph.edge_indices(first_tail, first_head).next().unwrap();
+        // let EdgeIdT(last_link_id) = graph.edge_indices(last_tail, last_head).next().unwrap();
+        // let first_link_starting_forbidden_paths = self.edge_forbidden_paths[first_link_id as usize]
+        //     .iter()
+        //     .filter(|&&(_, offset, _)| offset == 1)
+        //     .map(|(id, _, _)| id);
+        // let last_link_ending_forbidden_paths = self.edge_forbidden_paths[last_link_id as usize]
+        //     .iter()
+        //     .filter(|&&(global_id, offset, _)| offset + 1 == self.forbidden_paths[global_id].len())
+        //     .map(|(id, _, _)| id);
+        // let mut coordinated_iter = crate::util::coordinated_sweep_iter(first_link_starting_forbidden_paths, last_link_ending_forbidden_paths)
+        //     .filter(|(x, y)| x.is_some() && y.is_some());
+        // if coordinated_iter.next().is_some() {
+        //     self.num_forbidden_paths_with_shared_terminal_edges += 1;
+        //     dbg!(coordinated_iter.count() + 1);
+        // }
+
         if cfg!(debug_assertions) {
             let mut active_forbidden_paths = ActiveForbittenPaths::new(self.node_forbidden_path_counter[path[0] as usize]);
 
@@ -157,6 +180,7 @@ impl BlockedPathsDijkstra {
 
     pub fn reset(&mut self, graph: &impl EdgeIdGraph) {
         self.num_labels_pushed = 0;
+        // self.num_forbidden_paths_with_shared_terminal_edges = 0;
 
         for path in self.forbidden_paths.drain(..) {
             for &[(NodeIdT(tail), _), (NodeIdT(head), _)] in path.array_windows::<2>() {
@@ -461,6 +485,10 @@ impl<'a> TrafficAwareServer<'a> {
         report!("num_labels_pushed", self.dijkstra_ops.num_labels_pushed());
         report!("total_queue_pops", total_queue_pops);
         report!("num_forbidden_paths", self.dijkstra_ops.num_forbidden_paths());
+        // report!(
+        //     "num_forbidden_paths_with_shared_terminal_edges",
+        //     self.dijkstra_ops.num_forbidden_paths_with_shared_terminal_edges
+        // );
         report!(
             "length_increase_percent",
             (final_live_dist - base_live_dist) as f64 / base_live_dist as f64 * 100.0
