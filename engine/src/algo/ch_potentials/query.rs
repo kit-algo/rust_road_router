@@ -40,7 +40,7 @@ where
     {
         report_time_with_key("TopoDijkstra preprocessing", "topo_dijk_prepro_running_time_ms", move || {
             let (main_graph, comp_graph, virtual_topocore) = if BCC_CORE {
-                VirtualTopocoreGraph::new_topo_dijkstra_graphs(graph)
+                VirtualTopocoreGraph::new_into_core_and_component(graph)
             } else {
                 VirtualTopocoreGraph::new(graph)
             };
@@ -88,46 +88,16 @@ where
         potential.init(query.to());
         report!("lower_bound", potential.potential(query.from()).unwrap_or(INFINITY));
 
-        let into_core = virtual_topocore.bridge_node(query.from()).unwrap_or(query.from());
         let out_of_core = virtual_topocore.bridge_node(query.to()).unwrap_or(query.to());
-        let into_core_pot = potential.potential(into_core)?;
-
-        let mut comp_search = TopoDijkstraRun::query(
-            &self.comp_graph,
-            &mut self.core_search.dijkstra_data,
-            &mut self.core_search.ops,
-            DijkstraInit::from_query(&query),
-        );
-
-        while let Some(node) = comp_search.next_step_with_potential(|node| potential.potential(node)) {
-            num_queue_pops += 1;
-            inspect(node, &virtual_topocore.order, &comp_search, potential);
-
-            if comp_search
-                .queue()
-                .peek()
-                .map(|e| e.key >= *comp_search.tentative_distance(into_core) + into_core_pot)
-                .unwrap_or(true)
-            {
-                break;
-            }
-        }
-
-        if *comp_search.tentative_distance(into_core) >= INFINITY {
-            return None;
-        }
-
-        let to_core_pushs = comp_search.num_queue_pushs();
-        let to_core_relaxed = comp_search.num_relaxed_arcs();
 
         let core_dist = {
             let _ctxt = push_context("core_search");
-            let core_query = Q::new(into_core, out_of_core, *comp_search.tentative_distance(into_core));
-            let mut core_search = TopoDijkstraRun::continue_query(
+            let core_query = Q::new(query.from(), out_of_core, query.initial_state());
+            let mut core_search = TopoDijkstraRun::query(
                 &self.core_search.graph,
                 &mut self.core_search.dijkstra_data,
                 &mut self.core_search.ops,
-                into_core,
+                DijkstraInit::from_query(&core_query),
             );
             SkipLowDegServer::distance_manually_initialized(
                 &mut core_search,
@@ -138,12 +108,12 @@ where
             )
         };
 
-        let mut comp_search = TopoDijkstraRun::continue_query(
-            &self.comp_graph,
-            &mut self.core_search.dijkstra_data,
-            &mut self.core_search.ops,
-            if core_dist.is_some() { out_of_core } else { query.from() },
-        );
+        core_dist?;
+        // if core_dist.is_none() {
+        //     return None;
+        // }
+
+        let mut comp_search = TopoDijkstraRun::continue_query(&self.comp_graph, &mut self.core_search.dijkstra_data, &mut self.core_search.ops, out_of_core);
 
         while let Some(node) = comp_search.next_step_with_potential(|node| potential.potential(node)) {
             num_queue_pops += 1;
@@ -159,9 +129,9 @@ where
             }
         }
 
-        report!("num_queue_pops", num_queue_pops);
-        report!("num_queue_pushs", to_core_pushs + comp_search.num_queue_pushs());
-        report!("num_relaxed_arcs", to_core_relaxed + comp_search.num_relaxed_arcs());
+        // report!("num_queue_pops", num_queue_pops);
+        // report!("num_queue_pushs", to_core_pushs + comp_search.num_queue_pushs());
+        // report!("num_relaxed_arcs", to_core_relaxed + comp_search.num_relaxed_arcs());
 
         let dist = *comp_search.tentative_distance(query.to());
         if dist < INFINITY {
@@ -438,7 +408,6 @@ where
                 .queue()
                 .peek()
                 .map(|e| e.key >= *dijkstra.tentative_distance(query.to()) + target_pot || e.key > cap)
-                // .map(|e| e.key >= *dijkstra.tentative_distance(query.to()) + target_pot)
                 .unwrap_or(false)
             {
                 break;

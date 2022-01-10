@@ -451,11 +451,7 @@ pub enum NodeType {
 impl NodeType {
     #[inline]
     pub fn in_core(&self) -> bool {
-        if let NodeType::OtherBCC(_) = self {
-            false
-        } else {
-            true
-        }
+        !matches!(self, NodeType::OtherBCC(_))
     }
 }
 
@@ -648,6 +644,31 @@ impl<Graph> VirtualTopocoreGraph<Graph> {
             },
             VirtualTopocoreGraph {
                 graph: <Graph as BuildPermutated<G>>::permutated_filtered(graph, &topocore.order, Box::new(|_, _| false)),
+                virtual_topocore: topocore.clone(),
+            },
+            topocore,
+        )
+    }
+
+    pub fn new_into_core_and_component<G>(graph: &G) -> (Self, Self, VirtualTopocore)
+    where
+        G: LinkIterable<NodeIdT>,
+        Graph: BuildPermutated<G>,
+    {
+        let topocore = virtual_topocore(graph);
+        (
+            VirtualTopocoreGraph {
+                graph: <Graph as BuildPermutated<G>>::permutated_filtered(graph, &topocore.order, {
+                    let topocore = topocore.clone();
+                    Box::new(move |t, h| !topocore.node_type(t).in_core() || topocore.node_type(h).in_core())
+                }),
+                virtual_topocore: topocore.clone(),
+            },
+            VirtualTopocoreGraph {
+                graph: <Graph as BuildPermutated<G>>::permutated_filtered(graph, &topocore.order, {
+                    let topocore = topocore.clone();
+                    Box::new(move |t, h| !(topocore.node_type(t).in_core() && topocore.node_type(h).in_core()))
+                }),
                 virtual_topocore: topocore.clone(),
             },
             topocore,
