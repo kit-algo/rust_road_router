@@ -1,18 +1,20 @@
 //! Elimination Tree path to root traversal while relaxing edges.
 
+use std::ops::IndexMut;
+
 use super::*;
 use crate::{datastr::timestamped_vector::TimestampedVector, util::in_range_option::InRangeOption};
 
 #[derive(Debug)]
-pub struct EliminationTreeWalk<'a, Graph> {
+pub struct EliminationTreeWalk<'a, Graph, DistCont> {
     graph: &'a Graph,
-    distances: &'a mut TimestampedVector<Weight>,
+    distances: &'a mut DistCont,
     predecessors: &'a mut [NodeId],
     elimination_tree: &'a [InRangeOption<NodeId>],
     next: Option<NodeId>,
 }
 
-impl<'a, Graph: LinkIterGraph> EliminationTreeWalk<'a, Graph> {
+impl<'a, Graph: LinkIterGraph> EliminationTreeWalk<'a, Graph, TimestampedVector<Weight>> {
     pub fn query(
         graph: &'a Graph,
         elimination_tree: &'a [InRangeOption<NodeId>],
@@ -20,8 +22,26 @@ impl<'a, Graph: LinkIterGraph> EliminationTreeWalk<'a, Graph> {
         predecessors: &'a mut [NodeId],
         from: NodeId,
     ) -> Self {
-        // initialize
         distances.reset();
+        Self::query_with_resetted(graph, elimination_tree, distances, predecessors, from)
+    }
+}
+
+impl<'a, Graph: LinkIterGraph, DistCont: IndexMut<usize, Output = Weight>> EliminationTreeWalk<'a, Graph, DistCont> {
+    pub fn query_with_resetted(
+        graph: &'a Graph,
+        elimination_tree: &'a [InRangeOption<NodeId>],
+        distances: &'a mut DistCont,
+        predecessors: &'a mut [NodeId],
+        from: NodeId,
+    ) -> Self {
+        if cfg!(debug_assertions) {
+            let mut cur_node = Some(from);
+            while let Some(node) = cur_node {
+                assert_eq!(distances[node as usize], INFINITY);
+                cur_node = elimination_tree[node as usize].value();
+            }
+        }
 
         // Starte with origin
         distances[from as usize] = 0;
@@ -75,12 +95,16 @@ impl<'a, Graph: LinkIterGraph> EliminationTreeWalk<'a, Graph> {
         self.distances[node as usize]
     }
 
+    pub fn reset_distance(&mut self, node: NodeId) {
+        self.distances[node as usize] = INFINITY;
+    }
+
     pub fn predecessor(&self, node: NodeId) -> NodeId {
         self.predecessors[node as usize]
     }
 }
 
-impl<'a, Graph: LinkIterGraph> Iterator for EliminationTreeWalk<'a, Graph> {
+impl<'a, Graph: LinkIterGraph, DistCont: IndexMut<usize, Output = Weight>> Iterator for EliminationTreeWalk<'a, Graph, DistCont> {
     type Item = NodeId;
     fn next(&mut self) -> Option<Self::Item> {
         self.settle_next_node()

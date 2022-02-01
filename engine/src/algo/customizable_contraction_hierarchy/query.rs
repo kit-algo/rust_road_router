@@ -2,14 +2,14 @@
 
 use super::*;
 pub mod stepped_elimination_tree;
-use crate::datastr::timestamped_vector::TimestampedVector;
 use stepped_elimination_tree::EliminationTreeWalk;
 
 #[derive(Debug)]
 pub struct Server<CCH, CCHB> {
     customized: Customized<CCH, CCHB>,
-    fw_distances: TimestampedVector<Weight>,
-    bw_distances: TimestampedVector<Weight>,
+    fw_distances: Vec<Weight>,
+    bw_distances: Vec<Weight>,
+    unpacking_distances: Vec<Weight>,
     fw_parents: Vec<NodeId>,
     bw_parents: Vec<NodeId>,
     meeting_node: NodeId,
@@ -20,8 +20,9 @@ impl<'a, CCH: CCHT, CCHB: std::borrow::Borrow<CCH>> Server<CCH, CCHB> {
         let n = customized.forward_graph().num_nodes();
         Server {
             customized,
-            fw_distances: TimestampedVector::new(n),
-            bw_distances: TimestampedVector::new(n),
+            fw_distances: vec![INFINITY; n],
+            bw_distances: vec![INFINITY; n],
+            unpacking_distances: vec![INFINITY; n],
             fw_parents: vec![n as NodeId; n],
             bw_parents: vec![n as NodeId; n],
             meeting_node: 0,
@@ -43,14 +44,14 @@ impl<'a, CCH: CCHT, CCHB: std::borrow::Borrow<CCH>> Server<CCH, CCHB> {
         // initialize
         let mut tentative_distance = INFINITY;
         self.meeting_node = 0;
-        let mut fw_walk = EliminationTreeWalk::query(
+        let mut fw_walk = EliminationTreeWalk::query_with_resetted(
             &fw_graph,
             self.customized.cch.borrow().elimination_tree(),
             &mut self.fw_distances,
             &mut self.fw_parents,
             from,
         );
-        let mut bw_walk = EliminationTreeWalk::query(
+        let mut bw_walk = EliminationTreeWalk::query_with_resetted(
             &bw_graph,
             self.customized.cch.borrow().elimination_tree(),
             &mut self.bw_distances,
@@ -58,13 +59,16 @@ impl<'a, CCH: CCHT, CCHB: std::borrow::Borrow<CCH>> Server<CCH, CCHB> {
             to,
         );
 
+        // maybe split loop to exploit that once we use the "both nodes"-case, we will always use that?
         loop {
             match (fw_walk.peek(), bw_walk.peek()) {
                 (Some(fw_node), Some(bw_node)) if fw_node < bw_node => {
                     fw_walk.next();
+                    fw_walk.reset_distance(fw_node);
                 }
                 (Some(fw_node), Some(bw_node)) if fw_node > bw_node => {
                     bw_walk.next();
+                    bw_walk.reset_distance(bw_node);
                 }
                 (Some(node), Some(_node)) => {
                     debug_assert_eq!(node, _node);
@@ -83,12 +87,21 @@ impl<'a, CCH: CCHT, CCHB: std::borrow::Borrow<CCH>> Server<CCH, CCHB> {
                         tentative_distance = dist;
                         self.meeting_node = node;
                     }
+                    fw_walk.reset_distance(node);
+                    bw_walk.reset_distance(node);
                 }
                 // the (Some,None) case can only happen when the nodes
                 // share no common ancestores in the elimination tree
-                // thus, there will be no path
-                (Some(_), None) => return None,
-                (None, Some(_)) => return None,
+                // thus, there will be no path but we will still need
+                // to walk the path up to reset all distances
+                (Some(fw_node), None) => {
+                    fw_walk.next();
+                    fw_walk.reset_distance(fw_node);
+                }
+                (None, Some(bw_node)) => {
+                    bw_walk.next();
+                    bw_walk.reset_distance(bw_node);
+                }
                 (None, None) => break,
             }
         }
@@ -102,37 +115,46 @@ impl<'a, CCH: CCHT, CCHB: std::borrow::Borrow<CCH>> Server<CCH, CCHB> {
     fn path(&mut self, query: Query) -> Vec<NodeId> {
         let from = self.customized.cch.borrow().node_order().rank(query.from);
         let to = self.customized.cch.borrow().node_order().rank(query.to);
+        let fw_graph = self.customized.forward_graph();
+        let bw_graph = self.customized.backward_graph();
+
+        let mut node = self.meeting_node;
+        while node != to {
+            let parent = self.bw_parents[node as usize];
+            self.fw_parents[parent as usize] = node;
+            node = parent;
+        }
+
+        self.unpacking_distances[to as usize] = 0;
+        debug_assert_eq!(node, to);
+        while node != self.meeting_node {
+            let parent = self.fw_parents[node as usize];
+            self.unpacking_distances[parent as usize] =
+                self.unpacking_distances[node as usize] + bw_graph.weight()[bw_graph.edge_indices(node, parent).next().unwrap().0 as usize];
+            node = parent;
+        }
+
+        debug_assert_eq!(node, self.meeting_node);
+        while node != from {
+            let parent = self.fw_parents[node as usize];
+            self.bw_parents[parent as usize] = node;
+            self.unpacking_distances[parent as usize] =
+                self.unpacking_distances[node as usize] + fw_graph.weight()[fw_graph.edge_indices(parent, node).next().unwrap().0 as usize];
+            node = parent;
+        }
 
         // unpack shortcuts so that parant pointers already point along the completely unpacked path
         Self::unpack_path(
-            from,
-            self.meeting_node,
-            true,
-            self.customized.cch.borrow(),
-            self.customized.forward_graph().weight(),
-            self.customized.backward_graph().weight(),
-            &mut self.fw_distances,
-            &mut self.fw_parents,
-        );
-        Self::unpack_path(
             to,
-            self.meeting_node,
-            false,
+            from,
             self.customized.cch.borrow(),
-            self.customized.backward_graph().weight(),
-            self.customized.forward_graph().weight(),
-            &mut self.bw_distances,
+            bw_graph.weight(),
+            fw_graph.weight(),
+            &mut self.unpacking_distances,
             &mut self.bw_parents,
         );
 
-        let mut path = Vec::new();
-        path.push(self.meeting_node);
-
-        while *path.last().unwrap() != from {
-            path.push(self.fw_parents[*path.last().unwrap() as usize]);
-        }
-
-        path.reverse();
+        let mut path = vec![from];
 
         while *path.last().unwrap() != to {
             path.push(self.bw_parents[*path.last().unwrap() as usize]);
@@ -146,30 +168,17 @@ impl<'a, CCH: CCHT, CCHB: std::borrow::Borrow<CCH>> Server<CCH, CCHB> {
     }
 
     /// Unpack path from a start node (the meeting node of the CCH query), so that parent pointers point along the unpacked path.
-    fn unpack_path(
-        origin: NodeId,
-        target: NodeId,
-        forward: bool,
-        cch: &CCH,
-        weights: &[Weight],
-        other_weights: &[Weight],
-        distances: &mut TimestampedVector<Weight>,
-        parents: &mut [NodeId],
-    ) {
+    fn unpack_path(origin: NodeId, target: NodeId, cch: &CCH, weights: &[Weight], other_weights: &[Weight], distances: &mut [Weight], parents: &mut [NodeId]) {
         let mut current = target;
         while current != origin {
             let pred = parents[current as usize];
             let weight = distances[current as usize] - distances[pred as usize];
 
-            let unpacked = if forward {
-                cch.unpack_arc(pred, current, weight, weights, other_weights)
-            } else {
-                cch.unpack_arc(current, pred, weight, other_weights, weights)
-            };
-            if let Some((middle, first_weight, second_weight)) = unpacked {
+            let unpacked = cch.unpack_arc(current, pred, weight, other_weights, weights);
+            if let Some((middle, _first_weight, second_weight)) = unpacked {
                 parents[current as usize] = middle;
                 parents[middle as usize] = pred;
-                distances[middle as usize] = distances[pred as usize] + if forward { first_weight } else { second_weight };
+                distances[middle as usize] = distances[pred as usize] + second_weight;
             } else {
                 current = pred;
             }
