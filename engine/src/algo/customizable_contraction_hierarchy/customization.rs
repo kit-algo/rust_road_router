@@ -326,21 +326,6 @@ pub fn customize_perfect(mut customized: Customized<CCH, &CCH>) -> Customized<Di
         let mut backward_head = Vec::with_capacity(m);
         let mut backward_weight = Vec::with_capacity(m);
 
-        let forward_cch_edge_to_orig_arc = Vecs::from_iters(
-            cch.forward_cch_edge_to_orig_arc
-                .iter()
-                .zip(forward.weight().iter())
-                .filter(|(_, w)| **w < INFINITY)
-                .map(|(slc, _)| slc.iter().copied()),
-        );
-        let backward_cch_edge_to_orig_arc = Vecs::from_iters(
-            cch.backward_cch_edge_to_orig_arc
-                .iter()
-                .zip(backward.weight().iter())
-                .filter(|(_, w)| **w < INFINITY)
-                .map(|(slc, _)| slc.iter().copied()),
-        );
-
         for node in 0..n as NodeId {
             let edge_ids = cch.neighbor_edge_indices_usize(node);
             for (link, &customized_weight) in LinkIterable::<Link>::link_iter(&forward, node).zip(&upward_orig[edge_ids.clone()]) {
@@ -369,8 +354,8 @@ pub fn customize_perfect(mut customized: Customized<CCH, &CCH>) -> Customized<Di
                 backward_first_out,
                 backward_head,
                 node_order: cch.node_order.clone(),
-                forward_cch_edge_to_orig_arc,
-                backward_cch_edge_to_orig_arc,
+                forward_cch_edge_to_orig_arc: Vecs::empty(),
+                backward_cch_edge_to_orig_arc: Vecs::empty(),
                 elimination_tree: cch.elimination_tree.clone(),
                 forward_inverted,
                 backward_inverted,

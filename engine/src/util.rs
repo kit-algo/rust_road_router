@@ -89,6 +89,13 @@ pub struct Vecs<T> {
 }
 
 impl<T> Vecs<T> {
+    pub fn empty() -> Self {
+        Self {
+            first_idx: vec![0],
+            data: Vec::new(),
+        }
+    }
+
     pub fn from_iters<Inner: Iterator<Item = T>, Outer: Iterator<Item = Inner>>(iters: Outer) -> Self {
         let mut first_idx = Vec::with_capacity(iters.size_hint().0 + 1);
         first_idx.push(0);
