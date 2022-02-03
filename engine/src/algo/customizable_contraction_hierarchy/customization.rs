@@ -316,36 +316,176 @@ pub fn customize_perfect(mut customized: Customized<CCH, &CCH>) -> Customized<Di
         let forward = customized.forward_graph();
         let backward = customized.backward_graph();
 
-        let mut forward_first_out = Vec::with_capacity(cch.first_out.len());
-        forward_first_out.push(0);
-        let mut forward_head = Vec::with_capacity(m);
-        let mut forward_weight = Vec::with_capacity(m);
+        let mut timer = Timer::new();
 
-        let mut backward_first_out = Vec::with_capacity(cch.first_out.len());
-        backward_first_out.push(0);
-        let mut backward_head = Vec::with_capacity(m);
-        let mut backward_weight = Vec::with_capacity(m);
+        let mut forward_first_out: Vec<EdgeId>;
+        let mut forward_head: Vec<NodeId>;
+        let mut forward_weight: Vec<Weight>;
 
-        for node in 0..n as NodeId {
-            let edge_ids = cch.neighbor_edge_indices_usize(node);
-            for (link, &customized_weight) in LinkIterable::<Link>::link_iter(&forward, node).zip(&upward_orig[edge_ids.clone()]) {
-                if link.weight < INFINITY && link.weight >= customized_weight {
-                    forward_head.push(link.node);
-                    forward_weight.push(link.weight);
+        let mut backward_first_out: Vec<EdgeId>;
+        let mut backward_head: Vec<NodeId>;
+        let mut backward_weight: Vec<Weight>;
+
+        if cfg!(feature = "cch-disable-par") {
+            forward_first_out = Vec::with_capacity(cch.first_out.len());
+            forward_first_out.push(0);
+            forward_head = Vec::with_capacity(m);
+            forward_weight = Vec::with_capacity(m);
+
+            backward_first_out = Vec::with_capacity(cch.first_out.len());
+            backward_first_out.push(0);
+            backward_head = Vec::with_capacity(m);
+            backward_weight = Vec::with_capacity(m);
+
+            eprintln!("alloc");
+            timer.report_passed_ms();
+            timer.restart();
+
+            for node in 0..n as NodeId {
+                let edge_ids = cch.neighbor_edge_indices_usize(node);
+                for (link, &customized_weight) in LinkIterable::<Link>::link_iter(&forward, node).zip(&upward_orig[edge_ids.clone()]) {
+                    if link.weight < INFINITY && link.weight >= customized_weight {
+                        forward_head.push(link.node);
+                        forward_weight.push(link.weight);
+                    }
                 }
-            }
-            for (link, &customized_weight) in LinkIterable::<Link>::link_iter(&backward, node).zip(&downward_orig[edge_ids.clone()]) {
-                if link.weight < INFINITY && link.weight >= customized_weight {
-                    backward_head.push(link.node);
-                    backward_weight.push(link.weight);
+                for (link, &customized_weight) in LinkIterable::<Link>::link_iter(&backward, node).zip(&downward_orig[edge_ids.clone()]) {
+                    if link.weight < INFINITY && link.weight >= customized_weight {
+                        backward_head.push(link.node);
+                        backward_weight.push(link.weight);
+                    }
                 }
+                forward_first_out.push(forward_head.len() as EdgeId);
+                backward_first_out.push(backward_head.len() as EdgeId);
             }
-            forward_first_out.push(forward_head.len() as EdgeId);
-            backward_first_out.push(backward_head.len() as EdgeId);
+        } else {
+            let k = rayon::current_num_threads() * 16;
+
+            forward_first_out = vec![0; cch.first_out.len()];
+            forward_head = vec![0; m];
+            forward_weight = vec![0; m];
+
+            backward_first_out = vec![0; cch.first_out.len()];
+            backward_head = vec![0; m];
+            backward_weight = vec![0; m];
+
+            eprintln!("alloc");
+            timer.report_passed_ms();
+            timer.restart();
+
+            let mut edges_of_each_thread = vec![(0, 0); k + 1];
+            let mut local_edge_counts = &mut edges_of_each_thread[1..];
+            let nodes_per_thread = (n + k - 1) / k;
+
+            rayon::scope(|s| {
+                let forward = &forward;
+                let backward = &backward;
+                let upward_orig = &upward_orig;
+                let downward_orig = &downward_orig;
+
+                for i in 0..k {
+                    let (local_count, rest_counts) = local_edge_counts.split_first_mut().unwrap();
+                    local_edge_counts = rest_counts;
+                    let local_nodes = i * nodes_per_thread..min((i + 1) * nodes_per_thread, n);
+                    s.spawn(move |_| {
+                        for node in local_nodes {
+                            let edge_ids = cch.neighbor_edge_indices_usize(node as NodeId);
+                            local_count.0 += LinkIterable::<Link>::link_iter(forward, node as NodeId)
+                                .zip(&upward_orig[edge_ids.clone()])
+                                .filter(|(link, &customized_weight)| link.weight < INFINITY && link.weight >= customized_weight)
+                                .count();
+                            local_count.1 += LinkIterable::<Link>::link_iter(backward, node as NodeId)
+                                .zip(&downward_orig[edge_ids])
+                                .filter(|(link, &customized_weight)| link.weight < INFINITY && link.weight >= customized_weight)
+                                .count();
+                        }
+                    });
+                }
+            });
+
+            let mut prefixes = (0, 0);
+            for (fw_count, bw_count) in &mut edges_of_each_thread {
+                prefixes.0 += *fw_count;
+                prefixes.1 += *bw_count;
+                *fw_count = prefixes.0;
+                *bw_count = prefixes.1;
+            }
+
+            rayon::scope(|s| {
+                let mut forward_first_out = &mut forward_first_out[..];
+                let mut forward_head = &mut forward_head[..];
+                let mut forward_weight = &mut forward_weight[..];
+                let mut backward_first_out = &mut backward_first_out[..];
+                let mut backward_head = &mut backward_head[..];
+                let mut backward_weight = &mut backward_weight[..];
+
+                let forward = &forward;
+                let backward = &backward;
+                let upward_orig = &upward_orig;
+                let downward_orig = &downward_orig;
+
+                for i in 0..k {
+                    let local_nodes = i * nodes_per_thread..min((i + 1) * nodes_per_thread, n);
+                    let num_fw_edges_before = edges_of_each_thread[i].0;
+                    let num_bw_edges_before = edges_of_each_thread[i].1;
+
+                    let (local_fw_fo, rest_fw_fo) = forward_first_out.split_at_mut(min(nodes_per_thread, forward_first_out.len()));
+                    forward_first_out = rest_fw_fo;
+                    let (local_bw_fo, rest_bw_fo) = backward_first_out.split_at_mut(min(nodes_per_thread, backward_first_out.len()));
+                    backward_first_out = rest_bw_fo;
+                    let (local_fw_head, rest_fw_head) = forward_head.split_at_mut(edges_of_each_thread[i + 1].0 - num_fw_edges_before);
+                    forward_head = rest_fw_head;
+                    let (local_fw_weight, rest_fw_weight) = forward_weight.split_at_mut(edges_of_each_thread[i + 1].0 - num_fw_edges_before);
+                    forward_weight = rest_fw_weight;
+                    let (local_bw_head, rest_bw_head) = backward_head.split_at_mut(edges_of_each_thread[i + 1].1 - num_bw_edges_before);
+                    backward_head = rest_bw_head;
+                    let (local_bw_weight, rest_bw_weight) = backward_weight.split_at_mut(edges_of_each_thread[i + 1].1 - num_bw_edges_before);
+                    backward_weight = rest_bw_weight;
+
+                    s.spawn(move |_| {
+                        let mut fw_edge_count = 0;
+                        let mut bw_edge_count = 0;
+                        for (local_node_idx, node) in local_nodes.enumerate() {
+                            local_fw_fo[local_node_idx] = (num_fw_edges_before + fw_edge_count) as EdgeId;
+                            local_bw_fo[local_node_idx] = (num_bw_edges_before + bw_edge_count) as EdgeId;
+
+                            let edge_ids = cch.neighbor_edge_indices_usize(node as NodeId);
+                            for (link, &customized_weight) in LinkIterable::<Link>::link_iter(forward, node as NodeId).zip(&upward_orig[edge_ids.clone()]) {
+                                if link.weight < INFINITY && link.weight >= customized_weight {
+                                    local_fw_head[fw_edge_count] = link.node;
+                                    local_fw_weight[fw_edge_count] = link.weight;
+                                    fw_edge_count += 1;
+                                }
+                            }
+                            for (link, &customized_weight) in LinkIterable::<Link>::link_iter(backward, node as NodeId).zip(&downward_orig[edge_ids.clone()]) {
+                                if link.weight < INFINITY && link.weight >= customized_weight {
+                                    local_bw_head[bw_edge_count] = link.node;
+                                    local_bw_weight[bw_edge_count] = link.weight;
+                                    bw_edge_count += 1;
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+
+            forward_head.truncate(edges_of_each_thread[k].0);
+            backward_head.truncate(edges_of_each_thread[k].1);
+            forward_weight.truncate(edges_of_each_thread[k].0);
+            backward_weight.truncate(edges_of_each_thread[k].1);
+            forward_first_out[n] = forward_head.len() as EdgeId;
+            backward_first_out[n] = backward_head.len() as EdgeId;
         }
+
+        eprintln!("forward");
+        timer.report_passed_ms();
+        timer.restart();
 
         let forward_inverted = ReversedGraphWithEdgeIds::reversed(&UnweightedFirstOutGraph::new(&forward_first_out[..], &forward_head[..]));
         let backward_inverted = ReversedGraphWithEdgeIds::reversed(&UnweightedFirstOutGraph::new(&backward_first_out[..], &backward_head[..]));
+
+        eprintln!("reversed");
+        timer.report_passed_ms();
 
         Customized::new(
             DirectedCCH {
