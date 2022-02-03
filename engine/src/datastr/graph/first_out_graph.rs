@@ -305,7 +305,7 @@ where
     }
 }
 
-impl<FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<(NodeIdT, (Weight, EdgeIdT))>
+impl<FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<(NodeIdT, Weight, EdgeIdT)>
     for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
@@ -316,7 +316,7 @@ where
     type Iter<'a>
     where
         Self: 'a,
-    = impl Iterator<Item = (NodeIdT, (Weight, EdgeIdT))> + 'a;
+    = impl Iterator<Item = (NodeIdT, Weight, EdgeIdT)> + 'a;
 
     #[inline]
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
@@ -325,7 +325,7 @@ where
             .iter()
             .zip(self.weight()[range.clone()].iter())
             .zip(range)
-            .map(|((&node, &weight), e)| (NodeIdT(node), (weight, EdgeIdT(e as EdgeId))))
+            .map(|((&node, &weight), e)| (NodeIdT(node), weight, EdgeIdT(e as EdgeId)))
     }
 }
 

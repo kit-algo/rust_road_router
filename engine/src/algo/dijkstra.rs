@@ -196,7 +196,7 @@ pub struct DefaultOpsWithLinkPath();
 
 impl<G: EdgeIdGraph> DijkstraOps<G> for DefaultOpsWithLinkPath {
     type Label = Weight;
-    type Arc = (NodeIdT, (Weight, EdgeIdT));
+    type Arc = (NodeIdT, Weight, EdgeIdT);
     type LinkResult = Weight;
     type PredecessorLink = EdgeIdT;
 
@@ -207,7 +207,7 @@ impl<G: EdgeIdGraph> DijkstraOps<G> for DefaultOpsWithLinkPath {
         _parents: &[(NodeId, Self::PredecessorLink)],
         _tail: NodeIdT,
         label: &Weight,
-        (_, (weight, _)): &Self::Arc,
+        (_, weight, _): &Self::Arc,
     ) -> Self::LinkResult {
         label + weight
     }
@@ -222,7 +222,7 @@ impl<G: EdgeIdGraph> DijkstraOps<G> for DefaultOpsWithLinkPath {
     }
 
     #[inline(always)]
-    fn predecessor_link(&self, &(_, (_, edge_id)): &Self::Arc) -> Self::PredecessorLink {
+    fn predecessor_link(&self, &(_, _, edge_id): &Self::Arc) -> Self::PredecessorLink {
         edge_id
     }
 }

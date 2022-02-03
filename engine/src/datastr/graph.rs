@@ -71,6 +71,13 @@ impl<T> Arc for (NodeIdT, T) {
     }
 }
 
+impl<T1, T2> Arc for (NodeIdT, T1, T2) {
+    #[inline(always)]
+    fn head(&self) -> NodeId {
+        self.0 .0
+    }
+}
+
 /// Base trait for graphs.
 /// Interesting behaviour will be added through subtraits.
 pub trait Graph {
