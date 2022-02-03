@@ -503,18 +503,42 @@ pub struct ReversedGraphWithEdgeIds {
 
 impl<G: LinkIterable<(NodeIdT, EdgeIdT)>> BuildReversed<G> for ReversedGraphWithEdgeIds {
     fn reversed(graph: &G) -> Self {
-        // vector of adjacency lists for the reverse graph
-        let mut reversed: Vec<Vec<Link>> = (0..graph.num_nodes()).map(|_| Vec::<Link>::new()).collect();
+        let mut reversed_first_out = vec![0u32; graph.num_nodes() + 1];
+        for node in 0..(graph.num_nodes() as NodeId) {
+            for (NodeIdT(neighbor), _) in graph.link_iter(node) {
+                reversed_first_out[neighbor as usize + 1] += 1;
+            }
+        }
+
+        let mut prefix_sum = 0;
+        for deg in &mut reversed_first_out {
+            prefix_sum += *deg;
+            *deg = prefix_sum;
+        }
+
+        let mut head = vec![0; graph.num_arcs()];
+        let mut edge_ids = vec![0; graph.num_arcs()];
 
         // iterate over all edges and insert them in the reversed structure
         for node in 0..(graph.num_nodes() as NodeId) {
             for (NodeIdT(neighbor), EdgeIdT(edge_id)) in graph.link_iter(node) {
-                reversed[neighbor as usize].push(Link { node, weight: edge_id });
+                let idx = reversed_first_out[neighbor as usize] as usize;
+                reversed_first_out[neighbor as usize] += 1;
+                head[idx] = node;
+                edge_ids[idx] = edge_id;
             }
         }
 
-        let (first_out, head, edge_ids) = OwnedGraph::from_adjancecy_lists(reversed).decompose();
-        ReversedGraphWithEdgeIds { first_out, head, edge_ids }
+        for node in (1..graph.num_nodes()).rev() {
+            reversed_first_out[node] = reversed_first_out[node - 1];
+        }
+        reversed_first_out[0] = 0;
+
+        ReversedGraphWithEdgeIds {
+            first_out: reversed_first_out,
+            head,
+            edge_ids,
+        }
     }
 }
 
