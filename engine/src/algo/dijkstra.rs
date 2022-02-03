@@ -128,8 +128,8 @@ impl<L: Label, PredLink: Copy, NodeData: Reset> DijkstraData<L, PredLink, NodeDa
 }
 
 impl<L: Label, NodeData: Reset> DijkstraData<L, (), NodeData> {
-    pub fn predecessors(&self) -> &[NodeId] {
-        unsafe { std::mem::transmute(&self.predecessors[..]) }
+    pub fn predecessors(&self) -> &[(NodeId, ())] {
+        &self.predecessors
     }
 }
 

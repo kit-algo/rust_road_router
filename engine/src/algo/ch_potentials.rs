@@ -33,13 +33,14 @@ impl CCHPotData {
 
     pub fn forward_potential(&self) -> BorrowedCCHPot {
         let n = self.customized.forward_graph().num_nodes();
+        let m = self.customized.forward_graph().num_arcs();
 
         CCHPotential {
             cch: self.customized.cch(),
             stack: Vec::new(),
             forward_cch_graph: self.customized.forward_graph(),
             backward_distances: TimestampedVector::new(n),
-            backward_parents: vec![n as NodeId; n],
+            backward_parents: vec![(n as NodeId, m as EdgeId); n],
             backward_cch_graph: self.customized.backward_graph(),
             potentials: TimestampedVector::new(n),
             num_pot_computations: 0,
@@ -48,13 +49,14 @@ impl CCHPotData {
 
     pub fn backward_potential(&self) -> BorrowedCCHPot {
         let n = self.customized.forward_graph().num_nodes();
+        let m = self.customized.forward_graph().num_arcs();
 
         CCHPotential {
             cch: self.customized.cch(),
             stack: Vec::new(),
             forward_cch_graph: self.customized.backward_graph(),
             backward_distances: TimestampedVector::new(n),
-            backward_parents: vec![n as NodeId; n],
+            backward_parents: vec![(n as NodeId, m as EdgeId); n],
             backward_cch_graph: self.customized.forward_graph(),
             potentials: TimestampedVector::new(n),
             num_pot_computations: 0,
@@ -63,13 +65,14 @@ impl CCHPotData {
 
     pub fn forward_path_potential(&self) -> CCHPotentialWithPathUnpacking {
         let n = self.customized.forward_graph().num_nodes();
+        let m = self.customized.forward_graph().num_arcs();
 
         CCHPotentialWithPathUnpacking {
             cch: self.customized.cch(),
             stack: Vec::new(),
             forward_cch_graph: self.customized.forward_graph(),
             backward_distances: TimestampedVector::new(n),
-            backward_parents: vec![n as NodeId; n],
+            backward_parents: vec![(n as NodeId, m as EdgeId); n],
             backward_cch_graph: self.customized.backward_graph(),
             potentials: TimestampedVector::new(n),
             num_pot_computations: 0,
@@ -81,13 +84,14 @@ impl CCHPotData {
 
     pub fn backward_path_potential(&self) -> CCHPotentialWithPathUnpacking {
         let n = self.customized.forward_graph().num_nodes();
+        let m = self.customized.forward_graph().num_arcs();
 
         CCHPotentialWithPathUnpacking {
             cch: self.customized.cch(),
             stack: Vec::new(),
             forward_cch_graph: self.customized.backward_graph(),
             backward_distances: TimestampedVector::new(n),
-            backward_parents: vec![n as NodeId; n],
+            backward_parents: vec![(n as NodeId, m as EdgeId); n],
             backward_cch_graph: self.customized.forward_graph(),
             potentials: TimestampedVector::new(n),
             num_pot_computations: 0,
@@ -109,7 +113,7 @@ pub struct CCHPotential<'a, GF, GB> {
     potentials: TimestampedVector<InRangeOption<Weight>>,
     forward_cch_graph: GF,
     backward_distances: TimestampedVector<Weight>,
-    backward_parents: Vec<NodeId>,
+    backward_parents: Vec<(NodeId, EdgeId)>,
     backward_cch_graph: GB,
     num_pot_computations: usize,
 }
@@ -125,7 +129,7 @@ impl<'a, GF, GB> CCHPotential<'a, GF, GB> {
 impl<'a, GF, GB> Potential for CCHPotential<'a, GF, GB>
 where
     GF: LinkIterGraph,
-    GB: LinkIterGraph,
+    GB: LinkIterable<(NodeIdT, Weight, EdgeIdT)>,
 {
     fn init(&mut self, target: NodeId) {
         let target = self.cch.node_order().rank(target);
@@ -179,7 +183,7 @@ pub struct CCHPotentialWithPathUnpacking<'a> {
     potentials: TimestampedVector<InRangeOption<Weight>>,
     forward_cch_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>,
     backward_distances: TimestampedVector<Weight>,
-    backward_parents: Vec<NodeId>,
+    backward_parents: Vec<(NodeId, EdgeId)>,
     backward_cch_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>,
     num_pot_computations: usize,
     path_unpacked: FastClearBitVec,
@@ -225,7 +229,7 @@ impl<'a> Potential for CCHPotentialWithPathUnpacking<'a> {
             for edge in LinkIterable::<Link>::link_iter(&self.forward_cch_graph, node) {
                 let relaxed = edge.weight + self.potentials[edge.node as usize].value().unwrap();
                 if relaxed < dist {
-                    self.backward_parents[node as usize] = edge.node;
+                    self.backward_parents[node as usize].0 = edge.node;
                     dist = relaxed;
                 }
             }
@@ -248,7 +252,7 @@ impl<'a> CCHPotentialWithPathUnpacking<'a> {
             return;
         }
         let self_dist = self.potential(node).unwrap();
-        let parent = self.backward_parents[node as usize];
+        let parent = self.backward_parents[node as usize].0;
         if parent == node {
             self.path_unpacked.set(node as usize);
             return;
@@ -266,7 +270,7 @@ impl<'a> CCHPotentialWithPathUnpacking<'a> {
             self.forward_inverted,
             self.backward_inverted,
         ) {
-            self.backward_parents[node as usize] = middle;
+            self.backward_parents[node as usize].0 = middle;
 
             if !self.path_unpacked.get(middle as usize) {
                 // will be called in the unpack_path call
@@ -275,7 +279,7 @@ impl<'a> CCHPotentialWithPathUnpacking<'a> {
                 // and then the call in unpack_path won't override it again.
                 // This is only a problem with zero arcs and the induced non-unique shortest paths
                 self.potential(middle);
-                self.backward_parents[middle as usize] = parent;
+                self.backward_parents[middle as usize].0 = parent;
                 self.unpack_path(NodeIdT(middle));
             }
 
@@ -285,7 +289,7 @@ impl<'a> CCHPotentialWithPathUnpacking<'a> {
         self.path_unpacked.set(node as usize);
     }
 
-    pub fn target_shortest_path_tree(&self) -> &[NodeId] {
+    pub fn target_shortest_path_tree(&self) -> &[(NodeId, EdgeId)] {
         &self.backward_parents
     }
 

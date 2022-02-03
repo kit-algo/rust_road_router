@@ -172,7 +172,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
 
             while *fixed_path.last().unwrap() != orig_path[r.end] {
                 let last = *fixed_path.last().unwrap();
-                let parent = order.node(self.target_pot.target_shortest_path_tree()[order.rank(last) as usize]);
+                let parent = order.node(self.target_pot.target_shortest_path_tree()[order.rank(last) as usize].0);
                 fixed_path.push(parent);
             }
 
@@ -289,7 +289,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
                 target_earliest_suboptimal_rank = path_ranks[node as usize].value().unwrap() as usize;
                 self.target_pot.unpack_path(NodeIdT(node));
 
-                if self.target_pot.target_shortest_path_tree()[node as usize] != next_on_path && shortest_dist != path_dist {
+                if self.target_pot.target_shortest_path_tree()[node as usize].0 != next_on_path && shortest_dist != path_dist {
                     path_parent(node, self.target_pot.target_shortest_path_tree(), &mut self.path_parent_cache, |node| {
                         path_ranks[node as usize].value().map_or(false, |path_rank| {
                             path_rank >= path_ranks[start as usize].value().unwrap() && path_rank <= path_ranks[end as usize].value().unwrap()
@@ -332,7 +332,7 @@ impl<'a> MinimalNonShortestSubPaths<'a> {
                 source_earliest_suboptimal_rank = path_ranks[node as usize].value().unwrap() as usize;
                 self.source_pot.unpack_path(NodeIdT(node));
 
-                if self.source_pot.target_shortest_path_tree()[node as usize] != prev_on_path && shortest_dist != path_dist {
+                if self.source_pot.target_shortest_path_tree()[node as usize].0 != prev_on_path && shortest_dist != path_dist {
                     path_parent(node, self.source_pot.target_shortest_path_tree(), &mut self.path_parent_cache, |node| {
                         path_ranks[node as usize].value().map_or(false, |path_rank| {
                             path_rank >= path_ranks[start as usize].value().unwrap() && path_rank <= path_ranks[end as usize].value().unwrap()
@@ -446,25 +446,30 @@ pub fn filter_covered(ranges: &mut Vec<Range<usize>>) {
     ranges.retain(with_index(|index, _| !covered.get(index)));
 }
 
-pub fn path_parent(node: NodeId, predecessors: &[NodeId], path_parent_cache: &mut [InRangeOption<NodeId>], mut on_path: impl FnMut(NodeId) -> bool) -> NodeId {
+pub fn path_parent<T>(
+    node: NodeId,
+    predecessors: &[(NodeId, T)],
+    path_parent_cache: &mut [InRangeOption<NodeId>],
+    mut on_path: impl FnMut(NodeId) -> bool,
+) -> NodeId {
     if let Some(path_parent) = path_parent_cache[node as usize].value() {
         return path_parent;
     }
 
-    if on_path(predecessors[node as usize]) {
-        path_parent_cache[node as usize] = InRangeOption::some(predecessors[node as usize]);
-        return predecessors[node as usize];
+    if on_path(predecessors[node as usize].0) {
+        path_parent_cache[node as usize] = InRangeOption::some(predecessors[node as usize].0);
+        return predecessors[node as usize].0;
     }
 
-    let pp = path_parent(predecessors[node as usize], predecessors, path_parent_cache, on_path);
+    let pp = path_parent(predecessors[node as usize].0, predecessors, path_parent_cache, on_path);
     path_parent_cache[node as usize] = InRangeOption::some(pp);
     pp
 }
 
-pub fn reset_path_parent_cache(node: NodeId, predecessors: &[NodeId], path_parent_cache: &mut [InRangeOption<NodeId>]) {
+pub fn reset_path_parent_cache<T>(node: NodeId, predecessors: &[(NodeId, T)], path_parent_cache: &mut [InRangeOption<NodeId>]) {
     if path_parent_cache[node as usize].value().is_some() {
         path_parent_cache[node as usize] = InRangeOption::NONE;
-        reset_path_parent_cache(predecessors[node as usize], predecessors, path_parent_cache);
+        reset_path_parent_cache(predecessors[node as usize].0, predecessors, path_parent_cache);
     }
 }
 

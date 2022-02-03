@@ -10,21 +10,22 @@ pub struct Server<CCH, CCHB> {
     fw_distances: Vec<Weight>,
     bw_distances: Vec<Weight>,
     unpacking_distances: Vec<Weight>,
-    fw_parents: Vec<NodeId>,
-    bw_parents: Vec<NodeId>,
+    fw_parents: Vec<(NodeId, EdgeId)>,
+    bw_parents: Vec<(NodeId, EdgeId)>,
     meeting_node: NodeId,
 }
 
 impl<'a, CCH: CCHT, CCHB: std::borrow::Borrow<CCH>> Server<CCH, CCHB> {
     pub fn new(customized: Customized<CCH, CCHB>) -> Self {
         let n = customized.forward_graph().num_nodes();
+        let m = customized.forward_graph().num_arcs();
         Server {
             customized,
             fw_distances: vec![INFINITY; n],
             bw_distances: vec![INFINITY; n],
             unpacking_distances: vec![INFINITY; n],
-            fw_parents: vec![n as NodeId; n],
-            bw_parents: vec![n as NodeId; n],
+            fw_parents: vec![(n as NodeId, m as EdgeId); n],
+            bw_parents: vec![(n as NodeId, m as EdgeId); n],
             meeting_node: 0,
         }
     }
@@ -120,15 +121,15 @@ impl<'a, CCH: CCHT, CCHB: std::borrow::Borrow<CCH>> Server<CCH, CCHB> {
 
         let mut node = self.meeting_node;
         while node != to {
-            let parent = self.bw_parents[node as usize];
-            self.fw_parents[parent as usize] = node;
+            let parent = self.bw_parents[node as usize].0;
+            self.fw_parents[parent as usize].0 = node;
             node = parent;
         }
 
         self.unpacking_distances[to as usize] = 0;
         debug_assert_eq!(node, to);
         while node != self.meeting_node {
-            let parent = self.fw_parents[node as usize];
+            let parent = self.fw_parents[node as usize].0;
             self.unpacking_distances[parent as usize] =
                 self.unpacking_distances[node as usize] + bw_graph.weight()[bw_graph.edge_indices(node, parent).next().unwrap().0 as usize];
             node = parent;
@@ -136,8 +137,8 @@ impl<'a, CCH: CCHT, CCHB: std::borrow::Borrow<CCH>> Server<CCH, CCHB> {
 
         debug_assert_eq!(node, self.meeting_node);
         while node != from {
-            let parent = self.fw_parents[node as usize];
-            self.bw_parents[parent as usize] = node;
+            let parent = self.fw_parents[node as usize].0;
+            self.bw_parents[parent as usize].0 = node;
             self.unpacking_distances[parent as usize] =
                 self.unpacking_distances[node as usize] + fw_graph.weight()[fw_graph.edge_indices(parent, node).next().unwrap().0 as usize];
             node = parent;
@@ -157,7 +158,7 @@ impl<'a, CCH: CCHT, CCHB: std::borrow::Borrow<CCH>> Server<CCH, CCHB> {
         let mut path = vec![from];
 
         while *path.last().unwrap() != to {
-            path.push(self.bw_parents[*path.last().unwrap() as usize]);
+            path.push(self.bw_parents[*path.last().unwrap() as usize].0);
         }
 
         for node in &mut path {
@@ -168,16 +169,24 @@ impl<'a, CCH: CCHT, CCHB: std::borrow::Borrow<CCH>> Server<CCH, CCHB> {
     }
 
     /// Unpack path from a start node (the meeting node of the CCH query), so that parent pointers point along the unpacked path.
-    fn unpack_path(origin: NodeId, target: NodeId, cch: &CCH, weights: &[Weight], other_weights: &[Weight], distances: &mut [Weight], parents: &mut [NodeId]) {
+    fn unpack_path(
+        origin: NodeId,
+        target: NodeId,
+        cch: &CCH,
+        weights: &[Weight],
+        other_weights: &[Weight],
+        distances: &mut [Weight],
+        parents: &mut [(NodeId, EdgeId)],
+    ) {
         let mut current = target;
         while current != origin {
-            let pred = parents[current as usize];
+            let pred = parents[current as usize].0;
             let weight = distances[current as usize] - distances[pred as usize];
 
             let unpacked = cch.unpack_arc(current, pred, weight, other_weights, weights);
             if let Some((middle, _first_weight, second_weight)) = unpacked {
-                parents[current as usize] = middle;
-                parents[middle as usize] = pred;
+                parents[current as usize].0 = middle;
+                parents[middle as usize].0 = pred;
                 distances[middle as usize] = distances[pred as usize] + second_weight;
             } else {
                 current = pred;
