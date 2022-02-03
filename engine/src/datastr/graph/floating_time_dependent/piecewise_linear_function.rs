@@ -33,6 +33,11 @@ fn append_point(points: &mut Vec<TTFPoint>, point: TTFPoint) {
                 append_too_close(points, point);
             }
             return;
+        } else if cfg!(feature = "tdcch-prevent-colinear") && points.len() > 1 {
+            let prev_last_point = &points[points.len() - 2];
+            if interpolate_linear(prev_last_point, &point, p.at).fuzzy_eq(p.val) {
+                points.pop();
+            }
         }
     }
     debug_assert!(
