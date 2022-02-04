@@ -7,8 +7,8 @@ use parallelization::*;
 pub mod ftd;
 
 // One mapping of node id to weight for each thread during the scope of the customization.
-scoped_thread_local!(static UPWARD_WORKSPACE: RefCell<Vec<(Weight, EdgeId, EdgeId)>>);
-scoped_thread_local!(static DOWNWARD_WORKSPACE: RefCell<Vec<(Weight, EdgeId, EdgeId)>>);
+scoped_thread_local!(static UPWARD_WORKSPACE: RefCell<Vec<(Weight, InRangeOption<EdgeId>, InRangeOption<EdgeId>)>>);
+scoped_thread_local!(static DOWNWARD_WORKSPACE: RefCell<Vec<(Weight, InRangeOption<EdgeId>, InRangeOption<EdgeId>)>>);
 scoped_thread_local!(static PERFECT_WORKSPACE: RefCell<Vec<InRangeOption<EdgeId>>>);
 
 /// Execute second phase, that is metric dependent preprocessing.
@@ -152,8 +152,8 @@ fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weig
                      _offset_down: usize,
                      upward_weights: &mut [Weight],
                      downward_weights: &mut [Weight],
-                     upward_unpack: &mut [(EdgeId, EdgeId)],
-                     downward_unpack: &mut [(EdgeId, EdgeId)]| {
+                     upward_unpack: &mut [(InRangeOption<EdgeId>, InRangeOption<EdgeId>)],
+                     downward_unpack: &mut [(InRangeOption<EdgeId>, InRangeOption<EdgeId>)]| {
         UPWARD_WORKSPACE.with(|node_outgoing_weights| {
             let mut node_outgoing_weights = node_outgoing_weights.borrow_mut();
 
@@ -172,8 +172,8 @@ fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weig
                         .zip(&downward_weights[edges.clone()])
                         .zip(&upward_weights[edges.clone()])
                     {
-                        node_incoming_weights[node as usize] = (down_weight, m, m);
-                        node_outgoing_weights[node as usize] = (up_weight, m, m);
+                        node_incoming_weights[node as usize] = (down_weight, InRangeOption::NONE, InRangeOption::NONE);
+                        node_outgoing_weights[node as usize] = (up_weight, InRangeOption::NONE, InRangeOption::NONE);
                     }
 
                     // for all downward edges of the current node
@@ -210,12 +210,12 @@ fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weig
                             let relax = unsafe { node_outgoing_weights.get_unchecked_mut(node as usize) };
                             let triang_weight = upward_weight + first_down_weight;
                             if triang_weight < relax.0 {
-                                *relax = (triang_weight, first_edge_id, second_edge_id as EdgeId)
+                                *relax = (triang_weight, InRangeOption::some(first_edge_id), InRangeOption::some(second_edge_id as EdgeId))
                             }
                             let relax = unsafe { node_incoming_weights.get_unchecked_mut(node as usize) };
                             let triang_weight = downward_weight + first_up_weight;
                             if triang_weight < relax.0 {
-                                *relax = (triang_weight, second_edge_id as EdgeId, first_edge_id)
+                                *relax = (triang_weight, InRangeOption::some(second_edge_id as EdgeId), InRangeOption::some(first_edge_id))
                             }
                         }
                     }
@@ -243,15 +243,15 @@ fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weig
     // setup customization for parallization
     let customization = SeperatorBasedParallelCustomization::new_with_aux(cch, customize, customize);
 
-    let mut upward_unpack = vec![(m, m); m as usize];
-    let mut downward_unpack = vec![(m, m); m as usize];
+    let mut upward_unpack = vec![(InRangeOption::NONE, InRangeOption::NONE); m as usize];
+    let mut downward_unpack = vec![(InRangeOption::NONE, InRangeOption::NONE); m as usize];
 
     // execute customization
     report_time_with_key("CCH Customization", "basic_customization_running_time_ms", || {
         customization.customize_with_aux(&mut upward_weights, &mut downward_weights, &mut upward_unpack, &mut downward_unpack, |cb| {
             // create workspace vectors for the scope of the customization
-            UPWARD_WORKSPACE.set(&RefCell::new(vec![(INFINITY, m, m); n as usize]), || {
-                DOWNWARD_WORKSPACE.set(&RefCell::new(vec![(INFINITY, m, m); n as usize]), cb);
+            UPWARD_WORKSPACE.set(&RefCell::new(vec![(INFINITY, InRangeOption::NONE, InRangeOption::NONE); n as usize]), || {
+                DOWNWARD_WORKSPACE.set(&RefCell::new(vec![(INFINITY, InRangeOption::NONE, InRangeOption::NONE); n as usize]), cb);
             });
             // everything will be dropped here
         });
@@ -343,21 +343,28 @@ pub fn customize_perfect(mut customized: Customized<CCH, &CCH>) -> Customized<Di
         let mut forward_first_out: Vec<EdgeId>;
         let mut forward_head: Vec<NodeId>;
         let mut forward_weight: Vec<Weight>;
+        let mut forward_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>;
 
         let mut backward_first_out: Vec<EdgeId>;
         let mut backward_head: Vec<NodeId>;
         let mut backward_weight: Vec<Weight>;
+        let mut backward_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>;
+
+        let mut forward_id_mapping = vec![m as EdgeId; m];
+        let mut backward_id_mapping = vec![m as EdgeId; m];
 
         if cfg!(feature = "cch-disable-par") {
             forward_first_out = Vec::with_capacity(cch.first_out.len());
             forward_first_out.push(0);
             forward_head = Vec::with_capacity(m);
             forward_weight = Vec::with_capacity(m);
+            forward_unpacking = Vec::with_capacity(m);
 
             backward_first_out = Vec::with_capacity(cch.first_out.len());
             backward_first_out.push(0);
             backward_head = Vec::with_capacity(m);
             backward_weight = Vec::with_capacity(m);
+            backward_unpacking = Vec::with_capacity(m);
 
             eprintln!("alloc");
             timer.report_passed_ms();
@@ -365,16 +372,34 @@ pub fn customize_perfect(mut customized: Customized<CCH, &CCH>) -> Customized<Di
 
             for node in 0..n as NodeId {
                 let edge_ids = cch.neighbor_edge_indices_usize(node);
-                for (link, &customized_weight) in LinkIterable::<Link>::link_iter(&forward, node).zip(&upward_orig[edge_ids.clone()]) {
+                for (((link, &customized_weight), unpack), edge_idx) in LinkIterable::<Link>::link_iter(&forward, node)
+                    .zip(&upward_orig[edge_ids.clone()])
+                    .zip(&customized.up_unpacking[edge_ids.clone()])
+                    .zip(edge_ids.clone())
+                {
                     if link.weight < INFINITY && link.weight >= customized_weight {
+                        forward_id_mapping[edge_idx] = forward_head.len() as EdgeId;
                         forward_head.push(link.node);
                         forward_weight.push(link.weight);
+                        forward_unpacking.push((
+                            InRangeOption::new(unpack.0.value().map(|idx| backward_id_mapping[idx as usize] as EdgeId)),
+                            InRangeOption::new(unpack.1.value().map(|idx| forward_id_mapping[idx as usize] as EdgeId)),
+                        ));
                     }
                 }
-                for (link, &customized_weight) in LinkIterable::<Link>::link_iter(&backward, node).zip(&downward_orig[edge_ids.clone()]) {
+                for (((link, &customized_weight), unpack), edge_idx) in LinkIterable::<Link>::link_iter(&backward, node)
+                    .zip(&downward_orig[edge_ids.clone()])
+                    .zip(&customized.down_unpacking[edge_ids.clone()])
+                    .zip(edge_ids)
+                {
                     if link.weight < INFINITY && link.weight >= customized_weight {
+                        backward_id_mapping[edge_idx] = backward_head.len() as EdgeId;
                         backward_head.push(link.node);
                         backward_weight.push(link.weight);
+                        backward_unpacking.push((
+                            InRangeOption::new(unpack.0.value().map(|idx| backward_id_mapping[idx as usize] as EdgeId)),
+                            InRangeOption::new(unpack.1.value().map(|idx| forward_id_mapping[idx as usize] as EdgeId)),
+                        ));
                     }
                 }
                 forward_first_out.push(forward_head.len() as EdgeId);
@@ -386,10 +411,12 @@ pub fn customize_perfect(mut customized: Customized<CCH, &CCH>) -> Customized<Di
             forward_first_out = vec![0; cch.first_out.len()];
             forward_head = vec![0; m];
             forward_weight = vec![0; m];
+            forward_unpacking = vec![(InRangeOption::NONE, InRangeOption::NONE); m];
 
             backward_first_out = vec![0; cch.first_out.len()];
             backward_head = vec![0; m];
             backward_weight = vec![0; m];
+            backward_unpacking = vec![(InRangeOption::NONE, InRangeOption::NONE); m];
 
             eprintln!("alloc");
             timer.report_passed_ms();
@@ -437,17 +464,24 @@ pub fn customize_perfect(mut customized: Customized<CCH, &CCH>) -> Customized<Di
                 let mut forward_first_out = &mut forward_first_out[..];
                 let mut forward_head = &mut forward_head[..];
                 let mut forward_weight = &mut forward_weight[..];
+                let mut forward_unpacking = &mut forward_unpacking[..];
+                let mut forward_mapping = &mut forward_id_mapping[..];
                 let mut backward_first_out = &mut backward_first_out[..];
                 let mut backward_head = &mut backward_head[..];
                 let mut backward_weight = &mut backward_weight[..];
+                let mut backward_unpacking = &mut backward_unpacking[..];
+                let mut backward_mapping = &mut backward_id_mapping[..];
 
                 let forward = &forward;
                 let backward = &backward;
                 let upward_orig = &upward_orig;
                 let downward_orig = &downward_orig;
+                let up_unpacking = &customized.up_unpacking;
+                let down_unpacking = &customized.down_unpacking;
 
                 for i in 0..k {
                     let local_nodes = i * nodes_per_thread..min((i + 1) * nodes_per_thread, n);
+                    let num_cch_edges_in_batch = cch.first_out()[local_nodes.end] - cch.first_out()[local_nodes.start];
                     let num_fw_edges_before = edges_of_each_thread[i].0;
                     let num_bw_edges_before = edges_of_each_thread[i].1;
 
@@ -459,30 +493,51 @@ pub fn customize_perfect(mut customized: Customized<CCH, &CCH>) -> Customized<Di
                     forward_head = rest_fw_head;
                     let (local_fw_weight, rest_fw_weight) = forward_weight.split_at_mut(edges_of_each_thread[i + 1].0 - num_fw_edges_before);
                     forward_weight = rest_fw_weight;
+                    let (local_fw_unpacking, rest_fw_unpacking) = forward_unpacking.split_at_mut(edges_of_each_thread[i + 1].0 - num_fw_edges_before);
+                    forward_unpacking = rest_fw_unpacking;
+                    let (local_fw_mapping, rest_fw_mapping) = forward_mapping.split_at_mut(num_cch_edges_in_batch as usize);
+                    forward_mapping = rest_fw_mapping;
                     let (local_bw_head, rest_bw_head) = backward_head.split_at_mut(edges_of_each_thread[i + 1].1 - num_bw_edges_before);
                     backward_head = rest_bw_head;
                     let (local_bw_weight, rest_bw_weight) = backward_weight.split_at_mut(edges_of_each_thread[i + 1].1 - num_bw_edges_before);
                     backward_weight = rest_bw_weight;
+                    let (local_bw_unpacking, rest_bw_unpacking) = backward_unpacking.split_at_mut(edges_of_each_thread[i + 1].1 - num_bw_edges_before);
+                    backward_unpacking = rest_bw_unpacking;
+                    let (local_bw_mapping, rest_bw_mapping) = backward_mapping.split_at_mut(num_cch_edges_in_batch as usize);
+                    backward_mapping = rest_bw_mapping;
 
                     s.spawn(move |_| {
                         let mut fw_edge_count = 0;
                         let mut bw_edge_count = 0;
+                        let edge_offset = cch.first_out()[local_nodes.start] as usize;
                         for (local_node_idx, node) in local_nodes.enumerate() {
                             local_fw_fo[local_node_idx] = (num_fw_edges_before + fw_edge_count) as EdgeId;
                             local_bw_fo[local_node_idx] = (num_bw_edges_before + bw_edge_count) as EdgeId;
 
                             let edge_ids = cch.neighbor_edge_indices_usize(node as NodeId);
-                            for (link, &customized_weight) in LinkIterable::<Link>::link_iter(forward, node as NodeId).zip(&upward_orig[edge_ids.clone()]) {
+                            for (((link, &customized_weight), unpack), edge_idx) in LinkIterable::<Link>::link_iter(forward, node as NodeId)
+                                .zip(&upward_orig[edge_ids.clone()])
+                                .zip(&up_unpacking[edge_ids.clone()])
+                                .zip(edge_ids.clone())
+                            {
                                 if link.weight < INFINITY && link.weight >= customized_weight {
                                     local_fw_head[fw_edge_count] = link.node;
                                     local_fw_weight[fw_edge_count] = link.weight;
+                                    local_fw_unpacking[fw_edge_count] = *unpack;
+                                    local_fw_mapping[edge_idx - edge_offset] = (num_fw_edges_before + fw_edge_count) as EdgeId;
                                     fw_edge_count += 1;
                                 }
                             }
-                            for (link, &customized_weight) in LinkIterable::<Link>::link_iter(backward, node as NodeId).zip(&downward_orig[edge_ids.clone()]) {
+                            for (((link, &customized_weight), unpack), edge_idx) in LinkIterable::<Link>::link_iter(backward, node as NodeId)
+                                .zip(&downward_orig[edge_ids.clone()])
+                                .zip(&down_unpacking[edge_ids.clone()])
+                                .zip(edge_ids)
+                            {
                                 if link.weight < INFINITY && link.weight >= customized_weight {
                                     local_bw_head[bw_edge_count] = link.node;
                                     local_bw_weight[bw_edge_count] = link.weight;
+                                    local_bw_unpacking[bw_edge_count] = *unpack;
+                                    local_bw_mapping[edge_idx - edge_offset] = (num_bw_edges_before + bw_edge_count) as EdgeId;
                                     bw_edge_count += 1;
                                 }
                             }
@@ -495,8 +550,19 @@ pub fn customize_perfect(mut customized: Customized<CCH, &CCH>) -> Customized<Di
             backward_head.truncate(edges_of_each_thread[k].1);
             forward_weight.truncate(edges_of_each_thread[k].0);
             backward_weight.truncate(edges_of_each_thread[k].1);
+            forward_unpacking.truncate(edges_of_each_thread[k].0);
+            backward_unpacking.truncate(edges_of_each_thread[k].1);
             forward_first_out[n] = forward_head.len() as EdgeId;
             backward_first_out[n] = backward_head.len() as EdgeId;
+
+            forward_unpacking.par_iter_mut().for_each(|(down, up)| {
+                *down = InRangeOption::new(down.value().map(|idx| backward_id_mapping[idx as usize] as EdgeId));
+                *up = InRangeOption::new(up.value().map(|idx| forward_id_mapping[idx as usize] as EdgeId));
+            });
+            backward_unpacking.par_iter_mut().for_each(|(down, up)| {
+                *down = InRangeOption::new(down.value().map(|idx| backward_id_mapping[idx as usize] as EdgeId));
+                *up = InRangeOption::new(up.value().map(|idx| forward_id_mapping[idx as usize] as EdgeId));
+            });
         }
 
         eprintln!("forward");
@@ -524,9 +590,8 @@ pub fn customize_perfect(mut customized: Customized<CCH, &CCH>) -> Customized<Di
             },
             forward_weight,
             backward_weight,
-            // TODO
-            Vec::new(),
-            Vec::new(),
+            forward_unpacking,
+            backward_unpacking,
         )
     })
 }
@@ -555,8 +620,8 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
                      downward_offset: usize,
                      upward_weights: &mut [Weight],
                      downward_weights: &mut [Weight],
-                     upward_unpack: &mut [(EdgeId, EdgeId)],
-                     downward_unpack: &mut [(EdgeId, EdgeId)]| {
+                     upward_unpack: &mut [(InRangeOption<EdgeId>, InRangeOption<EdgeId>)],
+                     downward_unpack: &mut [(InRangeOption<EdgeId>, InRangeOption<EdgeId>)]| {
         UPWARD_WORKSPACE.with(|node_outgoing_weights| {
             let mut node_outgoing_weights = node_outgoing_weights.borrow_mut();
 
@@ -574,10 +639,10 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
                     backward_edges.end -= downward_offset;
                     // for all upward neighbors: store weight of edge in workspace at index `head`
                     for (&node, &up_weight) in cch.forward()[current_node as usize].iter().zip(&upward_weights[forward_edges.clone()]) {
-                        node_outgoing_weights[node as usize] = (up_weight, m_down, m_up);
+                        node_outgoing_weights[node as usize] = (up_weight, InRangeOption::NONE, InRangeOption::NONE);
                     }
                     for (&node, &down_weight) in cch.backward()[current_node as usize].iter().zip(&downward_weights[backward_edges.clone()]) {
-                        node_incoming_weights[node as usize] = (down_weight, m_down, m_up);
+                        node_incoming_weights[node as usize] = (down_weight, InRangeOption::NONE, InRangeOption::NONE);
                     }
 
                     // for all downward edges of the current node
@@ -612,7 +677,7 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
                             let relax = unsafe { node_outgoing_weights.get_unchecked_mut(node as usize) };
                             let triang_weight = upward_weight + first_down_weight;
                             if triang_weight < relax.0 {
-                                *relax = (triang_weight, first_edge_id, second_edge_id as EdgeId)
+                                *relax = (triang_weight, InRangeOption::some(first_edge_id), InRangeOption::some(second_edge_id as EdgeId))
                             }
                         }
                     }
@@ -649,7 +714,7 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
                             let relax = unsafe { node_incoming_weights.get_unchecked_mut(node as usize) };
                             let triang_weight = downward_weight + first_up_weight;
                             if triang_weight < relax.0 {
-                                *relax = (triang_weight, second_edge_id as EdgeId, first_edge_id)
+                                *relax = (triang_weight, InRangeOption::some(second_edge_id as EdgeId), InRangeOption::some(first_edge_id))
                             }
                         }
                     }
@@ -681,15 +746,15 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
     // setup customization for parallization
     let customization = SeperatorBasedParallelCustomization::new_with_aux(cch, customize, customize);
 
-    let mut upward_unpack = vec![(m_down, m_up); m_up as usize];
-    let mut downward_unpack = vec![(m_down, m_up); m_down as usize];
+    let mut upward_unpack = vec![(InRangeOption::NONE, InRangeOption::NONE); m_up as usize];
+    let mut downward_unpack = vec![(InRangeOption::NONE, InRangeOption::NONE); m_down as usize];
 
     // execute customization
     report_time_with_key("CCH Customization", "basic_customization_running_time_ms", || {
         customization.customize_with_aux(&mut upward_weights, &mut downward_weights, &mut upward_unpack, &mut downward_unpack, |cb| {
             // create workspace vectors for the scope of the customization
-            UPWARD_WORKSPACE.set(&RefCell::new(vec![(INFINITY, m_down, m_up); n as usize]), || {
-                DOWNWARD_WORKSPACE.set(&RefCell::new(vec![(INFINITY, m_down, m_up); n as usize]), cb);
+            UPWARD_WORKSPACE.set(&RefCell::new(vec![(INFINITY, InRangeOption::NONE, InRangeOption::NONE); n as usize]), || {
+                DOWNWARD_WORKSPACE.set(&RefCell::new(vec![(INFINITY, InRangeOption::NONE, InRangeOption::NONE); n as usize]), cb);
             });
             // everything will be dropped here
         });

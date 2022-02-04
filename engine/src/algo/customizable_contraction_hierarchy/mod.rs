@@ -342,13 +342,19 @@ pub struct Customized<CCH, CCHRef> {
     cch: CCHRef,
     upward: Vec<Weight>,
     downward: Vec<Weight>,
-    up_unpacking: Vec<(EdgeId, EdgeId)>,
-    down_unpacking: Vec<(EdgeId, EdgeId)>,
+    up_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,
+    down_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,
     _phantom: std::marker::PhantomData<CCH>,
 }
 
 impl<C: CCHT, CCHRef: std::borrow::Borrow<C>> Customized<C, CCHRef> {
-    fn new(cch: CCHRef, upward: Vec<Weight>, downward: Vec<Weight>, up_unpacking: Vec<(EdgeId, EdgeId)>, down_unpacking: Vec<(EdgeId, EdgeId)>) -> Self {
+    fn new(
+        cch: CCHRef,
+        upward: Vec<Weight>,
+        downward: Vec<Weight>,
+        up_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,
+        down_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,
+    ) -> Self {
         Customized {
             cch,
             upward,
