@@ -150,22 +150,8 @@ impl CCH {
     }
 
     #[inline]
-    fn edge_indices_range(&self, nodes: Range<NodeId>) -> Range<EdgeId> {
-        (self.first_out[nodes.start as usize] as EdgeId)..(self.first_out[nodes.end as usize] as EdgeId)
-    }
-
-    #[inline]
     fn neighbor_edge_indices_usize(&self, node: NodeId) -> Range<usize> {
         let range = self.neighbor_edge_indices(node);
-        Range {
-            start: range.start as usize,
-            end: range.end as usize,
-        }
-    }
-
-    #[inline]
-    fn edge_indices_range_usize(&self, nodes: Range<NodeId>) -> Range<usize> {
-        let range = self.edge_indices_range(nodes);
         Range {
             start: range.start as usize,
             end: range.end as usize,

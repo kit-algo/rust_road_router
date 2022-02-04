@@ -10,11 +10,10 @@ pub struct SeperatorBasedParallelCustomization<'a, T, F, G, C> {
     customize_cell: F,
     customize_separator: G,
     _t: std::marker::PhantomData<T>,
-    reverse: bool,
 }
 
-pub fn new_undirected_parallelization<'a, T: Send + Sync>(
-    cch: &'a CCH,
+pub fn new_undirected_parallelization<T: Send + Sync>(
+    cch: &CCH,
     customize_cell: impl Sync + Fn(Range<usize>, usize, &mut [T], &mut [T]),
     customize_separator: impl Sync + Fn(Range<usize>, usize, &mut [T], &mut [T]),
 ) -> SeperatorBasedParallelCustomization<
@@ -49,14 +48,6 @@ where
     /// The cell routine will be invoked several times in parallel and nodes will mostly have low degrees.
     /// The separator routine will be invoked only very few times in parallel, the final separator will be customized completely alone and nodes have high degrees.
     pub fn new(cch: &'a C, customize_cell: F, customize_separator: G) -> Self {
-        Self::new_internal(cch, customize_cell, customize_separator, false)
-    }
-
-    pub fn new_reverse(cch: &'a C, customize_cell: F, customize_separator: G) -> Self {
-        Self::new_internal(cch, customize_cell, customize_separator, true)
-    }
-
-    fn new_internal(cch: &'a C, customize_cell: F, customize_separator: G, reverse: bool) -> Self {
         let separators = cch.separators();
         if !cfg!(feature = "cch-disable-par") {
             separators.validate_for_parallelization();
@@ -68,7 +59,6 @@ where
             customize_cell,
             customize_separator,
             _t: std::marker::PhantomData::<T>,
-            reverse,
         }
     }
 
@@ -104,17 +94,6 @@ where
             // if the current cell is small enough (load balancing parameters) run the customize_cell routine on it
             (self.customize_cell)(offset..offset + sep_tree.num_nodes, forward_edge_offset, backward_edge_offset, upward, downward);
         } else {
-            if self.reverse {
-                let sep_begin = offset + sep_tree.children.iter().map(|sub| sub.num_nodes).sum::<usize>();
-                (self.customize_separator)(
-                    sep_begin..offset + sep_tree.num_nodes,
-                    forward_edge_offset,
-                    backward_edge_offset,
-                    upward,
-                    downward,
-                );
-            }
-
             // if not, split at the separator, process all subcells independently in parallel and the separator afterwards
             let mut sub_offset = offset;
             let mut sub_forward_edge_offset = forward_edge_offset;
@@ -144,16 +123,14 @@ where
                 }
             });
 
-            if !self.reverse {
-                // once all subcells are processed, process the separator itself
-                (self.customize_separator)(
-                    sub_offset..offset + sep_tree.num_nodes,
-                    forward_edge_offset,
-                    backward_edge_offset,
-                    upward,
-                    downward,
-                )
-            }
+            // once all subcells are processed, process the separator itself
+            (self.customize_separator)(
+                sub_offset..offset + sep_tree.num_nodes,
+                forward_edge_offset,
+                backward_edge_offset,
+                upward,
+                downward,
+            )
         }
     }
 }
