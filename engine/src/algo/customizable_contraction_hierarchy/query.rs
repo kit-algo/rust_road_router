@@ -4,7 +4,6 @@ use super::*;
 pub mod stepped_elimination_tree;
 use stepped_elimination_tree::EliminationTreeWalk;
 
-#[derive(Debug)]
 pub struct Server<CCH, CCHB> {
     customized: Customized<CCH, CCHB>,
     fw_distances: Vec<Weight>,

@@ -33,22 +33,6 @@ impl<F: Sync + Fn(Range<usize>, usize, &mut [T], &mut [T]), T, E> SubgraphCustom
     }
 }
 
-pub struct DirectedNoAux<F>(F);
-impl<F: Sync + Fn(Range<usize>, usize, usize, &mut [T], &mut [T]), T, E> SubgraphCustomization<T, E> for DirectedNoAux<F> {
-    fn exec(
-        &self,
-        nodes: Range<usize>,
-        edge_offset_up: usize,
-        edge_offset_down: usize,
-        edges_up: &mut [T],
-        edges_down: &mut [T],
-        _aux_up: &mut [E],
-        _aux_down: &mut [E],
-    ) {
-        (self.0)(nodes, edge_offset_up, edge_offset_down, edges_up, edges_down)
-    }
-}
-
 impl<F: Sync + Fn(Range<usize>, usize, usize, &mut [T], &mut [T], &mut [E], &mut [E]), T, E> SubgraphCustomization<T, E> for F {
     fn exec(
         &self,
@@ -82,23 +66,6 @@ where
 {
     pub fn new_undirected(cch: &'a CCH, customize_cell: F, customize_separator: G) -> Self {
         Self::new_with_aux(cch, UndirectedNoAux(customize_cell), UndirectedNoAux(customize_separator))
-    }
-}
-
-impl<'a, T, F, G, C> SeperatorBasedParallelCustomization<'a, T, DirectedNoAux<F>, DirectedNoAux<G>, C>
-where
-    T: Send + Sync,
-    F: Sync + Fn(Range<usize>, usize, usize, &mut [T], &mut [T]),
-    G: Sync + Fn(Range<usize>, usize, usize, &mut [T], &mut [T]),
-    C: CCHT + Sync,
-{
-    /// Setup for parallelization, we need a cch, and a routine for customization of cells
-    /// and one for customization of separators.
-    /// These should do the same thing in the end, but may achieve it in different ways because there are different performance trade-offs.
-    /// The cell routine will be invoked several times in parallel and nodes will mostly have low degrees.
-    /// The separator routine will be invoked only very few times in parallel, the final separator will be customized completely alone and nodes have high degrees.
-    pub fn new(cch: &'a C, customize_cell: F, customize_separator: G) -> Self {
-        Self::new_with_aux(cch, DirectedNoAux(customize_cell), DirectedNoAux(customize_separator))
     }
 }
 

@@ -7,8 +7,8 @@ use parallelization::*;
 pub mod ftd;
 
 // One mapping of node id to weight for each thread during the scope of the customization.
-scoped_thread_local!(static UPWARD_WORKSPACE: RefCell<Vec<Weight>>);
-scoped_thread_local!(static DOWNWARD_WORKSPACE: RefCell<Vec<Weight>>);
+scoped_thread_local!(static UPWARD_WORKSPACE: RefCell<Vec<(Weight, EdgeId, EdgeId)>>);
+scoped_thread_local!(static DOWNWARD_WORKSPACE: RefCell<Vec<(Weight, EdgeId, EdgeId)>>);
 scoped_thread_local!(static PERFECT_WORKSPACE: RefCell<Vec<InRangeOption<EdgeId>>>);
 
 /// Execute second phase, that is metric dependent preprocessing.
@@ -131,6 +131,7 @@ fn prepare_zero_weights(cch: &CCH, upward_weights: &mut [Weight], downward_weigh
 
 fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weights: Vec<Weight>) -> Customized<CCH, &CCH> {
     let n = cch.num_nodes() as NodeId;
+    let m = cch.num_arcs() as EdgeId;
 
     // Main customization routine.
     // Executed by one thread for a consecutive range of nodes.
@@ -146,7 +147,13 @@ fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weig
     // of the edges we customize.
     // So i.e. if nodes are the nodes of a separator, than the weights have also to contain the edges of the components the separator split.
     // The offset parameter gives the edge id offset of the weight slices.
-    let customize = |nodes: Range<usize>, offset: usize, upward_weights: &mut [Weight], downward_weights: &mut [Weight]| {
+    let customize = |nodes: Range<usize>,
+                     offset: usize,
+                     _offset_down: usize,
+                     upward_weights: &mut [Weight],
+                     downward_weights: &mut [Weight],
+                     upward_unpack: &mut [(EdgeId, EdgeId)],
+                     downward_unpack: &mut [(EdgeId, EdgeId)]| {
         UPWARD_WORKSPACE.with(|node_outgoing_weights| {
             let mut node_outgoing_weights = node_outgoing_weights.borrow_mut();
 
@@ -165,8 +172,8 @@ fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weig
                         .zip(&downward_weights[edges.clone()])
                         .zip(&upward_weights[edges.clone()])
                     {
-                        node_incoming_weights[node as usize] = down_weight;
-                        node_outgoing_weights[node as usize] = up_weight;
+                        node_incoming_weights[node as usize] = (down_weight, m, m);
+                        node_outgoing_weights[node as usize] = (up_weight, m, m);
                     }
 
                     // for all downward edges of the current node
@@ -177,11 +184,12 @@ fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weig
                         low_up_edges.start -= offset;
                         low_up_edges.end -= offset;
                         // for all upward edges of the lower node
-                        for ((node, upward_weight), downward_weight) in cch
+                        for (((node, upward_weight), downward_weight), second_edge_id) in cch
                             .neighbor_iter(low_node)
                             .rev() // reversed order, (from high to low), so we can terminate earlier
                             .zip(upward_weights[low_up_edges.clone()].iter().rev())
-                            .zip(downward_weights[low_up_edges].iter().rev())
+                            .zip(downward_weights[low_up_edges.clone()].iter().rev())
+                            .zip(low_up_edges.rev())
                         {
                             // since we go from high to low, once the ids are smaller than current node,
                             // we won't encounter any more lower triangles we need
@@ -200,21 +208,32 @@ fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weig
                             // the unsafes are safe, because the `head` nodes in the cch are all < n
                             // we might want to add an explicit validation for this
                             let relax = unsafe { node_outgoing_weights.get_unchecked_mut(node as usize) };
-                            *relax = min(*relax, upward_weight + first_down_weight);
+                            let triang_weight = upward_weight + first_down_weight;
+                            if triang_weight < relax.0 {
+                                *relax = (triang_weight, first_edge_id, second_edge_id as EdgeId)
+                            }
                             let relax = unsafe { node_incoming_weights.get_unchecked_mut(node as usize) };
-                            *relax = min(*relax, downward_weight + first_up_weight);
+                            let triang_weight = downward_weight + first_up_weight;
+                            if triang_weight < relax.0 {
+                                *relax = (triang_weight, second_edge_id as EdgeId, first_edge_id)
+                            }
                         }
                     }
 
                     // for all upward neighbors: copy weights from the mapping back to the edge
-                    for (((node, downward_weight), upward_weight), _edge_id) in cch
+                    for ((((node, downward_weight), upward_weight), downward_unpack), upward_unpack) in cch
                         .neighbor_iter(current_node)
                         .zip(&mut downward_weights[edges.clone()])
                         .zip(&mut upward_weights[edges.clone()])
-                        .zip(edges)
+                        .zip(&mut downward_unpack[edges.clone()])
+                        .zip(&mut upward_unpack[edges])
                     {
-                        *downward_weight = node_incoming_weights[node as usize];
-                        *upward_weight = node_outgoing_weights[node as usize];
+                        *downward_weight = node_incoming_weights[node as usize].0;
+                        *upward_weight = node_outgoing_weights[node as usize].0;
+                        downward_unpack.0 = node_incoming_weights[node as usize].1;
+                        downward_unpack.1 = node_incoming_weights[node as usize].2;
+                        upward_unpack.0 = node_outgoing_weights[node as usize].1;
+                        upward_unpack.1 = node_outgoing_weights[node as usize].2;
                     }
                 }
             });
@@ -222,20 +241,23 @@ fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weig
     };
 
     // setup customization for parallization
-    let customization = SeperatorBasedParallelCustomization::new_undirected(cch, customize, customize);
+    let customization = SeperatorBasedParallelCustomization::new_with_aux(cch, customize, customize);
+
+    let mut upward_unpack = vec![(m, m); m as usize];
+    let mut downward_unpack = vec![(m, m); m as usize];
 
     // execute customization
     report_time_with_key("CCH Customization", "basic_customization_running_time_ms", || {
-        customization.customize(&mut upward_weights, &mut downward_weights, |cb| {
+        customization.customize_with_aux(&mut upward_weights, &mut downward_weights, &mut upward_unpack, &mut downward_unpack, |cb| {
             // create workspace vectors for the scope of the customization
-            UPWARD_WORKSPACE.set(&RefCell::new(vec![INFINITY; n as usize]), || {
-                DOWNWARD_WORKSPACE.set(&RefCell::new(vec![INFINITY; n as usize]), cb);
+            UPWARD_WORKSPACE.set(&RefCell::new(vec![(INFINITY, m, m); n as usize]), || {
+                DOWNWARD_WORKSPACE.set(&RefCell::new(vec![(INFINITY, m, m); n as usize]), cb);
             });
             // everything will be dropped here
         });
     });
 
-    Customized::new(cch, upward_weights, downward_weights)
+    Customized::new(cch, upward_weights, downward_weights, upward_unpack, downward_unpack)
 }
 
 pub fn customize_perfect(mut customized: Customized<CCH, &CCH>) -> Customized<DirectedCCH, DirectedCCH> {
@@ -502,12 +524,17 @@ pub fn customize_perfect(mut customized: Customized<CCH, &CCH>) -> Customized<Di
             },
             forward_weight,
             backward_weight,
+            // TODO
+            Vec::new(),
+            Vec::new(),
         )
     })
 }
 
 fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, mut downward_weights: Vec<Weight>) -> Customized<DirectedCCH, &DirectedCCH> {
     let n = cch.num_nodes() as NodeId;
+    let m_up = cch.forward_head().len() as EdgeId;
+    let m_down = cch.backward_head().len() as EdgeId;
 
     // Main customization routine.
     // Executed by one thread for a consecutive range of nodes.
@@ -523,7 +550,13 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
     // of the edges we customize.
     // So i.e. if nodes are the nodes of a separator, than the weights have also to contain the edges of the components the separator split.
     // The offset parameter gives the edge id offset of the weight slices.
-    let customize = |nodes: Range<usize>, upward_offset: usize, downward_offset: usize, upward_weights: &mut [Weight], downward_weights: &mut [Weight]| {
+    let customize = |nodes: Range<usize>,
+                     upward_offset: usize,
+                     downward_offset: usize,
+                     upward_weights: &mut [Weight],
+                     downward_weights: &mut [Weight],
+                     upward_unpack: &mut [(EdgeId, EdgeId)],
+                     downward_unpack: &mut [(EdgeId, EdgeId)]| {
         UPWARD_WORKSPACE.with(|node_outgoing_weights| {
             let mut node_outgoing_weights = node_outgoing_weights.borrow_mut();
 
@@ -541,10 +574,10 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
                     backward_edges.end -= downward_offset;
                     // for all upward neighbors: store weight of edge in workspace at index `head`
                     for (&node, &up_weight) in cch.forward()[current_node as usize].iter().zip(&upward_weights[forward_edges.clone()]) {
-                        node_outgoing_weights[node as usize] = up_weight;
+                        node_outgoing_weights[node as usize] = (up_weight, m_down, m_up);
                     }
                     for (&node, &down_weight) in cch.backward()[current_node as usize].iter().zip(&downward_weights[backward_edges.clone()]) {
-                        node_incoming_weights[node as usize] = down_weight;
+                        node_incoming_weights[node as usize] = (down_weight, m_down, m_up);
                     }
 
                     // for all downward edges of the current node
@@ -554,10 +587,11 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
                         low_up_edges.start -= upward_offset;
                         low_up_edges.end -= upward_offset;
                         // for all upward edges of the lower node
-                        for (&node, upward_weight) in cch.forward()[low_node as usize]
+                        for ((&node, upward_weight), second_edge_id) in cch.forward()[low_node as usize]
                             .iter()
                             .rev() // reversed order, (from high to low), so we can terminate earlier
-                            .zip(upward_weights[low_up_edges].iter().rev())
+                            .zip(upward_weights[low_up_edges.clone()].iter().rev())
+                            .zip(low_up_edges.rev())
                         {
                             // since we go from high to low, once the ids are smaller than current node,
                             // we won't encounter any more lower triangles we need
@@ -576,7 +610,10 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
                             // the unsafes are safe, because the `head` nodes in the cch are all < n
                             // we might want to add an explicit validation for this
                             let relax = unsafe { node_outgoing_weights.get_unchecked_mut(node as usize) };
-                            *relax = min(*relax, upward_weight + first_down_weight);
+                            let triang_weight = upward_weight + first_down_weight;
+                            if triang_weight < relax.0 {
+                                *relax = (triang_weight, first_edge_id, second_edge_id as EdgeId)
+                            }
                         }
                     }
 
@@ -587,10 +624,11 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
                         low_up_edges.start -= downward_offset;
                         low_up_edges.end -= downward_offset;
                         // for all upward edges of the lower node
-                        for (&node, downward_weight) in cch.backward()[low_node as usize]
+                        for ((&node, downward_weight), second_edge_id) in cch.backward()[low_node as usize]
                             .iter()
                             .rev() // reversed order, (from high to low), so we can terminate earlier
-                            .zip(downward_weights[low_up_edges].iter().rev())
+                            .zip(downward_weights[low_up_edges.clone()].iter().rev())
+                            .zip(low_up_edges.rev())
                         {
                             // since we go from high to low, once the ids are smaller than current node,
                             // we won't encounter any more lower triangles we need
@@ -609,16 +647,31 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
                             // the unsafes are safe, because the `head` nodes in the cch are all < n
                             // we might want to add an explicit validation for this
                             let relax = unsafe { node_incoming_weights.get_unchecked_mut(node as usize) };
-                            *relax = min(*relax, downward_weight + first_up_weight);
+                            let triang_weight = downward_weight + first_up_weight;
+                            if triang_weight < relax.0 {
+                                *relax = (triang_weight, second_edge_id as EdgeId, first_edge_id)
+                            }
                         }
                     }
 
                     // for all upward neighbors: copy weights from the mapping back to the edge
-                    for (&node, up_weight) in cch.forward()[current_node as usize].iter().zip(&mut upward_weights[forward_edges]) {
-                        *up_weight = node_outgoing_weights[node as usize];
+                    for ((&node, up_weight), upward_unpack) in cch.forward()[current_node as usize]
+                        .iter()
+                        .zip(&mut upward_weights[forward_edges.clone()])
+                        .zip(&mut upward_unpack[forward_edges])
+                    {
+                        *up_weight = node_outgoing_weights[node as usize].0;
+                        upward_unpack.0 = node_outgoing_weights[node as usize].1;
+                        upward_unpack.1 = node_outgoing_weights[node as usize].2;
                     }
-                    for (&node, down_weight) in cch.backward()[current_node as usize].iter().zip(&mut downward_weights[backward_edges]) {
-                        *down_weight = node_incoming_weights[node as usize];
+                    for ((&node, down_weight), downward_unpack) in cch.backward()[current_node as usize]
+                        .iter()
+                        .zip(&mut downward_weights[backward_edges.clone()])
+                        .zip(&mut downward_unpack[backward_edges])
+                    {
+                        *down_weight = node_incoming_weights[node as usize].0;
+                        downward_unpack.0 = node_incoming_weights[node as usize].1;
+                        downward_unpack.1 = node_incoming_weights[node as usize].2;
                     }
                 }
             });
@@ -626,18 +679,21 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
     };
 
     // setup customization for parallization
-    let customization = SeperatorBasedParallelCustomization::new(cch, customize, customize);
+    let customization = SeperatorBasedParallelCustomization::new_with_aux(cch, customize, customize);
+
+    let mut upward_unpack = vec![(m_down, m_up); m_up as usize];
+    let mut downward_unpack = vec![(m_down, m_up); m_down as usize];
 
     // execute customization
     report_time_with_key("CCH Customization", "basic_customization_running_time_ms", || {
-        customization.customize(&mut upward_weights, &mut downward_weights, |cb| {
+        customization.customize_with_aux(&mut upward_weights, &mut downward_weights, &mut upward_unpack, &mut downward_unpack, |cb| {
             // create workspace vectors for the scope of the customization
-            UPWARD_WORKSPACE.set(&RefCell::new(vec![INFINITY; n as usize]), || {
-                DOWNWARD_WORKSPACE.set(&RefCell::new(vec![INFINITY; n as usize]), || cb());
+            UPWARD_WORKSPACE.set(&RefCell::new(vec![(INFINITY, m_down, m_up); n as usize]), || {
+                DOWNWARD_WORKSPACE.set(&RefCell::new(vec![(INFINITY, m_down, m_up); n as usize]), cb);
             });
             // everything will be dropped here
         });
     });
 
-    Customized::new(cch, upward_weights, downward_weights)
+    Customized::new(cch, upward_weights, downward_weights, upward_unpack, downward_unpack)
 }
