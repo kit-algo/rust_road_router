@@ -197,7 +197,7 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
     };
 
     // parallelize precusotmization
-    let static_customization = new_undirected_parallelization(cch, customize, customize);
+    let static_customization = SeperatorBasedParallelCustomization::new_undirected(cch, customize, customize);
     let static_perfect_customization = SeperatorBasedPerfectParallelCustomization::new(cch, customize_perfect, customize_perfect);
 
     // routine to disable shortcuts for which the perfect precustomization determined them to be irrelevant
@@ -246,7 +246,7 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
         let (events_tx, events_rx) = channel();
 
         // use separator based parallelization
-        let customization = new_undirected_parallelization(
+        let customization = SeperatorBasedParallelCustomization::new_undirected(
             cch,
             // routines created in this function
             // we customize many cells in parallel - so iterate over triangles sequentially
