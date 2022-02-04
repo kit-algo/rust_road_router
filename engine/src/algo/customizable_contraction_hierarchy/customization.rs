@@ -222,7 +222,7 @@ fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weig
     };
 
     // setup customization for parallization
-    let customization = SeperatorBasedParallelCustomization::new(cch, customize, customize);
+    let customization = new_undirected_parallelization(cch, customize, customize);
 
     // execute customization
     report_time_with_key("CCH Customization", "basic_customization_running_time_ms", || {
@@ -626,7 +626,7 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
     };
 
     // setup customization for parallization
-    let customization = SeperatorBasedParallelDirectedCustomization::new(cch, customize, customize);
+    let customization = SeperatorBasedParallelCustomization::new(cch, customize, customize);
 
     // execute customization
     report_time_with_key("CCH Customization", "basic_customization_running_time_ms", || {

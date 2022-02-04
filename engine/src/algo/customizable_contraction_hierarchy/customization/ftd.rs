@@ -197,7 +197,7 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
     };
 
     // parallelize precusotmization
-    let static_customization = SeperatorBasedParallelCustomization::new(cch, customize, customize);
+    let static_customization = new_undirected_parallelization(cch, customize, customize);
     let static_perfect_customization = SeperatorBasedPerfectParallelCustomization::new(cch, customize_perfect, customize_perfect);
 
     // routine to disable shortcuts for which the perfect precustomization determined them to be irrelevant
@@ -246,7 +246,7 @@ pub fn customize_internal<'a, 'b: 'a>(cch: &'a CCH, metric: &'b TDGraph) -> (Vec
         let (events_tx, events_rx) = channel();
 
         // use separator based parallelization
-        let customization = SeperatorBasedParallelCustomization::new(
+        let customization = new_undirected_parallelization(
             cch,
             // routines created in this function
             // we customize many cells in parallel - so iterate over triangles sequentially
@@ -773,7 +773,7 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
         });
     };
 
-    let static_customization = SeperatorBasedParallelCustomization::new(cch, customize, customize);
+    let static_customization = new_undirected_parallelization(cch, customize, customize);
 
     let customize_perfect = |nodes: Range<usize>, upward: *mut PreLiveShortcut, downward: *mut PreLiveShortcut| {
         PERFECT_WORKSPACE.with(|node_edge_ids| {
@@ -884,49 +884,51 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
 
     let static_perfect_customization = SeperatorBasedPerfectParallelCustomization::new(cch, customize_perfect, customize_perfect);
 
-    let mark_for_unpacking = |nodes: Range<usize>, offset: usize, upward_weights: &mut [PreLiveShortcut], downward_weights: &mut [PreLiveShortcut]| {
-        use floating_time_dependent::shortcut_source::ShortcutSource;
-        let edges = cch.edge_indices_range_usize(nodes.start as NodeId..nodes.end as NodeId);
-        for edge_idx in edges.rev() {
-            if let Some(unpack) = upward_weights[edge_idx - offset].unpack {
-                let start = upward_weights[edge_idx - offset].live_until.unwrap_or(t_live);
-                if start.fuzzy_lt(unpack) {
-                    for (_, source) in upward_pred[edge_idx].sources_for(start, unpack) {
-                        if let ShortcutSource::Shortcut(down, up) = source.into() {
-                            let down = down as usize - offset;
-                            let up = up as usize - offset;
-                            downward_weights[down].unpack = max(downward_weights[down].unpack, upward_weights[edge_idx - offset].unpack);
-                            upward_weights[up].unpack = max(
-                                upward_weights[up].unpack,
-                                upward_weights[edge_idx - offset]
-                                    .unpack
-                                    .map(|unpack| unpack + downward_weights[down].upper_bound),
-                            );
+    let mark_for_unpacking =
+        |nodes: Range<usize>, offset: usize, _down_offset: usize, upward_weights: &mut [PreLiveShortcut], downward_weights: &mut [PreLiveShortcut]| {
+            debug_assert_eq!(offset, _down_offset);
+            use floating_time_dependent::shortcut_source::ShortcutSource;
+            let edges = cch.edge_indices_range_usize(nodes.start as NodeId..nodes.end as NodeId);
+            for edge_idx in edges.rev() {
+                if let Some(unpack) = upward_weights[edge_idx - offset].unpack {
+                    let start = upward_weights[edge_idx - offset].live_until.unwrap_or(t_live);
+                    if start.fuzzy_lt(unpack) {
+                        for (_, source) in upward_pred[edge_idx].sources_for(start, unpack) {
+                            if let ShortcutSource::Shortcut(down, up) = source.into() {
+                                let down = down as usize - offset;
+                                let up = up as usize - offset;
+                                downward_weights[down].unpack = max(downward_weights[down].unpack, upward_weights[edge_idx - offset].unpack);
+                                upward_weights[up].unpack = max(
+                                    upward_weights[up].unpack,
+                                    upward_weights[edge_idx - offset]
+                                        .unpack
+                                        .map(|unpack| unpack + downward_weights[down].upper_bound),
+                                );
+                            }
                         }
                     }
                 }
-            }
 
-            if let Some(unpack) = downward_weights[edge_idx - offset].unpack {
-                let start = downward_weights[edge_idx - offset].live_until.unwrap_or(t_live);
-                if start.fuzzy_lt(unpack) {
-                    for (_, source) in downward_pred[edge_idx].sources_for(start, unpack) {
-                        if let ShortcutSource::Shortcut(down, up) = source.into() {
-                            let down = down as usize - offset;
-                            let up = up as usize - offset;
-                            downward_weights[down].unpack = max(downward_weights[down].unpack, downward_weights[edge_idx - offset].unpack);
-                            upward_weights[up].unpack = max(
-                                upward_weights[up].unpack,
-                                downward_weights[edge_idx - offset]
-                                    .unpack
-                                    .map(|unpack| unpack + downward_weights[down].upper_bound),
-                            );
+                if let Some(unpack) = downward_weights[edge_idx - offset].unpack {
+                    let start = downward_weights[edge_idx - offset].live_until.unwrap_or(t_live);
+                    if start.fuzzy_lt(unpack) {
+                        for (_, source) in downward_pred[edge_idx].sources_for(start, unpack) {
+                            if let ShortcutSource::Shortcut(down, up) = source.into() {
+                                let down = down as usize - offset;
+                                let up = up as usize - offset;
+                                downward_weights[down].unpack = max(downward_weights[down].unpack, downward_weights[edge_idx - offset].unpack);
+                                upward_weights[up].unpack = max(
+                                    upward_weights[up].unpack,
+                                    downward_weights[edge_idx - offset]
+                                        .unpack
+                                        .map(|unpack| unpack + downward_weights[down].upper_bound),
+                                );
+                            }
                         }
                     }
                 }
             }
-        }
-    };
+        };
 
     let mark_for_unpacking = SeperatorBasedParallelCustomization::new_reverse(cch, mark_for_unpacking, mark_for_unpacking);
 
@@ -984,7 +986,7 @@ pub fn customize_live<'a, 'b: 'a>(cch: &'a CCH, metric: &'b LiveGraph) {
         let (events_tx, events_rx) = channel();
 
         // use separator based parallelization
-        let customization = SeperatorBasedParallelCustomization::new(
+        let customization = new_undirected_parallelization(
             cch,
             // routines created in this function
             // we customize many cells in parallel - so iterate over triangles sequentially

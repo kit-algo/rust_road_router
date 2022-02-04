@@ -272,6 +272,11 @@ pub trait CCHT {
     fn unpack_arc(&self, from: NodeId, to: NodeId, weight: Weight, upward: &[Weight], downward: &[Weight]) -> Option<(NodeId, Weight, Weight)> {
         unpack_arc(from, to, weight, upward, downward, self.forward_inverted(), self.backward_inverted())
     }
+
+    /// Reconstruct the separators of the nested dissection order.
+    fn separators(&self) -> SeparatorTree {
+        SeparatorTree::new(self.elimination_tree())
+    }
 }
 
 pub fn unpack_arc(
@@ -402,11 +407,6 @@ impl DirectedCCH {
 
     fn backward(&self) -> Slcs<EdgeId, NodeId> {
         Slcs(&self.forward_first_out, &self.forward_head)
-    }
-
-    /// Reconstruct the separators of the nested dissection order.
-    pub fn separators(&self) -> SeparatorTree {
-        SeparatorTree::new(&self.elimination_tree)
     }
 }
 
