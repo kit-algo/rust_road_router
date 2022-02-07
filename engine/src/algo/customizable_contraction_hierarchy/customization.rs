@@ -14,7 +14,7 @@ scoped_thread_local!(static PERFECT_WORKSPACE: RefCell<Vec<InRangeOption<EdgeId>
 /// Execute second phase, that is metric dependent preprocessing.
 /// `metric` has to have the same topology as the original graph used for first phase preprocessing.
 /// The weights of `metric` should be the ones that the cch should be customized with.
-pub fn customize<'c, Graph>(cch: &'c CCH, metric: &Graph) -> Customized<CCH, &'c CCH>
+pub fn customize<'c, Graph>(cch: &'c CCH, metric: &Graph) -> CustomizedBasic<'c, CCH>
 where
     Graph: LinkIterGraph + EdgeRandomAccessGraph<Link> + Sync,
 {
@@ -31,7 +31,7 @@ where
 }
 
 /// Same as [customize], except with a `DirectedCCH`
-pub fn customize_directed<'c, Graph>(cch: &'c DirectedCCH, metric: &Graph) -> Customized<DirectedCCH, &'c DirectedCCH>
+pub fn customize_directed<'c, Graph>(cch: &'c DirectedCCH, metric: &Graph) -> CustomizedBasic<'c, DirectedCCH>
 where
     Graph: LinkIterGraph + EdgeRandomAccessGraph<Link> + Sync,
 {
@@ -49,7 +49,7 @@ where
 /// Customize with zero metric.
 /// Edges that have weight infinity after customization will have this weight
 /// for every metric and can be removed.
-pub fn always_infinity(cch: &CCH) -> Customized<CCH, &CCH> {
+pub fn always_infinity(cch: &CCH) -> CustomizedBasic<CCH> {
     let m = cch.num_arcs();
     // buffers for the customized weights
     let mut upward_weights = vec![INFINITY; m];
@@ -129,7 +129,7 @@ fn prepare_zero_weights(cch: &CCH, upward_weights: &mut [Weight], downward_weigh
     });
 }
 
-fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weights: Vec<Weight>) -> Customized<CCH, &CCH> {
+fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weights: Vec<Weight>) -> CustomizedBasic<CCH> {
     let n = cch.num_nodes() as NodeId;
     let m = cch.num_arcs() as EdgeId;
 
@@ -257,10 +257,10 @@ fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weig
         });
     });
 
-    Customized::new(cch, upward_weights, downward_weights, upward_unpack, downward_unpack)
+    CustomizedBasic::new(cch, upward_weights, downward_weights, upward_unpack, downward_unpack)
 }
 
-pub fn customize_perfect(mut customized: Customized<CCH, &CCH>) -> Customized<DirectedCCH, DirectedCCH> {
+pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerfect<CCH> {
     let cch = customized.cch;
     let n = cch.num_nodes();
     let m = cch.num_arcs();
@@ -575,28 +575,19 @@ pub fn customize_perfect(mut customized: Customized<CCH, &CCH>) -> Customized<Di
         eprintln!("reversed");
         timer.report_passed_ms();
 
-        Customized::new(
-            DirectedCCH {
-                forward_first_out,
-                forward_head,
-                backward_first_out,
-                backward_head,
-                node_order: cch.node_order.clone(),
-                forward_cch_edge_to_orig_arc: Vecs::empty(),
-                backward_cch_edge_to_orig_arc: Vecs::empty(),
-                elimination_tree: cch.elimination_tree.clone(),
-                forward_inverted,
-                backward_inverted,
-            },
-            forward_weight,
-            backward_weight,
+        CustomizedPerfect::new(
+            cch,
+            OwnedGraph::new(forward_first_out, forward_head, forward_weight),
+            OwnedGraph::new(backward_first_out, backward_head, backward_weight),
             forward_unpacking,
             backward_unpacking,
+            forward_inverted,
+            backward_inverted,
         )
     })
 }
 
-fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, mut downward_weights: Vec<Weight>) -> Customized<DirectedCCH, &DirectedCCH> {
+fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, mut downward_weights: Vec<Weight>) -> CustomizedBasic<DirectedCCH> {
     let n = cch.num_nodes() as NodeId;
     let m_up = cch.forward_head().len() as EdgeId;
     let m_down = cch.backward_head().len() as EdgeId;
@@ -760,5 +751,5 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
         });
     });
 
-    Customized::new(cch, upward_weights, downward_weights, upward_unpack, downward_unpack)
+    CustomizedBasic::new(cch, upward_weights, downward_weights, upward_unpack, downward_unpack)
 }

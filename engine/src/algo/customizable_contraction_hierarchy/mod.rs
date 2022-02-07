@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::{
-    datastr::node_order::NodeOrder,
+    datastr::{graph::first_out_graph::BorrowedGraph, node_order::NodeOrder},
     io::*,
     report::{benchmark::*, block_reporting},
     util::{in_range_option::InRangeOption, *},
@@ -253,12 +253,6 @@ pub trait CCHT {
     /// Borrow node order
     fn node_order(&self) -> &NodeOrder;
 
-    /// Check for a node pair and a weight if there is a corresponding lower triangle.
-    /// If so, return the id of the middle node and the weights of both lower edges.
-    fn unpack_arc(&self, from: NodeId, to: NodeId, weight: Weight, upward: &[Weight], downward: &[Weight]) -> Option<(NodeId, Weight, Weight)> {
-        unpack_arc(from, to, weight, upward, downward, self.forward_inverted(), self.backward_inverted())
-    }
-
     /// Reconstruct the separators of the nested dissection order.
     fn separators(&self) -> SeparatorTree {
         SeparatorTree::new(self.elimination_tree())
@@ -337,44 +331,136 @@ impl CCHT for CCH {
     }
 }
 
+pub trait Customized {
+    type CCH: CCHT;
+    fn forward_graph(&self) -> BorrowedGraph;
+    fn backward_graph(&self) -> BorrowedGraph;
+    fn cch(&self) -> &Self::CCH;
+
+    /// Check for a node pair and a weight if there is a corresponding lower triangle.
+    /// If so, return the id of the middle node and the weights of both lower edges.
+    fn unpack_arc(&self, from: NodeId, to: NodeId, weight: Weight) -> Option<(NodeId, Weight, Weight)>;
+
+    fn forward_inverted(&self) -> &ReversedGraphWithEdgeIds;
+    fn backward_inverted(&self) -> &ReversedGraphWithEdgeIds;
+}
+
 /// A struct containing the results of the second preprocessing phase.
-pub struct Customized<CCH, CCHRef> {
-    cch: CCHRef,
+pub struct CustomizedBasic<'a, CCH> {
+    cch: &'a CCH,
     upward: Vec<Weight>,
     downward: Vec<Weight>,
     up_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,
     down_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,
-    _phantom: std::marker::PhantomData<CCH>,
 }
 
-impl<C: CCHT, CCHRef: std::borrow::Borrow<C>> Customized<C, CCHRef> {
+impl<'a, C: CCHT> CustomizedBasic<'a, C> {
     fn new(
-        cch: CCHRef,
+        cch: &'a C,
         upward: Vec<Weight>,
         downward: Vec<Weight>,
         up_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,
         down_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,
     ) -> Self {
-        Customized {
+        Self {
             cch,
             upward,
             downward,
             up_unpacking,
             down_unpacking,
-            _phantom: Default::default(),
         }
     }
-
-    pub fn forward_graph(&self) -> FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]> {
-        FirstOutGraph::new(self.cch.borrow().forward_first_out(), self.cch.borrow().forward_head(), &self.upward)
+}
+impl<'a, C: CCHT> Customized for CustomizedBasic<'a, C> {
+    type CCH = C;
+    fn forward_graph(&self) -> BorrowedGraph {
+        FirstOutGraph::new(self.cch.forward_first_out(), self.cch.forward_head(), &self.upward)
+    }
+    fn backward_graph(&self) -> BorrowedGraph {
+        FirstOutGraph::new(self.cch.backward_first_out(), self.cch.backward_head(), &self.downward)
+    }
+    fn cch(&self) -> &C {
+        self.cch
     }
 
-    pub fn backward_graph(&self) -> FirstOutGraph<&[EdgeId], &[NodeId], &[Weight]> {
-        FirstOutGraph::new(self.cch.borrow().backward_first_out(), self.cch.borrow().backward_head(), &self.downward)
+    fn unpack_arc(&self, from: NodeId, to: NodeId, weight: Weight) -> Option<(NodeId, Weight, Weight)> {
+        unpack_arc(
+            from,
+            to,
+            weight,
+            &self.upward,
+            &self.downward,
+            self.forward_inverted(),
+            self.backward_inverted(),
+        )
     }
 
-    pub fn cch(&self) -> &C {
-        self.cch.borrow()
+    fn forward_inverted(&self) -> &ReversedGraphWithEdgeIds {
+        self.cch.forward_inverted()
+    }
+    fn backward_inverted(&self) -> &ReversedGraphWithEdgeIds {
+        self.cch.backward_inverted()
+    }
+}
+
+pub struct CustomizedPerfect<'a, CCH> {
+    cch: &'a CCH,
+    upward: OwnedGraph,
+    downward: OwnedGraph,
+    up_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,
+    down_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,
+    forward_inverted: ReversedGraphWithEdgeIds,
+    backward_inverted: ReversedGraphWithEdgeIds,
+}
+
+impl<'a, C: CCHT> CustomizedPerfect<'a, C> {
+    fn new(
+        cch: &'a C,
+        upward: OwnedGraph,
+        downward: OwnedGraph,
+        up_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,
+        down_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,
+        forward_inverted: ReversedGraphWithEdgeIds,
+        backward_inverted: ReversedGraphWithEdgeIds,
+    ) -> Self {
+        Self {
+            cch,
+            upward,
+            downward,
+            up_unpacking,
+            down_unpacking,
+            forward_inverted,
+            backward_inverted,
+        }
+    }
+}
+impl<'a, C: CCHT> Customized for CustomizedPerfect<'a, C> {
+    type CCH = C;
+    fn forward_graph(&self) -> BorrowedGraph {
+        self.upward.borrowed()
+    }
+    fn backward_graph(&self) -> BorrowedGraph {
+        self.downward.borrowed()
+    }
+    fn cch(&self) -> &C {
+        self.cch
+    }
+    fn unpack_arc(&self, from: NodeId, to: NodeId, weight: Weight) -> Option<(NodeId, Weight, Weight)> {
+        unpack_arc(
+            from,
+            to,
+            weight,
+            self.upward.weight(),
+            self.downward.weight(),
+            &self.forward_inverted,
+            &self.backward_inverted,
+        )
+    }
+    fn forward_inverted(&self) -> &ReversedGraphWithEdgeIds {
+        &self.forward_inverted
+    }
+    fn backward_inverted(&self) -> &ReversedGraphWithEdgeIds {
+        &self.backward_inverted
     }
 }
 

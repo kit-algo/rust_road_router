@@ -4,8 +4,8 @@ use super::*;
 pub mod stepped_elimination_tree;
 use stepped_elimination_tree::EliminationTreeWalk;
 
-pub struct Server<CCH, CCHB> {
-    customized: Customized<CCH, CCHB>,
+pub struct Server<Customized> {
+    customized: Customized,
     fw_distances: Vec<Weight>,
     bw_distances: Vec<Weight>,
     unpacking_distances: Vec<Weight>,
@@ -14,8 +14,8 @@ pub struct Server<CCH, CCHB> {
     meeting_node: NodeId,
 }
 
-impl<'a, CCH: CCHT, CCHB: std::borrow::Borrow<CCH>> Server<CCH, CCHB> {
-    pub fn new(customized: Customized<CCH, CCHB>) -> Self {
+impl<C: Customized> Server<C> {
+    pub fn new(customized: C) -> Self {
         let n = customized.forward_graph().num_nodes();
         let m = customized.forward_graph().num_arcs();
         Server {
@@ -30,13 +30,13 @@ impl<'a, CCH: CCHT, CCHB: std::borrow::Borrow<CCH>> Server<CCH, CCHB> {
     }
 
     // Update the metric using a new customization result
-    pub fn update(&mut self, mut customized: Customized<CCH, CCHB>) {
+    pub fn update(&mut self, mut customized: C) {
         std::mem::swap(&mut self.customized, &mut customized);
     }
 
     fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
-        let from = self.customized.cch.borrow().node_order().rank(from);
-        let to = self.customized.cch.borrow().node_order().rank(to);
+        let from = self.customized.cch().node_order().rank(from);
+        let to = self.customized.cch().node_order().rank(to);
 
         let fw_graph = self.customized.forward_graph();
         let bw_graph = self.customized.backward_graph();
@@ -46,14 +46,14 @@ impl<'a, CCH: CCHT, CCHB: std::borrow::Borrow<CCH>> Server<CCH, CCHB> {
         self.meeting_node = 0;
         let mut fw_walk = EliminationTreeWalk::query_with_resetted(
             &fw_graph,
-            self.customized.cch.borrow().elimination_tree(),
+            self.customized.cch().elimination_tree(),
             &mut self.fw_distances,
             &mut self.fw_parents,
             from,
         );
         let mut bw_walk = EliminationTreeWalk::query_with_resetted(
             &bw_graph,
-            self.customized.cch.borrow().elimination_tree(),
+            self.customized.cch().elimination_tree(),
             &mut self.bw_distances,
             &mut self.bw_parents,
             to,
@@ -113,8 +113,8 @@ impl<'a, CCH: CCHT, CCHB: std::borrow::Borrow<CCH>> Server<CCH, CCHB> {
     }
 
     fn path(&mut self, query: Query) -> Vec<NodeId> {
-        let from = self.customized.cch.borrow().node_order().rank(query.from);
-        let to = self.customized.cch.borrow().node_order().rank(query.to);
+        let from = self.customized.cch().node_order().rank(query.from);
+        let to = self.customized.cch().node_order().rank(query.to);
         let fw_graph = self.customized.forward_graph();
         let bw_graph = self.customized.backward_graph();
 
@@ -144,15 +144,7 @@ impl<'a, CCH: CCHT, CCHB: std::borrow::Borrow<CCH>> Server<CCH, CCHB> {
         }
 
         // unpack shortcuts so that parant pointers already point along the completely unpacked path
-        Self::unpack_path(
-            to,
-            from,
-            self.customized.cch.borrow(),
-            bw_graph.weight(),
-            fw_graph.weight(),
-            &mut self.unpacking_distances,
-            &mut self.bw_parents,
-        );
+        Self::unpack_path(to, from, &self.customized, &mut self.unpacking_distances, &mut self.bw_parents);
 
         let mut path = vec![from];
 
@@ -161,28 +153,20 @@ impl<'a, CCH: CCHT, CCHB: std::borrow::Borrow<CCH>> Server<CCH, CCHB> {
         }
 
         for node in &mut path {
-            *node = self.customized.cch.borrow().node_order().node(*node);
+            *node = self.customized.cch().node_order().node(*node);
         }
 
         path
     }
 
     /// Unpack path from a start node (the meeting node of the CCH query), so that parent pointers point along the unpacked path.
-    fn unpack_path(
-        origin: NodeId,
-        target: NodeId,
-        cch: &CCH,
-        weights: &[Weight],
-        other_weights: &[Weight],
-        distances: &mut [Weight],
-        parents: &mut [(NodeId, EdgeId)],
-    ) {
+    fn unpack_path(origin: NodeId, target: NodeId, customzied: &C, distances: &mut [Weight], parents: &mut [(NodeId, EdgeId)]) {
         let mut current = target;
         while current != origin {
             let pred = parents[current as usize].0;
             let weight = distances[current as usize] - distances[pred as usize];
 
-            let unpacked = cch.unpack_arc(current, pred, weight, other_weights, weights);
+            let unpacked = customzied.unpack_arc(current, pred, weight);
             if let Some((middle, _first_weight, second_weight)) = unpacked {
                 parents[current as usize].0 = middle;
                 parents[middle as usize].0 = pred;
@@ -194,9 +178,9 @@ impl<'a, CCH: CCHT, CCHB: std::borrow::Borrow<CCH>> Server<CCH, CCHB> {
     }
 }
 
-pub struct PathServerWrapper<'s, CCH, CCHB>(&'s mut Server<CCH, CCHB>, Query);
+pub struct PathServerWrapper<'s, C>(&'s mut Server<C>, Query);
 
-impl<'s, CCH: CCHT, CCHB: std::borrow::Borrow<CCH>> PathServer for PathServerWrapper<'s, CCH, CCHB> {
+impl<'s, C: Customized> PathServer for PathServerWrapper<'s, C> {
     type NodeInfo = NodeId;
     type EdgeInfo = ();
 
@@ -208,11 +192,11 @@ impl<'s, CCH: CCHT, CCHB: std::borrow::Borrow<CCH>> PathServer for PathServerWra
     }
 }
 
-impl<'a, CCH: CCHT, CCHB: std::borrow::Borrow<CCH>> QueryServer for Server<CCH, CCHB> {
+impl<'a, C: Customized> QueryServer for Server<C> {
     type P<'s>
     where
         Self: 's,
-    = PathServerWrapper<'s, CCH, CCHB>;
+    = PathServerWrapper<'s, C>;
 
     fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight> {
         QueryResult::new(self.distance(query.from, query.to), PathServerWrapper(self, query))

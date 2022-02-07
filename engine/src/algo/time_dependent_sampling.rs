@@ -11,7 +11,7 @@
 use super::*;
 use crate::{
     algo::{
-        customizable_contraction_hierarchy::{customize, query::Server as CCHServer, CCH},
+        customizable_contraction_hierarchy::{query::Server as CCHServer, *},
         dijkstra::{generic_dijkstra::*, query::td_dijkstra::TDDijkstraOps, *},
     },
     datastr::{graph::time_dependent::*, timestamped_vector::TimestampedVector},
@@ -26,7 +26,7 @@ pub struct Server<'a> {
     // The Dijkstra algo on the original graph
     dijkstra_data: DijkstraData<Weight>,
     // A CCH Server for each time window
-    samples: Vec<CCHServer<CCH, &'a CCH>>,
+    samples: Vec<CCHServer<CustomizedBasic<'a, CCH>>>,
     // marking edges in the subgraph we perform dijkstra on
     active_edges: TimestampedVector<bool>,
 }

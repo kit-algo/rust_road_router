@@ -14,12 +14,12 @@ use crate::{
 pub mod penalty;
 pub mod query;
 
-pub struct CCHPotData {
-    customized: Customized<DirectedCCH, DirectedCCH>,
+pub struct CCHPotData<'a> {
+    customized: CustomizedPerfect<'a, CCH>,
 }
 
-impl CCHPotData {
-    pub fn new<Graph>(cch: &CCH, lower_bound: &Graph) -> Self
+impl<'a> CCHPotData<'a> {
+    pub fn new<Graph>(cch: &'a CCH, lower_bound: &Graph) -> Self
     where
         Graph: LinkIterGraph + EdgeRandomAccessGraph<Link> + Sync,
     {
@@ -77,8 +77,8 @@ impl CCHPotData {
             potentials: TimestampedVector::new(n),
             num_pot_computations: 0,
             path_unpacked: FastClearBitVec::new(n),
-            forward_inverted: self.customized.cch().forward_inverted(),
-            backward_inverted: self.customized.cch().backward_inverted(),
+            forward_inverted: self.customized.forward_inverted(),
+            backward_inverted: self.customized.backward_inverted(),
         }
     }
 
@@ -96,19 +96,19 @@ impl CCHPotData {
             potentials: TimestampedVector::new(n),
             num_pot_computations: 0,
             path_unpacked: FastClearBitVec::new(n),
-            forward_inverted: self.customized.cch().backward_inverted(),
-            backward_inverted: self.customized.cch().forward_inverted(),
+            forward_inverted: self.customized.backward_inverted(),
+            backward_inverted: self.customized.forward_inverted(),
         }
     }
 
-    pub fn customized(&self) -> &Customized<DirectedCCH, DirectedCCH> {
+    pub fn customized(&self) -> &CustomizedPerfect<'a, CCH> {
         &self.customized
     }
 }
 
 #[derive(Clone)]
 pub struct CCHPotential<'a, GF, GB> {
-    cch: &'a DirectedCCH,
+    cch: &'a CCH,
     stack: Vec<NodeId>,
     potentials: TimestampedVector<InRangeOption<Weight>>,
     forward_cch_graph: GF,
@@ -178,7 +178,7 @@ where
 }
 
 pub struct CCHPotentialWithPathUnpacking<'a> {
-    cch: &'a DirectedCCH,
+    cch: &'a CCH,
     stack: Vec<NodeId>,
     potentials: TimestampedVector<InRangeOption<Weight>>,
     forward_cch_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>,
@@ -293,7 +293,7 @@ impl<'a> CCHPotentialWithPathUnpacking<'a> {
         &self.backward_parents
     }
 
-    pub fn cch(&self) -> &DirectedCCH {
+    pub fn cch(&self) -> &CCH {
         self.cch
     }
 
