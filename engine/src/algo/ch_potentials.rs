@@ -77,8 +77,9 @@ impl<'a> CCHPotData<'a> {
             potentials: TimestampedVector::new(n),
             num_pot_computations: 0,
             path_unpacked: FastClearBitVec::new(n),
-            forward_inverted: self.customized.forward_inverted(),
-            backward_inverted: self.customized.backward_inverted(),
+            forward_unpacking: self.customized.forward_unpacking(),
+            backward_unpacking: self.customized.backward_unpacking(),
+            forward_tail: self.customized.forward_tail(),
         }
     }
 
@@ -96,8 +97,9 @@ impl<'a> CCHPotData<'a> {
             potentials: TimestampedVector::new(n),
             num_pot_computations: 0,
             path_unpacked: FastClearBitVec::new(n),
-            forward_inverted: self.customized.backward_inverted(),
-            backward_inverted: self.customized.forward_inverted(),
+            forward_unpacking: self.customized.backward_unpacking(),
+            backward_unpacking: self.customized.forward_unpacking(),
+            forward_tail: self.customized.backward_tail(),
         }
     }
 
@@ -187,8 +189,9 @@ pub struct CCHPotentialWithPathUnpacking<'a> {
     backward_cch_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>,
     num_pot_computations: usize,
     path_unpacked: FastClearBitVec,
-    forward_inverted: &'a ReversedGraphWithEdgeIds,
-    backward_inverted: &'a ReversedGraphWithEdgeIds,
+    forward_unpacking: &'a [(InRangeOption<EdgeId>, InRangeOption<EdgeId>)],
+    backward_unpacking: &'a [(InRangeOption<EdgeId>, InRangeOption<EdgeId>)],
+    forward_tail: &'a [NodeId],
 }
 
 impl<'a> CCHPotentialWithPathUnpacking<'a> {
@@ -226,10 +229,10 @@ impl<'a> Potential for CCHPotentialWithPathUnpacking<'a> {
         while let Some(node) = self.stack.pop() {
             let mut dist = self.backward_distances[node as usize];
 
-            for edge in LinkIterable::<Link>::link_iter(&self.forward_cch_graph, node) {
-                let relaxed = edge.weight + self.potentials[edge.node as usize].value().unwrap();
+            for (NodeIdT(head), weight, EdgeIdT(edge_idx)) in LinkIterable::<(NodeIdT, Weight, EdgeIdT)>::link_iter(&self.forward_cch_graph, node) {
+                let relaxed = weight + self.potentials[head as usize].value().unwrap();
                 if relaxed < dist {
-                    self.backward_parents[node as usize].0 = edge.node;
+                    self.backward_parents[node as usize] = (head, edge_idx);
                     dist = relaxed;
                 }
             }
@@ -252,7 +255,7 @@ impl<'a> CCHPotentialWithPathUnpacking<'a> {
             return;
         }
         let self_dist = self.potential(node).unwrap();
-        let parent = self.backward_parents[node as usize].0;
+        let (parent, edge) = self.backward_parents[node as usize];
         if parent == node {
             self.path_unpacked.set(node as usize);
             return;
@@ -261,16 +264,15 @@ impl<'a> CCHPotentialWithPathUnpacking<'a> {
         self.unpack_path(NodeIdT(parent));
 
         debug_assert!(self_dist >= parent_dist, "{:#?}", (node, parent, self_dist, parent_dist));
-        if let Some((middle, _down, _up)) = unpack_arc(
-            node,
-            parent,
-            self_dist - parent_dist,
-            self.forward_cch_graph.weight(),
-            self.backward_cch_graph.weight(),
-            self.forward_inverted,
-            self.backward_inverted,
-        ) {
-            self.backward_parents[node as usize].0 = middle;
+        let (down, up) = if parent > node {
+            self.forward_unpacking[edge as usize]
+        } else {
+            self.backward_unpacking[edge as usize]
+        };
+        if let Some(down) = down.value() {
+            let up = up.value().unwrap();
+            let middle = self.forward_tail[up as usize];
+            self.backward_parents[node as usize] = (middle, down);
 
             if !self.path_unpacked.get(middle as usize) {
                 // will be called in the unpack_path call
@@ -279,11 +281,11 @@ impl<'a> CCHPotentialWithPathUnpacking<'a> {
                 // and then the call in unpack_path won't override it again.
                 // This is only a problem with zero arcs and the induced non-unique shortest paths
                 self.potential(middle);
-                self.backward_parents[middle as usize].0 = parent;
+                self.backward_parents[middle as usize] = (parent, up);
                 self.unpack_path(NodeIdT(middle));
             }
 
-            debug_assert_eq!(self.potential(middle).unwrap(), parent_dist + _up,);
+            debug_assert_eq!(self.potential(middle).unwrap(), parent_dist + self.forward_cch_graph.weight()[up as usize]);
             self.unpack_path(NodeIdT(node));
         }
         self.path_unpacked.set(node as usize);

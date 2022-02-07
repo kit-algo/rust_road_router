@@ -358,6 +358,8 @@ pub trait Customized {
     fn backward_inverted(&self) -> &ReversedGraphWithEdgeIds;
     fn forward_tail(&self) -> &[NodeId];
     fn backward_tail(&self) -> &[NodeId];
+    fn forward_unpacking(&self) -> &[(InRangeOption<EdgeId>, InRangeOption<EdgeId>)];
+    fn backward_unpacking(&self) -> &[(InRangeOption<EdgeId>, InRangeOption<EdgeId>)];
 }
 
 /// A struct containing the results of the second preprocessing phase.
@@ -419,6 +421,12 @@ impl<'a, C: CCHT> Customized for CustomizedBasic<'a, C> {
         let (down, up) = self.down_unpacking[edge as usize];
         down.value()
             .map(|down| (EdgeIdT(down), EdgeIdT(up.value().unwrap()), NodeIdT(self.backward_tail()[down as usize])))
+    }
+    fn forward_unpacking(&self) -> &[(InRangeOption<EdgeId>, InRangeOption<EdgeId>)] {
+        &self.up_unpacking
+    }
+    fn backward_unpacking(&self) -> &[(InRangeOption<EdgeId>, InRangeOption<EdgeId>)] {
+        &self.down_unpacking
     }
 }
 
@@ -491,6 +499,12 @@ impl<'a, C: CCHT> Customized for CustomizedPerfect<'a, C> {
         let (down, up) = self.down_unpacking[edge as usize];
         down.value()
             .map(|down| (EdgeIdT(down), EdgeIdT(up.value().unwrap()), NodeIdT(self.backward_tail()[down as usize])))
+    }
+    fn forward_unpacking(&self) -> &[(InRangeOption<EdgeId>, InRangeOption<EdgeId>)] {
+        &self.up_unpacking
+    }
+    fn backward_unpacking(&self) -> &[(InRangeOption<EdgeId>, InRangeOption<EdgeId>)] {
+        &self.down_unpacking
     }
 }
 
