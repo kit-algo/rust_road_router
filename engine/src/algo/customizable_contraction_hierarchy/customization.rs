@@ -342,11 +342,13 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
 
         let mut forward_first_out: Vec<EdgeId>;
         let mut forward_head: Vec<NodeId>;
+        let mut forward_tail: Vec<NodeId>;
         let mut forward_weight: Vec<Weight>;
         let mut forward_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>;
 
         let mut backward_first_out: Vec<EdgeId>;
         let mut backward_head: Vec<NodeId>;
+        let mut backward_tail: Vec<NodeId>;
         let mut backward_weight: Vec<Weight>;
         let mut backward_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>;
 
@@ -357,12 +359,14 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
             forward_first_out = Vec::with_capacity(cch.first_out.len());
             forward_first_out.push(0);
             forward_head = Vec::with_capacity(m);
+            forward_tail = Vec::with_capacity(m);
             forward_weight = Vec::with_capacity(m);
             forward_unpacking = Vec::with_capacity(m);
 
             backward_first_out = Vec::with_capacity(cch.first_out.len());
             backward_first_out.push(0);
             backward_head = Vec::with_capacity(m);
+            backward_tail = Vec::with_capacity(m);
             backward_weight = Vec::with_capacity(m);
             backward_unpacking = Vec::with_capacity(m);
 
@@ -380,6 +384,7 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
                     if link.weight < INFINITY && link.weight >= customized_weight {
                         forward_id_mapping[edge_idx] = forward_head.len() as EdgeId;
                         forward_head.push(link.node);
+                        forward_tail.push(node);
                         forward_weight.push(link.weight);
                         forward_unpacking.push((
                             InRangeOption::new(unpack.0.value().map(|idx| backward_id_mapping[idx as usize] as EdgeId)),
@@ -395,6 +400,7 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
                     if link.weight < INFINITY && link.weight >= customized_weight {
                         backward_id_mapping[edge_idx] = backward_head.len() as EdgeId;
                         backward_head.push(link.node);
+                        backward_tail.push(node);
                         backward_weight.push(link.weight);
                         backward_unpacking.push((
                             InRangeOption::new(unpack.0.value().map(|idx| backward_id_mapping[idx as usize] as EdgeId)),
@@ -410,11 +416,13 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
 
             forward_first_out = vec![0; cch.first_out.len()];
             forward_head = vec![0; m];
+            forward_tail = vec![0; m];
             forward_weight = vec![0; m];
             forward_unpacking = vec![(InRangeOption::NONE, InRangeOption::NONE); m];
 
             backward_first_out = vec![0; cch.first_out.len()];
             backward_head = vec![0; m];
+            backward_tail = vec![0; m];
             backward_weight = vec![0; m];
             backward_unpacking = vec![(InRangeOption::NONE, InRangeOption::NONE); m];
 
@@ -463,11 +471,13 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
             rayon::scope(|s| {
                 let mut forward_first_out = &mut forward_first_out[..];
                 let mut forward_head = &mut forward_head[..];
+                let mut forward_tail = &mut forward_tail[..];
                 let mut forward_weight = &mut forward_weight[..];
                 let mut forward_unpacking = &mut forward_unpacking[..];
                 let mut forward_mapping = &mut forward_id_mapping[..];
                 let mut backward_first_out = &mut backward_first_out[..];
                 let mut backward_head = &mut backward_head[..];
+                let mut backward_tail = &mut backward_tail[..];
                 let mut backward_weight = &mut backward_weight[..];
                 let mut backward_unpacking = &mut backward_unpacking[..];
                 let mut backward_mapping = &mut backward_id_mapping[..];
@@ -491,6 +501,8 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
                     backward_first_out = rest_bw_fo;
                     let (local_fw_head, rest_fw_head) = forward_head.split_at_mut(edges_of_each_thread[i + 1].0 - num_fw_edges_before);
                     forward_head = rest_fw_head;
+                    let (local_fw_tail, rest_fw_tail) = forward_tail.split_at_mut(edges_of_each_thread[i + 1].0 - num_fw_edges_before);
+                    forward_tail = rest_fw_tail;
                     let (local_fw_weight, rest_fw_weight) = forward_weight.split_at_mut(edges_of_each_thread[i + 1].0 - num_fw_edges_before);
                     forward_weight = rest_fw_weight;
                     let (local_fw_unpacking, rest_fw_unpacking) = forward_unpacking.split_at_mut(edges_of_each_thread[i + 1].0 - num_fw_edges_before);
@@ -499,6 +511,8 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
                     forward_mapping = rest_fw_mapping;
                     let (local_bw_head, rest_bw_head) = backward_head.split_at_mut(edges_of_each_thread[i + 1].1 - num_bw_edges_before);
                     backward_head = rest_bw_head;
+                    let (local_bw_tail, rest_bw_tail) = backward_tail.split_at_mut(edges_of_each_thread[i + 1].1 - num_bw_edges_before);
+                    backward_tail = rest_bw_tail;
                     let (local_bw_weight, rest_bw_weight) = backward_weight.split_at_mut(edges_of_each_thread[i + 1].1 - num_bw_edges_before);
                     backward_weight = rest_bw_weight;
                     let (local_bw_unpacking, rest_bw_unpacking) = backward_unpacking.split_at_mut(edges_of_each_thread[i + 1].1 - num_bw_edges_before);
@@ -522,6 +536,7 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
                             {
                                 if link.weight < INFINITY && link.weight >= customized_weight {
                                     local_fw_head[fw_edge_count] = link.node;
+                                    local_fw_tail[fw_edge_count] = node as NodeId;
                                     local_fw_weight[fw_edge_count] = link.weight;
                                     local_fw_unpacking[fw_edge_count] = *unpack;
                                     local_fw_mapping[edge_idx - edge_offset] = (num_fw_edges_before + fw_edge_count) as EdgeId;
@@ -535,6 +550,7 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
                             {
                                 if link.weight < INFINITY && link.weight >= customized_weight {
                                     local_bw_head[bw_edge_count] = link.node;
+                                    local_bw_tail[bw_edge_count] = node as NodeId;
                                     local_bw_weight[bw_edge_count] = link.weight;
                                     local_bw_unpacking[bw_edge_count] = *unpack;
                                     local_bw_mapping[edge_idx - edge_offset] = (num_bw_edges_before + bw_edge_count) as EdgeId;
@@ -583,6 +599,8 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
             backward_unpacking,
             forward_inverted,
             backward_inverted,
+            forward_tail,
+            backward_tail,
         )
     })
 }

@@ -175,10 +175,12 @@ impl CCH {
         let mut forward_first_out = Vec::with_capacity(self.first_out.len());
         forward_first_out.push(0);
         let mut forward_head = Vec::with_capacity(self.head.len());
+        let mut forward_tail = Vec::with_capacity(self.head.len());
 
         let mut backward_first_out = Vec::with_capacity(self.first_out.len());
         backward_first_out.push(0);
         let mut backward_head = Vec::with_capacity(self.head.len());
+        let mut backward_tail = Vec::with_capacity(self.head.len());
 
         let forward_cch_edge_to_orig_arc = Vecs::from_iters(
             self.forward_cch_edge_to_orig_arc
@@ -198,6 +200,8 @@ impl CCH {
         for node in 0..self.num_nodes() as NodeId {
             forward_head.extend(LinkIterable::<Link>::link_iter(&forward, node).filter(|l| l.weight < INFINITY).map(|l| l.node));
             backward_head.extend(LinkIterable::<Link>::link_iter(&backward, node).filter(|l| l.weight < INFINITY).map(|l| l.node));
+            forward_tail.extend(LinkIterable::<Link>::link_iter(&forward, node).filter(|l| l.weight < INFINITY).map(|_| node));
+            backward_tail.extend(LinkIterable::<Link>::link_iter(&backward, node).filter(|l| l.weight < INFINITY).map(|_| node));
             forward_first_out.push(forward_head.len() as EdgeId);
             backward_first_out.push(backward_head.len() as EdgeId);
         }
@@ -208,8 +212,10 @@ impl CCH {
         DirectedCCH {
             forward_first_out,
             forward_head,
+            forward_tail,
             backward_first_out,
             backward_head,
+            backward_tail,
             node_order: self.node_order,
             forward_cch_edge_to_orig_arc,
             backward_cch_edge_to_orig_arc,
@@ -241,6 +247,8 @@ pub trait CCHT {
     fn backward_first_out(&self) -> &[EdgeId];
     fn forward_head(&self) -> &[NodeId];
     fn backward_head(&self) -> &[NodeId];
+    fn forward_tail(&self) -> &[NodeId];
+    fn backward_tail(&self) -> &[NodeId];
     fn forward_inverted(&self) -> &ReversedGraphWithEdgeIds;
     fn backward_inverted(&self) -> &ReversedGraphWithEdgeIds;
 
@@ -315,6 +323,12 @@ impl CCHT for CCH {
     fn backward_head(&self) -> &[NodeId] {
         &self.head[..]
     }
+    fn forward_tail(&self) -> &[NodeId] {
+        &self.tail[..]
+    }
+    fn backward_tail(&self) -> &[NodeId] {
+        &self.tail[..]
+    }
     fn forward_inverted(&self) -> &ReversedGraphWithEdgeIds {
         &self.inverted
     }
@@ -343,6 +357,8 @@ pub trait Customized {
 
     fn forward_inverted(&self) -> &ReversedGraphWithEdgeIds;
     fn backward_inverted(&self) -> &ReversedGraphWithEdgeIds;
+    fn forward_tail(&self) -> &[NodeId];
+    fn backward_tail(&self) -> &[NodeId];
 }
 
 /// A struct containing the results of the second preprocessing phase.
@@ -401,6 +417,12 @@ impl<'a, C: CCHT> Customized for CustomizedBasic<'a, C> {
     fn backward_inverted(&self) -> &ReversedGraphWithEdgeIds {
         self.cch.backward_inverted()
     }
+    fn forward_tail(&self) -> &[NodeId] {
+        self.cch().forward_tail()
+    }
+    fn backward_tail(&self) -> &[NodeId] {
+        self.cch().backward_tail()
+    }
 }
 
 pub struct CustomizedPerfect<'a, CCH> {
@@ -411,6 +433,8 @@ pub struct CustomizedPerfect<'a, CCH> {
     down_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,
     forward_inverted: ReversedGraphWithEdgeIds,
     backward_inverted: ReversedGraphWithEdgeIds,
+    forward_tail: Vec<NodeId>,
+    backward_tail: Vec<NodeId>,
 }
 
 impl<'a, C: CCHT> CustomizedPerfect<'a, C> {
@@ -422,6 +446,8 @@ impl<'a, C: CCHT> CustomizedPerfect<'a, C> {
         down_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,
         forward_inverted: ReversedGraphWithEdgeIds,
         backward_inverted: ReversedGraphWithEdgeIds,
+        forward_tail: Vec<NodeId>,
+        backward_tail: Vec<NodeId>,
     ) -> Self {
         Self {
             cch,
@@ -431,6 +457,8 @@ impl<'a, C: CCHT> CustomizedPerfect<'a, C> {
             down_unpacking,
             forward_inverted,
             backward_inverted,
+            forward_tail,
+            backward_tail,
         }
     }
 }
@@ -462,13 +490,21 @@ impl<'a, C: CCHT> Customized for CustomizedPerfect<'a, C> {
     fn backward_inverted(&self) -> &ReversedGraphWithEdgeIds {
         &self.backward_inverted
     }
+    fn forward_tail(&self) -> &[NodeId] {
+        &self.forward_tail
+    }
+    fn backward_tail(&self) -> &[NodeId] {
+        &self.backward_tail
+    }
 }
 
 pub struct DirectedCCH {
     forward_first_out: Vec<EdgeId>,
     forward_head: Vec<NodeId>,
+    forward_tail: Vec<NodeId>,
     backward_first_out: Vec<EdgeId>,
     backward_head: Vec<NodeId>,
+    backward_tail: Vec<NodeId>,
     node_order: NodeOrder,
     forward_cch_edge_to_orig_arc: Vecs<EdgeIdT>,
     backward_cch_edge_to_orig_arc: Vecs<EdgeIdT>,
@@ -503,6 +539,12 @@ impl CCHT for DirectedCCH {
     }
     fn backward_head(&self) -> &[NodeId] {
         &self.backward_head[..]
+    }
+    fn forward_tail(&self) -> &[NodeId] {
+        &self.forward_tail[..]
+    }
+    fn backward_tail(&self) -> &[NodeId] {
+        &self.backward_tail[..]
     }
     fn forward_inverted(&self) -> &ReversedGraphWithEdgeIds {
         &self.forward_inverted

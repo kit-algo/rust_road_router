@@ -38,6 +38,7 @@ pub struct InRangeOption<T: Sentinel + Debug>(T);
 impl<T: Sentinel + Debug> InRangeOption<T> {
     pub const NONE: Self = InRangeOption(T::SENTINEL);
 
+    #[inline]
     pub fn some(value: T) -> InRangeOption<T> {
         assert_ne!(value, T::SENTINEL, "InRangeOption::new: Got sentinel as a value");
         InRangeOption(value)
