@@ -223,38 +223,82 @@ impl<T> Clone for PtrWrapper<T> {
 }
 impl<T> Copy for PtrWrapper<T> {}
 
-pub struct SeperatorBasedPerfectParallelCustomization<'a, T, F, G> {
+pub trait SubgraphPerfectCustomization<T, E>: Sync {
+    fn exec(&self, nodes: Range<usize>, edges_up: *mut T, edges_down: *mut T, aux_up: *mut E, aux_down: *mut E);
+}
+
+pub struct NoAux<F>(F);
+impl<F: Sync + Fn(Range<usize>, *mut T, *mut T), T, E> SubgraphPerfectCustomization<T, E> for NoAux<F> {
+    fn exec(&self, nodes: Range<usize>, edges_up: *mut T, edges_down: *mut T, _aux_up: *mut E, _aux_down: *mut E) {
+        (self.0)(nodes, edges_up, edges_down)
+    }
+}
+
+impl<F: Sync + Fn(Range<usize>, *mut T, *mut T, *mut E, *mut E), T, E> SubgraphPerfectCustomization<T, E> for F {
+    fn exec(&self, nodes: Range<usize>, edges_up: *mut T, edges_down: *mut T, aux_up: *mut E, aux_down: *mut E) {
+        (self)(nodes, edges_up, edges_down, aux_up, aux_down)
+    }
+}
+
+pub struct SeperatorBasedPerfectParallelCustomization<'a, T, F, G, E = ()> {
     cch: &'a CCH,
     separators: SeparatorTree,
     customize_cell: F,
     customize_separator: G,
     _t: std::marker::PhantomData<T>,
+    _e: std::marker::PhantomData<E>,
 }
 
-/// Parallelization of perfect customization.
-impl<'a, T, F, G> SeperatorBasedPerfectParallelCustomization<'a, T, F, G>
+impl<'a, T, F, G> SeperatorBasedPerfectParallelCustomization<'a, T, NoAux<F>, NoAux<G>>
 where
     T: Send + Sync,
     F: Sync + Fn(Range<usize>, *mut T, *mut T),
     G: Sync + Fn(Range<usize>, *mut T, *mut T),
+{
+    pub fn new(cch: &'a CCH, customize_cell: F, customize_separator: G) -> Self {
+        Self::new_with_aux(cch, NoAux(customize_cell), NoAux(customize_separator))
+    }
+}
+
+impl<'a, T, F, G> SeperatorBasedPerfectParallelCustomization<'a, T, F, G>
+where
+    T: Send + Sync,
+    F: SubgraphPerfectCustomization<T, ()>,
+    G: SubgraphPerfectCustomization<T, ()>,
+{
+    pub fn customize(&self, upward: &'a mut [T], downward: &'a mut [T], setup: impl Fn(Box<dyn FnOnce() + '_>) + Sync) {
+        let mut up_aux = vec![(); upward.len()];
+        let mut down_aux = vec![(); downward.len()];
+        self.customize_with_aux(upward, downward, &mut up_aux, &mut down_aux, setup)
+    }
+}
+
+/// Parallelization of perfect customization.
+impl<'a, T, F, G, E> SeperatorBasedPerfectParallelCustomization<'a, T, F, G, E>
+where
+    T: Send + Sync,
+    E: Send + Sync,
+    F: SubgraphPerfectCustomization<T, E>,
+    G: SubgraphPerfectCustomization<T, E>,
 {
     /// Setup for parallelization, we need a cch, and a routine for customization of cells
     /// and one for customization of separators.
     /// These should do the same thing in the end, but may achieve it in different ways because there are different performance trade-offs.
     /// The cell routine will be invoked several times in parallel and nodes will mostly have low degrees.
     /// The separator routine will be invoked only very few times in parallel, the final separator will be customized completely alone and nodes have high degrees.
-    pub fn new(cch: &'a CCH, customize_cell: F, customize_separator: G) -> Self {
+    pub fn new_with_aux(cch: &'a CCH, customize_cell: F, customize_separator: G) -> Self {
         let separators = cch.separators();
         if cfg!(feature = "cch-disable-par") {
             separators.validate_for_parallelization();
         }
 
-        SeperatorBasedPerfectParallelCustomization {
+        Self {
             cch,
             separators,
             customize_cell,
             customize_separator,
             _t: std::marker::PhantomData::<T>,
+            _e: std::marker::PhantomData::<E>,
         }
     }
 
@@ -262,10 +306,23 @@ where
     /// The setup callback can be used to perform additional scoped setup work.
     /// It has to call the callback that gets passed to it in turn.
     /// Otherwise nothing will happen.
-    pub fn customize(&self, upward: &'a mut [T], downward: &'a mut [T], setup: impl Fn(Box<dyn FnOnce() + '_>) + Sync) {
+    pub fn customize_with_aux(
+        &self,
+        upward: &'a mut [T],
+        downward: &'a mut [T],
+        up_aux: &'a mut [E],
+        down_aux: &'a mut [E],
+        setup: impl Fn(Box<dyn FnOnce() + '_>) + Sync,
+    ) {
         if cfg!(feature = "cch-disable-par") {
             setup(Box::new(|| {
-                (self.customize_cell)(0..self.cch.num_nodes(), upward.as_mut_ptr(), downward.as_mut_ptr())
+                self.customize_cell.exec(
+                    0..self.cch.num_nodes(),
+                    upward.as_mut_ptr(),
+                    downward.as_mut_ptr(),
+                    up_aux.as_mut_ptr(),
+                    down_aux.as_mut_ptr(),
+                )
             }));
         } else {
             let core_ids = core_affinity::get_core_ids().unwrap();
@@ -275,22 +332,36 @@ where
                         core_affinity::set_for_current(core_ids[thread.index()]);
                         setup(Box::new(|| thread.run()));
                     },
-                    |pool| pool.install(|| self.customize_tree(&self.separators, self.cch.num_nodes(), upward.as_mut_ptr(), downward.as_mut_ptr())),
+                    |pool| {
+                        pool.install(|| {
+                            self.customize_tree(
+                                &self.separators,
+                                self.cch.num_nodes(),
+                                upward.as_mut_ptr(),
+                                downward.as_mut_ptr(),
+                                up_aux.as_mut_ptr(),
+                                down_aux.as_mut_ptr(),
+                            )
+                        })
+                    },
                 )
                 .unwrap();
         }
     }
 
-    fn customize_tree(&self, sep_tree: &SeparatorTree, offset: usize, upward: *mut T, downward: *mut T) {
+    fn customize_tree(&self, sep_tree: &SeparatorTree, offset: usize, upward: *mut T, downward: *mut T, up_aux: *mut E, down_aux: *mut E) {
         if sep_tree.num_nodes < self.cch.num_nodes() / (32 * rayon::current_num_threads()) {
             // if the current cell is small enough (load balancing parameters) run the customize_cell routine on it
-            (self.customize_cell)(offset - sep_tree.num_nodes..offset, upward, downward);
+            self.customize_cell
+                .exec(offset - sep_tree.num_nodes..offset, upward, downward, up_aux, down_aux);
         } else {
             // if not, process separator, then split into subcells and process them independently in parallel.
             let mut end_next = offset - sep_tree.nodes.len();
-            (self.customize_separator)(end_next..offset, upward, downward);
+            self.customize_separator.exec(end_next..offset, upward, downward, up_aux, down_aux);
             let upward = PtrWrapper(upward);
             let downward = PtrWrapper(downward);
+            let up_aux = PtrWrapper(up_aux);
+            let down_aux = PtrWrapper(down_aux);
 
             rayon::scope(|s| {
                 for sub in sep_tree.children.iter().rev() {
@@ -298,7 +369,9 @@ where
                         // force capturing the wrapper so closure is send/sync
                         let _ = &upward;
                         let _ = &downward;
-                        self.customize_tree(sub, end_next, upward.0, downward.0)
+                        let _ = &up_aux;
+                        let _ = &down_aux;
+                        self.customize_tree(sub, end_next, upward.0, downward.0, up_aux.0, down_aux.0)
                     });
                     end_next -= sub.num_nodes;
                 }
