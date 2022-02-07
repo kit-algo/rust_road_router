@@ -587,20 +587,12 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
         timer.report_passed_ms();
         timer.restart();
 
-        let forward_inverted = ReversedGraphWithEdgeIds::reversed(&UnweightedFirstOutGraph::new(&forward_first_out[..], &forward_head[..]));
-        let backward_inverted = ReversedGraphWithEdgeIds::reversed(&UnweightedFirstOutGraph::new(&backward_first_out[..], &backward_head[..]));
-
-        eprintln!("reversed");
-        timer.report_passed_ms();
-
         CustomizedPerfect::new(
             cch,
             OwnedGraph::new(forward_first_out, forward_head, forward_weight),
             OwnedGraph::new(backward_first_out, backward_head, backward_weight),
             forward_unpacking,
             backward_unpacking,
-            forward_inverted,
-            backward_inverted,
             forward_tail,
             backward_tail,
         )

@@ -354,8 +354,6 @@ pub trait Customized {
     fn unpack_outgoing(&self, edge: EdgeIdT) -> Option<(EdgeIdT, EdgeIdT, NodeIdT)>;
     fn unpack_incoming(&self, edge: EdgeIdT) -> Option<(EdgeIdT, EdgeIdT, NodeIdT)>;
 
-    fn forward_inverted(&self) -> &ReversedGraphWithEdgeIds;
-    fn backward_inverted(&self) -> &ReversedGraphWithEdgeIds;
     fn forward_tail(&self) -> &[NodeId];
     fn backward_tail(&self) -> &[NodeId];
     fn forward_unpacking(&self) -> &[(InRangeOption<EdgeId>, InRangeOption<EdgeId>)];
@@ -399,13 +397,6 @@ impl<'a, C: CCHT> Customized for CustomizedBasic<'a, C> {
     fn cch(&self) -> &C {
         self.cch
     }
-
-    fn forward_inverted(&self) -> &ReversedGraphWithEdgeIds {
-        self.cch.forward_inverted()
-    }
-    fn backward_inverted(&self) -> &ReversedGraphWithEdgeIds {
-        self.cch.backward_inverted()
-    }
     fn forward_tail(&self) -> &[NodeId] {
         self.cch().forward_tail()
     }
@@ -436,8 +427,6 @@ pub struct CustomizedPerfect<'a, CCH> {
     downward: OwnedGraph,
     up_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,
     down_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,
-    forward_inverted: ReversedGraphWithEdgeIds,
-    backward_inverted: ReversedGraphWithEdgeIds,
     forward_tail: Vec<NodeId>,
     backward_tail: Vec<NodeId>,
 }
@@ -449,8 +438,6 @@ impl<'a, C: CCHT> CustomizedPerfect<'a, C> {
         downward: OwnedGraph,
         up_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,
         down_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,
-        forward_inverted: ReversedGraphWithEdgeIds,
-        backward_inverted: ReversedGraphWithEdgeIds,
         forward_tail: Vec<NodeId>,
         backward_tail: Vec<NodeId>,
     ) -> Self {
@@ -460,8 +447,6 @@ impl<'a, C: CCHT> CustomizedPerfect<'a, C> {
             downward,
             up_unpacking,
             down_unpacking,
-            forward_inverted,
-            backward_inverted,
             forward_tail,
             backward_tail,
         }
@@ -477,12 +462,6 @@ impl<'a, C: CCHT> Customized for CustomizedPerfect<'a, C> {
     }
     fn cch(&self) -> &C {
         self.cch
-    }
-    fn forward_inverted(&self) -> &ReversedGraphWithEdgeIds {
-        &self.forward_inverted
-    }
-    fn backward_inverted(&self) -> &ReversedGraphWithEdgeIds {
-        &self.backward_inverted
     }
     fn forward_tail(&self) -> &[NodeId] {
         &self.forward_tail
