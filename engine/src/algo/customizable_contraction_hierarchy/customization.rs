@@ -270,7 +270,7 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
     // so we can't use slices. Thus, we just take a mutable pointer to the shortcut vecs.
     // The logic of the perfect customization based on separators guarantees, that we will never concurrently modify
     // the same shortcuts, but so far I haven't found a way to express that in safe rust.
-    let customize_perfect = |nodes: Range<usize>, upward: *mut Weight, downward: *mut Weight| {
+    let customize_perfect = |nodes: Range<usize>, upward: *mut Weight, downward: *mut Weight, up_mod: *mut bool, down_mod: *mut bool| {
         PERFECT_WORKSPACE.with(|node_edge_ids| {
             let mut node_edge_ids = node_edge_ids.borrow_mut();
 
@@ -290,25 +290,33 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
                             // depending on which edge we take as the base
                             // Relax all them.
                             unsafe {
-                                (*upward.add(other_edge_id as usize)) = min(
-                                    *upward.add(other_edge_id as usize),
-                                    (*upward.add(edge_id as usize)) + (*upward.add(shortcut_edge_id as usize)),
-                                );
+                                let relax_weight = (*upward.add(edge_id as usize)) + (*upward.add(shortcut_edge_id as usize));
+                                let edge_weight = upward.add(other_edge_id as usize);
+                                if relax_weight < *edge_weight {
+                                    *edge_weight = relax_weight;
+                                    *up_mod.add(other_edge_id as usize) = true;
+                                }
 
-                                (*upward.add(edge_id as usize)) = min(
-                                    *upward.add(edge_id as usize),
-                                    (*upward.add(other_edge_id as usize)) + (*downward.add(shortcut_edge_id as usize)),
-                                );
+                                let relax_weight = (*upward.add(other_edge_id as usize)) + (*downward.add(shortcut_edge_id as usize));
+                                let edge_weight = upward.add(edge_id as usize);
+                                if relax_weight < *edge_weight {
+                                    *edge_weight = relax_weight;
+                                    *up_mod.add(edge_id as usize) = true;
+                                }
 
-                                (*downward.add(other_edge_id as usize)) = min(
-                                    *downward.add(other_edge_id as usize),
-                                    (*downward.add(edge_id as usize)) + (*downward.add(shortcut_edge_id as usize)),
-                                );
+                                let relax_weight = (*downward.add(edge_id as usize)) + (*downward.add(shortcut_edge_id as usize));
+                                let edge_weight = downward.add(other_edge_id as usize);
+                                if relax_weight < *edge_weight {
+                                    *edge_weight = relax_weight;
+                                    *down_mod.add(other_edge_id as usize) = true;
+                                }
 
-                                (*downward.add(edge_id as usize)) = min(
-                                    *downward.add(edge_id as usize),
-                                    (*downward.add(other_edge_id as usize)) + (*upward.add(shortcut_edge_id as usize)),
-                                );
+                                let relax_weight = (*downward.add(other_edge_id as usize)) + (*upward.add(shortcut_edge_id as usize));
+                                let edge_weight = downward.add(edge_id as usize);
+                                if relax_weight < *edge_weight {
+                                    *edge_weight = relax_weight;
+                                    *down_mod.add(edge_id as usize) = true;
+                                }
                             }
                         }
                     }
@@ -322,15 +330,15 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
         });
     };
 
-    let static_perfect_customization = SeperatorBasedPerfectParallelCustomization::new(cch, customize_perfect, customize_perfect);
+    let static_perfect_customization = SeperatorBasedPerfectParallelCustomization::new_with_aux(cch, customize_perfect, customize_perfect);
 
     let upward = &mut customized.upward;
     let downward = &mut customized.downward;
-    let upward_orig = upward.clone();
-    let downward_orig = downward.clone();
+    let mut upward_modified = vec![false; upward.len()];
+    let mut downward_modified = vec![false; downward.len()];
 
     report_time_with_key("CCH Perfect Customization", "perfect_customization_running_time_ms", || {
-        static_perfect_customization.customize(upward, downward, |cb| {
+        static_perfect_customization.customize_with_aux(upward, downward, &mut upward_modified, &mut downward_modified, |cb| {
             PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::NONE; n as usize]), cb);
         });
     });
@@ -377,12 +385,13 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
 
             for node in 0..n as NodeId {
                 let edge_ids = cch.neighbor_edge_indices_usize(node);
-                for (((link, &customized_weight), unpack), edge_idx) in LinkIterable::<Link>::link_iter(&forward, node)
-                    .zip(&upward_orig[edge_ids.clone()])
+                for (((link, &modified), unpack), edge_idx) in LinkIterable::<Link>::link_iter(&forward, node)
+                    .zip(&upward_modified[edge_ids.clone()])
                     .zip(&customized.up_unpacking[edge_ids.clone()])
                     .zip(edge_ids.clone())
                 {
-                    if link.weight < INFINITY && link.weight >= customized_weight {
+                    if !modified {
+                        debug_assert!(link.weight < INFINITY);
                         forward_id_mapping[edge_idx] = forward_head.len() as EdgeId;
                         forward_head.push(link.node);
                         forward_tail.push(node);
@@ -393,12 +402,13 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
                         ));
                     }
                 }
-                for (((link, &customized_weight), unpack), edge_idx) in LinkIterable::<Link>::link_iter(&backward, node)
-                    .zip(&downward_orig[edge_ids.clone()])
+                for (((link, &modified), unpack), edge_idx) in LinkIterable::<Link>::link_iter(&backward, node)
+                    .zip(&downward_modified[edge_ids.clone()])
                     .zip(&customized.down_unpacking[edge_ids.clone()])
                     .zip(edge_ids)
                 {
-                    if link.weight < INFINITY && link.weight >= customized_weight {
+                    if !modified {
+                        debug_assert!(link.weight < INFINITY);
                         backward_id_mapping[edge_idx] = backward_head.len() as EdgeId;
                         backward_head.push(link.node);
                         backward_tail.push(node);
@@ -436,27 +446,17 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
             let nodes_per_thread = (n + k - 1) / k;
 
             rayon::scope(|s| {
-                let forward = &forward;
-                let backward = &backward;
-                let upward_orig = &upward_orig;
-                let downward_orig = &downward_orig;
+                let upward_modified = &upward_modified;
+                let downward_modified = &downward_modified;
 
                 for i in 0..k {
                     let (local_count, rest_counts) = local_edge_counts.split_first_mut().unwrap();
                     local_edge_counts = rest_counts;
                     let local_nodes = i * nodes_per_thread..min((i + 1) * nodes_per_thread, n);
+                    let local_edges = cch.first_out()[local_nodes.start] as usize..cch.first_out()[local_nodes.end] as usize;
                     s.spawn(move |_| {
-                        for node in local_nodes {
-                            let edge_ids = cch.neighbor_edge_indices_usize(node as NodeId);
-                            local_count.0 += LinkIterable::<Link>::link_iter(forward, node as NodeId)
-                                .zip(&upward_orig[edge_ids.clone()])
-                                .filter(|(link, &customized_weight)| link.weight < INFINITY && link.weight >= customized_weight)
-                                .count();
-                            local_count.1 += LinkIterable::<Link>::link_iter(backward, node as NodeId)
-                                .zip(&downward_orig[edge_ids])
-                                .filter(|(link, &customized_weight)| link.weight < INFINITY && link.weight >= customized_weight)
-                                .count();
-                        }
+                        local_count.0 = upward_modified[local_edges.clone()].iter().filter(|&&m| !m).count();
+                        local_count.1 = downward_modified[local_edges].iter().filter(|&&m| !m).count();
                     });
                 }
             });
@@ -485,8 +485,8 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
 
                 let forward = &forward;
                 let backward = &backward;
-                let upward_orig = &upward_orig;
-                let downward_orig = &downward_orig;
+                let upward_modified = &upward_modified;
+                let downward_modified = &downward_modified;
                 let up_unpacking = &customized.up_unpacking;
                 let down_unpacking = &customized.down_unpacking;
 
@@ -531,12 +531,13 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
                             local_bw_fo[local_node_idx] = (num_bw_edges_before + bw_edge_count) as EdgeId;
 
                             let edge_ids = cch.neighbor_edge_indices_usize(node as NodeId);
-                            for (((link, &customized_weight), unpack), edge_idx) in LinkIterable::<Link>::link_iter(forward, node as NodeId)
-                                .zip(&upward_orig[edge_ids.clone()])
+                            for (((link, &modified), unpack), edge_idx) in LinkIterable::<Link>::link_iter(forward, node as NodeId)
+                                .zip(&upward_modified[edge_ids.clone()])
                                 .zip(&up_unpacking[edge_ids.clone()])
                                 .zip(edge_ids.clone())
                             {
-                                if link.weight < INFINITY && link.weight >= customized_weight {
+                                if !modified {
+                                    debug_assert!(link.weight < INFINITY);
                                     local_fw_head[fw_edge_count] = link.node;
                                     local_fw_tail[fw_edge_count] = node as NodeId;
                                     local_fw_weight[fw_edge_count] = link.weight;
@@ -545,12 +546,13 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
                                     fw_edge_count += 1;
                                 }
                             }
-                            for (((link, &customized_weight), unpack), edge_idx) in LinkIterable::<Link>::link_iter(backward, node as NodeId)
-                                .zip(&downward_orig[edge_ids.clone()])
+                            for (((link, &modified), unpack), edge_idx) in LinkIterable::<Link>::link_iter(backward, node as NodeId)
+                                .zip(&downward_modified[edge_ids.clone()])
                                 .zip(&down_unpacking[edge_ids.clone()])
                                 .zip(edge_ids)
                             {
-                                if link.weight < INFINITY && link.weight >= customized_weight {
+                                if !modified {
+                                    debug_assert!(link.weight < INFINITY);
                                     local_bw_head[bw_edge_count] = link.node;
                                     local_bw_tail[bw_edge_count] = node as NodeId;
                                     local_bw_weight[bw_edge_count] = link.weight;
@@ -568,6 +570,8 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
             backward_head.truncate(edges_of_each_thread[k].1);
             forward_weight.truncate(edges_of_each_thread[k].0);
             backward_weight.truncate(edges_of_each_thread[k].1);
+            forward_tail.truncate(edges_of_each_thread[k].0);
+            backward_tail.truncate(edges_of_each_thread[k].1);
             forward_unpacking.truncate(edges_of_each_thread[k].0);
             backward_unpacking.truncate(edges_of_each_thread[k].1);
             forward_first_out[n] = forward_head.len() as EdgeId;
