@@ -351,9 +351,8 @@ pub trait Customized {
     fn backward_graph(&self) -> BorrowedGraph;
     fn cch(&self) -> &Self::CCH;
 
-    /// Check for a node pair and a weight if there is a corresponding lower triangle.
-    /// If so, return the id of the middle node and the weights of both lower edges.
-    fn unpack_arc(&self, from: NodeId, to: NodeId, weight: Weight) -> Option<(NodeId, Weight, Weight)>;
+    fn unpack_outgoing(&self, edge: EdgeIdT) -> Option<(EdgeIdT, EdgeIdT, NodeIdT)>;
+    fn unpack_incoming(&self, edge: EdgeIdT) -> Option<(EdgeIdT, EdgeIdT, NodeIdT)>;
 
     fn forward_inverted(&self) -> &ReversedGraphWithEdgeIds;
     fn backward_inverted(&self) -> &ReversedGraphWithEdgeIds;
@@ -399,18 +398,6 @@ impl<'a, C: CCHT> Customized for CustomizedBasic<'a, C> {
         self.cch
     }
 
-    fn unpack_arc(&self, from: NodeId, to: NodeId, weight: Weight) -> Option<(NodeId, Weight, Weight)> {
-        unpack_arc(
-            from,
-            to,
-            weight,
-            &self.upward,
-            &self.downward,
-            self.forward_inverted(),
-            self.backward_inverted(),
-        )
-    }
-
     fn forward_inverted(&self) -> &ReversedGraphWithEdgeIds {
         self.cch.forward_inverted()
     }
@@ -422,6 +409,16 @@ impl<'a, C: CCHT> Customized for CustomizedBasic<'a, C> {
     }
     fn backward_tail(&self) -> &[NodeId] {
         self.cch().backward_tail()
+    }
+    fn unpack_outgoing(&self, EdgeIdT(edge): EdgeIdT) -> Option<(EdgeIdT, EdgeIdT, NodeIdT)> {
+        let (down, up) = self.up_unpacking[edge as usize];
+        down.value()
+            .map(|down| (EdgeIdT(down), EdgeIdT(up.value().unwrap()), NodeIdT(self.backward_tail()[down as usize])))
+    }
+    fn unpack_incoming(&self, EdgeIdT(edge): EdgeIdT) -> Option<(EdgeIdT, EdgeIdT, NodeIdT)> {
+        let (down, up) = self.down_unpacking[edge as usize];
+        down.value()
+            .map(|down| (EdgeIdT(down), EdgeIdT(up.value().unwrap()), NodeIdT(self.backward_tail()[down as usize])))
     }
 }
 
@@ -473,17 +470,6 @@ impl<'a, C: CCHT> Customized for CustomizedPerfect<'a, C> {
     fn cch(&self) -> &C {
         self.cch
     }
-    fn unpack_arc(&self, from: NodeId, to: NodeId, weight: Weight) -> Option<(NodeId, Weight, Weight)> {
-        unpack_arc(
-            from,
-            to,
-            weight,
-            self.upward.weight(),
-            self.downward.weight(),
-            &self.forward_inverted,
-            &self.backward_inverted,
-        )
-    }
     fn forward_inverted(&self) -> &ReversedGraphWithEdgeIds {
         &self.forward_inverted
     }
@@ -495,6 +481,16 @@ impl<'a, C: CCHT> Customized for CustomizedPerfect<'a, C> {
     }
     fn backward_tail(&self) -> &[NodeId] {
         &self.backward_tail
+    }
+    fn unpack_outgoing(&self, EdgeIdT(edge): EdgeIdT) -> Option<(EdgeIdT, EdgeIdT, NodeIdT)> {
+        let (down, up) = self.up_unpacking[edge as usize];
+        down.value()
+            .map(|down| (EdgeIdT(down), EdgeIdT(up.value().unwrap()), NodeIdT(self.backward_tail()[down as usize])))
+    }
+    fn unpack_incoming(&self, EdgeIdT(edge): EdgeIdT) -> Option<(EdgeIdT, EdgeIdT, NodeIdT)> {
+        let (down, up) = self.down_unpacking[edge as usize];
+        down.value()
+            .map(|down| (EdgeIdT(down), EdgeIdT(up.value().unwrap()), NodeIdT(self.backward_tail()[down as usize])))
     }
 }
 

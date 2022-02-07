@@ -181,6 +181,7 @@ fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weig
                         let first_down_weight = downward_weights[first_edge_id as usize - offset];
                         let first_up_weight = upward_weights[first_edge_id as usize - offset];
                         let mut low_up_edges = cch.neighbor_edge_indices_usize(low_node);
+                        let low_up_edges_orig = low_up_edges.clone();
                         low_up_edges.start -= offset;
                         low_up_edges.end -= offset;
                         // for all upward edges of the lower node
@@ -188,8 +189,8 @@ fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weig
                             .neighbor_iter(low_node)
                             .rev() // reversed order, (from high to low), so we can terminate earlier
                             .zip(upward_weights[low_up_edges.clone()].iter().rev())
-                            .zip(downward_weights[low_up_edges.clone()].iter().rev())
-                            .zip(low_up_edges.rev())
+                            .zip(downward_weights[low_up_edges].iter().rev())
+                            .zip(low_up_edges_orig.rev())
                         {
                             // since we go from high to low, once the ids are smaller than current node,
                             // we won't encounter any more lower triangles we need
@@ -490,7 +491,8 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
                 let down_unpacking = &customized.down_unpacking;
 
                 for i in 0..k {
-                    let local_nodes = i * nodes_per_thread..min((i + 1) * nodes_per_thread, n);
+                    let local_nodes = min(i * nodes_per_thread, n)..min((i + 1) * nodes_per_thread, n);
+                    debug_assert!(local_nodes.start <= local_nodes.end);
                     let num_cch_edges_in_batch = cch.first_out()[local_nodes.end] - cch.first_out()[local_nodes.start];
                     let num_fw_edges_before = edges_of_each_thread[i].0;
                     let num_bw_edges_before = edges_of_each_thread[i].1;
@@ -658,14 +660,15 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
                     for (NodeIdT(low_node), Reversed(EdgeIdT(first_edge_id))) in cch.backward_inverted.link_iter(current_node) {
                         let first_down_weight = downward_weights[first_edge_id as usize - downward_offset];
                         let mut low_up_edges = cch.forward().range(low_node as usize);
+                        let low_up_edges_orig = low_up_edges.clone();
                         low_up_edges.start -= upward_offset;
                         low_up_edges.end -= upward_offset;
                         // for all upward edges of the lower node
                         for ((&node, upward_weight), second_edge_id) in cch.forward()[low_node as usize]
                             .iter()
                             .rev() // reversed order, (from high to low), so we can terminate earlier
-                            .zip(upward_weights[low_up_edges.clone()].iter().rev())
-                            .zip(low_up_edges.rev())
+                            .zip(upward_weights[low_up_edges].iter().rev())
+                            .zip(low_up_edges_orig.rev())
                         {
                             // since we go from high to low, once the ids are smaller than current node,
                             // we won't encounter any more lower triangles we need
@@ -695,14 +698,15 @@ fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weight>, 
                     for (NodeIdT(low_node), Reversed(EdgeIdT(first_edge_id))) in cch.forward_inverted.link_iter(current_node) {
                         let first_up_weight = upward_weights[first_edge_id as usize - upward_offset];
                         let mut low_up_edges = cch.backward().range(low_node as usize);
+                        let low_up_edges_orig = low_up_edges.clone();
                         low_up_edges.start -= downward_offset;
                         low_up_edges.end -= downward_offset;
                         // for all upward edges of the lower node
                         for ((&node, downward_weight), second_edge_id) in cch.backward()[low_node as usize]
                             .iter()
                             .rev() // reversed order, (from high to low), so we can terminate earlier
-                            .zip(downward_weights[low_up_edges.clone()].iter().rev())
-                            .zip(low_up_edges.rev())
+                            .zip(downward_weights[low_up_edges].iter().rev())
+                            .zip(low_up_edges_orig.rev())
                         {
                             // since we go from high to low, once the ids are smaller than current node,
                             // we won't encounter any more lower triangles we need
