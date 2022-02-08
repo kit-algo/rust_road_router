@@ -5,7 +5,6 @@ use std::ops::IndexMut;
 use super::*;
 use crate::{datastr::timestamped_vector::TimestampedVector, util::in_range_option::InRangeOption};
 
-#[derive(Debug)]
 pub struct EliminationTreeWalk<'a, Graph, DistCont> {
     graph: &'a Graph,
     distances: &'a mut DistCont,

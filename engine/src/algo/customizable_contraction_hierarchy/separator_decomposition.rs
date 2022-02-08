@@ -2,7 +2,6 @@
 
 use super::*;
 
-#[derive(Debug)]
 pub struct SeparatorTree {
     pub nodes: Vec<NodeId>,
     pub children: Vec<SeparatorTree>,

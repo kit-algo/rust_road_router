@@ -136,7 +136,6 @@ impl RdfLinkGeometry {
     }
 }
 
-#[derive(Debug)]
 pub struct HereData {
     pub graph: OwnedGraph,
     pub link_lengths: Vec<f64>,

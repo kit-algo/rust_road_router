@@ -135,7 +135,6 @@ pub trait Deconstruct: Sized {
 
 /// Helper struct for loading multiple objects back from disk.
 /// Basically used as a callback for each object to load.
-#[derive(Debug)]
 pub struct Loader<'a> {
     path: &'a Path,
 }

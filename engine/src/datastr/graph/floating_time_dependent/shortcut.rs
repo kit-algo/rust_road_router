@@ -614,7 +614,6 @@ impl Sources {
     }
 }
 
-#[derive(Debug)]
 pub enum SourcesIter<'a> {
     None,
     One(Timestamp, std::iter::Once<ShortcutSourceData>),

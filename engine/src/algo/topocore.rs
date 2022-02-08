@@ -6,7 +6,6 @@ use crate::report::*;
 use crate::util::{in_range_option::InRangeOption, Bool, TapOps};
 use std::cmp::{max, min};
 
-#[derive(Debug)]
 pub struct Topocore {
     pub forward: OwnedGraph,
     pub backward: OwnedGraph,
@@ -14,7 +13,6 @@ pub struct Topocore {
     pub core_size: usize,
 }
 
-#[derive(Debug)]
 struct UndirectedGraph<'a, G, H> {
     ins: &'a G,
     outs: &'a H,

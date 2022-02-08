@@ -98,7 +98,6 @@ pub trait ShortcutGraphTrt {
 
 /// Container for partial CCH graphs during CATCHUp customization.
 /// Think split borrows.
-#[derive(Debug)]
 pub struct PartialShortcutGraph<'a> {
     pub original_graph: &'a TDGraph,
     outgoing: &'a [Shortcut],
@@ -171,7 +170,6 @@ impl<'a> ShortcutGraphTrt for PartialShortcutGraph<'a> {
 }
 
 // Just a container to group some data
-#[derive(Debug)]
 struct ShortcutGraph<'a> {
     original_graph: &'a TDGraph,
     first_out: &'a [EdgeId],
@@ -181,7 +179,6 @@ struct ShortcutGraph<'a> {
 }
 
 /// Result of CATCHUp customization to be passed to query algorithm.
-#[derive(Debug)]
 pub struct CustomizedGraph<'a> {
     pub original_graph: &'a TDGraph,
     pub outgoing: CustomizedSingleDirGraph,
@@ -429,7 +426,6 @@ impl<'a> Deconstruct for CustomizedGraph<'a> {
 }
 
 /// Additional data to load CATCHUp customization results back from disk.
-#[derive(Debug)]
 pub struct CustomizedGraphReconstrctor<'a> {
     pub original_graph: &'a TDGraph,
     pub first_out: &'a [EdgeId],
@@ -486,7 +482,6 @@ impl<'a> ReconstructPrepared<CustomizedGraph<'a>> for CustomizedGraphReconstrcto
 }
 
 /// Data for result of CATCHUp customization; one half/direction of it.
-#[derive(Debug)]
 pub struct CustomizedSingleDirGraph {
     first_out: Vec<EdgeId>,
     head: Vec<NodeId>,
@@ -722,7 +717,6 @@ impl<'a> ShortcutGraphTrt for CustomizedGraph<'a> {
 }
 
 /// Struct with borrowed slice of the relevant parts (topology, upper and lower bounds) for elimination tree corridor query.
-#[derive(Debug)]
 pub struct SingleDirBoundsGraph<'a> {
     first_out: &'a [EdgeId],
     head: &'a [NodeId],
@@ -850,7 +844,6 @@ impl Indexing for Reverse<ReconstructionQueueElement> {
     }
 }
 
-#[derive(Debug)]
 pub struct ReconstructionGraph<'a> {
     pub customized_graph: &'a CustomizedGraph<'a>,
     pub outgoing_cache: &'a mut [Option<ApproxPartialsContainer<Box<[TTFPoint]>>>],
@@ -1295,7 +1288,6 @@ impl<'a> ReconstructionGraph<'a> {
     }
 }
 
-#[derive(Debug)]
 pub struct ReconstructedGraph<'a> {
     pub customized_graph: &'a CustomizedGraph<'a>,
     pub outgoing_cache: &'a [Option<ApproxPartialsContainer<Box<[TTFPoint]>>>],

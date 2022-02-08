@@ -600,7 +600,6 @@ impl Sources for [(Timestamp, ShortcutSourceData)] {
 // Helper struct to iterate over sources.
 // Allows to get sources valid for times > period().
 // Handles all the ugly wraparound logic.
-#[derive(Debug)]
 pub struct SourceCursor<'a> {
     sources: &'a [(Timestamp, ShortcutSourceData)],
     current_index: usize,
@@ -658,7 +657,6 @@ impl<'a> SourceCursor<'a> {
     }
 }
 
-#[derive(Debug)]
 pub struct WrappingSourceIter<'a> {
     pub cursor: SourceCursor<'a>,
     pub end: Timestamp,

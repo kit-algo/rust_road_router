@@ -3,7 +3,6 @@ use super::sorted_search_slice_ext::*;
 use super::*;
 
 /// A struct borrowing data of a single PLF and exposing some methods to work with it.
-#[derive(Debug)]
 pub struct PiecewiseLinearFunction<'a> {
     departure_time: &'a [Timestamp],
     travel_time: &'a [Weight],

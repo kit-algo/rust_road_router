@@ -46,7 +46,6 @@ impl ImaiVertex {
     }
 }
 
-#[derive(Debug)]
 pub struct Imai {
     tunnel: Vec<ImaiVertex>,
     window: Vec<TTFPoint>,

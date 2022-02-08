@@ -6,7 +6,6 @@ pub trait Potential {
     fn potential(&mut self, node: NodeId) -> Option<Weight>;
 }
 
-#[derive(Debug)]
 pub struct TurnExpandedPotential<Potential> {
     potential: Potential,
     tail: Vec<NodeId>,

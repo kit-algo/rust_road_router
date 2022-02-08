@@ -78,7 +78,6 @@ impl Node {
     }
 }
 
-#[derive(Debug)]
 pub struct ContractionGraph<'a, Graph: 'a> {
     nodes: Vec<Node>,
     node_order: NodeOrder,
@@ -183,7 +182,6 @@ impl<'a, Graph: LinkIterable<NodeIdT>> ContractionGraph<'a, Graph> {
 }
 
 // a struct to keep track of the partial graphs during contraction
-#[derive(Debug)]
 struct PartialContractionGraph<'a> {
     // the nodes in the partial graph
     nodes: &'a mut [Node],
@@ -221,7 +219,6 @@ impl<'a> IndexMut<usize> for PartialContractionGraph<'a> {
 }
 
 /// Phase one result without any extra info
-#[derive(Debug)]
 pub struct ContractedGraph<'a, Graph: 'a>(ContractionGraph<'a, Graph>);
 
 impl<'a, Graph: 'a> ContractedGraph<'a, Graph> {

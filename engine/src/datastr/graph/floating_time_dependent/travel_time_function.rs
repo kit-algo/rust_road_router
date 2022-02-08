@@ -127,7 +127,6 @@ enum BoundMergingState {
 }
 
 // Similar to `ApproxTTFContainer`, though this one is for actually working with the functions, `ApproxTTFContainer` is for storing them.
-#[derive(Debug)]
 pub enum PeriodicATTF<'a> {
     Exact(PeriodicPiecewiseLinearFunction<'a>),
     Approx(PeriodicPiecewiseLinearFunction<'a>, PeriodicPiecewiseLinearFunction<'a>),
@@ -654,7 +653,6 @@ impl<'a> PeriodicATTF<'a> {
     }
 }
 
-#[derive(Debug)]
 pub enum PartialATTF<'a> {
     Exact(PartialPiecewiseLinearFunction<'a>),
     Approx(PartialPiecewiseLinearFunction<'a>, PartialPiecewiseLinearFunction<'a>),
@@ -1329,7 +1327,6 @@ def plot_coords(coords, *args, **kwargs):
     }
 }
 
-#[derive(Debug)]
 pub struct Partial<D> {
     pub start: Timestamp,
     pub end: Timestamp,
@@ -1406,7 +1403,6 @@ where
     }
 }
 
-#[derive(Debug)]
 pub struct ApproxPartialsContainer<D> {
     partials: Vec<Partial<D>>,
 }

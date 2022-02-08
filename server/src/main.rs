@@ -37,7 +37,7 @@ use rust_road_router::{
     report::report_time,
 };
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy)]
 struct NodeCoord {
     coords: [f64; 2],
     node_id: NodeId,
@@ -58,7 +58,7 @@ struct GeoQuery {
     to_lng: f32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct GeoResponse {
     distance: Weight,
     path: Vec<(f32, f32)>,
@@ -74,13 +74,12 @@ struct HereQuery {
     to_link_fraction: f32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct HereResponse {
     distance: Weight,
     path: Vec<(u64, bool)>,
 }
 
-#[derive(Debug)]
 enum Request {
     Geo((GeoQuery, Sender<Option<GeoResponse>>)),
     Here((HereQuery, Sender<Option<HereResponse>>)),

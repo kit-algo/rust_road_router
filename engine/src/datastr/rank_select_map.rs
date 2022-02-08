@@ -20,7 +20,6 @@ const STORAGE_BITS: usize = size_of::<u64>() * 8;
 /// - we need access to the ints containing the actualy bits, then do popcount on them
 /// - the memory needs to be aligned to the cache line width
 /// -> create a thin wrapper around a Vec<u64>, where we do the first allocation ourselves, and have operations to set individual bits
-#[derive(Debug)]
 pub struct BitVec {
     data: Vec<u64>,
     size: usize,
@@ -205,7 +204,6 @@ impl Iterator for SetBitsIter<'_> {
 /// already counted in the prefix sum. Conveniently couting ones in the ids cache line
 /// is super fast. Since updates require us to update the prefixes we use the data structure
 /// in two phases, first insert, and then after compile access.
-#[derive(Debug)]
 pub struct RankSelectMap {
     contained_keys_flags: BitVec,
     prefix_sum: Vec<usize>,
@@ -305,7 +303,6 @@ const GROUPED_LOCALS: usize = 256;
 
 /// Wrapper around `RankSelectMap` if the reverse mapping (local to global) is required.
 /// Implements `Deref` to `RankSelectMap`, so the original map is still ergonomically accessible
-#[derive(Debug)]
 pub struct InvertableRankSelectMap {
     map: RankSelectMap,
     blocks: Vec<usize>,

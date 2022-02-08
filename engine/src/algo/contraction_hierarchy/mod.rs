@@ -41,7 +41,6 @@ enum ShortcutResult {
 
 /// Struct for nodes during contraction.
 /// Allows adding, removing or updating edges.
-#[derive(Debug)]
 struct Node {
     outgoing: Vec<(Link, NodeId)>,
     incoming: Vec<(Link, NodeId)>,
@@ -95,7 +94,6 @@ impl Node {
 
 /// Intermediate graph representation for during the preprocessing.
 /// During contraction, we need a dynamic graph, so we use a `Vec` of nodes instead of the typical adjacency array structure.
-#[derive(Debug)]
 struct ContractionGraph {
     nodes: Vec<Node>,
 }
@@ -221,7 +219,6 @@ impl ContractionGraph {
 }
 
 // a struct to keep track of the partial graphs during contraction
-#[derive(Debug)]
 struct PartialContractionGraph<'a> {
     // the nodes in the partial graph
     nodes: &'a mut [Node],
@@ -314,12 +311,10 @@ pub fn contract<Graph: LinkIterGraph>(graph: &Graph, order: NodeOrder) -> Contra
 
 // Utilities for witness search
 
-#[derive(Debug)]
 struct ForwardWrapper<'a> {
     graph: &'a PartialContractionGraph<'a>,
 }
 
-#[derive(Debug)]
 struct BackwardWrapper<'a> {
     graph: &'a PartialContractionGraph<'a>,
 }
@@ -353,7 +348,6 @@ impl<'a> Graph for BackwardWrapper<'a> {
 }
 
 // workaround until we get an implementation of https://github.com/rust-lang/rfcs/pull/2071
-#[derive(Debug)]
 struct LinkMappingIterator<'a> {
     iter: std::slice::Iter<'a, (Link, NodeId)>,
     offset: NodeId,

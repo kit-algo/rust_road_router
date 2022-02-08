@@ -30,7 +30,6 @@ pub struct NodeData {
     pub lower_bound: FlWeight,
 }
 
-#[derive(Debug)]
 pub struct FloatingTDSteppedEliminationTree<'a, 'b> {
     graph: SingleDirBoundsGraph<'a>,
     distances: Vec<NodeData>,

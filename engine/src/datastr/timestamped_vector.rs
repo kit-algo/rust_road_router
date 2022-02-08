@@ -30,7 +30,7 @@ impl<T: Clone> Reset for Vec<T> {
 /// When only few entries are modified, a clearlist based approach may actually be preferable
 /// The elements can be modified through the index traits.
 /// Other modifications are not permitted.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct TimestampedVector<T> {
     data: Vec<T>,
     // timestamp for current iteration. Up to date values will have this one
@@ -110,7 +110,6 @@ impl<T: Reset> IndexMut<usize> for TimestampedVector<T> {
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
-#[derive(Debug)]
 pub struct AtomicDists {
     data: Box<[std::sync::atomic::AtomicU64]>,
     current: u32,

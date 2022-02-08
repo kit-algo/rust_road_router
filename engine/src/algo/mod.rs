@@ -116,7 +116,6 @@ impl<T: Copy> GenQuery<T> for TDQuery<T> {
 ///     dbg!(result.node_path().len());
 /// }
 /// ```
-#[derive(Debug)]
 pub struct QueryResult<P, W> {
     // just the plain distance
     // the infinity case is ignored here, in that case, there will be no query result at all

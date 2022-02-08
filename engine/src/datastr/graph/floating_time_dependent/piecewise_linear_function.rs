@@ -1715,7 +1715,6 @@ def plot_coords(coords, *args, **kwargs):
     }
 }
 
-#[derive(Debug)]
 pub struct UpdatedPiecewiseLinearFunction<'a> {
     plf: PeriodicPiecewiseLinearFunction<'a>,
     update: &'a [TTFPoint],

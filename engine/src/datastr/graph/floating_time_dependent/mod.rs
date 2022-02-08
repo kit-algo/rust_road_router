@@ -317,7 +317,7 @@ use std::panic;
 #[cfg(test)]
 fn run_test_with_periodicity<T>(period: Timestamp, test: T)
 where
-    T: FnOnce() -> () + panic::UnwindSafe,
+    T: FnOnce() + panic::UnwindSafe,
 {
     unsafe { set_period(period) };
 
@@ -359,7 +359,6 @@ pub static SAVED_BY_APPROX: AtomicIsize = AtomicIsize::new(0);
 /// Data structure to reduce allocations during customization.
 /// Stores multiple PLFs consecutively in one `Vec`
 /// The vector (capacity) grows on demand but should never shrink
-#[derive(Debug)]
 pub struct ReusablePLFStorage {
     data: Vec<TTFPoint>,
     first_points: Vec<u32>,
@@ -400,7 +399,6 @@ impl ReusablePLFStorage {
 
 /// A wrapper with mutable access to a PLF in a `ReusablePLFStorage`.
 /// Borrows the `ReusablePLFStorage` and allows other to reborrow it.
-#[derive(Debug)]
 pub struct MutTopPLF<'a> {
     storage: &'a mut ReusablePLFStorage,
 }

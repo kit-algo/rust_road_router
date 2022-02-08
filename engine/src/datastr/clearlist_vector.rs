@@ -6,7 +6,6 @@ use std::ops::{Index, IndexMut};
 /// Resetting is efficient when few entries where modified.
 /// The elements can be modified through the index traits.
 /// Other modifications are not permitted.
-#[derive(Debug)]
 pub struct ClearlistVector<T> {
     data: Vec<T>,
     clearlist: Vec<usize>,

@@ -6,7 +6,6 @@ use crate::datastr::rank_select_map::*;
 /// A compact data strcuture to efficiently get the tail node of a given link.
 /// Only good for very specific trade-offs.
 /// Usually, there is enough space to just keep a vector of tail nodes for each edge.
-#[derive(Debug)]
 pub struct LinkIdToTailMapper {
     link_id_to_tail: RankSelectMap,
     deg_zero_nodes_indices: Vec<EdgeId>,

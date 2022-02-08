@@ -4,7 +4,6 @@ use glob::glob;
 use std::fs::File;
 use std::path::Path;
 
-#[derive(Debug)]
 pub struct CSVSource<'a> {
     directory: &'a Path,
 }
