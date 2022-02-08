@@ -127,7 +127,7 @@ impl<'a, Graph: LinkIterable<NodeIdT>> ContractionGraph<'a, Graph> {
 
         for (node_id, node) in nodes.iter_mut().enumerate() {
             node.edges.retain(|&neighbor| neighbor > node_id as NodeId); // remove down arcs
-            node.edges.sort();
+            node.edges.sort_unstable();
             node.edges.dedup();
         }
 
