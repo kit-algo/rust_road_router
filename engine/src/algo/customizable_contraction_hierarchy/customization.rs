@@ -452,7 +452,7 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
                 for i in 0..k {
                     let (local_count, rest_counts) = local_edge_counts.split_first_mut().unwrap();
                     local_edge_counts = rest_counts;
-                    let local_nodes = i * nodes_per_thread..min((i + 1) * nodes_per_thread, n);
+                    let local_nodes = min(i * nodes_per_thread, n)..min((i + 1) * nodes_per_thread, n);
                     let local_edges = cch.first_out()[local_nodes.start] as usize..cch.first_out()[local_nodes.end] as usize;
                     s.spawn(move |_| {
                         local_count.0 = upward_modified[local_edges.clone()].iter().filter(|&&m| !m).count();
