@@ -31,23 +31,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let latitude = Vec::<f32>::load_from(path.join("latitude"))?;
     let longitude = Vec::<f32>::load_from(path.join("longitude"))?;
 
-    let cch_order = CCHReordering {
-        cch: &cch,
-        latitude: &latitude,
-        longitude: &longitude,
-    }
-    .reorder();
+    let cch_order = reorder(&cch, &latitude, &longitude);
 
     let cch_build_ctxt = algo_runs_ctxt.push_collection_item();
-    let cch = contract(&graph, cch_order);
+    let cch = contract(&graph, cch_order.clone());
     drop(cch_build_ctxt);
 
-    let cch_order = CCHReordering {
-        cch: &cch,
-        latitude: &latitude,
-        longitude: &longitude,
-    }
-    .reorder_for_seperator_based_customization();
+    let cch_order = reorder_for_seperator_based_customization(&cch_order, cch.separators());
     if !cch_folder.exists() {
         std::fs::create_dir(&cch_folder)?;
     }

@@ -61,16 +61,12 @@ impl<'g, Graph: EdgeIdGraph> ReconstructPrepared<CCH> for CCHReconstrctor<'g, Gr
 
 impl CCH {
     pub fn fix_order_and_build(graph: &(impl LinkIterable<NodeIdT> + EdgeIdGraph), order: NodeOrder) -> Self {
-        let cch = {
+        let contracted = {
             let _blocked = block_reporting();
-            contract(graph, order)
+            ContractionGraph::new(graph, order.clone()).contract()
         };
-        let order = CCHReordering {
-            cch: &cch,
-            latitude: &[],
-            longitude: &[],
-        }
-        .reorder_for_seperator_based_customization();
+        let elimination_tree = Self::build_elimination_tree(&contracted.decompose().0);
+        let order = reorder_for_seperator_based_customization(&order, SeparatorTree::new(&elimination_tree));
         contract(graph, order)
     }
 
