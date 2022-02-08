@@ -225,6 +225,10 @@ impl<'a, Graph: 'a> ContractedGraph<'a, Graph> {
     pub fn decompose(self) -> (UnweightedOwnedGraph, NodeOrder, &'a Graph) {
         (adjancecy_lists_to_first_out_graph(self.0.nodes), self.0.node_order, self.0.original_graph)
     }
+
+    pub fn elimination_tree(&self) -> Box<[InRangeOption<NodeId>]> {
+        self.0.nodes.iter().map(|nodes| nodes.edges.first().copied()).map(InRangeOption::new).collect()
+    }
 }
 
 fn adjancecy_lists_to_first_out_graph(adjancecy_lists: Vec<Node>) -> UnweightedOwnedGraph {

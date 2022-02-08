@@ -65,8 +65,7 @@ impl CCH {
             let _blocked = block_reporting();
             ContractionGraph::new(graph, order.clone()).contract()
         };
-        let elimination_tree = Self::build_elimination_tree(&contracted.decompose().0);
-        let order = reorder_for_seperator_based_customization(&order, SeparatorTree::new(&elimination_tree));
+        let order = reorder_for_seperator_based_customization(&order, SeparatorTree::new(&contracted.elimination_tree()));
         contract(graph, order)
     }
 
@@ -120,7 +119,7 @@ impl CCH {
 
     fn build_elimination_tree(graph: &UnweightedOwnedGraph) -> Vec<InRangeOption<NodeId>> {
         (0..graph.num_nodes())
-            .map(|node_id| LinkIterable::<NodeIdT>::link_iter(graph, node_id as NodeId).map(|NodeIdT(n)| n).min())
+            .map(|node_id| LinkIterable::<NodeIdT>::link_iter(graph, node_id as NodeId).map(|NodeIdT(n)| n).next())
             .map(InRangeOption::new)
             .collect()
     }
