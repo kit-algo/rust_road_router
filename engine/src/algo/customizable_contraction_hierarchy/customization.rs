@@ -347,22 +347,20 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
         let forward = customized.forward_graph();
         let backward = customized.backward_graph();
 
-        let mut timer = Timer::new();
+        let mut forward_first_out: Vec<EdgeId> = Vec::new();
+        let mut forward_head: Vec<NodeId> = Vec::new();
+        let mut forward_tail: Vec<NodeId> = Vec::new();
+        let mut forward_weight: Vec<Weight> = Vec::new();
+        let mut forward_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)> = Vec::new();
 
-        let mut forward_first_out: Vec<EdgeId>;
-        let mut forward_head: Vec<NodeId>;
-        let mut forward_tail: Vec<NodeId>;
-        let mut forward_weight: Vec<Weight>;
-        let mut forward_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>;
+        let mut backward_first_out: Vec<EdgeId> = Vec::new();
+        let mut backward_head: Vec<NodeId> = Vec::new();
+        let mut backward_tail: Vec<NodeId> = Vec::new();
+        let mut backward_weight: Vec<Weight> = Vec::new();
+        let mut backward_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)> = Vec::new();
 
-        let mut backward_first_out: Vec<EdgeId>;
-        let mut backward_head: Vec<NodeId>;
-        let mut backward_tail: Vec<NodeId>;
-        let mut backward_weight: Vec<Weight>;
-        let mut backward_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>;
-
-        let mut forward_id_mapping = vec![m as EdgeId; m];
-        let mut backward_id_mapping = vec![m as EdgeId; m];
+        let mut forward_id_mapping = Vec::new();
+        let mut backward_id_mapping = Vec::new();
 
         if cfg!(feature = "cch-disable-par") {
             forward_first_out = Vec::with_capacity(cch.first_out.len());
@@ -379,9 +377,8 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
             backward_weight = Vec::with_capacity(m);
             backward_unpacking = Vec::with_capacity(m);
 
-            eprintln!("alloc");
-            timer.report_passed_ms();
-            timer.restart();
+            forward_id_mapping = vec![m as EdgeId; m];
+            backward_id_mapping = vec![m as EdgeId; m];
 
             for node in 0..n as NodeId {
                 let edge_ids = cch.neighbor_edge_indices_usize(node);
@@ -423,27 +420,35 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
                 backward_first_out.push(backward_head.len() as EdgeId);
             }
         } else {
-            let k = rayon::current_num_threads() * 16;
+            let k = rayon::current_num_threads() * 4;
 
-            forward_first_out = vec![0; cch.first_out.len()];
-            forward_head = vec![0; m];
-            forward_tail = vec![0; m];
-            forward_weight = vec![0; m];
-            forward_unpacking = vec![(InRangeOption::NONE, InRangeOption::NONE); m];
-
-            backward_first_out = vec![0; cch.first_out.len()];
-            backward_head = vec![0; m];
-            backward_tail = vec![0; m];
-            backward_weight = vec![0; m];
-            backward_unpacking = vec![(InRangeOption::NONE, InRangeOption::NONE); m];
-
-            eprintln!("alloc");
-            timer.report_passed_ms();
-            timer.restart();
+            rayon::scope(|s| {
+                s.spawn(|_| forward_first_out = vec![0; cch.first_out.len()]);
+                s.spawn(|_| forward_head = vec![0; m]);
+                s.spawn(|_| forward_tail = vec![0; m]);
+                s.spawn(|_| forward_weight = vec![0; m]);
+                s.spawn(|_| forward_unpacking = vec![(InRangeOption::NONE, InRangeOption::NONE); m]);
+                s.spawn(|_| forward_id_mapping = vec![m as EdgeId; m]);
+                s.spawn(|_| backward_first_out = vec![0; cch.first_out.len()]);
+                s.spawn(|_| backward_head = vec![0; m]);
+                s.spawn(|_| backward_tail = vec![0; m]);
+                s.spawn(|_| backward_weight = vec![0; m]);
+                s.spawn(|_| backward_unpacking = vec![(InRangeOption::NONE, InRangeOption::NONE); m]);
+                s.spawn(|_| backward_id_mapping = vec![m as EdgeId; m]);
+            });
 
             let mut edges_of_each_thread = vec![(0, 0); k + 1];
             let mut local_edge_counts = &mut edges_of_each_thread[1..];
-            let nodes_per_thread = (n + k - 1) / k;
+            let target_edges_per_thread = (m + k - 1) / k;
+            let first_node_of_chunk: Vec<_> = cch
+                .tail
+                .chunks(target_edges_per_thread)
+                .map(|chunk| chunk[0] as usize)
+                .chain(std::iter::once(n))
+                .collect();
+
+            // let nodes_per_thread = (n + k - 1) / k;
+            // let first_node_of_chunk: Vec<_> = (0..=k).map(|i| min(n, i * nodes_per_thread)).collect();
 
             rayon::scope(|s| {
                 let upward_modified = &upward_modified;
@@ -452,7 +457,7 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
                 for i in 0..k {
                     let (local_count, rest_counts) = local_edge_counts.split_first_mut().unwrap();
                     local_edge_counts = rest_counts;
-                    let local_nodes = min(i * nodes_per_thread, n)..min((i + 1) * nodes_per_thread, n);
+                    let local_nodes = first_node_of_chunk[i]..first_node_of_chunk[i + 1];
                     let local_edges = cch.first_out()[local_nodes.start] as usize..cch.first_out()[local_nodes.end] as usize;
                     s.spawn(move |_| {
                         local_count.0 = upward_modified[local_edges.clone()].iter().filter(|&&m| !m).count();
@@ -491,15 +496,15 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
                 let down_unpacking = &customized.down_unpacking;
 
                 for i in 0..k {
-                    let local_nodes = min(i * nodes_per_thread, n)..min((i + 1) * nodes_per_thread, n);
+                    let local_nodes = first_node_of_chunk[i]..first_node_of_chunk[i + 1];
                     debug_assert!(local_nodes.start <= local_nodes.end);
                     let num_cch_edges_in_batch = cch.first_out()[local_nodes.end] - cch.first_out()[local_nodes.start];
                     let num_fw_edges_before = edges_of_each_thread[i].0;
                     let num_bw_edges_before = edges_of_each_thread[i].1;
 
-                    let (local_fw_fo, rest_fw_fo) = forward_first_out.split_at_mut(min(nodes_per_thread, forward_first_out.len()));
+                    let (local_fw_fo, rest_fw_fo) = forward_first_out.split_at_mut(local_nodes.end - local_nodes.start);
                     forward_first_out = rest_fw_fo;
-                    let (local_bw_fo, rest_bw_fo) = backward_first_out.split_at_mut(min(nodes_per_thread, backward_first_out.len()));
+                    let (local_bw_fo, rest_bw_fo) = backward_first_out.split_at_mut(local_nodes.end - local_nodes.start);
                     backward_first_out = rest_bw_fo;
                     let (local_fw_head, rest_fw_head) = forward_head.split_at_mut(edges_of_each_thread[i + 1].0 - num_fw_edges_before);
                     forward_head = rest_fw_head;
@@ -586,10 +591,6 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
                 *up = InRangeOption::new(up.value().map(|idx| forward_id_mapping[idx as usize] as EdgeId));
             });
         }
-
-        eprintln!("forward");
-        timer.report_passed_ms();
-        timer.restart();
 
         CustomizedPerfect::new(
             cch,
