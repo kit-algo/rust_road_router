@@ -19,20 +19,21 @@ use std::mem::swap;
 /// Anything that can be dereferenced to a slice works.
 /// Both owned (`Vec<T>`, `Box<[T]>`) and shared (`Rc<[T]>`, `Arc<[T])>`) or borrowed (slices) data is possible.
 #[derive(Debug, Clone)]
-pub struct FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> {
+pub struct FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer, W = Weight> {
     // index of first edge of each node +1 entry in the end
     first_out: FirstOutContainer,
     // the node ids to which each edge points
     head: HeadContainer,
     // the weight of each edge
     weight: WeightContainer,
+    _phantom: std::marker::PhantomData<W>,
 }
 
-impl<FirstOutContainer, HeadContainer, WeightContainer> FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+impl<FirstOutContainer, HeadContainer, WeightContainer, W> FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer, W>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
-    WeightContainer: AsRef<[Weight]>,
+    WeightContainer: AsRef<[W]>,
 {
     /// Borrow a slice of the first_out data
     pub fn first_out(&self) -> &[EdgeId] {
@@ -43,19 +44,24 @@ where
         self.head.as_ref()
     }
     /// Borrow a slice of the weight data
-    pub fn weight(&self) -> &[Weight] {
+    pub fn weight(&self) -> &[W] {
         self.weight.as_ref()
     }
 
     /// Create a new `FirstOutGraph` from the three containers.
-    pub fn new(first_out: FirstOutContainer, head: HeadContainer, weight: WeightContainer) -> FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer> {
+    pub fn new(first_out: FirstOutContainer, head: HeadContainer, weight: WeightContainer) -> Self {
         assert!(first_out.as_ref().len() < <NodeId>::max_value() as usize);
         assert!(head.as_ref().len() < <EdgeId>::max_value() as usize);
         assert_eq!(*first_out.as_ref().first().unwrap(), 0);
         assert_eq!(*first_out.as_ref().last().unwrap() as usize, head.as_ref().len());
         assert_eq!(weight.as_ref().len(), head.as_ref().len());
 
-        FirstOutGraph { first_out, head, weight }
+        Self {
+            first_out,
+            head,
+            weight,
+            _phantom: Default::default(),
+        }
     }
 
     /// Decompose the graph into its three seperate data containers
@@ -63,11 +69,12 @@ where
         (self.first_out, self.head, self.weight)
     }
 
-    pub fn borrowed(&self) -> FirstOutGraph<&[EdgeId], &[NodeId], &[EdgeId]> {
+    pub fn borrowed(&self) -> FirstOutGraph<&[EdgeId], &[NodeId], &[W]> {
         FirstOutGraph {
             first_out: self.first_out(),
             head: self.head(),
             weight: self.weight(),
+            _phantom: Default::default(),
         }
     }
 }
@@ -87,7 +94,7 @@ where
 }
 
 pub type OwnedGraph = FirstOutGraph<Vec<EdgeId>, Vec<NodeId>, Vec<Weight>>;
-pub type BorrowedGraph<'a> = FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [Weight]>;
+pub type BorrowedGraph<'a, W = Weight> = FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [W], W>;
 
 impl OwnedGraph {
     pub fn from_adjancecy_lists(adjancecy_lists: Vec<Vec<Link>>) -> OwnedGraph {
@@ -165,11 +172,11 @@ impl<FirstOutContainer, HeadContainer> FirstOutGraph<FirstOutContainer, HeadCont
     }
 }
 
-impl<FirstOutContainer, HeadContainer, WeightContainer> Graph for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+impl<FirstOutContainer, HeadContainer, WeightContainer, W> Graph for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer, W>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
-    WeightContainer: AsRef<[Weight]>,
+    WeightContainer: AsRef<[W]>,
 {
     fn num_nodes(&self) -> usize {
         self.first_out().len() - 1
@@ -207,11 +214,11 @@ where
     }
 }
 
-impl<FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<NodeIdT> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+impl<FirstOutContainer, HeadContainer, WeightContainer, W> LinkIterable<NodeIdT> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer, W>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
-    WeightContainer: AsRef<[Weight]>,
+    WeightContainer: AsRef<[W]>,
 {
     type Iter<'a>
     where
@@ -223,14 +230,14 @@ where
     }
 }
 
-impl<'a, FirstOutContainer, HeadContainer, WeightContainer> MutLinkIterable<'a, (&'a NodeId, &'a mut Weight)>
-    for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+impl<'a, FirstOutContainer, HeadContainer, WeightContainer, W> MutLinkIterable<'a, (&'a NodeId, &'a mut W)>
+    for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer, W>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
-    WeightContainer: AsRef<[Weight]> + AsMut<[Weight]>,
+    WeightContainer: AsRef<[W]> + AsMut<[W]>,
 {
-    type Iter = std::iter::Zip<std::slice::Iter<'a, NodeId>, std::slice::IterMut<'a, Weight>>;
+    type Iter = std::iter::Zip<std::slice::Iter<'a, NodeId>, std::slice::IterMut<'a, W>>;
 
     #[inline]
     fn link_iter_mut(&'a mut self, node: NodeId) -> Self::Iter {
@@ -239,20 +246,20 @@ where
     }
 }
 
-impl<'a, FirstOutContainer, HeadContainer, WeightContainer> FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+impl<'a, FirstOutContainer, HeadContainer, WeightContainer, W> FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer, W>
 where
-    WeightContainer: AsMut<[Weight]>,
+    WeightContainer: AsMut<[W]>,
 {
-    pub fn weights_mut(&mut self) -> &mut [Weight] {
+    pub fn weights_mut(&mut self) -> &mut [W] {
         self.weight.as_mut()
     }
 }
 
-impl<FirstOutContainer, HeadContainer, WeightContainer> EdgeIdGraph for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+impl<FirstOutContainer, HeadContainer, WeightContainer, W> EdgeIdGraph for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer, W>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
-    WeightContainer: AsRef<[Weight]>,
+    WeightContainer: AsRef<[W]>,
 {
     type IdxIter<'a>
     where
@@ -284,11 +291,12 @@ where
     }
 }
 
-impl<FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<(NodeIdT, EdgeIdT)> for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+impl<FirstOutContainer, HeadContainer, WeightContainer, W> LinkIterable<(NodeIdT, EdgeIdT)>
+    for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer, W>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
-    WeightContainer: AsRef<[Weight]>,
+    WeightContainer: AsRef<[W]>,
 {
     type Iter<'a>
     where
@@ -305,18 +313,19 @@ where
     }
 }
 
-impl<FirstOutContainer, HeadContainer, WeightContainer> LinkIterable<(NodeIdT, Weight, EdgeIdT)>
-    for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+impl<FirstOutContainer, HeadContainer, WeightContainer, W> LinkIterable<(NodeIdT, W, EdgeIdT)>
+    for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer, W>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
-    WeightContainer: AsRef<[Weight]>,
+    WeightContainer: AsRef<[W]>,
+    W: Copy,
 {
     #[allow(clippy::type_complexity)]
     type Iter<'a>
     where
         Self: 'a,
-    = impl Iterator<Item = (NodeIdT, Weight, EdgeIdT)> + 'a;
+    = impl Iterator<Item = (NodeIdT, W, EdgeIdT)> + 'a;
 
     #[inline]
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
@@ -333,7 +342,7 @@ where
 /// Genric over the types of the data collections.
 /// Anything that can be dereferenced to a slice works.
 /// Both owned (`Vec<T>`, `Box<[T]>`) and shared (`Rc<[T]>`, `Arc<[T])>`) or borrowed (slices) data is possible.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct UnweightedFirstOutGraph<FirstOutContainer, HeadContainer> {
     // index of first edge of each node +1 entry in the end
     first_out: FirstOutContainer,
