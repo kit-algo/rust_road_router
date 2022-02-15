@@ -31,7 +31,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     });
 
     experiments::run_queries(
-        from.iter().copied().zip(to.iter().copied()).take(10000),
+        from.iter().copied().zip(to.iter().copied()).take(100000),
         &mut server,
         None,
         |_, _, _| (),

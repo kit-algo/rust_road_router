@@ -1,5 +1,6 @@
 #![feature(array_windows)]
 
+use std::time::Duration;
 use std::{env, error::Error, path::Path};
 
 use rust_road_router::{
@@ -10,6 +11,7 @@ use rust_road_router::{
     cli::CliErr,
     datastr::{graph::*, node_order::NodeOrder},
     io::*,
+    report::benchmark::*,
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -31,12 +33,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         val => Some(val),
     });
 
-    for ((&from, &to), gt) in from.iter().zip(to.iter()).zip(gt_iter) {
+    let mut total_unpacking_time = Duration::ZERO;
+    let mut counter = 0;
+
+    for ((&from, &to), gt) in from.iter().zip(to.iter()).zip(gt_iter).take(10000) {
+        counter += 1;
         let mut res = server.query(Query { from, to });
         let dist = res.distance();
         assert_eq!(dist, gt);
         if let Some(_) = dist {
-            let nodes = res.node_path().unwrap();
+            let (nodes, time) = measure(|| res.node_path().unwrap());
+            total_unpacking_time += time;
             let mut dist = 0;
             for &[tail, head] in nodes.array_windows::<2>() {
                 dist += graph.edge_indices(tail, head).map(|EdgeIdT(e)| graph.link(e).weight).min().unwrap();
@@ -45,6 +52,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             assert_eq!(dist, gt.unwrap());
         }
     }
+
+    eprintln!("Avg. path unpacking time: {}ms", (total_unpacking_time / counter).as_secs_f64() * 1000.0);
 
     Ok(())
 }
