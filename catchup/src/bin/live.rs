@@ -21,10 +21,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let graph = TDGraph::reconstruct_from(&path)?;
 
-    let mut algo_runs_ctxt = push_collection_context("algo_runs");
+    let _algo_runs_ctxt = push_collection_context("algo_runs");
 
     let cch_folder = path.join("cch");
-    let cch = CCHReconstrctor(&graph).reconstruct_from(&cch_folder)?;
+    let _cch = CCHReconstrctor(&graph).reconstruct_from(&cch_folder)?;
 
     let file = File::open(args.next().unwrap()).unwrap();
     let mut reader = ReaderBuilder::new()
@@ -57,7 +57,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    let live_graph = LiveGraph::new(graph, Timestamp::new(f64::from(t_live / 1000)), &live);
+    let _live_graph = LiveGraph::new(graph, Timestamp::new(f64::from(t_live / 1000)), &live);
 
     Ok(())
 }
