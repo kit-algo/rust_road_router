@@ -13,7 +13,10 @@ pub trait Reset: Clone {
 impl Reset for Weight {
     const DEFAULT: Self = INFINITY;
 }
-impl Reset for InRangeOption<u32> {
+impl Reset for (Weight, Weight) {
+    const DEFAULT: Self = (INFINITY, INFINITY);
+}
+impl<T: Sentinel + std::fmt::Debug> Reset for InRangeOption<T> {
     const DEFAULT: Self = InRangeOption::NONE;
 }
 impl Reset for bool {

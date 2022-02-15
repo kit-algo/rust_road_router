@@ -12,6 +12,10 @@ impl Sentinel for u32 {
     const SENTINEL: u32 = u32::MAX;
 }
 
+impl Sentinel for (u32, u32) {
+    const SENTINEL: (u32, u32) = (u32::MAX, u32::MAX);
+}
+
 impl Sentinel for i32 {
     const SENTINEL: i32 = i32::MIN;
 }
