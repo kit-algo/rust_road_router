@@ -137,9 +137,10 @@ impl<'a> Server<'a> {
                 // only works for forward search
                 // currently deactivated by default
                 let stall = || {
-                    for ((target, _), (_, shortcut_upper_bound)) in
-                        self.customized_graph.downward_bounds_graph().neighbor_iter(self.forward.peek_next().unwrap())
-                    {
+                    for (NodeIdT(target), (_, shortcut_upper_bound), _) in LinkIterable::<(NodeIdT, (FlWeight, FlWeight), EdgeIdT)>::link_iter(
+                        &self.customized_graph.downward_bounds_graph(),
+                        self.forward.peek_next().unwrap(),
+                    ) {
                         if self.forward.node_data(target).upper_bound + shortcut_upper_bound
                             < self.forward.node_data(self.forward.peek_next().unwrap()).lower_bound
                         {

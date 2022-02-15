@@ -5,7 +5,6 @@
 //! Thus we may have multiple potentially optimal labels for each node and get a corridor instead of a path.
 
 use super::*;
-use crate::datastr::graph::floating_time_dependent::SingleDirBoundsGraph;
 use crate::datastr::graph::floating_time_dependent::*;
 use crate::util::in_range_option::InRangeOption;
 use std::cmp::min;
@@ -31,7 +30,7 @@ pub struct NodeData {
 }
 
 pub struct FloatingTDSteppedEliminationTree<'a, 'b> {
-    graph: SingleDirBoundsGraph<'a>,
+    graph: BorrowedGraph<'a, (FlWeight, FlWeight)>,
     distances: Vec<NodeData>,
     elimination_tree: &'b [InRangeOption<NodeId>],
     next: Option<NodeId>,
@@ -39,7 +38,7 @@ pub struct FloatingTDSteppedEliminationTree<'a, 'b> {
 }
 
 impl<'a, 'b> FloatingTDSteppedEliminationTree<'a, 'b> {
-    pub fn new(graph: SingleDirBoundsGraph<'a>, elimination_tree: &'b [InRangeOption<NodeId>]) -> FloatingTDSteppedEliminationTree<'a, 'b> {
+    pub fn new(graph: BorrowedGraph<'a, (FlWeight, FlWeight)>, elimination_tree: &'b [InRangeOption<NodeId>]) -> FloatingTDSteppedEliminationTree<'a, 'b> {
         let n = graph.num_nodes();
 
         FloatingTDSteppedEliminationTree {
@@ -88,7 +87,9 @@ impl<'a, 'b> FloatingTDSteppedEliminationTree<'a, 'b> {
             let current_state_upper_bound = self.distances[node as usize].upper_bound;
             self.next = self.elimination_tree[node as usize].value();
 
-            for ((target, shortcut_id), (shortcut_lower_bound, shortcut_upper_bound)) in self.graph.neighbor_iter(node) {
+            for (NodeIdT(target), (shortcut_lower_bound, shortcut_upper_bound), EdgeIdT(shortcut_id)) in
+                LinkIterable::<(NodeIdT, (FlWeight, FlWeight), EdgeIdT)>::link_iter(&self.graph, node)
+            {
                 let next;
                 let next_upper_bound;
                 if cfg!(feature = "tdcch-query-corridor") {

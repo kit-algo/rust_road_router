@@ -137,9 +137,10 @@ impl<'a> Server<'a> {
                 // only works for forward search
                 // currently deactivated by default
                 let stall = || {
-                    for ((target, _), (_, shortcut_upper_bound)) in
-                        self.customized_graph.downward_bounds_graph().neighbor_iter(self.forward.peek_next().unwrap())
-                    {
+                    for (NodeIdT(target), (_, shortcut_upper_bound), _) in LinkIterable::<(NodeIdT, (FlWeight, FlWeight), EdgeIdT)>::link_iter(
+                        &self.customized_graph.downward_bounds_graph(),
+                        self.forward.peek_next().unwrap(),
+                    ) {
                         if self.forward.node_data(target).upper_bound + shortcut_upper_bound
                             < self.forward.node_data(self.forward.peek_next().unwrap()).lower_bound
                         {
@@ -347,7 +348,9 @@ impl<'a> Server<'a> {
             relax_timer.restart();
 
             // for each outgoing (forward) edge
-            for ((target, shortcut_id), (shortcut_lower_bound, _shortcut_upper_bound)) in self.customized_graph.upward_bounds_graph().neighbor_iter(node) {
+            for (NodeIdT(target), (shortcut_lower_bound, _shortcut_upper_bound), EdgeIdT(shortcut_id)) in
+                LinkIterable::<(NodeIdT, (FlWeight, FlWeight), EdgeIdT)>::link_iter(&self.customized_graph.upward_bounds_graph(), node)
+            {
                 // if its in the search space
                 // and can improve the distance of the target according to the bounds
                 if relevant_upward.get(shortcut_id as usize)

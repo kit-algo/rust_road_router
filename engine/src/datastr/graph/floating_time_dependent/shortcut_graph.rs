@@ -337,21 +337,13 @@ impl<'a> CustomizedGraph<'a> {
     }
 
     /// Get bounds graph for forward elimination tree interval query
-    pub fn upward_bounds_graph(&self) -> SingleDirBoundsGraph {
-        SingleDirBoundsGraph {
-            first_out: &self.outgoing.first_out[..],
-            head: &self.outgoing.head[..],
-            bounds: &self.outgoing.bounds[..],
-        }
+    pub fn upward_bounds_graph(&self) -> BorrowedGraph<(FlWeight, FlWeight)> {
+        FirstOutGraph::new(&self.outgoing.first_out[..], &self.outgoing.head[..], &self.outgoing.bounds[..])
     }
 
     /// Get bounds graph for backward elimination tree interval query
-    pub fn downward_bounds_graph(&self) -> SingleDirBoundsGraph {
-        SingleDirBoundsGraph {
-            first_out: &self.incoming.first_out[..],
-            head: &self.incoming.head[..],
-            bounds: &self.incoming.bounds[..],
-        }
+    pub fn downward_bounds_graph(&self) -> BorrowedGraph<(FlWeight, FlWeight)> {
+        FirstOutGraph::new(&self.incoming.first_out[..], &self.incoming.head[..], &self.incoming.bounds[..])
     }
 
     pub fn unique_path_edges(&self) -> (BitVec, BitVec) {
@@ -359,7 +351,7 @@ impl<'a> CustomizedGraph<'a> {
         let mut outgoing_unique = BitVec::new(self.outgoing.head.len());
 
         for n in 0..self.original_graph.num_nodes() {
-            for ((_, edge), _) in self.downward_bounds_graph().neighbor_iter(n as NodeId) {
+            for edge in self.downward_bounds_graph().neighbor_edge_indices(n as NodeId) {
                 if let &[(_, source)] = self.incoming.edge_sources(edge) {
                     match source.into() {
                         ShortcutSource::Shortcut(down, up) => {
@@ -372,7 +364,7 @@ impl<'a> CustomizedGraph<'a> {
                     }
                 }
             }
-            for ((_, edge), _) in self.upward_bounds_graph().neighbor_iter(n as NodeId) {
+            for edge in self.upward_bounds_graph().neighbor_edge_indices(n as NodeId) {
                 if let &[(_, source)] = self.outgoing.edge_sources(edge) {
                     match source.into() {
                         ShortcutSource::Shortcut(down, up) => {
@@ -713,29 +705,6 @@ impl<'a> ShortcutGraphTrt for CustomizedGraph<'a> {
                 .unwrap(),
         )
         .evaluate(t, self)
-    }
-}
-
-/// Struct with borrowed slice of the relevant parts (topology, upper and lower bounds) for elimination tree corridor query.
-pub struct SingleDirBoundsGraph<'a> {
-    first_out: &'a [EdgeId],
-    head: &'a [NodeId],
-    bounds: &'a [(FlWeight, FlWeight)],
-}
-
-impl<'a> SingleDirBoundsGraph<'a> {
-    pub fn num_nodes(&self) -> usize {
-        self.first_out.len() - 1
-    }
-
-    fn neighbor_edge_indices_usize(&self, node: NodeId) -> Range<usize> {
-        (self.first_out[node as usize] as usize)..(self.first_out[(node + 1) as usize] as usize)
-    }
-
-    pub fn neighbor_iter(&self, node: NodeId) -> impl Iterator<Item = ((NodeId, EdgeId), &(FlWeight, FlWeight))> {
-        let range = self.neighbor_edge_indices_usize(node);
-        let edge_ids = range.start as EdgeId..range.end as EdgeId;
-        self.head[range.clone()].iter().cloned().zip(edge_ids).zip(self.bounds[range].iter())
     }
 }
 
