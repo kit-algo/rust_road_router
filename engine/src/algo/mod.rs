@@ -14,6 +14,7 @@ pub mod dijkstra;
 pub mod hl;
 pub mod minimal_nonshortest_subpaths;
 pub mod rphast;
+pub mod td_astar;
 pub mod time_dependent_sampling;
 pub mod topocore;
 pub mod traffic_aware;
