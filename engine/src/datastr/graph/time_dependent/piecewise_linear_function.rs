@@ -53,6 +53,37 @@ impl<'a> PiecewiseLinearFunction<'a> {
         *self.travel_time.iter().min().unwrap()
     }
 
+    /// Calculate average Weight over a given time range.
+    pub fn lower_bound_in_range(&self, range: Range<Timestamp>) -> Weight {
+        let (first_range, second_range) = range.split(period());
+        std::cmp::min(self.lower_bound_in_included(first_range), self.lower_bound_in_included(second_range))
+    }
+
+    pub fn lower_bound_in_included(&self, range: Range<Timestamp>) -> Weight {
+        let (first_idx, first_lower) = match self.departure_time.locate(range.start, |&dt| dt) {
+            Location::On(index) => (index, INFINITY),
+            Location::Between(_lower_index, upper_index) => (upper_index, self.evaluate(range.start)),
+        };
+
+        let (last_idx, last_lower) = match self.departure_time.locate(range.start, |&dt| dt) {
+            Location::On(index) => (index, INFINITY),
+            Location::Between(lower_index, _upper_index) => (lower_index, self.evaluate(range.end)),
+        };
+
+        self.travel_time[first_idx..last_idx]
+            .iter()
+            .copied()
+            .chain(std::iter::once(first_lower))
+            .chain(std::iter::once(last_lower))
+            .min()
+            .unwrap()
+    }
+
+    /// Find the highest value of the function
+    pub fn upper_bound(&self) -> Weight {
+        *self.travel_time.iter().max().unwrap()
+    }
+
     /// Evaluate for a point in time within period!
     #[inline(always)]
     pub(super) fn evaluate(&self, departure: Timestamp) -> Weight {

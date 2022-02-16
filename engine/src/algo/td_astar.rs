@@ -22,8 +22,10 @@ impl<T: Potential> TDPotential for T {
     }
 }
 
+use std::ops::Range;
+
 pub struct MultiMetric<C> {
-    metric_ranges: Vec<std::ops::Range<Timestamp>>,
+    metric_ranges: Vec<(Range<Timestamp>, usize)>,
     metrics: Vec<C>,
     stack: Vec<NodeId>,
     potentials: TimestampedVector<InRangeOption<Weight>>,
@@ -34,29 +36,66 @@ pub struct MultiMetric<C> {
     current_metric: Option<usize>,
 }
 
+impl<'a> MultiMetric<CustomizedBasic<'a, CCH>> {
+    pub fn build(cch: &'a CCH, metric_ranges: Vec<Range<Timestamp>>, graph: &TDGraph) -> Self {
+        let metrics: Vec<Box<[_]>> = metric_ranges
+            .iter()
+            .map(|r| {
+                (0..graph.num_arcs())
+                    .map(|e| graph.travel_time_function(e as EdgeId).lower_bound_in_range(r.clone()))
+                    .collect()
+            })
+            .collect();
+        let metric_ranges = metric_ranges.into_iter().enumerate().map(|(i, r)| (r, i)).collect();
+        let upper_bound: Box<[_]> = (0..graph.num_arcs()).map(|e| graph.travel_time_function(e as EdgeId).upper_bound()).collect();
+        let metric_graphs: Box<[_]> = metrics.iter().map(|w| BorrowedGraph::new(graph.first_out(), graph.head(), w)).collect();
+        Self::new(
+            cch,
+            metric_ranges,
+            &metric_graphs,
+            BorrowedGraph::new(graph.first_out(), graph.head(), &upper_bound),
+        )
+    }
+
+    pub fn new(cch: &'a CCH, metric_ranges: Vec<(Range<Timestamp>, usize)>, metrics: &[BorrowedGraph], upper_bound: BorrowedGraph) -> Self {
+        let n = cch.num_nodes();
+        let m = cch.num_arcs();
+        Self {
+            metric_ranges,
+            metrics: metrics.iter().map(|m| customize(cch, m)).collect(),
+            stack: Vec::new(),
+            backward_distances: TimestampedVector::new(n),
+            backward_parents: vec![(n as NodeId, m as EdgeId); n],
+            potentials: TimestampedVector::new(n),
+            num_pot_computations: 0,
+            current_metric: None,
+            upper_bound_dist: query::Server::new(customize(cch, &upper_bound)),
+        }
+    }
+}
+
 impl<C: Customized> TDPotential for MultiMetric<C> {
     fn init(&mut self, source: NodeId, target: NodeId, departure: Timestamp) {
+        let departure = departure % period();
         self.num_pot_computations = 0;
         self.potentials.reset();
-        // TODO permutation foo server vs the ones here?
+
         if let Some(upper_bound) = self.upper_bound_dist.query(Query { from: source, to: target }).distance() {
             let latest_arrival = departure + upper_bound;
-            let mut best_range_idx: Option<usize> = None;
-            for (idx, range) in self.metric_ranges.iter().enumerate() {
-                // TODO wrapping foo
+            let mut best_range: Option<(Range<Timestamp>, usize)> = None;
+            for (range, idx) in &self.metric_ranges {
                 if range.start <= departure && range.end > latest_arrival {
-                    if let Some(best_range_idx) = &mut best_range_idx {
-                        let best_range = &self.metric_ranges[*best_range_idx];
-                        if range.start >= best_range.start && range.end <= best_range.end {
-                            *best_range_idx = idx;
+                    if let Some(best_range) = &mut best_range {
+                        if range.start >= best_range.0.start && range.end <= best_range.0.end {
+                            *best_range = (range.clone(), *idx);
                         }
                     } else {
-                        best_range_idx = Some(idx);
+                        best_range = Some((range.clone(), *idx));
                     }
                 }
             }
 
-            let metric = &self.metrics[best_range_idx.unwrap()];
+            let metric = &self.metrics[best_range.as_ref().unwrap().1];
             let bw_graph = metric.backward_graph();
 
             let target = metric.cch().node_order().rank(target);
@@ -78,7 +117,7 @@ impl<C: Customized> TDPotential for MultiMetric<C> {
                 }
             }
 
-            self.current_metric = Some(best_range_idx.unwrap());
+            self.current_metric = Some(best_range.unwrap().1);
         } else {
             self.current_metric = None;
         }
