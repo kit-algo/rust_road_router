@@ -19,7 +19,7 @@ pub use self::graph::LiveTDGraph;
 mod geometry;
 use self::geometry::*;
 
-mod math;
+pub mod math;
 mod sorted_search_slice_ext;
 
 /// A point in time.

@@ -1,0 +1,10 @@
+[package]
+name = "tdpot"
+version = "0.1.0"
+edition = "2021"
+authors = ["Tim 'tim3z' Zeitz <mail@tim3z.net>"]
+
+[dependencies]
+rust_road_router = { path = "../engine" }
+csv = "^1.1.6"
+rayon = "^1.5.1"

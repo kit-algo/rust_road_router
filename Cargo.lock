@@ -1434,6 +1434,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tdpot"
+version = "0.1.0"
+dependencies = [
+ "csv",
+ "rayon",
+ "rust_road_router",
+]
+
+[[package]]
 name = "time"
 version = "0.1.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"

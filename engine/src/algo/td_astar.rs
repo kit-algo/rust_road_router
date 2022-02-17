@@ -96,6 +96,24 @@ impl<'a> MultiMetric<CustomizedBasic<'a, CCH>> {
     }
 }
 
+fn range_included(covered: &Range<Timestamp>, to_cover: &Range<Timestamp>) -> bool {
+    use crate::datastr::graph::time_dependent::math::RangeExtensions;
+    debug_assert!(covered.start < period());
+    debug_assert!(to_cover.start < period());
+    let (covered_first, mut covered_second) = covered.clone().split(period());
+    let (to_cover_first, mut to_cover_second) = to_cover.clone().split(period());
+    covered_second.start %= period();
+    covered_second.end %= period();
+    covered_second.start %= period();
+    to_cover_second.end %= period();
+    (to_cover_first.is_empty() || range_contains(&covered_first, &to_cover_first) || range_contains(&covered_second, &to_cover_first))
+        && (to_cover_second.is_empty() || range_contains(&covered_first, &to_cover_second) || range_contains(&covered_second, &to_cover_second))
+}
+
+fn range_contains(covered: &Range<Timestamp>, to_cover: &Range<Timestamp>) -> bool {
+    covered.start <= to_cover.start && covered.end >= to_cover.end
+}
+
 impl<C: Customized> TDPotential for MultiMetric<C> {
     fn init(&mut self, source: NodeId, target: NodeId, departure: Timestamp) {
         let departure = departure % period();
@@ -106,13 +124,9 @@ impl<C: Customized> TDPotential for MultiMetric<C> {
             let latest_arrival = departure + upper_bound;
             let mut best_range: Option<(Range<Timestamp>, usize)> = None;
             for (range, idx) in &self.metric_ranges {
-                if range.start <= departure && range.end > latest_arrival {
+                if range_included(range, &(departure..latest_arrival + 1)) {
                     if let Some(best_range) = &mut best_range {
-                        // TODO reicht noch nicht fuer modulo foo
-                        // check length of range to determine the better one?
-                        // computed range might go over period but dep..latest_arr might be at beginning
-                        // dep..latest_arr might jump over period()
-                        if range.start >= best_range.0.start && range.end <= best_range.0.end {
+                        if range.end - range.start < best_range.0.end - best_range.0.start {
                             *best_range = (range.clone(), *idx);
                         }
                     } else {
