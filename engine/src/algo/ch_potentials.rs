@@ -13,6 +13,7 @@ use crate::{
 
 pub mod penalty;
 pub mod query;
+pub mod td_query;
 
 pub struct CCHPotData<'a> {
     customized: CustomizedPerfect<'a, CCH>,

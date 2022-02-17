@@ -10,15 +10,37 @@ use std::cmp::min;
 
 pub trait TDPotential {
     fn init(&mut self, source: NodeId, target: NodeId, departure: Timestamp);
-    fn potential(&mut self, node: NodeId, t: Timestamp) -> Option<Weight>;
+    fn potential(&mut self, node: NodeId, t: Option<Timestamp>) -> Option<Weight>;
 }
 
 impl<T: Potential> TDPotential for T {
     fn init(&mut self, _source: NodeId, target: NodeId, _departure: Timestamp) {
         self.init(target)
     }
-    fn potential(&mut self, node: NodeId, _t: Timestamp) -> Option<Weight> {
+    fn potential(&mut self, node: NodeId, _t: Option<Timestamp>) -> Option<Weight> {
         self.potential(node)
+    }
+}
+
+#[derive(Clone)]
+pub struct TDPotentialForPermutated<P> {
+    pub potential: P,
+    pub order: NodeOrder,
+}
+
+impl<P> TDPotentialForPermutated<P> {
+    pub fn inner(&self) -> &P {
+        &self.potential
+    }
+}
+
+impl<P: TDPotential> TDPotential for TDPotentialForPermutated<P> {
+    fn init(&mut self, source: NodeId, target: NodeId, departure: Timestamp) {
+        self.potential.init(self.order.node(source), self.order.node(target), departure)
+    }
+
+    fn potential(&mut self, node: NodeId, t: Option<Timestamp>) -> Option<Weight> {
+        self.potential.potential(self.order.node(node), t)
     }
 }
 
@@ -86,6 +108,10 @@ impl<C: Customized> TDPotential for MultiMetric<C> {
             for (range, idx) in &self.metric_ranges {
                 if range.start <= departure && range.end > latest_arrival {
                     if let Some(best_range) = &mut best_range {
+                        // TODO reicht noch nicht fuer modulo foo
+                        // check length of range to determine the better one?
+                        // computed range might go over period but dep..latest_arr might be at beginning
+                        // dep..latest_arr might jump over period()
                         if range.start >= best_range.0.start && range.end <= best_range.0.end {
                             *best_range = (range.clone(), *idx);
                         }
@@ -122,7 +148,7 @@ impl<C: Customized> TDPotential for MultiMetric<C> {
             self.current_metric = None;
         }
     }
-    fn potential(&mut self, node: NodeId, _t: Timestamp) -> Option<Weight> {
+    fn potential(&mut self, node: NodeId, _t: Option<Timestamp>) -> Option<Weight> {
         self.current_metric.and_then(|best_metric| {
             let metric = &self.metrics[best_metric];
 
@@ -265,7 +291,7 @@ impl TDPotential for CorridorBounds<'_> {
         }
     }
 
-    fn potential(&mut self, node: NodeId, _t: Timestamp) -> Option<Weight> {
+    fn potential(&mut self, node: NodeId, _t: Option<Timestamp>) -> Option<Weight> {
         let node = self.corridor_pot.cch.node_order().rank(node);
 
         let mut cur_node = node;

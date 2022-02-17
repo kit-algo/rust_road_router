@@ -339,7 +339,7 @@ where
     }
 }
 
-struct VirtualTopocoreOps<O>(O);
+pub struct VirtualTopocoreOps<O>(pub O);
 
 impl<G, O> DijkstraOps<VirtualTopocoreGraph<G>> for VirtualTopocoreOps<O>
 where
