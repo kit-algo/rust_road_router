@@ -124,9 +124,9 @@ pub fn run_random_td_queries<
     rng: &mut StdRng,
     reporting_context: &mut CollectionContextGuard,
     num_queries: usize,
-    pre_query: impl FnMut(NodeId, NodeId, &mut S),
+    pre_query: impl FnMut(NodeId, NodeId, T, &mut S),
     // with_result: impl for<'a> FnMut(&mut QueryResult<S::P<'a>, W>),
-    ground_truth: impl FnMut(NodeId, NodeId) -> Option<Option<W>>,
+    ground_truth: impl FnMut(NodeId, NodeId, T) -> Option<Option<W>>,
 ) {
     run_td_queries(
         std::iter::from_fn(move || {
@@ -149,9 +149,9 @@ pub fn run_td_queries<T: Copy + serde::ser::Serialize, W: Copy + Eq + std::fmt::
     query_iter: impl Iterator<Item = (NodeId, NodeId, T)>,
     server: &mut S,
     mut reporting_context: Option<&mut CollectionContextGuard>,
-    mut pre_query: impl FnMut(NodeId, NodeId, &mut S),
+    mut pre_query: impl FnMut(NodeId, NodeId, T, &mut S),
     // mut with_result: impl for<'a> FnMut(&mut QueryResult<S::P<'a>, W>),
-    mut ground_truth: impl FnMut(NodeId, NodeId) -> Option<Option<W>>,
+    mut ground_truth: impl FnMut(NodeId, NodeId, T) -> Option<Option<W>>,
 ) {
     let core_ids = core_affinity::get_core_ids().unwrap();
     core_affinity::set_for_current(core_ids[0]);
@@ -167,14 +167,14 @@ pub fn run_td_queries<T: Copy + serde::ser::Serialize, W: Copy + Eq + std::fmt::
         report!("to", to);
         report!("at", at);
 
-        pre_query(from, to, server);
+        pre_query(from, to, at, server);
 
         let (res, time) = measure(|| server.td_query(TDQuery { from, to, departure: at }));
         report!("running_time_ms", time.as_secs_f64() * 1000.0);
         let dist = res.distance();
         report!("result", dist);
 
-        if let Some(gt) = ground_truth(from, to) {
+        if let Some(gt) = ground_truth(from, to, at) {
             assert_eq!(dist, gt);
         }
 

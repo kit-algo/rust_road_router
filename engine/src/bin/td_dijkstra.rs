@@ -43,7 +43,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let to = Vec::load_from(path.join("target_node"))?;
 
         let iter = from.into_iter().zip(to.into_iter()).zip(at.into_iter()).map(|((s, t), a)| (s, t, a)).take(1000);
-        experiments::run_td_queries(iter, &mut server, Some(&mut algo_runs_ctxt), |_, _, _| (), |_, _| None);
+        experiments::run_td_queries(iter, &mut server, Some(&mut algo_runs_ctxt), |_, _, _, _| (), |_, _, _| None);
     }
 
     Ok(())

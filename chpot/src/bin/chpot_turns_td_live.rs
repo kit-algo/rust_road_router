@@ -106,12 +106,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         &mut rng,
         &mut algo_runs_ctxt,
         experiments::chpot::num_queries(),
-        |_, _, _| (),
+        |_, _, _, _| (),
         // |res| {
         //     report!("num_pot_computations", res.data().potential().inner().num_pot_computations());
         //     report!("lower_bound", res.data().lower_bound(from));
         // },
-        |_, _| None,
+        |_, _, _| None,
     );
 
     let mut server = DijkServer::<_, LiveTDDijkstraOps>::new(graph);
@@ -123,9 +123,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         &mut rng,
         &mut algo_runs_ctxt,
         experiments::num_dijkstra_queries(),
-        |_, _, _| (),
+        |_, _, _, _| (),
         // |_| (),
-        |_, _| None,
+        |_, _, _| None,
     );
 
     Ok(())
