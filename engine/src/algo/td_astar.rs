@@ -211,6 +211,7 @@ pub struct CorridorCCHPotential<'a> {
 impl<'a> CorridorCCHPotential<'a> {
     fn init(&mut self, target: NodeId) {
         self.potentials.reset();
+        self.backward_distances.reset();
         self.backward_distances[target as usize] = (0, 0);
         let mut node = Some(target);
         while let Some(current) = node {
@@ -267,6 +268,32 @@ pub struct CorridorBounds<'a> {
     departure: Timestamp,
 }
 
+impl<'a> CorridorBounds<'a> {
+    pub fn new(cch: &'a CCH, catchup: customizable_contraction_hierarchy::customization::ftd_for_pot::PotData) -> Self {
+        let n = cch.num_nodes();
+        Self {
+            corridor_pot: CorridorCCHPotential {
+                cch,
+                stack: Vec::new(),
+                potentials: TimestampedVector::new(n),
+                backward_distances: TimestampedVector::new(n),
+                // switched directions
+                forward_cch_graph: FirstOutGraph::new(cch.first_out(), cch.head(), catchup.bw_static_bound),
+                backward_cch_graph: FirstOutGraph::new(cch.first_out(), cch.head(), catchup.fw_static_bound),
+            },
+            fw_graph: UnweightedOwnedGraph::new(cch.first_out().to_vec(), cch.head().to_vec()),
+            bw_graph: UnweightedOwnedGraph::new(cch.first_out().to_vec(), cch.head().to_vec()),
+            fw_weights: catchup.fw_bucket_bounds,
+            bw_weights: catchup.bw_bucket_bounds,
+            stack: Vec::new(),
+            potentials: TimestampedVector::new(n),
+            backward_distances: TimestampedVector::new(n),
+            global_upper: INFINITY,
+            departure: INFINITY,
+        }
+    }
+}
+
 impl CorridorBounds<'_> {
     fn to_metric_idx(&self, t: Timestamp) -> usize {
         (t % period()) as usize * self.fw_weights.len() / period() as usize
@@ -281,13 +308,14 @@ impl TDPotential for CorridorBounds<'_> {
 
         self.corridor_pot.init(source);
 
+        self.potentials.reset();
         self.backward_distances.reset();
         self.backward_distances[target as usize] = 0;
-        self.global_upper = self.corridor_pot.potential(target).unwrap().1;
+        self.global_upper = self.corridor_pot.potential(target).map(|(_, u)| u).unwrap_or(INFINITY);
 
         let mut node = Some(target);
         while let Some(current) = node {
-            if self.backward_distances[current as usize] + self.corridor_pot.potential(current).unwrap().0 <= self.global_upper {
+            if self.backward_distances[current as usize] + self.corridor_pot.potential(current).map(|(l, _)| l).unwrap_or(INFINITY) <= self.global_upper {
                 for (NodeIdT(head), EdgeIdT(edge_id)) in LinkIterable::<(NodeIdT, EdgeIdT)>::link_iter(&self.bw_graph, current) {
                     if let Some((lower, upper)) = self.corridor_pot.potential(head) {
                         if lower <= self.global_upper {
