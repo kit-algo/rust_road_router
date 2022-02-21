@@ -33,19 +33,7 @@ impl<'a> CCHPotData<'a> {
     }
 
     pub fn forward_potential(&self) -> BorrowedCCHPot {
-        let n = self.customized.forward_graph().num_nodes();
-        let m = self.customized.forward_graph().num_arcs();
-
-        CCHPotential {
-            cch: self.customized.cch(),
-            stack: Vec::new(),
-            forward_cch_graph: self.customized.forward_graph(),
-            backward_distances: TimestampedVector::new(n),
-            backward_parents: vec![(n as NodeId, m as EdgeId); n],
-            backward_cch_graph: self.customized.backward_graph(),
-            potentials: TimestampedVector::new(n),
-            num_pot_computations: 0,
-        }
+        BorrowedCCHPot::new_from_customized(&self.customized)
     }
 
     pub fn backward_potential(&self) -> BorrowedCCHPot {
@@ -122,6 +110,24 @@ pub struct CCHPotential<'a, GF, GB> {
 }
 
 pub type BorrowedCCHPot<'a> = CCHPotential<'a, BorrowedGraph<'a>, BorrowedGraph<'a>>;
+
+impl<'a> BorrowedCCHPot<'a> {
+    pub fn new_from_customized<C: Customized<CCH = CCH>>(customized: &'a C) -> Self {
+        let n = customized.forward_graph().num_nodes();
+        let m = customized.forward_graph().num_arcs();
+
+        Self {
+            cch: customized.cch(),
+            stack: Vec::new(),
+            forward_cch_graph: customized.forward_graph(),
+            backward_distances: TimestampedVector::new(n),
+            backward_parents: vec![(n as NodeId, m as EdgeId); n],
+            backward_cch_graph: customized.backward_graph(),
+            potentials: TimestampedVector::new(n),
+            num_pot_computations: 0,
+        }
+    }
+}
 
 impl<'a, GF, GB> CCHPotential<'a, GF, GB> {
     pub fn num_pot_computations(&self) -> usize {
