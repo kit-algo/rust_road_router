@@ -203,14 +203,15 @@ pub struct CorridorCCHPotential<'a> {
     cch: &'a CCH,
     stack: Vec<NodeId>,
     potentials: TimestampedVector<InRangeOption<(Weight, Weight)>>,
-    forward_cch_graph: BorrowedGraph<'a, (Weight, Weight)>,
+    forward_cch_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], Vec<(Weight, Weight)>, (Weight, Weight)>,
     backward_distances: TimestampedVector<(Weight, Weight)>,
-    backward_cch_graph: BorrowedGraph<'a, (Weight, Weight)>,
+    backward_cch_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], Vec<(Weight, Weight)>, (Weight, Weight)>,
 }
 
 impl<'a> CorridorCCHPotential<'a> {
     fn init(&mut self, target: NodeId) {
         self.potentials.reset();
+        self.backward_distances[target as usize] = (0, 0);
         let mut node = Some(target);
         while let Some(current) = node {
             for (NodeIdT(head), (lower, upper), _) in LinkIterable::<(NodeIdT, (Weight, Weight), EdgeIdT)>::link_iter(&self.backward_cch_graph, current) {
@@ -268,7 +269,7 @@ pub struct CorridorBounds<'a> {
 
 impl CorridorBounds<'_> {
     fn to_metric_idx(&self, t: Timestamp) -> usize {
-        (t % period()) as usize / self.fw_weights.len()
+        (t % period()) as usize * self.fw_weights.len() / period() as usize
     }
 }
 

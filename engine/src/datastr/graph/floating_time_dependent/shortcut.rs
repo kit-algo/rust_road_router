@@ -265,16 +265,12 @@ impl Shortcut {
             return None;
         }
         self.periodic_ttf(shortcut_graph)
-            .map(|ttf| PartialATTF::try_from(ttf).ok())
-            .flatten()
+            .and_then(|ttf| PartialATTF::try_from(ttf).ok())
             .map(|ttf| ttf.sub_ttf(start, end))
     }
 
     pub fn is_valid_path(&self) -> bool {
-        match self.sources {
-            Sources::None => false,
-            _ => true,
-        }
+        !matches!(self.sources, Sources::None)
     }
 
     /// Once the TTF of this Shortcut is final, we can tighten the lower bound.
