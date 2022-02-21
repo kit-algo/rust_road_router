@@ -33,6 +33,23 @@ impl<F: Sync + Fn(Range<usize>, usize, &mut [T], &mut [T]), T, E> SubgraphCustom
     }
 }
 
+pub struct UndirectedWithAux<F>(F);
+impl<F: Sync + Fn(Range<usize>, usize, &mut [T], &mut [T], &mut [E], &mut [E]), T, E> SubgraphCustomization<T, E> for UndirectedWithAux<F> {
+    fn exec(
+        &self,
+        nodes: Range<usize>,
+        edge_offset_up: usize,
+        edge_offset_down: usize,
+        edges_up: &mut [T],
+        edges_down: &mut [T],
+        aux_up: &mut [E],
+        aux_down: &mut [E],
+    ) {
+        debug_assert_eq!(edge_offset_up, edge_offset_down);
+        (self.0)(nodes, edge_offset_up, edges_up, edges_down, aux_up, aux_down)
+    }
+}
+
 impl<F: Sync + Fn(Range<usize>, usize, usize, &mut [T], &mut [T], &mut [E], &mut [E]), T, E> SubgraphCustomization<T, E> for F {
     fn exec(
         &self,
@@ -66,6 +83,18 @@ where
 {
     pub fn new_undirected(cch: &'a CCH, customize_cell: F, customize_separator: G) -> Self {
         Self::new_with_aux(cch, UndirectedNoAux(customize_cell), UndirectedNoAux(customize_separator))
+    }
+}
+
+impl<'a, T, F, G, E> SeperatorBasedParallelCustomization<'a, T, UndirectedWithAux<F>, UndirectedWithAux<G>, CCH, E>
+where
+    T: Send + Sync,
+    E: Send + Sync,
+    F: Sync + Fn(Range<usize>, usize, &mut [T], &mut [T], &mut [E], &mut [E]),
+    G: Sync + Fn(Range<usize>, usize, &mut [T], &mut [T], &mut [E], &mut [E]),
+{
+    pub fn new_undirected_with_aux(cch: &'a CCH, customize_cell: F, customize_separator: G) -> Self {
+        Self::new_with_aux(cch, UndirectedWithAux(customize_cell), UndirectedWithAux(customize_separator))
     }
 }
 
