@@ -87,5 +87,29 @@ fn main() -> Result<(), Box<dyn Error>> {
         },
     );
 
+    let _blocked = block_reporting();
+    let fl_graph = floating_time_dependent::TDGraph::reconstruct_from(&path)?;
+    let catchup = customization::ftd_for_pot::customize_internal::<48>(&cch, &fl_graph);
+    let interval_min_pot = CorridorBounds::new(&cch, catchup);
+    drop(_blocked);
+
+    let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
+    let mut cb_server = Server::new(&graph, interval_min_pot, TDDijkstraOps::default());
+    drop(virtual_topocore_ctxt);
+
+    experiments::run_random_td_queries(
+        n,
+        0..period() as Timestamp,
+        &mut cb_server,
+        &mut rng,
+        &mut algo_runs_ctxt,
+        experiments::chpot::num_queries(),
+        |_, _, _, _| (),
+        |from, to, departure| {
+            let _blocked = block_reporting();
+            Some(server.td_query(TDQuery { from, to, departure }).distance())
+        },
+    );
+
     Ok(())
 }
