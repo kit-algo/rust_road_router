@@ -369,14 +369,13 @@ impl TDPotential for CorridorBounds<'_> {
             if let Some((lower, upper)) = self.corridor_pot.potential(node) {
                 if lower <= self.global_upper {
                     dist = self.backward_distances[node as usize];
+                    let metric_indices = self.to_metric_idx(self.departure + lower)..=self.to_metric_idx(self.departure + upper);
 
-                    for (NodeIdT(head), EdgeIdT(edge_id)) in LinkIterable::<(NodeIdT, EdgeIdT)>::link_iter(&self.fw_graph, node) {
-                        let metric_indices = self.to_metric_idx(self.departure + lower)..=self.to_metric_idx(self.departure + upper);
-                        let mut weight_lower = INFINITY;
-                        for idx in metric_indices {
-                            weight_lower = min(weight_lower, self.fw_bucket_slice(idx)[edge_id as usize]);
+                    for idx in metric_indices {
+                        let g = BorrowedGraph::new(self.fw_graph.first_out(), self.fw_graph.head(), self.fw_bucket_slice(idx));
+                        for l in LinkIterable::<Link>::link_iter(&g, node) {
+                            dist = min(dist, self.potentials[l.node as usize].value().unwrap() + l.weight);
                         }
-                        dist = min(dist, self.potentials[head as usize].value().unwrap() + weight_lower);
                     }
                 }
             }
