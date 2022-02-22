@@ -20,8 +20,29 @@ scoped_thread_local!(static PERFECT_WORKSPACE: RefCell<Vec<InRangeOption<EdgeId>
 pub struct PotData {
     pub fw_static_bound: Vec<(Weight, Weight)>,
     pub bw_static_bound: Vec<(Weight, Weight)>,
-    pub fw_bucket_bounds: Vec<Box<[Weight]>>,
-    pub bw_bucket_bounds: Vec<Box<[Weight]>>,
+    pub fw_bucket_bounds: Vec<Weight>,
+    pub bw_bucket_bounds: Vec<Weight>,
+}
+
+impl<'a> crate::io::Deconstruct for PotData {
+    fn store_each(&self, store: &dyn Fn(&str, &dyn Store) -> std::io::Result<()>) -> std::io::Result<()> {
+        store("fw_static_bound", &self.fw_static_bound)?;
+        store("bw_static_bound", &self.bw_static_bound)?;
+        store("fw_bucket_bounds", &self.fw_bucket_bounds)?;
+        store("bw_bucket_bounds", &self.bw_bucket_bounds)?;
+        Ok(())
+    }
+}
+
+impl<'a> crate::io::Reconstruct for PotData {
+    fn reconstruct_with(loader: Loader) -> std::io::Result<Self> {
+        Ok(Self {
+            fw_static_bound: loader.load("fw_static_bound")?,
+            bw_static_bound: loader.load("bw_static_bound")?,
+            fw_bucket_bounds: loader.load("fw_bucket_bounds")?,
+            bw_bucket_bounds: loader.load("bw_bucket_bounds")?,
+        })
+    }
 }
 
 pub fn customize_internal<'a, 'b: 'a, const K: usize>(cch: &'a CCH, metric: &'b TDGraph) -> PotData {
@@ -442,31 +463,29 @@ pub fn customize_internal<'a, 'b: 'a, const K: usize>(cch: &'a CCH, metric: &'b 
     }
 
     let fw_static_bound: Vec<_> = upward
-        .iter()
+        .into_iter()
         .map(|s| (extract_lower_bound(s.lower_bound), extract_upper_bound(s.upper_bound)))
         .collect();
     let bw_static_bound: Vec<_> = downward
-        .iter()
+        .into_iter()
         .map(|s| (extract_lower_bound(s.lower_bound), extract_upper_bound(s.upper_bound)))
         .collect();
 
     PotData {
         fw_bucket_bounds: (0..K)
-            .map(|i| {
+            .flat_map(|i| {
                 fw_bucket_weights
                     .iter()
                     .zip(fw_static_bound.iter())
-                    .map(|(buckets, bound)| std::cmp::max(buckets[i], bound.0))
-                    .collect()
+                    .map(move |(buckets, bound)| std::cmp::max(buckets[i], bound.0))
             })
             .collect(),
         bw_bucket_bounds: (0..K)
-            .map(|i| {
+            .flat_map(|i| {
                 bw_bucket_weights
                     .iter()
                     .zip(bw_static_bound.iter())
-                    .map(|(buckets, bound)| std::cmp::max(buckets[i], bound.0))
-                    .collect()
+                    .map(move |(buckets, bound)| std::cmp::max(buckets[i], bound.0))
             })
             .collect(),
         fw_static_bound,

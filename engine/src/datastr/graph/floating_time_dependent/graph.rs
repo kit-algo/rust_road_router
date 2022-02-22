@@ -237,6 +237,16 @@ impl LinkIterable<(NodeIdT, EdgeIdT)> for Graph {
     }
 }
 
+impl LinkIterable<NodeIdT> for Graph {
+    type Iter<'a> = impl Iterator<Item = NodeIdT> + 'a;
+
+    #[inline(always)]
+    fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
+        let range = self.neighbor_edge_indices_usize(node);
+        self.head[range].iter().copied().map(NodeIdT)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct LiveGraph {
     pub graph: Graph,

@@ -259,8 +259,8 @@ pub struct CorridorBounds<'a> {
     corridor_pot: CorridorCCHPotential<'a>,
     fw_graph: UnweightedOwnedGraph,
     bw_graph: UnweightedOwnedGraph,
-    fw_weights: Vec<Box<[Weight]>>,
-    bw_weights: Vec<Box<[Weight]>>,
+    fw_weights: Vec<Weight>,
+    bw_weights: Vec<Weight>,
     stack: Vec<NodeId>,
     potentials: TimestampedVector<InRangeOption<Weight>>,
     backward_distances: TimestampedVector<Weight>,
@@ -295,8 +295,25 @@ impl<'a> CorridorBounds<'a> {
 }
 
 impl CorridorBounds<'_> {
+    fn num_buckets(&self) -> usize {
+        let m = self.fw_graph.num_arcs();
+        self.fw_weights.len() / m
+    }
+
     fn to_metric_idx(&self, t: Timestamp) -> usize {
-        t as usize * self.fw_weights.len() / period() as usize
+        t as usize * self.num_buckets() / period() as usize
+    }
+
+    fn fw_bucket_slice(&self, bucket_idx: usize) -> &[Weight] {
+        let m = self.fw_graph.num_arcs();
+        let bucket_idx = bucket_idx % self.num_buckets();
+        &self.fw_weights[bucket_idx * m..(bucket_idx + 1) * m]
+    }
+
+    fn bw_bucket_slice(&self, bucket_idx: usize) -> &[Weight] {
+        let m = self.bw_graph.num_arcs();
+        let bucket_idx = bucket_idx % self.num_buckets();
+        &self.bw_weights[bucket_idx * m..(bucket_idx + 1) * m]
     }
 }
 
@@ -322,7 +339,7 @@ impl TDPotential for CorridorBounds<'_> {
                             let metric_indices = self.to_metric_idx(departure + lower)..=self.to_metric_idx(departure + upper);
                             let mut weight_lower = INFINITY;
                             for idx in metric_indices {
-                                weight_lower = min(weight_lower, self.bw_weights[idx % self.bw_weights.len()][edge_id as usize]);
+                                weight_lower = min(weight_lower, self.bw_bucket_slice(idx)[edge_id as usize]);
                             }
                             self.backward_distances[head as usize] =
                                 min(self.backward_distances[head as usize], weight_lower + self.backward_distances[current as usize]);
@@ -357,7 +374,7 @@ impl TDPotential for CorridorBounds<'_> {
                         let metric_indices = self.to_metric_idx(self.departure + lower)..=self.to_metric_idx(self.departure + upper);
                         let mut weight_lower = INFINITY;
                         for idx in metric_indices {
-                            weight_lower = min(weight_lower, self.fw_weights[idx % self.bw_weights.len()][edge_id as usize]);
+                            weight_lower = min(weight_lower, self.fw_bucket_slice(idx)[edge_id as usize]);
                         }
                         dist = min(dist, self.potentials[head as usize].value().unwrap() + weight_lower);
                     }
