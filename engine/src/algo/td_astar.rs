@@ -104,7 +104,7 @@ fn range_included(covered: &Range<Timestamp>, to_cover: &Range<Timestamp>) -> bo
     let (to_cover_first, mut to_cover_second) = to_cover.clone().split(period());
     covered_second.start %= period();
     covered_second.end %= period();
-    covered_second.start %= period();
+    to_cover_second.start %= period();
     to_cover_second.end %= period();
     (to_cover_first.is_empty() || range_contains(&covered_first, &to_cover_first) || range_contains(&covered_second, &to_cover_first))
         && (to_cover_second.is_empty() || range_contains(&covered_first, &to_cover_second) || range_contains(&covered_second, &to_cover_second))
