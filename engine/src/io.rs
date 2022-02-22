@@ -74,8 +74,13 @@ impl<T: Copy> DataBytesMut for [T] {
 
 impl<T: Copy> DataBytesMut for Vec<T> {
     fn data_bytes_mut(&mut self) -> &mut [u8] {
-        let num_bytes = self.len() * mem::size_of::<T>();
-        unsafe { slice::from_raw_parts_mut(self.as_mut_ptr() as *mut u8, num_bytes) }
+        (&mut self[..]).data_bytes_mut()
+    }
+}
+
+impl<T: Copy> DataBytesMut for Box<[T]> {
+    fn data_bytes_mut(&mut self) -> &mut [u8] {
+        (&mut self[..]).data_bytes_mut()
     }
 }
 
@@ -111,6 +116,14 @@ pub trait Load: DataBytesMut + Sized {
 }
 
 impl<T: Default + Copy> Load for Vec<T> {
+    fn new_with_bytes(num_bytes: usize) -> Self {
+        assert_eq!(num_bytes % mem::size_of::<T>(), 0);
+        let num_elements = num_bytes / mem::size_of::<T>();
+        (0..num_elements).map(|_| T::default()).collect()
+    }
+}
+
+impl<T: Default + Copy> Load for Box<[T]> {
     fn new_with_bytes(num_bytes: usize) -> Self {
         assert_eq!(num_bytes % mem::size_of::<T>(), 0);
         let num_elements = num_bytes / mem::size_of::<T>();
