@@ -73,8 +73,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         CCHPotData::new(&cch, &graph)
     };
 
-    let core_ids = core_affinity::get_core_ids().unwrap();
-    core_affinity::set_for_current(core_ids[0]);
+    affinity::set_thread_affinity(&[0]).unwrap();
 
     let pots = (
         TurnExpandedPotential::new(&graph, cch_pot_data.forward_potential()),

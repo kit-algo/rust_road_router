@@ -31,8 +31,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs");
 
-    let core_ids = core_affinity::get_core_ids().unwrap();
-    core_affinity::set_for_current(core_ids[0]);
+    affinity::set_thread_affinity(&[0]).unwrap();
 
     let potential = CHPotential::reconstruct_from(&path.join("lower_bound_ch"))?;
 

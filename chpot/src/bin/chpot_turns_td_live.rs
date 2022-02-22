@@ -91,8 +91,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     });
     let n = graph.num_nodes();
 
-    let core_ids = core_affinity::get_core_ids().unwrap();
-    core_affinity::set_for_current(core_ids[0]);
+    affinity::set_thread_affinity(&[0]).unwrap();
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
     let server = Server::new(&graph, potential, LiveTDDijkstraOps::default());

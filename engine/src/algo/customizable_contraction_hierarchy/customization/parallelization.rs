@@ -154,11 +154,10 @@ where
                     .exec(0..self.cch.forward_first_out().len() - 1, 0, 0, upward, downward, up_aux, down_aux)
             }));
         } else {
-            let core_ids = core_affinity::get_core_ids().unwrap();
             rayon::ThreadPoolBuilder::new()
                 .build_scoped(
                     |thread| {
-                        core_affinity::set_for_current(core_ids[thread.index()]);
+                        affinity::set_thread_affinity(&[thread.index()]).unwrap();
                         setup(Box::new(|| thread.run()));
                     },
                     |pool| pool.install(|| self.customize_tree(&self.separators, 0, upward, downward, up_aux, down_aux)),
@@ -354,11 +353,10 @@ where
                 )
             }));
         } else {
-            let core_ids = core_affinity::get_core_ids().unwrap();
             rayon::ThreadPoolBuilder::new()
                 .build_scoped(
                     |thread| {
-                        core_affinity::set_for_current(core_ids[thread.index()]);
+                        affinity::set_thread_affinity(&[thread.index()]).unwrap();
                         setup(Box::new(|| thread.run()));
                     },
                     |pool| {

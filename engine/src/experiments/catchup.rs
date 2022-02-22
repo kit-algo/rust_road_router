@@ -17,8 +17,7 @@ pub fn setup(path: &Path, run: impl FnOnce(&TDGraph, &mut StdRng, &CCH, &Customi
 
     let mut rng = super::rng(Default::default());
 
-    let core_ids = core_affinity::get_core_ids().unwrap();
-    core_affinity::set_for_current(core_ids[0]);
+    affinity::set_thread_affinity(&[0]).unwrap();
 
     let graph = TDGraph::reconstruct_from(&path)?;
 

@@ -10,7 +10,7 @@ authors = ["Tim 'tim3z' Zeitz <mail@tim3z.net>"]
 rayon = "^1.5.1"
 rust_road_router = { path = "../engine" }
 rand = "^0.8.4"
-core_affinity = "^0.5.9"
+affinity = "^0.1.2"
 
 [features]
 chpot-only-topo = []

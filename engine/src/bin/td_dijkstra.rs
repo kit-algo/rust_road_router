@@ -34,8 +34,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    let core_ids = core_affinity::get_core_ids().unwrap();
-    core_affinity::set_for_current(core_ids[0]);
+    affinity::set_thread_affinity(&[0]).unwrap();
 
     if let Some(path) = query_dir {
         let from = Vec::load_from(path.join("source_node"))?;
