@@ -543,7 +543,7 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
                                 .zip(edge_ids.clone())
                             {
                                 if !modified {
-                                    debug_assert!(link.weight < INFINITY);
+                                    // debug_assert!(link.weight < INFINITY);
                                     local_fw_head[fw_edge_count] = link.node;
                                     local_fw_tail[fw_edge_count] = node as NodeId;
                                     local_fw_weight[fw_edge_count] = link.weight;
@@ -558,7 +558,7 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
                                 .zip(edge_ids)
                             {
                                 if !modified {
-                                    debug_assert!(link.weight < INFINITY);
+                                    // debug_assert!(link.weight < INFINITY);
                                     local_bw_head[bw_edge_count] = link.node;
                                     local_bw_tail[bw_edge_count] = node as NodeId;
                                     local_bw_weight[bw_edge_count] = link.weight;
