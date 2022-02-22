@@ -77,7 +77,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         n,
         0..period() as Timestamp,
         &mut mm_server,
-        &mut rng,
+        &mut rng.clone(),
         &mut algo_runs_ctxt,
         experiments::chpot::num_queries(),
         |_, _, _, _| (),
