@@ -71,6 +71,11 @@ where
             &mut PotentialForPermutated<P>,
         ),
     ) -> Option<Weight> {
+        if query.from() == query.to() {
+            // TODO properly handle this edge case
+            return Some(0);
+        }
+
         query.permutate(&self.virtual_topocore.order);
 
         if !BCC_CORE {
