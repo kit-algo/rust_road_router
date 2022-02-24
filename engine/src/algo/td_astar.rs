@@ -199,25 +199,28 @@ impl<C: Customized> TDPotential for MultiMetric<C> {
     }
 }
 
+use std::rc::Rc;
+
+// Careful, this one works in reversed direction compared to most of the other CH-Pots
 pub struct CorridorCCHPotential<'a> {
     cch: &'a CCH,
     stack: Vec<NodeId>,
+    fw_distances: TimestampedVector<(Weight, Weight)>,
     potentials: TimestampedVector<InRangeOption<(Weight, Weight)>>,
-    forward_cch_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], Vec<(Weight, Weight)>, (Weight, Weight)>,
-    backward_distances: TimestampedVector<(Weight, Weight)>,
-    backward_cch_graph: FirstOutGraph<&'a [EdgeId], &'a [NodeId], Vec<(Weight, Weight)>, (Weight, Weight)>,
+    forward_cch_graph: FirstOutGraph<Rc<[EdgeId]>, Rc<[NodeId]>, Vec<(Weight, Weight)>, (Weight, Weight)>,
+    backward_cch_graph: FirstOutGraph<Rc<[EdgeId]>, Rc<[NodeId]>, Vec<(Weight, Weight)>, (Weight, Weight)>,
 }
 
 impl<'a> CorridorCCHPotential<'a> {
     fn init(&mut self, target: NodeId) {
         self.potentials.reset();
-        self.backward_distances.reset();
-        self.backward_distances[target as usize] = (0, 0);
+        self.fw_distances.reset();
+        self.fw_distances[target as usize] = (0, 0);
         let mut node = Some(target);
         while let Some(current) = node {
-            for (NodeIdT(head), (lower, upper), _) in LinkIterable::<(NodeIdT, (Weight, Weight), EdgeIdT)>::link_iter(&self.backward_cch_graph, current) {
-                self.backward_distances[head as usize].0 = min(self.backward_distances[head as usize].0, self.backward_distances[current as usize].0 + lower);
-                self.backward_distances[head as usize].1 = min(self.backward_distances[head as usize].1, self.backward_distances[current as usize].1 + upper);
+            for (NodeIdT(head), (lower, upper), _) in LinkIterable::<(NodeIdT, (Weight, Weight), EdgeIdT)>::link_iter(&self.forward_cch_graph, current) {
+                self.fw_distances[head as usize].0 = min(self.fw_distances[head as usize].0, self.fw_distances[current as usize].0 + lower);
+                self.fw_distances[head as usize].1 = min(self.fw_distances[head as usize].1, self.fw_distances[current as usize].1 + upper);
             }
             node = self.cch.elimination_tree()[current as usize].value();
         }
@@ -235,9 +238,9 @@ impl<'a> CorridorCCHPotential<'a> {
         }
 
         while let Some(node) = self.stack.pop() {
-            let mut dist = self.backward_distances[node as usize];
+            let mut dist = self.fw_distances[node as usize];
 
-            for (NodeIdT(head), (lower, upper), _) in LinkIterable::<(NodeIdT, (Weight, Weight), EdgeIdT)>::link_iter(&self.forward_cch_graph, node) {
+            for (NodeIdT(head), (lower, upper), _) in LinkIterable::<(NodeIdT, (Weight, Weight), EdgeIdT)>::link_iter(&self.backward_cch_graph, node) {
                 let (head_lower, head_upper) = self.potentials[head as usize].value().unwrap();
                 dist.0 = min(dist.0, lower + head_lower);
                 dist.1 = min(dist.1, upper + head_upper);
@@ -257,8 +260,8 @@ impl<'a> CorridorCCHPotential<'a> {
 
 pub struct CorridorBounds<'a> {
     corridor_pot: CorridorCCHPotential<'a>,
-    fw_graph: UnweightedOwnedGraph,
-    bw_graph: UnweightedOwnedGraph,
+    fw_graph: UnweightedFirstOutGraph<Rc<[EdgeId]>, Rc<[NodeId]>>,
+    bw_graph: UnweightedFirstOutGraph<Rc<[EdgeId]>, Rc<[NodeId]>>,
     fw_weights: Vec<Weight>,
     bw_weights: Vec<Weight>,
     stack: Vec<NodeId>,
@@ -269,20 +272,59 @@ pub struct CorridorBounds<'a> {
 }
 
 impl<'a> CorridorBounds<'a> {
-    pub fn new(cch: &'a CCH, catchup: customizable_contraction_hierarchy::customization::ftd_for_pot::PotData) -> Self {
+    pub fn new(cch: &'a CCH, mut catchup: customizable_contraction_hierarchy::customization::ftd_for_pot::PotData) -> Self {
         let n = cch.num_nodes();
+        let m = cch.num_arcs();
+        let mut fw_first_out = Vec::with_capacity(n + 1);
+        fw_first_out.push(0);
+        let mut bw_first_out = Vec::with_capacity(n + 1);
+        bw_first_out.push(0);
+        let mut fw_head = Vec::with_capacity(m);
+        let mut bw_head = Vec::with_capacity(m);
+
+        let g = UnweightedFirstOutGraph::new(cch.first_out(), cch.head());
+
+        let keep = |&(l, u): &(Weight, Weight)| l < INFINITY && l <= u;
+
+        for node in 0..n {
+            for (NodeIdT(head), EdgeIdT(edge_id)) in LinkIterable::<(NodeIdT, EdgeIdT)>::link_iter(&g, node as NodeId) {
+                if keep(&catchup.fw_static_bound[edge_id as usize]) {
+                    fw_head.push(head);
+                }
+                if keep(&catchup.bw_static_bound[edge_id as usize]) {
+                    bw_head.push(head);
+                }
+            }
+            fw_first_out.push(fw_head.len() as EdgeId);
+            bw_first_out.push(bw_head.len() as EdgeId);
+        }
+        assert_eq!(catchup.fw_static_bound.len(), m);
+        assert_eq!(catchup.bw_static_bound.len(), m);
+        catchup
+            .fw_bucket_bounds
+            .retain(crate::util::with_index(|idx, _| keep(&catchup.fw_static_bound[idx % m])));
+        catchup
+            .bw_bucket_bounds
+            .retain(crate::util::with_index(|idx, _| keep(&catchup.bw_static_bound[idx % m])));
+        catchup.fw_static_bound.retain(keep);
+        catchup.bw_static_bound.retain(keep);
+
+        let fw_first_out: std::rc::Rc<[_]> = fw_first_out.into();
+        let bw_first_out: std::rc::Rc<[_]> = bw_first_out.into();
+        let fw_head: std::rc::Rc<[_]> = fw_head.into();
+        let bw_head: std::rc::Rc<[_]> = bw_head.into();
+
         Self {
             corridor_pot: CorridorCCHPotential {
                 cch,
                 stack: Vec::new(),
                 potentials: TimestampedVector::new(n),
-                backward_distances: TimestampedVector::new(n),
-                // switched directions
-                forward_cch_graph: FirstOutGraph::new(cch.first_out(), cch.head(), catchup.bw_static_bound),
-                backward_cch_graph: FirstOutGraph::new(cch.first_out(), cch.head(), catchup.fw_static_bound),
+                fw_distances: TimestampedVector::new(n),
+                forward_cch_graph: FirstOutGraph::new(fw_first_out.clone(), fw_head.clone(), catchup.fw_static_bound),
+                backward_cch_graph: FirstOutGraph::new(bw_first_out.clone(), bw_head.clone(), catchup.bw_static_bound),
             },
-            fw_graph: UnweightedOwnedGraph::new(cch.first_out().to_vec(), cch.head().to_vec()),
-            bw_graph: UnweightedOwnedGraph::new(cch.first_out().to_vec(), cch.head().to_vec()),
+            fw_graph: UnweightedFirstOutGraph::new(fw_first_out, fw_head),
+            bw_graph: UnweightedFirstOutGraph::new(bw_first_out, bw_head),
             fw_weights: catchup.fw_bucket_bounds,
             bw_weights: catchup.bw_bucket_bounds,
             stack: Vec::new(),
@@ -296,7 +338,7 @@ impl<'a> CorridorBounds<'a> {
 
 impl CorridorBounds<'_> {
     fn num_buckets(&self) -> usize {
-        let m = self.fw_graph.num_arcs();
+        let m = self.corridor_pot.forward_cch_graph.num_arcs();
         self.fw_weights.len() / m
     }
 
@@ -305,13 +347,13 @@ impl CorridorBounds<'_> {
     }
 
     fn fw_bucket_slice(&self, bucket_idx: usize) -> &[Weight] {
-        let m = self.fw_graph.num_arcs();
+        let m = self.corridor_pot.forward_cch_graph.num_arcs();
         let bucket_idx = bucket_idx % self.num_buckets();
         &self.fw_weights[bucket_idx * m..(bucket_idx + 1) * m]
     }
 
     fn bw_bucket_slice(&self, bucket_idx: usize) -> &[Weight] {
-        let m = self.bw_graph.num_arcs();
+        let m = self.corridor_pot.backward_cch_graph.num_arcs();
         let bucket_idx = bucket_idx % self.num_buckets();
         &self.bw_weights[bucket_idx * m..(bucket_idx + 1) * m]
     }

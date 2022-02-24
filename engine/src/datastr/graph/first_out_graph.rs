@@ -93,7 +93,7 @@ where
     }
 }
 
-pub type OwnedGraph = FirstOutGraph<Vec<EdgeId>, Vec<NodeId>, Vec<Weight>>;
+pub type OwnedGraph<W = Weight> = FirstOutGraph<Vec<EdgeId>, Vec<NodeId>, Vec<W>, W>;
 pub type BorrowedGraph<'a, W = Weight> = FirstOutGraph<&'a [EdgeId], &'a [NodeId], &'a [W], W>;
 
 impl OwnedGraph {
