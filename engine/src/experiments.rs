@@ -232,6 +232,7 @@ pub fn gen_many_to_many_queries(
 
 fn pinned_to_cpu<T, F: FnOnce() -> T>(f: F) -> T {
     let prev_pin_state = affinity::get_thread_affinity().unwrap();
+    affinity::set_thread_affinity(&[0]).unwrap();
     let res = f();
     affinity::set_thread_affinity(&prev_pin_state).unwrap();
     res
