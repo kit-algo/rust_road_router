@@ -15,6 +15,7 @@ pub use self::wrapping_range::*;
 mod graph;
 pub use self::graph::Graph as TDGraph;
 pub use self::graph::LiveTDGraph;
+pub use self::graph::PessimisticLiveTDGraph;
 
 mod geometry;
 use self::geometry::*;

@@ -1,6 +1,7 @@
 use super::*;
 use crate::datastr::graph::time_dependent::*;
 
+#[derive(Default)]
 pub struct TDDijkstraOps();
 
 impl DijkstraOps<TDGraph> for TDDijkstraOps {
@@ -27,12 +28,7 @@ impl DijkstraOps<TDGraph> for TDDijkstraOps {
     fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {}
 }
 
-impl Default for TDDijkstraOps {
-    fn default() -> Self {
-        Self {}
-    }
-}
-
+#[derive(Default)]
 pub struct LiveTDDijkstraOps();
 
 impl DijkstraOps<LiveTDGraph> for LiveTDDijkstraOps {
@@ -66,8 +62,36 @@ impl DijkstraOps<LiveTDGraph> for LiveTDDijkstraOps {
     fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {}
 }
 
-impl Default for LiveTDDijkstraOps {
-    fn default() -> Self {
-        Self {}
+#[derive(Default)]
+pub struct PessimisticLiveTDDijkstraOps();
+
+impl DijkstraOps<PessimisticLiveTDGraph> for PessimisticLiveTDDijkstraOps {
+    type Label = Weight;
+    type LinkResult = Weight;
+    type Arc = (NodeIdT, EdgeIdT);
+    type PredecessorLink = ();
+
+    #[inline(always)]
+    fn link(
+        &mut self,
+        graph: &PessimisticLiveTDGraph,
+        _parents: &[(NodeId, Self::PredecessorLink)],
+        _tail: NodeIdT,
+        label: &Weight,
+        link: &Self::Arc,
+    ) -> Self::LinkResult {
+        label + graph.eval(link.1 .0, *label)
     }
+
+    #[inline(always)]
+    fn merge(&mut self, label: &mut Weight, linked: Self::LinkResult) -> bool {
+        if linked < *label {
+            *label = linked;
+            return true;
+        }
+        false
+    }
+
+    #[inline(always)]
+    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {}
 }

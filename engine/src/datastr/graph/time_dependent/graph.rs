@@ -235,6 +235,28 @@ impl BuildPermutated<Graph> for Graph {
     }
 }
 
+impl Reconstruct for Graph {
+    fn reconstruct_with(loader: Loader) -> std::io::Result<Self> {
+        let first_out: Vec<_> = loader.load("first_out")?;
+        let head: Vec<_> = loader.load("head")?;
+        let ipp_departure_time: Vec<_> = loader.load("ipp_departure_time")?;
+
+        report!("unprocessed_graph", { "num_nodes": first_out.len() - 1, "num_arcs": head.len(), "num_ipps": ipp_departure_time.len() });
+
+        let graph = Self::new(
+            first_out,
+            head,
+            loader.load("first_ipp_of_arc")?,
+            ipp_departure_time,
+            loader.load("ipp_travel_time")?,
+        );
+
+        report!("graph", { "num_nodes": graph.num_nodes(), "num_arcs": graph.num_arcs(), "num_ipps": graph.num_ipps(), "num_constant_ttfs": graph.num_constant() });
+
+        Ok(graph)
+    }
+}
+
 #[derive(Clone)]
 pub struct LiveTDGraph {
     graph: Graph,
@@ -353,24 +375,103 @@ impl BuildPermutated<LiveTDGraph> for LiveTDGraph {
     }
 }
 
-impl Reconstruct for Graph {
-    fn reconstruct_with(loader: Loader) -> std::io::Result<Self> {
-        let first_out: Vec<_> = loader.load("first_out")?;
-        let head: Vec<_> = loader.load("head")?;
-        let ipp_departure_time: Vec<_> = loader.load("ipp_departure_time")?;
+#[derive(Clone)]
+pub struct PessimisticLiveTDGraph {
+    graph: Graph,
+    live: Vec<InRangeOption<(Weight, Timestamp)>>,
+}
 
-        report!("unprocessed_graph", { "num_nodes": first_out.len() - 1, "num_arcs": head.len(), "num_ipps": ipp_departure_time.len() });
+impl PessimisticLiveTDGraph {
+    pub fn new(graph: Graph, live: Vec<InRangeOption<(Weight, Timestamp)>>) -> Self {
+        Self { graph, live }
+    }
 
-        let graph = Self::new(
-            first_out,
-            head,
-            loader.load("first_ipp_of_arc")?,
-            ipp_departure_time,
-            loader.load("ipp_travel_time")?,
-        );
+    pub fn eval(&self, edge_id: EdgeId, t: Timestamp) -> Weight {
+        let ttf = self.graph.travel_time_function(edge_id);
+        let predicted = ttf.eval(t);
+        if let Some((live, soon)) = self.live[edge_id as usize].value() {
+            std::cmp::max(if t < soon { live } else { (live + soon).saturating_sub(t) }, predicted)
+        } else {
+            predicted
+        }
+    }
 
-        report!("graph", { "num_nodes": graph.num_nodes(), "num_arcs": graph.num_arcs(), "num_ipps": graph.num_ipps(), "num_constant_ttfs": graph.num_constant() });
+    pub fn upper_bound(&self, edge_id: EdgeId) -> Weight {
+        let ttf = self.graph.travel_time_function(edge_id);
+        std::cmp::max(ttf.upper_bound(), self.live[edge_id as usize].value().map(|(l, _)| l).unwrap_or(0))
+    }
 
-        Ok(graph)
+    pub fn graph(&self) -> &Graph {
+        &self.graph
+    }
+}
+
+impl crate::datastr::graph::Graph for PessimisticLiveTDGraph {
+    fn num_nodes(&self) -> usize {
+        self.graph.num_nodes()
+    }
+    fn num_arcs(&self) -> usize {
+        self.graph.num_arcs()
+    }
+    fn degree(&self, node: NodeId) -> usize {
+        self.graph.degree(node)
+    }
+}
+
+impl LinkIterable<NodeIdT> for PessimisticLiveTDGraph {
+    type Iter<'a> = <Graph as LinkIterable<NodeIdT>>::Iter<'a>;
+
+    fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
+        LinkIterable::<NodeIdT>::link_iter(&self.graph, node)
+    }
+}
+impl LinkIterable<(NodeIdT, EdgeIdT)> for PessimisticLiveTDGraph {
+    type Iter<'a> = <Graph as LinkIterable<(NodeIdT, EdgeIdT)>>::Iter<'a>;
+
+    fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
+        LinkIterable::<(NodeIdT, EdgeIdT)>::link_iter(&self.graph, node)
+    }
+}
+
+impl BuildPermutated<PessimisticLiveTDGraph> for PessimisticLiveTDGraph {
+    fn permutated_filtered(graph: &PessimisticLiveTDGraph, order: &NodeOrder, mut predicate: Box<dyn FnMut(NodeId, NodeId) -> bool>) -> Self {
+        let mut first_out: Vec<EdgeId> = Vec::with_capacity(graph.num_nodes() + 1);
+        first_out.push(0);
+        let mut head = Vec::with_capacity(graph.num_arcs());
+        let mut live = Vec::with_capacity(graph.num_arcs());
+        let mut first_ipp_of_arc = Vec::<IPPIndex>::with_capacity(graph.num_arcs());
+        first_ipp_of_arc.push(0);
+        let mut ipp_departure_time = Vec::<Timestamp>::with_capacity(graph.graph.ipp_departure_time.len());
+        let mut ipp_travel_time = Vec::<Weight>::with_capacity(graph.graph.ipp_travel_time.len());
+
+        for (rank, &node) in order.order().iter().enumerate() {
+            let mut links = graph
+                .graph
+                .neighbor_and_edge_id_iter(node)
+                .filter(|&(h, _)| predicate(rank as NodeId, order.rank(h)))
+                .collect::<Vec<_>>();
+            first_out.push(first_out.last().unwrap() + links.len() as EdgeId);
+            links.sort_unstable_by_key(|&(head, _)| order.rank(head));
+
+            for (h, e) in links {
+                head.push(order.rank(h));
+                live.push(graph.live[e as usize]);
+                let ipp_range = graph.graph.first_ipp_of_arc[e as usize] as usize..graph.graph.first_ipp_of_arc[e as usize + 1] as usize;
+                first_ipp_of_arc.push(first_ipp_of_arc.last().unwrap() + (ipp_range.end - ipp_range.start) as IPPIndex);
+                ipp_departure_time.extend_from_slice(&graph.graph.ipp_departure_time[ipp_range.clone()]);
+                ipp_travel_time.extend_from_slice(&graph.graph.ipp_travel_time[ipp_range]);
+            }
+        }
+
+        PessimisticLiveTDGraph {
+            graph: Graph {
+                first_out,
+                head,
+                first_ipp_of_arc,
+                ipp_departure_time,
+                ipp_travel_time,
+            },
+            live,
+        }
     }
 }
