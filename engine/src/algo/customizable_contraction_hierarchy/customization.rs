@@ -263,9 +263,13 @@ fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weig
 }
 
 pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerfect<CCH> {
+    let (upward_modified, downward_modified) = customize_perfect_without_rebuild(&mut customized);
+    rebuild_customized_perfect(customized, &upward_modified, &downward_modified)
+}
+
+pub fn customize_perfect_without_rebuild(customized: &mut CustomizedBasic<CCH>) -> (Vec<bool>, Vec<bool>) {
     let cch = customized.cch;
     let n = cch.num_nodes();
-    let m = cch.num_arcs();
     // Routine for perfect precustomization.
     // The interface is similar to the one for the basic customization, but we need access to nonconsecutive ranges of edges,
     // so we can't use slices. Thus, we just take a mutable pointer to the shortcut vecs.
@@ -333,16 +337,28 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
 
     let static_perfect_customization = SeperatorBasedPerfectParallelCustomization::new_with_aux(cch, customize_perfect, customize_perfect);
 
-    let upward = &mut customized.upward;
-    let downward = &mut customized.downward;
-    let mut upward_modified = vec![false; upward.len()];
-    let mut downward_modified = vec![false; downward.len()];
+    let mut upward_modified = vec![false; customized.upward.len()];
+    let mut downward_modified = vec![false; customized.downward.len()];
 
     report_time_with_key("CCH Perfect Customization", "perfect_customization_running_time_ms", || {
-        static_perfect_customization.customize_with_aux(upward, downward, &mut upward_modified, &mut downward_modified, |cb| {
-            PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::NONE; n as usize]), cb);
-        });
+        static_perfect_customization.customize_with_aux(
+            &mut customized.upward,
+            &mut customized.downward,
+            &mut upward_modified,
+            &mut downward_modified,
+            |cb| {
+                PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::NONE; n as usize]), cb);
+            },
+        );
     });
+
+    (upward_modified, downward_modified)
+}
+
+fn rebuild_customized_perfect<'c>(customized: CustomizedBasic<'c, CCH>, upward_modified: &[bool], downward_modified: &[bool]) -> CustomizedPerfect<'c, CCH> {
+    let cch = customized.cch;
+    let n = cch.num_nodes();
+    let m = cch.num_arcs();
 
     report_time_with_key("Build Perfect Customized Graph", "graph_build_running_time_ms", || {
         let forward = customized.forward_graph();
