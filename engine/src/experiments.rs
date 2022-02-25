@@ -116,9 +116,10 @@ pub fn run_random_td_queries<
     T: Copy + serde::ser::Serialize + SampleUniform + Eq + PartialOrd,
     W: Copy + Eq + std::fmt::Debug + serde::ser::Serialize,
     S: TDQueryServer<T, W>,
+    R: rand::distributions::uniform::SampleRange<T> + Clone,
 >(
     num_nodes: usize,
-    departure_range: std::ops::Range<T>,
+    departure_range: R,
     server: &mut S,
     rng: &mut StdRng,
     reporting_context: &mut CollectionContextGuard,
