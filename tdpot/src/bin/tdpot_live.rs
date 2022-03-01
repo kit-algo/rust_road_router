@@ -23,7 +23,6 @@ use rust_road_router::{
 use std::{env, error::Error, path::Path};
 
 fn main() -> Result<(), Box<dyn Error>> {
-    // affinity::set_thread_affinity(&[env::var("PIN_QUERIES").map_or(0, |c| c.parse().unwrap())]).unwrap();
     let _reporter = enable_reporting("tdpot_live");
 
     let mut rng = experiments::rng(Default::default());

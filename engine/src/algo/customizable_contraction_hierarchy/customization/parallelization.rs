@@ -154,10 +154,11 @@ where
                     .exec(0..self.cch.forward_first_out().len() - 1, 0, 0, upward, downward, up_aux, down_aux)
             }));
         } else {
+            let available_cpus = affinity::get_thread_affinity().unwrap();
             rayon::ThreadPoolBuilder::new()
                 .build_scoped(
                     |thread| {
-                        affinity::set_thread_affinity(&[thread.index()]).unwrap();
+                        affinity::set_thread_affinity(&[available_cpus[thread.index()]]).unwrap();
                         setup(Box::new(|| thread.run()));
                     },
                     |pool| pool.install(|| self.customize_tree(&self.separators, 0, upward, downward, up_aux, down_aux)),
@@ -353,10 +354,11 @@ where
                 )
             }));
         } else {
+            let available_cpus = affinity::get_thread_affinity().unwrap();
             rayon::ThreadPoolBuilder::new()
                 .build_scoped(
                     |thread| {
-                        affinity::set_thread_affinity(&[thread.index()]).unwrap();
+                        affinity::set_thread_affinity(&[available_cpus[thread.index()]]).unwrap();
                         setup(Box::new(|| thread.run()));
                     },
                     |pool| {
