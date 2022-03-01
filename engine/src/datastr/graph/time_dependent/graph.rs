@@ -390,7 +390,13 @@ impl PessimisticLiveTDGraph {
         let ttf = self.graph.travel_time_function(edge_id);
         let predicted = ttf.eval(t);
         if let Some((live, soon)) = self.live[edge_id as usize].value() {
-            std::cmp::max(if t < soon { live } else { (live + soon).saturating_sub(t) }, predicted)
+            let tt_live = if t >= soon {
+                ttf.eval(t)
+            } else {
+                let tt_soon = ttf.eval(soon);
+                std::cmp::min(live, tt_soon.saturating_add(soon - t))
+            };
+            std::cmp::max(predicted, tt_live)
         } else {
             predicted
         }
