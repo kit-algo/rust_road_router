@@ -85,6 +85,28 @@ impl<T: Reset> TimestampedVector<T> {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    pub unsafe fn get_unchecked(&self, index: usize) -> &T {
+        debug_assert!(index < self.len());
+        // If element is from the current iteration use the element, otherwise the default
+        if *self.timestamps.get_unchecked(index) == self.current {
+            self.data.get_unchecked(index)
+        } else {
+            // fine since immutable
+            &self.default
+        }
+    }
+
+    pub unsafe fn get_unchecked_mut(&mut self, index: usize) -> &mut T {
+        debug_assert!(index < self.len());
+        let timestamp = self.timestamps.get_unchecked_mut(index);
+        let val = self.data.get_unchecked_mut(index);
+        if *timestamp != self.current {
+            *timestamp = self.current;
+            val.reset();
+        }
+        val
+    }
 }
 
 impl<T: Reset> Index<usize> for TimestampedVector<T> {

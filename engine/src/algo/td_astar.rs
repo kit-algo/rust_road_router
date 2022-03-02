@@ -241,7 +241,7 @@ impl<'a> CorridorCCHPotential<'a> {
             let mut dist = self.fw_distances[node as usize];
 
             for (NodeIdT(head), (lower, upper), _) in LinkIterable::<(NodeIdT, (Weight, Weight), EdgeIdT)>::link_iter(&self.backward_cch_graph, node) {
-                let (head_lower, head_upper) = self.potentials[head as usize].value().unwrap();
+                let (head_lower, head_upper) = unsafe { self.potentials.get_unchecked(head as usize).assume_some() };
                 dist.0 = min(dist.0, lower + head_lower);
                 dist.1 = min(dist.1, upper + head_upper);
             }
@@ -411,12 +411,12 @@ impl TDPotential for CorridorBounds<'_> {
             if let Some((lower, upper)) = self.corridor_pot.potential(node) {
                 if lower <= self.global_upper {
                     dist = self.backward_distances[node as usize];
-                    let metric_indices = self.to_metric_idx(self.departure + lower)..=self.to_metric_idx(self.departure + upper);
+                    let metric_indices = self.to_metric_idx(self.departure + lower)..=self.to_metric_idx(self.departure + min(upper, self.global_upper));
 
                     for idx in metric_indices {
                         let g = BorrowedGraph::new(self.fw_graph.first_out(), self.fw_graph.head(), self.fw_bucket_slice(idx));
                         for l in LinkIterable::<Link>::link_iter(&g, node) {
-                            dist = min(dist, self.potentials[l.node as usize].value().unwrap() + l.weight);
+                            dist = min(dist, unsafe { self.potentials.get_unchecked(l.node as usize).assume_some() } + l.weight);
                         }
                     }
                 }

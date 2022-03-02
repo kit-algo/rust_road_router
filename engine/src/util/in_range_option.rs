@@ -68,6 +68,11 @@ impl<T: Sentinel + Debug> InRangeOption<T> {
             None
         }
     }
+
+    pub unsafe fn assume_some(&self) -> T {
+        debug_assert!(self.value().is_some());
+        self.0
+    }
 }
 
 impl<T: Sentinel + Debug> Default for InRangeOption<T> {
