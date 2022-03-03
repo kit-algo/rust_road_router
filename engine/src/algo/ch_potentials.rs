@@ -171,7 +171,7 @@ where
             let mut dist = self.backward_distances[node as usize];
 
             for edge in LinkIterable::<Link>::link_iter(&self.forward_cch_graph, node) {
-                dist = std::cmp::min(dist, edge.weight + self.potentials[edge.node as usize].value().unwrap())
+                dist = std::cmp::min(dist, edge.weight + unsafe { self.potentials.get_unchecked(edge.node as usize).assume_some() })
             }
 
             self.potentials[node as usize] = InRangeOption::some(dist);
