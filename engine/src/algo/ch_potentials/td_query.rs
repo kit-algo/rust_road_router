@@ -104,8 +104,7 @@ where
             DijkstraInit::from_query(&query),
         );
 
-        // TODO
-        while let Some(node) = comp_search.next_step_with_potential(|node| potential.potential(node, None)) {
+        while let Some(node) = comp_search.next_step_with_td_potential(|node, &dist| potential.potential(node, Some(dist))) {
             num_queue_pops += 1;
             inspect(node, &virtual_topocore.order, &comp_search, potential);
 
@@ -151,8 +150,7 @@ where
             if core_dist.is_some() { out_of_core } else { query.from() },
         );
 
-        // TODO
-        while let Some(node) = comp_search.next_step_with_potential(|node| potential.potential(node, None)) {
+        while let Some(node) = comp_search.next_step_with_td_potential(|node, &dist| potential.potential(node, Some(dist))) {
             num_queue_pops += 1;
             inspect(node, &virtual_topocore.order, &comp_search, potential);
 
@@ -387,8 +385,7 @@ where
         let departure = *dijkstra.tentative_distance(query.from());
         let target_pot = potential.potential(query.to(), None)?;
 
-        // TODO
-        while let Some(node) = dijkstra.next_step_with_potential(|node| potential.potential(node, None)) {
+        while let Some(node) = dijkstra.next_step_with_td_potential(|node, &dist| potential.potential(node, Some(dist))) {
             num_queue_pops += 1;
             inspect(node, dijkstra, potential);
 

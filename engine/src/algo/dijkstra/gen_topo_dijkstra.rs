@@ -78,40 +78,53 @@ where
 
     #[inline(always)]
     pub fn next_step(&mut self) -> Option<NodeId> {
-        self.settle_next_node(|_| Some(Neutral()), |_| (), |_, _| true)
+        self.settle_next_node(|_, _| Some(Neutral()), |_| (), |_, _| true)
     }
 
     #[inline(always)]
-    pub fn next_step_with_potential<P, O>(&mut self, potential: P) -> Option<NodeId>
+    pub fn next_step_with_potential<P, O>(&mut self, mut potential: P) -> Option<NodeId>
     where
         P: FnMut(NodeId) -> Option<O>,
+        O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
+    {
+        self.settle_next_node(|node, _| potential(node), |_| (), |_, _| true)
+    }
+
+    #[inline(always)]
+    pub fn next_step_with_td_potential<P, O>(&mut self, potential: P) -> Option<NodeId>
+    where
+        P: FnMut(NodeId, &Ops::Label) -> Option<O>,
         O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
     {
         self.settle_next_node(potential, |_| (), |_, _| true)
     }
 
     #[inline(always)]
-    pub fn next_step_with_potential_and_edge_callback<P, O>(&mut self, potential: P, edge_callback: impl FnMut(&Ops::Arc)) -> Option<NodeId>
+    pub fn next_step_with_potential_and_edge_callback<P, O>(&mut self, mut potential: P, edge_callback: impl FnMut(&Ops::Arc)) -> Option<NodeId>
     where
         P: FnMut(NodeId) -> Option<O>,
         O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
     {
-        self.settle_next_node(potential, edge_callback, |_, _| true)
+        self.settle_next_node(|node, _| potential(node), edge_callback, |_, _| true)
     }
 
     #[inline(always)]
-    pub fn next_with_improve_callback_and_potential<P, O>(&mut self, improve_callback: impl FnMut(NodeId, &Ops::Label) -> bool, potential: P) -> Option<NodeId>
+    pub fn next_with_improve_callback_and_potential<P, O>(
+        &mut self,
+        improve_callback: impl FnMut(NodeId, &Ops::Label) -> bool,
+        mut potential: P,
+    ) -> Option<NodeId>
     where
         P: FnMut(NodeId) -> Option<O>,
         O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
     {
-        self.settle_next_node(potential, |_| (), improve_callback)
+        self.settle_next_node(|node, _| potential(node), |_| (), improve_callback)
     }
 
     #[inline(always)]
     fn settle_next_node<P, O, I>(&mut self, mut potential: P, mut edge_callback: impl FnMut(&Ops::Arc), mut improve_callback: I) -> Option<NodeId>
     where
-        P: FnMut(NodeId) -> Option<O>,
+        P: FnMut(NodeId, &Ops::Label) -> Option<O>,
         O: std::ops::Add<<Ops::Label as super::Label>::Key, Output = <Ops::Label as super::Label>::Key>,
         I: FnMut(NodeId, &Ops::Label) -> bool,
     {
@@ -196,7 +209,7 @@ where
                             });
                         } else if endpoint {
                             if improve_callback(next_node, next_distance) {
-                                if let Some(key) = potential(next_node).map(|p| p + next_distance.key()) {
+                                if let Some(key) = potential(next_node, next_distance).map(|p| p + next_distance.key()) {
                                     let next = State { key, node: next_node };
                                     if let Some(other) = self.queue.get(next.as_index()) {
                                         debug_assert!(other.key >= next.key);

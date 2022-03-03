@@ -7,7 +7,7 @@ use crate::{
     util::in_range_option::*,
 };
 
-use std::cmp::min;
+use std::cmp::{max, min};
 
 pub trait TDPotential {
     fn init(&mut self, source: NodeId, target: NodeId, departure: Timestamp);
@@ -271,7 +271,7 @@ pub struct CorridorBounds<'a> {
     fw_weights: Vec<Weight>,
     bw_weights: Vec<Weight>,
     stack: Vec<NodeId>,
-    potentials: TimestampedVector<InRangeOption<Weight>>,
+    potentials: TimestampedVector<InRangeOption<(Weight, u32)>>,
     backward_distances: TimestampedVector<Weight>,
     global_upper: Weight,
     departure: Timestamp,
@@ -410,11 +410,17 @@ impl TDPotential for CorridorBounds<'_> {
         }
     }
 
-    fn potential(&mut self, node: NodeId, _t: Option<Timestamp>) -> Option<Weight> {
+    fn potential(&mut self, node: NodeId, t: Option<Timestamp>) -> Option<Weight> {
         let node = self.corridor_pot.cch.node_order().rank(node);
+        let min_metric_idx = self.to_metric_idx(t.unwrap_or(self.departure));
 
         let mut cur_node = node;
-        while self.potentials[cur_node as usize].value().is_none() {
+        loop {
+            if let Some((_estimate, earliest_metric_idx)) = self.potentials[cur_node as usize].value() {
+                if earliest_metric_idx as usize <= min_metric_idx {
+                    break;
+                }
+            }
             self.stack.push(cur_node);
             if let Some(parent) = self.corridor_pot.cch.elimination_tree()[cur_node as usize].value() {
                 cur_node = parent;
@@ -423,28 +429,43 @@ impl TDPotential for CorridorBounds<'_> {
             }
         }
 
+        let mut earliest_metric_idx = self.to_metric_idx(self.departure);
+
         while let Some(node) = self.stack.pop() {
             self.num_pot_computations += 1;
+
             let mut dist = INFINITY;
+            let mut metric_idx_to_store = earliest_metric_idx;
+
             if let Some((lower, upper)) = self.corridor_pot.potential(node) {
                 if lower <= self.global_upper {
-                    dist = self.backward_distances[node as usize];
-                    let metric_indices = self.to_metric_idx(self.departure + lower)..=self.to_metric_idx(self.departure + min(upper, self.global_upper));
+                    let current_pot = self.potentials[node as usize].value();
+                    dist = current_pot.map(|(estimate, _)| estimate).unwrap_or(self.backward_distances[node as usize]);
+
+                    let lower_bound_metric_idx = self.to_metric_idx(self.departure + lower);
+                    if lower_bound_metric_idx < min_metric_idx {
+                        metric_idx_to_store = min_metric_idx;
+                    }
+                    earliest_metric_idx = max(lower_bound_metric_idx, min_metric_idx);
+                    let latest_metric_idx = current_pot
+                        .map(|(_, prev_lowest_idx)| prev_lowest_idx as usize)
+                        .unwrap_or_else(|| self.to_metric_idx(self.departure + min(upper, self.global_upper)) + 1);
+                    let metric_indices = earliest_metric_idx..latest_metric_idx;
 
                     for idx in metric_indices {
                         self.num_metrics += 1;
                         let g = BorrowedGraph::new(self.fw_graph.first_out(), self.fw_graph.head(), self.fw_bucket_slice(idx));
                         for l in LinkIterable::<Link>::link_iter(&g, node) {
-                            dist = min(dist, unsafe { self.potentials.get_unchecked(l.node as usize).assume_some() } + l.weight);
+                            dist = min(dist, unsafe { self.potentials.get_unchecked(l.node as usize).assume_some().0 } + l.weight);
                         }
                     }
                 }
             }
 
-            self.potentials[node as usize] = InRangeOption::some(dist);
+            self.potentials[node as usize] = InRangeOption::some((dist, metric_idx_to_store as u32));
         }
 
-        let dist = self.potentials[node as usize].value().unwrap();
+        let dist = self.potentials[node as usize].value().unwrap().0;
         if dist < INFINITY {
             Some(dist)
         } else {
