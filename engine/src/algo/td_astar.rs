@@ -3,6 +3,7 @@ use super::customizable_contraction_hierarchy::{query::stepped_elimination_tree:
 use super::*;
 use crate::{
     datastr::{graph::time_dependent::*, timestamped_vector::*},
+    report::*,
     util::in_range_option::*,
 };
 
@@ -11,6 +12,7 @@ use std::cmp::min;
 pub trait TDPotential {
     fn init(&mut self, source: NodeId, target: NodeId, departure: Timestamp);
     fn potential(&mut self, node: NodeId, t: Option<Timestamp>) -> Option<Weight>;
+    fn report_stats(&self) {}
 }
 
 impl<T: Potential> TDPotential for T {
@@ -41,6 +43,10 @@ impl<P: TDPotential> TDPotential for TDPotentialForPermutated<P> {
 
     fn potential(&mut self, node: NodeId, t: Option<Timestamp>) -> Option<Weight> {
         self.potential.potential(self.order.node(node), t)
+    }
+
+    fn report_stats(&self) {
+        self.potential.report_stats()
     }
 }
 
@@ -269,6 +275,8 @@ pub struct CorridorBounds<'a> {
     backward_distances: TimestampedVector<Weight>,
     global_upper: Weight,
     departure: Timestamp,
+    num_pot_computations: usize,
+    num_metrics: usize,
 }
 
 impl<'a> CorridorBounds<'a> {
@@ -332,6 +340,8 @@ impl<'a> CorridorBounds<'a> {
             backward_distances: TimestampedVector::new(n),
             global_upper: INFINITY,
             departure: INFINITY,
+            num_pot_computations: 0,
+            num_metrics: 0,
         }
     }
 }
@@ -360,7 +370,14 @@ impl CorridorBounds<'_> {
 }
 
 impl TDPotential for CorridorBounds<'_> {
+    fn report_stats(&self) {
+        report!("num_pot_computations", self.num_pot_computations);
+        report!("num_metrics", self.num_metrics);
+    }
+
     fn init(&mut self, source: NodeId, target: NodeId, departure: Timestamp) {
+        self.num_pot_computations = 0;
+        self.num_metrics = 0;
         let target = self.corridor_pot.cch.node_order().rank(target);
         let source = self.corridor_pot.cch.node_order().rank(source);
         self.departure = departure;
@@ -407,6 +424,7 @@ impl TDPotential for CorridorBounds<'_> {
         }
 
         while let Some(node) = self.stack.pop() {
+            self.num_pot_computations += 1;
             let mut dist = INFINITY;
             if let Some((lower, upper)) = self.corridor_pot.potential(node) {
                 if lower <= self.global_upper {
@@ -414,6 +432,7 @@ impl TDPotential for CorridorBounds<'_> {
                     let metric_indices = self.to_metric_idx(self.departure + lower)..=self.to_metric_idx(self.departure + min(upper, self.global_upper));
 
                     for idx in metric_indices {
+                        self.num_metrics += 1;
                         let g = BorrowedGraph::new(self.fw_graph.first_out(), self.fw_graph.head(), self.fw_bucket_slice(idx));
                         for l in LinkIterable::<Link>::link_iter(&g, node) {
                             dist = min(dist, unsafe { self.potentials.get_unchecked(l.node as usize).assume_some() } + l.weight);
