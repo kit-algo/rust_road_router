@@ -275,6 +275,7 @@ pub struct CorridorBounds<'a> {
     backward_distances: TimestampedVector<Weight>,
     global_upper: Weight,
     departure: Timestamp,
+    bucket_to_metric: Box<[usize]>,
     num_pot_computations: usize,
     num_metrics: usize,
 }
@@ -340,6 +341,7 @@ impl<'a> CorridorBounds<'a> {
             backward_distances: TimestampedVector::new(n),
             global_upper: INFINITY,
             departure: INFINITY,
+            bucket_to_metric: catchup.bucket_to_metric.into(),
             num_pot_computations: 0,
             num_metrics: 0,
         }
@@ -348,24 +350,23 @@ impl<'a> CorridorBounds<'a> {
 
 impl CorridorBounds<'_> {
     fn num_buckets(&self) -> usize {
-        let m = self.corridor_pot.forward_cch_graph.num_arcs();
-        self.fw_weights.len() / m
+        self.bucket_to_metric.len()
     }
 
-    fn to_metric_idx(&self, t: Timestamp) -> usize {
+    fn to_bucket_idx(&self, t: Timestamp) -> usize {
         t as usize * self.num_buckets() / period() as usize
     }
 
     fn fw_bucket_slice(&self, bucket_idx: usize) -> &[Weight] {
         let m = self.corridor_pot.forward_cch_graph.num_arcs();
-        let bucket_idx = bucket_idx % self.num_buckets();
-        &self.fw_weights[bucket_idx * m..(bucket_idx + 1) * m]
+        let metric_idx = self.bucket_to_metric[bucket_idx % self.num_buckets()];
+        &self.fw_weights[metric_idx * m..(metric_idx + 1) * m]
     }
 
     fn bw_bucket_slice(&self, bucket_idx: usize) -> &[Weight] {
         let m = self.corridor_pot.backward_cch_graph.num_arcs();
-        let bucket_idx = bucket_idx % self.num_buckets();
-        &self.bw_weights[bucket_idx * m..(bucket_idx + 1) * m]
+        let metric_idx = self.bucket_to_metric[bucket_idx % self.num_buckets()];
+        &self.bw_weights[metric_idx * m..(metric_idx + 1) * m]
     }
 }
 
@@ -395,7 +396,7 @@ impl TDPotential for CorridorBounds<'_> {
                 for (NodeIdT(head), EdgeIdT(edge_id)) in LinkIterable::<(NodeIdT, EdgeIdT)>::link_iter(&self.bw_graph, current) {
                     if let Some((lower, upper)) = self.corridor_pot.potential(head) {
                         if lower <= self.global_upper {
-                            let metric_indices = self.to_metric_idx(departure + lower)..=self.to_metric_idx(departure + upper);
+                            let metric_indices = self.to_bucket_idx(departure + lower)..=self.to_bucket_idx(departure + upper);
                             let mut weight_lower = INFINITY;
                             for idx in metric_indices {
                                 weight_lower = min(weight_lower, self.bw_bucket_slice(idx)[edge_id as usize]);
@@ -412,7 +413,7 @@ impl TDPotential for CorridorBounds<'_> {
 
     fn potential(&mut self, node: NodeId, t: Option<Timestamp>) -> Option<Weight> {
         let node = self.corridor_pot.cch.node_order().rank(node);
-        let min_metric_idx = self.to_metric_idx(t.unwrap_or(self.departure));
+        let min_metric_idx = self.to_bucket_idx(t.unwrap_or(self.departure));
 
         let mut cur_node = node;
         loop {
@@ -429,7 +430,7 @@ impl TDPotential for CorridorBounds<'_> {
             }
         }
 
-        let mut earliest_metric_idx = self.to_metric_idx(self.departure);
+        let mut earliest_metric_idx = self.to_bucket_idx(self.departure);
 
         while let Some(node) = self.stack.pop() {
             self.num_pot_computations += 1;
@@ -442,14 +443,14 @@ impl TDPotential for CorridorBounds<'_> {
                     let current_pot = self.potentials[node as usize].value();
                     dist = current_pot.map(|(estimate, _)| estimate).unwrap_or(self.backward_distances[node as usize]);
 
-                    let lower_bound_metric_idx = self.to_metric_idx(self.departure + lower);
+                    let lower_bound_metric_idx = self.to_bucket_idx(self.departure + lower);
                     if lower_bound_metric_idx < min_metric_idx {
                         metric_idx_to_store = min_metric_idx;
                     }
                     earliest_metric_idx = max(lower_bound_metric_idx, min_metric_idx);
                     let latest_metric_idx = current_pot
                         .map(|(_, prev_lowest_idx)| prev_lowest_idx as usize)
-                        .unwrap_or_else(|| self.to_metric_idx(self.departure + min(upper, self.global_upper)) + 1);
+                        .unwrap_or_else(|| self.to_bucket_idx(self.departure + min(upper, self.global_upper)) + 1);
                     let metric_indices = earliest_metric_idx..latest_metric_idx;
 
                     for idx in metric_indices {

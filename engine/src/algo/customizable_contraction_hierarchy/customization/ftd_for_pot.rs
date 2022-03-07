@@ -22,6 +22,7 @@ pub struct PotData {
     pub bw_static_bound: Vec<(Weight, Weight)>,
     pub fw_bucket_bounds: Vec<Weight>,
     pub bw_bucket_bounds: Vec<Weight>,
+    pub bucket_to_metric: Vec<usize>,
 }
 
 impl<'a> crate::io::Deconstruct for PotData {
@@ -30,17 +31,26 @@ impl<'a> crate::io::Deconstruct for PotData {
         store("bw_static_bound", &self.bw_static_bound)?;
         store("fw_bucket_bounds", &self.fw_bucket_bounds)?;
         store("bw_bucket_bounds", &self.bw_bucket_bounds)?;
+        store("bucket_to_metric", &self.bucket_to_metric)?;
         Ok(())
     }
 }
 
 impl<'a> crate::io::Reconstruct for PotData {
     fn reconstruct_with(loader: Loader) -> std::io::Result<Self> {
+        let fw_static_bound: Vec<(Weight, Weight)> = loader.load("fw_static_bound")?;
+        let fw_bucket_bounds: Vec<Weight> = loader.load("fw_bucket_bounds")?;
+        let m = fw_static_bound.len();
+        let num_buckets = fw_bucket_bounds.len() / m;
         Ok(Self {
-            fw_static_bound: loader.load("fw_static_bound")?,
+            fw_static_bound,
+            fw_bucket_bounds,
             bw_static_bound: loader.load("bw_static_bound")?,
-            fw_bucket_bounds: loader.load("fw_bucket_bounds")?,
             bw_bucket_bounds: loader.load("bw_bucket_bounds")?,
+            bucket_to_metric: loader.load("bucket_to_metric").unwrap_or_else(|err| {
+                dbg!(err);
+                (0..num_buckets).collect()
+            }),
         })
     }
 }
@@ -490,6 +500,7 @@ pub fn customize_internal<'a, 'b: 'a, const K: usize>(cch: &'a CCH, metric: &'b 
             .collect(),
         fw_static_bound,
         bw_static_bound,
+        bucket_to_metric: (0..K).collect(),
     }
 }
 

@@ -12,6 +12,7 @@ pub mod contraction_hierarchy;
 pub mod customizable_contraction_hierarchy;
 pub mod dijkstra;
 pub mod hl;
+pub mod metric_merging;
 pub mod minimal_nonshortest_subpaths;
 pub mod rphast;
 pub mod td_astar;
