@@ -6,7 +6,6 @@ use std::{env, error::Error, path::Path};
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args().skip(1);
     let arg = &args.next().ok_or(CliErr("No directory arg given"))?;
-    let arg = &env::args().skip(1).next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 
     let graph = floating_time_dependent::TDGraph::reconstruct_from(&path)?;
