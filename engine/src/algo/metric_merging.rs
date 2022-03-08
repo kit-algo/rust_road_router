@@ -1,5 +1,5 @@
 use super::*;
-// use rayon::prelude::*;
+use rayon::prelude::*;
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
@@ -16,8 +16,8 @@ pub fn merge(metrics: &[&[Weight]], target_size: usize) -> Vec<Vec<usize>> {
         for (other_idx, other_metric) in metrics.iter().enumerate() {
             if other_idx > idx {
                 let sum_of_squared_diffs: u64 = metric
-                    .iter()
-                    .zip(other_metric.iter())
+                    .par_iter()
+                    .zip(other_metric.par_iter())
                     .map(|(&w1, &w2)| w1.abs_diff(w2) as u64 * w1.abs_diff(w2) as u64)
                     .sum();
                 queue.push(Reverse((sum_of_squared_diffs, idx, other_idx)));
@@ -43,6 +43,7 @@ pub fn merge(metrics: &[&[Weight]], target_size: usize) -> Vec<Vec<usize>> {
             }
 
             let sum_of_squared_diffs: u64 = (0..m)
+                .into_par_iter()
                 .map(|edge_idx| {
                     let w1 = merged[idx1].iter().map(|&idx| metrics[idx][edge_idx]).min().unwrap();
                     let w2 = metric_group.iter().map(|&idx| metrics[idx][edge_idx]).min().unwrap();
