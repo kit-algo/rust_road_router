@@ -18,7 +18,7 @@ use std::{cell::RefCell, mem::swap};
 
 pub use serde_json::json;
 
-enum ReportingValue {
+pub enum ReportingValue {
     Collection(Vec<ReportingValue>),
     Object(BTreeMap<&'static str, ReportingValue>),
     Value(Value),
@@ -41,12 +41,14 @@ enum ContextStackItem {
     Key(&'static str),
     Collection(Vec<ReportingValue>),
     Object(BTreeMap<&'static str, ReportingValue>),
+    Capture(BTreeMap<&'static str, ReportingValue>),
     Throwaway,
 }
 
 enum CurrentReportingContext {
     Collection(Vec<ReportingValue>),
     Object(BTreeMap<&'static str, ReportingValue>),
+    Capture(BTreeMap<&'static str, ReportingValue>),
     Throwaway,
 }
 
@@ -73,6 +75,12 @@ impl Reporter {
                 self.context_stack.push(ContextStackItem::Object(tmp));
                 self.context_stack.push(ContextStackItem::Key(key));
             }
+            CurrentReportingContext::Capture(object) => {
+                let mut tmp = BTreeMap::new();
+                swap(&mut tmp, object);
+                self.context_stack.push(ContextStackItem::Capture(tmp));
+                self.context_stack.push(ContextStackItem::Key(key));
+            }
             CurrentReportingContext::Collection(_) => {
                 panic!("Cannot create object at key in collection");
             }
@@ -89,6 +97,13 @@ impl Reporter {
                 self.context_stack.push(ContextStackItem::Key(key));
                 self.current = CurrentReportingContext::Collection(Vec::new());
             }
+            CurrentReportingContext::Capture(object) => {
+                let mut tmp = BTreeMap::new();
+                swap(&mut tmp, object);
+                self.context_stack.push(ContextStackItem::Capture(tmp));
+                self.context_stack.push(ContextStackItem::Key(key));
+                self.current = CurrentReportingContext::Collection(Vec::new());
+            }
             CurrentReportingContext::Collection(_) => {
                 panic!("Cannot create collection at key in collection");
             }
@@ -98,7 +113,7 @@ impl Reporter {
 
     fn create_collection_item(&mut self) {
         match &mut self.current {
-            CurrentReportingContext::Object(_) => {
+            CurrentReportingContext::Object(_) | CurrentReportingContext::Capture(_) => {
                 panic!("Cannot create collection item in object");
             }
             CurrentReportingContext::Collection(collection) => {
@@ -119,6 +134,12 @@ impl Reporter {
                 self.context_stack.push(ContextStackItem::Object(tmp));
                 self.current = CurrentReportingContext::Throwaway;
             }
+            CurrentReportingContext::Capture(object) => {
+                let mut tmp = BTreeMap::new();
+                swap(&mut tmp, object);
+                self.context_stack.push(ContextStackItem::Capture(tmp));
+                self.current = CurrentReportingContext::Throwaway;
+            }
             CurrentReportingContext::Collection(collection) => {
                 let mut tmp = Vec::new();
                 swap(&mut tmp, collection);
@@ -131,9 +152,36 @@ impl Reporter {
         }
     }
 
-    fn report(&mut self, key: &'static str, val: Value) {
+    fn capture_reporting(&mut self) {
         match &mut self.current {
             CurrentReportingContext::Object(object) => {
+                let mut tmp = BTreeMap::new();
+                swap(&mut tmp, object);
+                self.context_stack.push(ContextStackItem::Object(tmp));
+                self.current = CurrentReportingContext::Capture(BTreeMap::new());
+            }
+            CurrentReportingContext::Capture(object) => {
+                let mut tmp = BTreeMap::new();
+                swap(&mut tmp, object);
+                self.context_stack.push(ContextStackItem::Capture(tmp));
+                self.current = CurrentReportingContext::Capture(BTreeMap::new());
+            }
+            CurrentReportingContext::Collection(collection) => {
+                let mut tmp = Vec::new();
+                swap(&mut tmp, collection);
+                self.context_stack.push(ContextStackItem::Collection(tmp));
+                self.current = CurrentReportingContext::Capture(BTreeMap::new());
+            }
+            CurrentReportingContext::Throwaway => {
+                self.context_stack.push(ContextStackItem::Throwaway);
+                self.current = CurrentReportingContext::Capture(BTreeMap::new());
+            }
+        }
+    }
+
+    fn report(&mut self, key: &'static str, val: Value) {
+        match &mut self.current {
+            CurrentReportingContext::Object(object) | CurrentReportingContext::Capture(object) => {
                 let prev = object.insert(key, ReportingValue::Value(val));
                 if !cfg!(feature = "report-allow-override") {
                     assert!(prev.is_none());
@@ -164,6 +212,7 @@ impl Reporter {
                         CurrentReportingContext::Object(cur_object) => object.insert(key, ReportingValue::Object(cur_object)),
                         CurrentReportingContext::Collection(collection) => object.insert(key, ReportingValue::Collection(collection)),
                         CurrentReportingContext::Throwaway => None,
+                        CurrentReportingContext::Capture(_) => panic!("Inconsistent context stack"),
                     };
                     if !cfg!(feature = "report-allow-override") {
                         assert!(prev.is_none());
@@ -186,6 +235,7 @@ impl Reporter {
                         panic!("Cannot insert collection into collection");
                     }
                     CurrentReportingContext::Throwaway => panic!("Inconsistent context stack"),
+                    CurrentReportingContext::Capture(_) => panic!("Inconsistent context stack"),
                 };
 
                 self.current = CurrentReportingContext::Collection(collection);
@@ -194,8 +244,8 @@ impl Reporter {
         }
     }
 
-    fn unblock(&mut self) {
-        if !matches!(self.current, CurrentReportingContext::Throwaway) {
+    fn unblock_or_drop_capture(&mut self) {
+        if !matches!(self.current, CurrentReportingContext::Throwaway | CurrentReportingContext::Capture(_)) {
             panic!("Inconsistent context stack");
         }
         match self.context_stack.pop().expect("tried to pop from empty context") {
@@ -206,7 +256,12 @@ impl Reporter {
             ContextStackItem::Object(object) => {
                 self.current = CurrentReportingContext::Object(object);
             }
-            ContextStackItem::Throwaway => (),
+            ContextStackItem::Capture(object) => {
+                self.current = CurrentReportingContext::Capture(object);
+            }
+            ContextStackItem::Throwaway => {
+                self.current = CurrentReportingContext::Throwaway;
+            }
         }
     }
 }
@@ -264,13 +319,44 @@ pub struct BlockedReportingContextGuard();
 
 impl Drop for BlockedReportingContextGuard {
     fn drop(&mut self) {
-        REPORTER.with(|reporter| reporter.borrow_mut().as_mut().map(Reporter::unblock));
+        REPORTER.with(|reporter| reporter.borrow_mut().as_mut().map(Reporter::unblock_or_drop_capture));
     }
 }
 
 pub fn block_reporting() -> BlockedReportingContextGuard {
-    REPORTER.with(|reporter| reporter.borrow_mut().as_mut().map(|r| r.block_reporting()));
+    REPORTER.with(|reporter| reporter.borrow_mut().as_mut().map(Reporter::block_reporting));
     BlockedReportingContextGuard()
+}
+
+#[must_use]
+pub struct CaptureReportingContextGuard();
+
+impl Drop for CaptureReportingContextGuard {
+    fn drop(&mut self) {
+        REPORTER.with(|reporter| reporter.borrow_mut().as_mut().map(Reporter::unblock_or_drop_capture));
+    }
+}
+
+pub fn capture_reporting() -> CaptureReportingContextGuard {
+    REPORTER.with(|reporter| reporter.borrow_mut().as_mut().map(Reporter::capture_reporting));
+    CaptureReportingContextGuard()
+}
+
+impl CaptureReportingContextGuard {
+    pub fn reported(self) -> Option<BTreeMap<&'static str, ReportingValue>> {
+        REPORTER.with(|reporter| {
+            if let Some(reporter) = reporter.borrow_mut().as_mut() {
+                if let CurrentReportingContext::Capture(obj) = &mut reporter.current {
+                    let mut tmp = BTreeMap::new();
+                    std::mem::swap(obj, &mut tmp);
+                    return Some(tmp);
+                } else {
+                    panic!("Inconsistent context stack");
+                }
+            }
+            None
+        })
+    }
 }
 
 pub fn report(key: &'static str, val: Value) {

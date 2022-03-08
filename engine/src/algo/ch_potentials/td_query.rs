@@ -122,11 +122,11 @@ where
             return None;
         }
 
-        let to_core_pushs = comp_search.num_queue_pushs();
-        let to_core_relaxed = comp_search.num_relaxed_arcs();
+        let mut pushs = comp_search.num_queue_pushs();
+        let mut relaxed = comp_search.num_relaxed_arcs();
 
         let core_dist = {
-            let _ctxt = push_context("core_search");
+            let capture = capture_reporting();
             let core_query = Q::new(into_core, out_of_core, *comp_search.tentative_distance(into_core));
             let mut core_search = TopoDijkstraRun::continue_query(
                 &self.core_search.graph,
@@ -134,13 +134,33 @@ where
                 &mut self.core_search.ops,
                 into_core,
             );
-            SkipLowDegServer::distance_manually_initialized(
+            let res = SkipLowDegServer::distance_manually_initialized(
                 &mut core_search,
                 core_query,
                 potential,
                 |n, d, p| inspect(n, &virtual_topocore.order, d, p),
                 INFINITY,
-            )
+            );
+
+            if let Some(reported) = capture.reported() {
+                if let ReportingValue::Value(serde_json::Value::Number(number)) = &reported["num_queue_pops"] {
+                    if let Some(num) = number.as_u64() {
+                        num_queue_pops += num as usize;
+                    }
+                }
+                if let ReportingValue::Value(serde_json::Value::Number(number)) = &reported["num_queue_pushs"] {
+                    if let Some(num) = number.as_u64() {
+                        pushs += num as usize;
+                    }
+                }
+                if let ReportingValue::Value(serde_json::Value::Number(number)) = &reported["num_relaxed_arcs"] {
+                    if let Some(num) = number.as_u64() {
+                        relaxed += num as usize;
+                    }
+                }
+            }
+
+            res
         };
 
         let mut comp_search = TopoDijkstraRun::continue_query(
@@ -165,8 +185,9 @@ where
         }
 
         report!("num_queue_pops", num_queue_pops);
-        report!("num_queue_pushs", to_core_pushs + comp_search.num_queue_pushs());
-        report!("num_relaxed_arcs", to_core_relaxed + comp_search.num_relaxed_arcs());
+        report!("num_queue_pushs", pushs + comp_search.num_queue_pushs());
+        report!("num_relaxed_arcs", relaxed + comp_search.num_relaxed_arcs());
+        potential.report_stats();
 
         let dist = *comp_search.tentative_distance(query.to());
         if dist < INFINITY {
