@@ -46,23 +46,33 @@ fn main() -> Result<(), Box<dyn Error>> {
     let live_data = Vec::<(EdgeId, Weight, Weight)>::load_from(path.join(live_data_file))?;
     report!("num_edges_with_live", live_data.len());
     let mut not_really_live: usize = 0;
+    let mut blocked: usize = 0;
+    let mut blocked_but_also_long_term: usize = 0;
+    let max_t_soon = period();
+    report!("max_t_soon", max_t_soon);
     for (edge, weight, duration) in live_data {
-        // if duration < 3600 * 1000 {
-        if duration < period() {
+        if weight >= INFINITY {
+            blocked += 1;
+        }
+        if duration < max_t_soon {
             live[edge as usize] = InRangeOption::some((weight, duration + t_live));
         } else {
+            if weight >= INFINITY && duration >= max_t_soon {
+                blocked_but_also_long_term += 1;
+            }
             not_really_live += 1;
         }
     }
-    report!("num_edges_where_live_is_not_live", not_really_live);
-
-    let mut algo_runs_ctxt = push_collection_context("algo_runs");
+    report!("num_long_term_live_reports", not_really_live);
+    report!("blocked", blocked);
+    report!("num_long_term_blocks", blocked_but_also_long_term);
 
     let cch = {
         let _blocked = block_reporting();
         let order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm"))?);
         CCH::fix_order_and_build(&graph, order)
     };
+    report!("num_cch_edges", cch.num_arcs());
     let cch_pot_data = {
         let _blocked = block_reporting();
         CCHPotData::new(&cch, &BorrowedGraph::new(graph.first_out(), graph.head(), &lower_bound))
@@ -80,20 +90,44 @@ fn main() -> Result<(), Box<dyn Error>> {
         customized
     };
 
+    let customized_folder = path.join("customized_corridor_mins");
+    let mut catchup = customization::ftd_for_pot::PotData::reconstruct_from(&customized_folder)?;
+    let mut worse_uppers: u64 = 0;
+    for ((_, upper), live) in catchup.fw_static_bound.iter_mut().zip(upper_bound_customized.forward_graph().weight()) {
+        if *upper < *live {
+            worse_uppers += 1;
+        }
+        *upper = std::cmp::max(*upper, *live);
+    }
+    for ((_, upper), live) in catchup.bw_static_bound.iter_mut().zip(upper_bound_customized.backward_graph().weight()) {
+        if *upper < *live {
+            worse_uppers += 1;
+        }
+        *upper = std::cmp::max(*upper, *live);
+    }
+    report!("num_worse_upper_bounds", worse_uppers);
+
+    let interval_min_pot = CorridorBounds::new(&cch, catchup);
+
+    let mut algo_runs_ctxt = push_collection_context("algo_runs");
+
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
     let mut server = Server::new(&live_graph, cch_pot_data.forward_potential(), PessimisticLiveTDDijkstraOps::default());
     drop(virtual_topocore_ctxt);
+    let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
+    let mut only_td_server = Server::new(live_graph.graph(), cch_pot_data.forward_potential(), TDDijkstraOps::default());
+    drop(virtual_topocore_ctxt);
 
-    // experiments::run_random_td_queries(
-    //     n,
-    //     t_live..=t_live,
-    //     &mut server,
-    //     &mut rng.clone(),
-    //     &mut algo_runs_ctxt,
-    //     experiments::chpot::num_queries() / 10,
-    //     |_, _, _, _| (),
-    //     |_, _, _| None,
-    // );
+    experiments::run_random_td_queries(
+        n,
+        t_live..=t_live,
+        &mut server,
+        &mut rng.clone(),
+        &mut algo_runs_ctxt,
+        experiments::chpot::num_queries(),
+        |_, _, _, _| (),
+        |_, _, _| None,
+    );
 
     // let mut ranges = vec![0..24 * 60 * 60 * 1000];
     // for i in 0..48 {
@@ -123,34 +157,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     //     },
     // );
 
-    let customized_folder = path.join("customized_corridor_mins");
-    let mut catchup = customization::ftd_for_pot::PotData::reconstruct_from(&customized_folder)?;
-    for ((_, upper), live) in catchup.fw_static_bound.iter_mut().zip(upper_bound_customized.forward_graph().weight()) {
-        *upper = std::cmp::max(*upper, *live);
-    }
-    for ((_, upper), live) in catchup.bw_static_bound.iter_mut().zip(upper_bound_customized.backward_graph().weight()) {
-        *upper = std::cmp::max(*upper, *live);
-    }
-
-    dbg!(
-        catchup.fw_static_bound.iter().filter(|&&(l, u)| u < l || l == INFINITY).count(),
-        catchup.fw_static_bound.len()
-    );
-    dbg!(
-        catchup.bw_static_bound.iter().filter(|&&(l, u)| u < l || l == INFINITY).count(),
-        catchup.bw_static_bound.len()
-    );
-    // dbg!(catchup
-    //     .fw_static_bound
-    //     .iter()
-    //     .zip(catchup.bw_static_bound.iter())
-    //     .filter(|&(&(l1, u1), &(l2, u2))| (u1 < l1 || l1 == INFINITY) && (u2 < l2 || l2 == INFINITY))
-    //     .count());
-    let interval_min_pot = CorridorBounds::new(&cch, catchup);
-
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
     let mut cb_server = Server::new(&live_graph, interval_min_pot, PessimisticLiveTDDijkstraOps::default());
     drop(virtual_topocore_ctxt);
+
+    let mut total_live: u64 = 0;
+    let mut total_td: u64 = 0;
+    let mut num_affected: u64 = 0;
 
     experiments::run_random_td_queries(
         n,
@@ -158,14 +171,30 @@ fn main() -> Result<(), Box<dyn Error>> {
         &mut cb_server,
         &mut rng,
         &mut algo_runs_ctxt,
-        experiments::chpot::num_queries() / 10,
+        experiments::chpot::num_queries(),
         |_, _, _, _| (),
-        |_, _, _| None,
-        // |from, to, departure| {
-        //     let _blocked = block_reporting();
-        //     Some(server.td_query(TDQuery { from, to, departure }).distance())
-        // },
+        // |_, _, _| None,
+        |from, to, departure| {
+            let _blocked = block_reporting();
+            let live_result = server.td_query(TDQuery { from, to, departure }).distance();
+            let plain_td_result = only_td_server.td_query(TDQuery { from, to, departure }).distance();
+            if let (Some(live_result), Some(plain_td_result)) = (live_result, plain_td_result) {
+                total_live += live_result as u64;
+                total_td += plain_td_result as u64;
+                assert!(live_result >= plain_td_result);
+                if live_result != plain_td_result {
+                    num_affected += 1;
+                }
+            }
+            Some(live_result)
+        },
     );
+
+    drop(algo_runs_ctxt);
+
+    report!("num_queries_affected_by_live", num_affected);
+    report!("avg_td_travel_time_s", total_td / 1000 / experiments::chpot::num_queries() as u64);
+    report!("avg_td_live_travel_time_s", total_live / 1000 / experiments::chpot::num_queries() as u64);
 
     Ok(())
 }
