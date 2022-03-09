@@ -273,9 +273,15 @@ impl Shortcut {
         !matches!(self.sources, Sources::None)
     }
 
+    pub fn disable_if_bounds_overlap(&mut self, shortcut_graph: &impl ShortcutGraphTrt<OriginalGraph = TDGraph>) {
+        self.finalize_bounds_int::<_, false>(shortcut_graph)
+    }
     /// Once the TTF of this Shortcut is final, we can tighten the lower bound.
     /// When we know or detect, that we don't need this shortcut, we set all bounds to infinity.
     pub fn finalize_bounds(&mut self, shortcut_graph: &impl ShortcutGraphTrt<OriginalGraph = TDGraph>) {
+        self.finalize_bounds_int::<_, true>(shortcut_graph)
+    }
+    fn finalize_bounds_int<S: ShortcutGraphTrt<OriginalGraph = TDGraph>, const SET_INF: bool>(&mut self, shortcut_graph: &S) {
         if !self.required {
             return;
         }
@@ -298,8 +304,10 @@ impl Shortcut {
         if self.upper_bound.fuzzy_lt(new_lower_bound) {
             self.required = false;
             self.sources = Sources::None;
-            self.lower_bound = FlWeight::INFINITY;
-            self.upper_bound = FlWeight::INFINITY;
+            if SET_INF {
+                self.lower_bound = FlWeight::INFINITY;
+                self.upper_bound = FlWeight::INFINITY;
+            }
             return;
         }
 

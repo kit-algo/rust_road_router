@@ -224,8 +224,6 @@ pub fn customize_internal<'a, 'b: 'a, const K: usize>(cch: &'a CCH, metric: &'b 
         // shortcut contains shortest path length, lower bound the length of the specific path represented by the shortcut (not necessarily the shortest)
         if shortcut.upper_bound.fuzzy_lt(shortcut.lower_bound) {
             shortcut.required = false;
-            shortcut.lower_bound = FlWeight::INFINITY;
-            shortcut.upper_bound = FlWeight::INFINITY;
         }
     };
 
@@ -450,19 +448,6 @@ pub fn customize_internal<'a, 'b: 'a, const K: usize>(cch: &'a CCH, metric: &'b 
                 }
             }
 
-            upward.par_iter_mut().for_each(|s| {
-                if !s.required {
-                    s.lower_bound = FlWeight::INFINITY;
-                    s.upper_bound = FlWeight::INFINITY;
-                }
-            });
-            downward.par_iter_mut().for_each(|s| {
-                if !s.required {
-                    s.lower_bound = FlWeight::INFINITY;
-                    s.upper_bound = FlWeight::INFINITY;
-                }
-            });
-
             upward
                 .par_iter()
                 .for_each(|s| debug_assert!(!s.required || s.lower_bound.fuzzy_lt(FlWeight::INFINITY)));
@@ -577,7 +562,7 @@ where
                                 TRIANGLES_PROCESSED.fetch_add(1, Ordering::Relaxed);
                             }
                         }
-                        upward_shortcut.finalize_bounds(&shortcut_graph);
+                        upward_shortcut.disable_if_bounds_overlap(&shortcut_graph);
                         if cfg!(feature = "detailed-stats") {
                             ARCS_PROCESSED.fetch_add(1, Ordering::Relaxed);
                         }
@@ -592,7 +577,7 @@ where
                                 TRIANGLES_PROCESSED.fetch_add(1, Ordering::Relaxed);
                             }
                         }
-                        downward_shortcut.finalize_bounds(&shortcut_graph);
+                        downward_shortcut.disable_if_bounds_overlap(&shortcut_graph);
                         if cfg!(feature = "detailed-stats") {
                             ARCS_PROCESSED.fetch_add(1, Ordering::Relaxed);
                         }
