@@ -50,12 +50,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut blocked_but_also_long_term: usize = 0;
     let max_t_soon = period();
     report!("max_t_soon", max_t_soon);
+    let mut max_duration = 0;
     for (edge, weight, duration) in live_data {
         if weight >= INFINITY {
             blocked += 1;
         }
         if duration < max_t_soon {
             live[edge as usize] = InRangeOption::some((weight, duration + t_live));
+            max_duration = std::cmp::max(max_duration, duration);
         } else {
             if weight >= INFINITY && duration >= max_t_soon {
                 blocked_but_also_long_term += 1;
@@ -92,6 +94,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let customized_folder = path.join("customized_corridor_mins");
     let mut catchup = customization::ftd_for_pot::PotData::reconstruct_from(&customized_folder)?;
+    let fw_non_live_upper = catchup.fw_static_bound.iter().map(|&(_l, u)| u).collect();
+    let bw_non_live_upper = catchup.bw_static_bound.iter().map(|&(_l, u)| u).collect();
     let mut worse_uppers: u64 = 0;
     for ((_, upper), live) in catchup.fw_static_bound.iter_mut().zip(upper_bound_customized.forward_graph().weight()) {
         if *upper < *live {
@@ -107,7 +111,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     report!("num_worse_upper_bounds", worse_uppers);
 
-    let interval_min_pot = IntervalMinPotential::new(&cch, catchup);
+    let interval_min_pot = IntervalMinPotential::new(&cch, catchup, fw_non_live_upper, bw_non_live_upper, max_duration + t_live);
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs");
 
