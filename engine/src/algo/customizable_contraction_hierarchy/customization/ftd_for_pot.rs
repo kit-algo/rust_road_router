@@ -51,7 +51,7 @@ impl<'a> crate::io::Reconstruct for PotData {
             fw_bucket_bounds,
             bw_static_bound: loader.load("bw_static_bound")?,
             bw_bucket_bounds: loader.load("bw_bucket_bounds")?,
-            fw_required: loader.load("bw_required")?,
+            fw_required: loader.load("fw_required")?,
             bw_required: loader.load("bw_required")?,
             bucket_to_metric: loader.load("bucket_to_metric").unwrap_or_else(|err| {
                 dbg!(err);
