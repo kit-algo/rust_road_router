@@ -282,46 +282,85 @@ pub struct IntervalMinPotential<'a> {
 
 impl<'a> IntervalMinPotential<'a> {
     pub fn new(cch: &'a CCH, mut catchup: customizable_contraction_hierarchy::customization::ftd_for_pot::PotData) -> Self {
+        let g = UnweightedFirstOutGraph::new(cch.first_out(), cch.head());
+        let keep = |&(l, u): &(Weight, Weight)| l < INFINITY && l <= u;
+
         let n = cch.num_nodes();
         let m = cch.num_arcs();
+        assert_eq!(catchup.fw_static_bound.len(), m);
+        assert_eq!(catchup.bw_static_bound.len(), m);
+
         let mut fw_first_out = Vec::with_capacity(n + 1);
         fw_first_out.push(0);
         let mut bw_first_out = Vec::with_capacity(n + 1);
         bw_first_out.push(0);
         let mut fw_head = Vec::with_capacity(m);
         let mut bw_head = Vec::with_capacity(m);
-
-        let g = UnweightedFirstOutGraph::new(cch.first_out(), cch.head());
-
-        let keep = |&(l, u): &(Weight, Weight)| l < INFINITY && l <= u;
-
         for node in 0..n {
             for (NodeIdT(head), EdgeIdT(edge_id)) in LinkIterable::<(NodeIdT, EdgeIdT)>::link_iter(&g, node as NodeId) {
-                if keep(&catchup.fw_static_bound[edge_id as usize]) {
+                if keep(&catchup.fw_static_bound[edge_id as usize]) && catchup.fw_required[edge_id as usize] {
                     fw_head.push(head);
                 }
-                if keep(&catchup.bw_static_bound[edge_id as usize]) {
+                if keep(&catchup.bw_static_bound[edge_id as usize]) && catchup.bw_required[edge_id as usize] {
                     bw_head.push(head);
                 }
             }
             fw_first_out.push(fw_head.len() as EdgeId);
             bw_first_out.push(bw_head.len() as EdgeId);
         }
-        assert_eq!(catchup.fw_static_bound.len(), m);
-        assert_eq!(catchup.bw_static_bound.len(), m);
-        catchup
-            .fw_bucket_bounds
-            .retain(crate::util::with_index(|idx, _| keep(&catchup.fw_static_bound[idx % m])));
-        catchup
-            .bw_bucket_bounds
-            .retain(crate::util::with_index(|idx, _| keep(&catchup.bw_static_bound[idx % m])));
-        catchup.fw_static_bound.retain(keep);
-        catchup.bw_static_bound.retain(keep);
-
         let fw_first_out: std::rc::Rc<[_]> = fw_first_out.into();
         let bw_first_out: std::rc::Rc<[_]> = bw_first_out.into();
         let fw_head: std::rc::Rc<[_]> = fw_head.into();
         let bw_head: std::rc::Rc<[_]> = bw_head.into();
+
+        let fw_bucket_graph = UnweightedFirstOutGraph::new(fw_first_out.clone(), fw_head.clone());
+        let bw_bucket_graph = UnweightedFirstOutGraph::new(bw_first_out.clone(), bw_head.clone());
+
+        // let mut fw_first_out = Vec::with_capacity(n + 1);
+        // fw_first_out.push(0);
+        // let mut bw_first_out = Vec::with_capacity(n + 1);
+        // bw_first_out.push(0);
+        // let mut fw_head = Vec::with_capacity(m);
+        // let mut bw_head = Vec::with_capacity(m);
+        // for node in 0..n {
+        //     for (NodeIdT(head), EdgeIdT(edge_id)) in LinkIterable::<(NodeIdT, EdgeIdT)>::link_iter(&g, node as NodeId) {
+        //         if keep(&catchup.fw_static_bound[edge_id as usize]) {
+        //             fw_head.push(head);
+        //         }
+        //         if keep(&catchup.bw_static_bound[edge_id as usize]) {
+        //             bw_head.push(head);
+        //         }
+        //     }
+        //     fw_first_out.push(fw_head.len() as EdgeId);
+        //     bw_first_out.push(bw_head.len() as EdgeId);
+        // }
+
+        // let fw_first_out: std::rc::Rc<[_]> = fw_first_out.into();
+        // let bw_first_out: std::rc::Rc<[_]> = bw_first_out.into();
+        // let fw_head: std::rc::Rc<[_]> = fw_head.into();
+        // let bw_head: std::rc::Rc<[_]> = bw_head.into();
+
+        // catchup
+        //     .fw_bucket_bounds
+        //     .retain(crate::util::with_index(|idx, _| keep(&catchup.fw_static_bound[idx % m])));
+        catchup.fw_bucket_bounds.retain(crate::util::with_index(|idx, _| {
+            keep(&catchup.fw_static_bound[idx % m]) && catchup.fw_required[idx % m]
+        }));
+        // catchup
+        //     .bw_bucket_bounds
+        //     .retain(crate::util::with_index(|idx, _| keep(&catchup.bw_static_bound[idx % m])));
+        catchup.bw_bucket_bounds.retain(crate::util::with_index(|idx, _| {
+            keep(&catchup.bw_static_bound[idx % m]) && catchup.bw_required[idx % m]
+        }));
+
+        // catchup.fw_static_bound.retain(keep);
+        catchup
+            .fw_static_bound
+            .retain(crate::util::with_index(|idx, bounds| keep(bounds) && catchup.fw_required[idx]));
+        // catchup.bw_static_bound.retain(keep);
+        catchup
+            .bw_static_bound
+            .retain(crate::util::with_index(|idx, bounds| keep(bounds) && catchup.bw_required[idx]));
 
         Self {
             minmax_pot: MinMaxPotential {
@@ -329,11 +368,11 @@ impl<'a> IntervalMinPotential<'a> {
                 stack: Vec::new(),
                 potentials: TimestampedVector::new(n),
                 fw_distances: TimestampedVector::new(n),
-                forward_cch_graph: FirstOutGraph::new(fw_first_out.clone(), fw_head.clone(), catchup.fw_static_bound),
-                backward_cch_graph: FirstOutGraph::new(bw_first_out.clone(), bw_head.clone(), catchup.bw_static_bound),
+                forward_cch_graph: FirstOutGraph::new(fw_first_out, fw_head, catchup.fw_static_bound),
+                backward_cch_graph: FirstOutGraph::new(bw_first_out, bw_head, catchup.bw_static_bound),
             },
-            fw_graph: UnweightedFirstOutGraph::new(fw_first_out, fw_head),
-            bw_graph: UnweightedFirstOutGraph::new(bw_first_out, bw_head),
+            fw_graph: fw_bucket_graph,
+            bw_graph: bw_bucket_graph,
             fw_weights: catchup.fw_bucket_bounds,
             bw_weights: catchup.bw_bucket_bounds,
             stack: Vec::new(),
