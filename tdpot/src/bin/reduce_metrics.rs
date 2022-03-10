@@ -1,6 +1,6 @@
 // WIP: CH potentials for TD Routing.
 
-use rust_road_router::{algo::customizable_contraction_hierarchy::*, cli::CliErr, io::*};
+use rust_road_router::{algo::customizable_contraction_hierarchy::*, cli::CliErr, io::*, report::benchmark::report_time};
 use std::{env, error::Error, path::Path};
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let metrics: Vec<_> = catchup.fw_bucket_bounds.chunks(m).collect();
     let num_buckets = metrics.len();
     assert_eq!(catchup.bucket_to_metric.len(), num_buckets);
-    let merged = rust_road_router::algo::metric_merging::merge(&metrics, target_num_metrics);
+    let merged = report_time("merging", || rust_road_router::algo::metric_merging::merge(&metrics, target_num_metrics));
     catchup.fw_bucket_bounds = merged
         .iter()
         .flat_map(|group| (0..m).map(|edge_idx| group.iter().map(|&metric_idx| metrics[metric_idx][edge_idx]).min().unwrap()))
