@@ -358,13 +358,13 @@ impl IntervalMinPotential<'_> {
     }
 
     fn fw_bucket_slice(&self, bucket_idx: usize) -> &[Weight] {
-        let m = self.minmax_pot.forward_cch_graph.num_arcs();
+        let m = self.fw_graph.num_arcs();
         let metric_idx = self.bucket_to_metric[bucket_idx % self.num_buckets()];
         &self.fw_weights[metric_idx * m..(metric_idx + 1) * m]
     }
 
     fn bw_bucket_slice(&self, bucket_idx: usize) -> &[Weight] {
-        let m = self.minmax_pot.backward_cch_graph.num_arcs();
+        let m = self.bw_graph.num_arcs();
         let metric_idx = self.bucket_to_metric[bucket_idx % self.num_buckets()];
         &self.bw_weights[metric_idx * m..(metric_idx + 1) * m]
     }
