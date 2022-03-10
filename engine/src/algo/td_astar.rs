@@ -208,7 +208,7 @@ impl<C: Customized> TDPotential for MultiMetric<C> {
 use std::rc::Rc;
 
 // Careful, this one works in reversed direction compared to most of the other CH-Pots
-pub struct CorridorCCHPotential<'a> {
+pub struct MinMaxPotential<'a> {
     cch: &'a CCH,
     stack: Vec<NodeId>,
     fw_distances: TimestampedVector<(Weight, Weight)>,
@@ -217,7 +217,7 @@ pub struct CorridorCCHPotential<'a> {
     backward_cch_graph: FirstOutGraph<Rc<[EdgeId]>, Rc<[NodeId]>, Vec<(Weight, Weight)>, (Weight, Weight)>,
 }
 
-impl<'a> CorridorCCHPotential<'a> {
+impl<'a> MinMaxPotential<'a> {
     fn init(&mut self, target: NodeId) {
         self.potentials.reset();
         self.fw_distances.reset();
@@ -264,8 +264,8 @@ impl<'a> CorridorCCHPotential<'a> {
     }
 }
 
-pub struct CorridorBounds<'a> {
-    corridor_pot: CorridorCCHPotential<'a>,
+pub struct IntervalMinPotential<'a> {
+    minmax_pot: MinMaxPotential<'a>,
     fw_graph: UnweightedFirstOutGraph<Rc<[EdgeId]>, Rc<[NodeId]>>,
     bw_graph: UnweightedFirstOutGraph<Rc<[EdgeId]>, Rc<[NodeId]>>,
     fw_weights: Vec<Weight>,
@@ -280,7 +280,7 @@ pub struct CorridorBounds<'a> {
     num_metrics: usize,
 }
 
-impl<'a> CorridorBounds<'a> {
+impl<'a> IntervalMinPotential<'a> {
     pub fn new(cch: &'a CCH, mut catchup: customizable_contraction_hierarchy::customization::ftd_for_pot::PotData) -> Self {
         let n = cch.num_nodes();
         let m = cch.num_arcs();
@@ -324,7 +324,7 @@ impl<'a> CorridorBounds<'a> {
         let bw_head: std::rc::Rc<[_]> = bw_head.into();
 
         Self {
-            corridor_pot: CorridorCCHPotential {
+            minmax_pot: MinMaxPotential {
                 cch,
                 stack: Vec::new(),
                 potentials: TimestampedVector::new(n),
@@ -348,7 +348,7 @@ impl<'a> CorridorBounds<'a> {
     }
 }
 
-impl CorridorBounds<'_> {
+impl IntervalMinPotential<'_> {
     fn num_buckets(&self) -> usize {
         self.bucket_to_metric.len()
     }
@@ -358,19 +358,19 @@ impl CorridorBounds<'_> {
     }
 
     fn fw_bucket_slice(&self, bucket_idx: usize) -> &[Weight] {
-        let m = self.corridor_pot.forward_cch_graph.num_arcs();
+        let m = self.minmax_pot.forward_cch_graph.num_arcs();
         let metric_idx = self.bucket_to_metric[bucket_idx % self.num_buckets()];
         &self.fw_weights[metric_idx * m..(metric_idx + 1) * m]
     }
 
     fn bw_bucket_slice(&self, bucket_idx: usize) -> &[Weight] {
-        let m = self.corridor_pot.backward_cch_graph.num_arcs();
+        let m = self.minmax_pot.backward_cch_graph.num_arcs();
         let metric_idx = self.bucket_to_metric[bucket_idx % self.num_buckets()];
         &self.bw_weights[metric_idx * m..(metric_idx + 1) * m]
     }
 }
 
-impl TDPotential for CorridorBounds<'_> {
+impl TDPotential for IntervalMinPotential<'_> {
     fn report_stats(&self) {
         report!("num_pot_computations", self.num_pot_computations);
         report!("num_metrics", self.num_metrics);
@@ -379,22 +379,22 @@ impl TDPotential for CorridorBounds<'_> {
     fn init(&mut self, source: NodeId, target: NodeId, departure: Timestamp) {
         self.num_pot_computations = 0;
         self.num_metrics = 0;
-        let target = self.corridor_pot.cch.node_order().rank(target);
-        let source = self.corridor_pot.cch.node_order().rank(source);
+        let target = self.minmax_pot.cch.node_order().rank(target);
+        let source = self.minmax_pot.cch.node_order().rank(source);
         self.departure = departure;
 
-        self.corridor_pot.init(source);
+        self.minmax_pot.init(source);
 
         self.potentials.reset();
         self.backward_distances.reset();
         self.backward_distances[target as usize] = 0;
-        self.global_upper = self.corridor_pot.potential(target).map(|(_, u)| u).unwrap_or(INFINITY);
+        self.global_upper = self.minmax_pot.potential(target).map(|(_, u)| u).unwrap_or(INFINITY);
 
         let mut node = Some(target);
         while let Some(current) = node {
-            if self.backward_distances[current as usize] + self.corridor_pot.potential(current).map(|(l, _)| l).unwrap_or(INFINITY) <= self.global_upper {
+            if self.backward_distances[current as usize] + self.minmax_pot.potential(current).map(|(l, _)| l).unwrap_or(INFINITY) <= self.global_upper {
                 for (NodeIdT(head), EdgeIdT(edge_id)) in LinkIterable::<(NodeIdT, EdgeIdT)>::link_iter(&self.bw_graph, current) {
-                    if let Some((lower, upper)) = self.corridor_pot.potential(head) {
+                    if let Some((lower, upper)) = self.minmax_pot.potential(head) {
                         if lower <= self.global_upper {
                             let metric_indices = self.to_bucket_idx(departure + lower)..=self.to_bucket_idx(departure + upper);
                             let mut weight_lower = INFINITY;
@@ -407,12 +407,12 @@ impl TDPotential for CorridorBounds<'_> {
                     }
                 }
             }
-            node = self.corridor_pot.cch.elimination_tree()[current as usize].value();
+            node = self.minmax_pot.cch.elimination_tree()[current as usize].value();
         }
     }
 
     fn potential(&mut self, node: NodeId, t: Option<Timestamp>) -> Option<Weight> {
-        let node = self.corridor_pot.cch.node_order().rank(node);
+        let node = self.minmax_pot.cch.node_order().rank(node);
         let min_metric_idx = self.to_bucket_idx(t.unwrap_or(self.departure));
 
         let mut cur_node = node;
@@ -423,7 +423,7 @@ impl TDPotential for CorridorBounds<'_> {
                 }
             }
             self.stack.push(cur_node);
-            if let Some(parent) = self.corridor_pot.cch.elimination_tree()[cur_node as usize].value() {
+            if let Some(parent) = self.minmax_pot.cch.elimination_tree()[cur_node as usize].value() {
                 cur_node = parent;
             } else {
                 break;
@@ -438,7 +438,7 @@ impl TDPotential for CorridorBounds<'_> {
             let mut dist = INFINITY;
             let mut metric_idx_to_store = earliest_metric_idx;
 
-            if let Some((lower, upper)) = self.corridor_pot.potential(node) {
+            if let Some((lower, upper)) = self.minmax_pot.potential(node) {
                 if lower <= self.global_upper {
                     let current_pot = self.potentials[node as usize].value();
                     dist = current_pot.map(|(estimate, _)| estimate).unwrap_or(self.backward_distances[node as usize]);

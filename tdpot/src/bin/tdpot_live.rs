@@ -107,7 +107,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     report!("num_worse_upper_bounds", worse_uppers);
 
-    let interval_min_pot = CorridorBounds::new(&cch, catchup);
+    let interval_min_pot = IntervalMinPotential::new(&cch, catchup);
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs");
 
