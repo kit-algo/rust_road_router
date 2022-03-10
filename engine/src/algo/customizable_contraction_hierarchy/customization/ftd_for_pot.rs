@@ -22,11 +22,15 @@ pub struct PotData {
     pub bw_static_bound: Vec<(Weight, Weight)>,
     pub fw_bucket_bounds: Vec<Weight>,
     pub bw_bucket_bounds: Vec<Weight>,
+    pub fw_required: Vec<bool>,
+    pub bw_required: Vec<bool>,
     pub bucket_to_metric: Vec<usize>,
 }
 
 impl<'a> crate::io::Deconstruct for PotData {
     fn store_each(&self, store: &dyn Fn(&str, &dyn Store) -> std::io::Result<()>) -> std::io::Result<()> {
+        store("fw_required", &self.fw_required)?;
+        store("bw_required", &self.bw_required)?;
         store("fw_static_bound", &self.fw_static_bound)?;
         store("bw_static_bound", &self.bw_static_bound)?;
         store("fw_bucket_bounds", &self.fw_bucket_bounds)?;
@@ -47,6 +51,8 @@ impl<'a> crate::io::Reconstruct for PotData {
             fw_bucket_bounds,
             bw_static_bound: loader.load("bw_static_bound")?,
             bw_bucket_bounds: loader.load("bw_bucket_bounds")?,
+            fw_required: loader.load("bw_required")?,
+            bw_required: loader.load("bw_required")?,
             bucket_to_metric: loader.load("bucket_to_metric").unwrap_or_else(|err| {
                 dbg!(err);
                 (0..num_buckets).collect()
@@ -433,21 +439,6 @@ pub fn customize_internal<'a, 'b: 'a, const K: usize>(cch: &'a CCH, metric: &'b 
                 }
             }
 
-            for current_node in (0..n).rev() {
-                let (upward_below, upward_above) = upward.split_at_mut(cch.first_out[current_node as usize] as usize);
-                let upward_active = &mut upward_above[0..cch.neighbor_edge_indices(current_node as NodeId).len()];
-                let (downward_below, downward_above) = downward.split_at_mut(cch.first_out[current_node as usize] as usize);
-                let downward_active = &mut downward_above[0..cch.neighbor_edge_indices(current_node as NodeId).len()];
-
-                for shortcut in upward_active {
-                    shortcut.reenable_required(downward_below, upward_below);
-                }
-
-                for shortcut in downward_active {
-                    shortcut.reenable_required(downward_below, upward_below);
-                }
-            }
-
             upward
                 .par_iter()
                 .for_each(|s| debug_assert!(!s.required || s.lower_bound.fuzzy_lt(FlWeight::INFINITY)));
@@ -456,6 +447,9 @@ pub fn customize_internal<'a, 'b: 'a, const K: usize>(cch: &'a CCH, metric: &'b 
                 .for_each(|s| debug_assert!(!s.required || s.lower_bound.fuzzy_lt(FlWeight::INFINITY)));
         });
     }
+
+    let fw_required: Vec<_> = upward.iter().map(|s| s.required).collect();
+    let bw_required: Vec<_> = downward.iter().map(|s| s.required).collect();
 
     let fw_static_bound: Vec<_> = upward
         .into_iter()
@@ -467,6 +461,8 @@ pub fn customize_internal<'a, 'b: 'a, const K: usize>(cch: &'a CCH, metric: &'b 
         .collect();
 
     PotData {
+        fw_required,
+        bw_required,
         fw_bucket_bounds: (0..K)
             .flat_map(|i| {
                 fw_bucket_weights
