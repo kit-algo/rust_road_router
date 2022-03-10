@@ -7,6 +7,7 @@ use parallelization::*;
 pub mod directed;
 pub mod ftd;
 pub mod ftd_for_pot;
+pub mod validity;
 
 // One mapping of node id to weight for each thread during the scope of the customization.
 scoped_thread_local!(static UPWARD_WORKSPACE: RefCell<Vec<(Weight, InRangeOption<EdgeId>, InRangeOption<EdgeId>)>>);

@@ -407,6 +407,10 @@ impl PessimisticLiveTDGraph {
         std::cmp::max(ttf.upper_bound(), self.live[edge_id as usize].value().map(|(l, _)| l).unwrap_or(0))
     }
 
+    pub fn live_ended_at(&self, edge_id: EdgeId) -> Timestamp {
+        self.live[edge_id as usize].value().map(|(_, t)| t).unwrap_or(0)
+    }
+
     pub fn graph(&self) -> &Graph {
         &self.graph
     }
