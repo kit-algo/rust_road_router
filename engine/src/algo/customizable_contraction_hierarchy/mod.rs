@@ -246,6 +246,8 @@ pub trait CCHT {
     fn backward_tail(&self) -> &[NodeId];
     fn forward_inverted(&self) -> &ReversedGraphWithEdgeIds;
     fn backward_inverted(&self) -> &ReversedGraphWithEdgeIds;
+    fn forward_cch_edge_to_orig_arc(&self) -> &Vecs<EdgeIdT>;
+    fn backward_cch_edge_to_orig_arc(&self) -> &Vecs<EdgeIdT>;
 
     /// Get elimination tree (actually forest).
     /// The tree is represented as a slice of length `n`.
@@ -329,6 +331,12 @@ impl CCHT for CCH {
     }
     fn backward_inverted(&self) -> &ReversedGraphWithEdgeIds {
         &self.inverted
+    }
+    fn forward_cch_edge_to_orig_arc(&self) -> &Vecs<EdgeIdT> {
+        &self.forward_cch_edge_to_orig_arc
+    }
+    fn backward_cch_edge_to_orig_arc(&self) -> &Vecs<EdgeIdT> {
+        &self.backward_cch_edge_to_orig_arc
     }
 
     fn node_order(&self) -> &NodeOrder {
@@ -535,6 +543,12 @@ impl CCHT for DirectedCCH {
     }
     fn backward_inverted(&self) -> &ReversedGraphWithEdgeIds {
         &self.backward_inverted
+    }
+    fn forward_cch_edge_to_orig_arc(&self) -> &Vecs<EdgeIdT> {
+        &self.forward_cch_edge_to_orig_arc
+    }
+    fn backward_cch_edge_to_orig_arc(&self) -> &Vecs<EdgeIdT> {
+        &self.backward_cch_edge_to_orig_arc
     }
 
     fn node_order(&self) -> &NodeOrder {
