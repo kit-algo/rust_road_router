@@ -17,7 +17,7 @@ pub fn merge(metrics: &[&[Weight]], target_size: usize) -> Vec<Vec<usize>> {
     for (idx, _metric) in metrics.iter().enumerate() {
         for (other_idx, _other_metric) in metrics.iter().enumerate() {
             if other_idx > idx {
-                queue.push(Reverse((0, false, idx, other_idx)));
+                queue.push(Reverse((0, 0, idx, other_idx)));
             }
         }
     }
@@ -27,7 +27,8 @@ pub fn merge(metrics: &[&[Weight]], target_size: usize) -> Vec<Vec<usize>> {
             break;
         }
 
-        let &Reverse((_, diff_final, idx1, idx2)) = queue.peek().unwrap();
+        let &Reverse((_, edges_checked, idx1, idx2)) = queue.peek().unwrap();
+        let diff_final = edges_checked as usize >= m;
 
         if diff_final {
             queue.pop();
@@ -44,20 +45,20 @@ pub fn merge(metrics: &[&[Weight]], target_size: usize) -> Vec<Vec<usize>> {
                 }
 
                 if idx1 < other_idx {
-                    queue.push(Reverse((0, false, idx1, other_idx)));
+                    queue.push(Reverse((0, 0, idx1, other_idx)));
                 } else {
-                    queue.push(Reverse((0, false, other_idx, idx1)));
+                    queue.push(Reverse((0, 0, other_idx, idx1)));
                 }
             }
         } else {
             let mut min_final_key = u64::MAX;
             let mut to_compute = Vec::new();
-            while let Some(&Reverse((key, is_final, idx1, idx2))) = queue.peek() {
-                if is_final {
+            while let Some(&Reverse((key, edges_checked, idx1, idx2))) = queue.peek() {
+                if edges_checked as usize >= m {
                     min_final_key = key;
                     break;
                 } else {
-                    to_compute.push((idx1, idx2));
+                    to_compute.push((key, edges_checked, idx1, idx2));
                     queue.pop();
                 }
             }
@@ -66,26 +67,26 @@ pub fn merge(metrics: &[&[Weight]], target_size: usize) -> Vec<Vec<usize>> {
             let queue = std::sync::Mutex::new(&mut queue);
 
             rayon::scope(|s| {
-                for (idx1, idx2) in to_compute {
+                for (sum_so_far, edges_checked_so_far, idx1, idx2) in to_compute {
                     let min_final_key = &min_final_key;
                     let queue = &queue;
                     let merged = &merged;
                     s.spawn(move |_| {
-                        let mut sum_of_squared_diffs: u64 = 0;
-                        let mut diff_final = true;
-                        for edge_idx in 0..m {
+                        let mut sum_of_squared_diffs: u64 = sum_so_far;
+                        let mut edges_checked = edges_checked_so_far;
+                        for edge_idx in edges_checked_so_far as usize..m {
                             if sum_of_squared_diffs > min_final_key.load(SeqCst) {
-                                diff_final = false;
                                 break;
                             }
                             let w1 = merged[idx1].iter().map(|&idx| metrics[idx][edge_idx]).min().unwrap();
                             let w2 = merged[idx2].iter().map(|&idx| metrics[idx][edge_idx]).min().unwrap();
                             sum_of_squared_diffs += w1.abs_diff(w2) as u64 * w1.abs_diff(w2) as u64;
+                            edges_checked += 1;
                         }
-                        if diff_final {
+                        if edges_checked as usize >= m {
                             min_final_key.fetch_min(sum_of_squared_diffs, SeqCst);
                         }
-                        queue.lock().unwrap().push(Reverse((sum_of_squared_diffs, diff_final, idx1, idx2)));
+                        queue.lock().unwrap().push(Reverse((sum_of_squared_diffs, edges_checked, idx1, idx2)));
                     });
                 }
             });
