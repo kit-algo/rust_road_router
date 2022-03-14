@@ -4,7 +4,14 @@ use crate::datastr::graph::time_dependent::*;
 scoped_thread_local!(static VALIDITY_UPWARD_WORKSPACE: RefCell<Vec<(Weight, Weight)>>);
 scoped_thread_local!(static VALIDITY_DOWNWARD_WORKSPACE: RefCell<Vec<(Weight, Weight)>>);
 
-pub fn customize_upper_bounds_with_limited_validity(cch: &CCH, metric: &PessimisticLiveTDGraph) {
+pub struct CustomizedWithValidity {
+    pub upward_weights: Vec<Weight>,
+    pub downward_weights: Vec<Weight>,
+    pub upward_valid: Vec<Timestamp>,
+    pub downward_valid: Vec<Timestamp>,
+}
+
+pub fn customize_upper_bounds_with_limited_validity(cch: &CCH, metric: &PessimisticLiveTDGraph) -> CustomizedWithValidity {
     let m = cch.num_arcs();
     // buffers for the customized weights
     let mut upward_weights = vec![INFINITY; m];
@@ -18,6 +25,13 @@ pub fn customize_upper_bounds_with_limited_validity(cch: &CCH, metric: &Pessimis
 
     customize_basic_with_validity(cch, &mut upward_weights, &mut downward_weights, &mut upward_valid, &mut downward_valid);
     customize_perfect_with_validity(cch, &mut upward_weights, &mut downward_weights, &mut upward_valid, &mut downward_valid);
+
+    CustomizedWithValidity {
+        upward_weights,
+        downward_weights,
+        upward_valid,
+        downward_valid,
+    }
 }
 
 fn prepare_weights(
@@ -180,7 +194,7 @@ fn customize_basic_with_validity(
     });
 }
 
-pub fn customize_perfect_with_validity(
+fn customize_perfect_with_validity(
     cch: &CCH,
     upward_weights: &mut [Weight],
     downward_weights: &mut [Weight],

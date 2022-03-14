@@ -81,37 +81,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let live_graph = PessimisticLiveTDGraph::new(graph, live);
-    let upper_bound = (0..m as EdgeId).map(|edge_id| live_graph.upper_bound(edge_id)).collect::<Box<[Weight]>>();
-    let upper_bound_customized = {
-        let _blocked = block_reporting();
-        let mut customized = customize(
-            &cch,
-            &FirstOutGraph::new(live_graph.graph().first_out(), live_graph.graph().head(), &upper_bound),
-        );
-        customization::customize_perfect_without_rebuild(&mut customized);
-        customized
-    };
 
     let customized_folder = path.join("customized_corridor_mins");
-    let mut catchup = customization::ftd_for_pot::PotData::reconstruct_from(&customized_folder)?;
-    let fw_non_live_upper = catchup.fw_static_bound.iter().map(|&(_l, u)| u).collect();
-    let bw_non_live_upper = catchup.bw_static_bound.iter().map(|&(_l, u)| u).collect();
-    let mut worse_uppers: u64 = 0;
-    for ((_, upper), live) in catchup.fw_static_bound.iter_mut().zip(upper_bound_customized.forward_graph().weight()) {
-        if *upper < *live {
-            worse_uppers += 1;
-        }
-        *upper = std::cmp::max(*upper, *live);
-    }
-    for ((_, upper), live) in catchup.bw_static_bound.iter_mut().zip(upper_bound_customized.backward_graph().weight()) {
-        if *upper < *live {
-            worse_uppers += 1;
-        }
-        *upper = std::cmp::max(*upper, *live);
-    }
-    report!("num_worse_upper_bounds", worse_uppers);
-
-    let interval_min_pot = IntervalMinPotential::new(&cch, catchup, fw_non_live_upper, bw_non_live_upper, max_duration + t_live);
+    let catchup = customization::ftd_for_pot::PotData::reconstruct_from(&customized_folder)?;
+    let interval_min_pot = IntervalMinPotential::new_for_live(&cch, catchup, &live_graph);
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs");
 

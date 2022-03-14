@@ -89,9 +89,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let customized_folder = path.join("customized_corridor_mins");
     let catchup = customization::ftd_for_pot::PotData::reconstruct_from(&customized_folder)?;
-    let fw_non_live_upper = catchup.fw_static_bound.iter().map(|&(_l, u)| u).collect();
-    let bw_non_live_upper = catchup.bw_static_bound.iter().map(|&(_l, u)| u).collect();
-    let interval_min_pot = IntervalMinPotential::new(&cch, catchup, fw_non_live_upper, bw_non_live_upper, INFINITY);
+    let interval_min_pot = IntervalMinPotential::new(&cch, catchup);
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
     let mut cb_server = Server::new(&graph, interval_min_pot, TDDijkstraOps::default());

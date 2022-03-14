@@ -207,37 +207,74 @@ impl<C: Customized> TDPotential for MultiMetric<C> {
 
 use std::rc::Rc;
 
+pub trait TDBounds: Copy {
+    fn lower(&self) -> Weight;
+    fn td_upper(&self, t: Timestamp) -> Weight;
+    fn pessimistic_upper(&self) -> Weight;
+}
+
+impl TDBounds for (Weight, Weight) {
+    fn lower(&self) -> Weight {
+        self.0
+    }
+    fn td_upper(&self, _t: Timestamp) -> Weight {
+        self.1
+    }
+    fn pessimistic_upper(&self) -> Weight {
+        self.1
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct LiveToPredictedBounds {
+    lower: Weight,
+    live_upper: Weight,
+    predicted_upper: Weight,
+    predicted_valid_from: Timestamp,
+}
+
+impl TDBounds for LiveToPredictedBounds {
+    fn lower(&self) -> Weight {
+        self.lower
+    }
+    fn td_upper(&self, t: Timestamp) -> Weight {
+        if t >= self.predicted_valid_from {
+            self.predicted_upper
+        } else {
+            self.live_upper
+        }
+    }
+    fn pessimistic_upper(&self) -> Weight {
+        debug_assert!(self.live_upper >= self.predicted_upper);
+        self.live_upper
+    }
+}
+
 // Careful, this one works in reversed direction compared to most of the other CH-Pots
-pub struct MinMaxPotential<'a> {
+pub struct MinMaxPotential<'a, W> {
     cch: &'a CCH,
     stack: Vec<NodeId>,
     fw_distances: TimestampedVector<(Weight, Weight)>,
     potentials: TimestampedVector<InRangeOption<(Weight, Weight)>>,
-    forward_cch_graph: FirstOutGraph<Rc<[EdgeId]>, Rc<[NodeId]>, Vec<(Weight, Weight)>, (Weight, Weight)>,
-    backward_cch_graph: FirstOutGraph<Rc<[EdgeId]>, Rc<[NodeId]>, Vec<(Weight, Weight)>, (Weight, Weight)>,
-    fw_non_live_upper: Vec<Weight>,
-    bw_non_live_upper: Vec<Weight>,
-    live_done_after: Timestamp,
+    forward_cch_graph: FirstOutGraph<Rc<[EdgeId]>, Rc<[NodeId]>, Vec<W>, W>,
+    backward_cch_graph: FirstOutGraph<Rc<[EdgeId]>, Rc<[NodeId]>, Vec<W>, W>,
+    departure: Timestamp,
 }
 
-impl<'a> MinMaxPotential<'a> {
-    fn init(&mut self, target: NodeId, live_done_after: Timestamp) {
-        self.live_done_after = live_done_after;
+impl<'a, W: TDBounds> MinMaxPotential<'a, W> {
+    fn init(&mut self, target: NodeId, departure: Timestamp) {
+        self.departure = departure;
         self.potentials.reset();
         self.fw_distances.reset();
         self.fw_distances[target as usize] = (0, 0);
         let mut node = Some(target);
         while let Some(current) = node {
-            for (NodeIdT(head), (lower, upper), EdgeIdT(edge_id)) in
-                LinkIterable::<(NodeIdT, (Weight, Weight), EdgeIdT)>::link_iter(&self.forward_cch_graph, current)
-            {
-                self.fw_distances[head as usize].0 = min(self.fw_distances[head as usize].0, self.fw_distances[current as usize].0 + lower);
-                let upper = if self.fw_distances[current as usize].0 > self.live_done_after {
-                    self.fw_non_live_upper[edge_id as usize]
-                } else {
-                    upper
-                };
-                self.fw_distances[head as usize].1 = min(self.fw_distances[head as usize].1, self.fw_distances[current as usize].1 + upper);
+            for (NodeIdT(head), bounds, EdgeIdT(_)) in LinkIterable::<(NodeIdT, W, EdgeIdT)>::link_iter(&self.forward_cch_graph, current) {
+                self.fw_distances[head as usize].0 = min(self.fw_distances[head as usize].0, self.fw_distances[current as usize].0 + bounds.lower());
+                self.fw_distances[head as usize].1 = min(
+                    self.fw_distances[head as usize].1,
+                    self.fw_distances[current as usize].1 + bounds.td_upper(self.departure + self.fw_distances[current as usize].0),
+                );
             }
             node = self.cch.elimination_tree()[current as usize].value();
         }
@@ -257,17 +294,10 @@ impl<'a> MinMaxPotential<'a> {
         while let Some(node) = self.stack.pop() {
             let mut dist = self.fw_distances[node as usize];
 
-            for (NodeIdT(head), (lower, upper), EdgeIdT(edge_id)) in
-                LinkIterable::<(NodeIdT, (Weight, Weight), EdgeIdT)>::link_iter(&self.backward_cch_graph, node)
-            {
+            for (NodeIdT(head), bounds, EdgeIdT(_)) in LinkIterable::<(NodeIdT, W, EdgeIdT)>::link_iter(&self.backward_cch_graph, node) {
                 let (head_lower, head_upper) = unsafe { self.potentials.get_unchecked(head as usize).assume_some() };
-                dist.0 = min(dist.0, lower + head_lower);
-                let upper = if head_lower > self.live_done_after {
-                    self.bw_non_live_upper[edge_id as usize]
-                } else {
-                    upper
-                };
-                dist.1 = min(dist.1, upper + head_upper);
+                dist.0 = min(dist.0, bounds.lower() + head_lower);
+                dist.1 = min(dist.1, bounds.td_upper(self.departure + head_lower) + head_upper);
             }
 
             self.potentials[node as usize] = InRangeOption::some(dist);
@@ -282,8 +312,8 @@ impl<'a> MinMaxPotential<'a> {
     }
 }
 
-pub struct IntervalMinPotential<'a> {
-    minmax_pot: MinMaxPotential<'a>,
+pub struct IntervalMinPotential<'a, W> {
+    minmax_pot: MinMaxPotential<'a, W>,
     fw_graph: UnweightedFirstOutGraph<Rc<[EdgeId]>, Rc<[NodeId]>>,
     bw_graph: UnweightedFirstOutGraph<Rc<[EdgeId]>, Rc<[NodeId]>>,
     fw_weights: Vec<Weight>,
@@ -296,23 +326,95 @@ pub struct IntervalMinPotential<'a> {
     bucket_to_metric: Box<[usize]>,
     num_pot_computations: usize,
     num_metrics: usize,
-    live_done_after: Timestamp,
 }
 
-impl<'a> IntervalMinPotential<'a> {
-    pub fn new(
+impl<'a> IntervalMinPotential<'a, (Weight, Weight)> {
+    pub fn new(cch: &'a CCH, catchup: customizable_contraction_hierarchy::customization::ftd_for_pot::PotData) -> Self {
+        Self::new_int(
+            cch,
+            catchup.fw_static_bound,
+            catchup.bw_static_bound,
+            catchup.fw_bucket_bounds,
+            catchup.bw_bucket_bounds,
+            catchup.fw_required,
+            catchup.bw_required,
+            catchup.bucket_to_metric,
+        )
+    }
+}
+
+impl<'a> IntervalMinPotential<'a, LiveToPredictedBounds> {
+    pub fn new_for_live(
         cch: &'a CCH,
-        mut catchup: customizable_contraction_hierarchy::customization::ftd_for_pot::PotData,
-        mut fw_non_live_upper: Vec<Weight>,
-        mut bw_non_live_upper: Vec<Weight>,
-        live_done_after: Timestamp,
+        catchup: customizable_contraction_hierarchy::customization::ftd_for_pot::PotData,
+        live_graph: &PessimisticLiveTDGraph,
+    ) -> Self {
+        let customized = customization::validity::customize_upper_bounds_with_limited_validity(cch, live_graph);
+
+        for valid in &customized.upward_valid {
+            eprint!("{valid} ");
+        }
+        eprintln!();
+
+        let fw_bounds = catchup
+            .fw_static_bound
+            .into_iter()
+            .zip(customized.upward_weights)
+            .zip(customized.upward_valid)
+            .map(|(((pred_l, pred_u), live_u), pred_valid)| LiveToPredictedBounds {
+                lower: pred_l,
+                live_upper: live_u,
+                predicted_upper: pred_u,
+                predicted_valid_from: pred_valid,
+            })
+            .collect();
+
+        let bw_bounds = catchup
+            .bw_static_bound
+            .into_iter()
+            .zip(customized.downward_weights)
+            .zip(customized.downward_valid)
+            .map(|(((pred_l, pred_u), live_u), pred_valid)| LiveToPredictedBounds {
+                lower: pred_l,
+                live_upper: live_u,
+                predicted_upper: pred_u,
+                predicted_valid_from: pred_valid,
+            })
+            .collect();
+
+        Self::new_int(
+            cch,
+            fw_bounds,
+            bw_bounds,
+            catchup.fw_bucket_bounds,
+            catchup.bw_bucket_bounds,
+            catchup.fw_required,
+            catchup.bw_required,
+            catchup.bucket_to_metric,
+        )
+    }
+}
+
+impl<'a, W: TDBounds> IntervalMinPotential<'a, W> {
+    fn keep(b: &W) -> bool {
+        b.lower() < INFINITY && b.lower() <= b.pessimistic_upper()
+    }
+
+    fn new_int(
+        cch: &'a CCH,
+        mut fw_static_bound: Vec<W>,
+        mut bw_static_bound: Vec<W>,
+        mut fw_bucket_bounds: Vec<Weight>,
+        mut bw_bucket_bounds: Vec<Weight>,
+        fw_required: Vec<bool>,
+        bw_required: Vec<bool>,
+        bucket_to_metric: Vec<usize>,
     ) -> Self {
         let g = UnweightedFirstOutGraph::new(cch.first_out(), cch.head());
-        let keep = |&(l, u): &(Weight, Weight)| l < INFINITY && l <= u;
         let n = cch.num_nodes();
         let m = cch.num_arcs();
-        assert_eq!(catchup.fw_static_bound.len(), m);
-        assert_eq!(catchup.bw_static_bound.len(), m);
+        assert_eq!(fw_static_bound.len(), m);
+        assert_eq!(bw_static_bound.len(), m);
 
         let mut fw_first_out = Vec::with_capacity(n + 1);
         fw_first_out.push(0);
@@ -322,10 +424,10 @@ impl<'a> IntervalMinPotential<'a> {
         let mut bw_head = Vec::with_capacity(m);
         for node in 0..n {
             for (NodeIdT(head), EdgeIdT(edge_id)) in LinkIterable::<(NodeIdT, EdgeIdT)>::link_iter(&g, node as NodeId) {
-                if keep(&catchup.fw_static_bound[edge_id as usize]) && catchup.fw_required[edge_id as usize] {
+                if Self::keep(&fw_static_bound[edge_id as usize]) && fw_required[edge_id as usize] {
                     fw_head.push(head);
                 }
-                if keep(&catchup.bw_static_bound[edge_id as usize]) && catchup.bw_required[edge_id as usize] {
+                if Self::keep(&bw_static_bound[edge_id as usize]) && bw_required[edge_id as usize] {
                     bw_head.push(head);
                 }
             }
@@ -348,10 +450,10 @@ impl<'a> IntervalMinPotential<'a> {
         // let mut bw_head = Vec::with_capacity(m);
         // for node in 0..n {
         //     for (NodeIdT(head), EdgeIdT(edge_id)) in LinkIterable::<(NodeIdT, EdgeIdT)>::link_iter(&g, node as NodeId) {
-        //         if keep(&catchup.fw_static_bound[edge_id as usize]) {
+        //         if Self::keep(&fw_static_bound[edge_id as usize]) {
         //             fw_head.push(head);
         //         }
-        //         if keep(&catchup.bw_static_bound[edge_id as usize]) {
+        //         if Self::keep(&bw_static_bound[edge_id as usize]) {
         //             bw_head.push(head);
         //         }
         //     }
@@ -364,33 +466,15 @@ impl<'a> IntervalMinPotential<'a> {
         // let fw_head: std::rc::Rc<[_]> = fw_head.into();
         // let bw_head: std::rc::Rc<[_]> = bw_head.into();
 
-        // catchup
-        //     .fw_bucket_bounds
-        //     .retain(crate::util::with_index(|idx, _| keep(&catchup.fw_static_bound[idx % m])));
-        catchup.fw_bucket_bounds.retain(crate::util::with_index(|idx, _| {
-            keep(&catchup.fw_static_bound[idx % m]) && catchup.fw_required[idx % m]
-        }));
-        // catchup
-        //     .bw_bucket_bounds
-        //     .retain(crate::util::with_index(|idx, _| keep(&catchup.bw_static_bound[idx % m])));
-        catchup.bw_bucket_bounds.retain(crate::util::with_index(|idx, _| {
-            keep(&catchup.bw_static_bound[idx % m]) && catchup.bw_required[idx % m]
-        }));
+        // fw_bucket_bounds.retain(crate::util::with_index(|idx, _| Self::keep(&fw_static_bound[idx % m])));
+        fw_bucket_bounds.retain(crate::util::with_index(|idx, _| Self::keep(&fw_static_bound[idx % m]) && fw_required[idx % m]));
+        // bw_bucket_bounds.retain(crate::util::with_index(|idx, _| Self::keep(&bw_static_bound[idx % m])));
+        bw_bucket_bounds.retain(crate::util::with_index(|idx, _| Self::keep(&bw_static_bound[idx % m]) && bw_required[idx % m]));
 
-        // catchup.fw_static_bound.retain(keep);
-        catchup
-            .fw_static_bound
-            .retain(crate::util::with_index(|idx, bounds| keep(bounds) && catchup.fw_required[idx]));
-        // catchup.bw_static_bound.retain(keep);
-        catchup
-            .bw_static_bound
-            .retain(crate::util::with_index(|idx, bounds| keep(bounds) && catchup.bw_required[idx]));
-        fw_non_live_upper.retain(crate::util::with_index(|idx, _| {
-            keep(&catchup.fw_static_bound[idx]) && catchup.fw_required[idx]
-        }));
-        bw_non_live_upper.retain(crate::util::with_index(|idx, _| {
-            keep(&catchup.bw_static_bound[idx]) && catchup.bw_required[idx]
-        }));
+        // fw_static_bound.retain(Self::keep);
+        fw_static_bound.retain(crate::util::with_index(|idx, bounds| Self::keep(bounds) && fw_required[idx]));
+        // bw_static_bound.retain(Self::keep);
+        bw_static_bound.retain(crate::util::with_index(|idx, bounds| Self::keep(bounds) && bw_required[idx]));
 
         Self {
             minmax_pot: MinMaxPotential {
@@ -398,30 +482,25 @@ impl<'a> IntervalMinPotential<'a> {
                 stack: Vec::new(),
                 potentials: TimestampedVector::new(n),
                 fw_distances: TimestampedVector::new(n),
-                forward_cch_graph: FirstOutGraph::new(fw_first_out, fw_head, catchup.fw_static_bound),
-                backward_cch_graph: FirstOutGraph::new(bw_first_out, bw_head, catchup.bw_static_bound),
-                live_done_after: INFINITY,
-                fw_non_live_upper,
-                bw_non_live_upper,
+                forward_cch_graph: FirstOutGraph::new(fw_first_out, fw_head, fw_static_bound),
+                backward_cch_graph: FirstOutGraph::new(bw_first_out, bw_head, bw_static_bound),
+                departure: INFINITY,
             },
             fw_graph: fw_bucket_graph,
             bw_graph: bw_bucket_graph,
-            fw_weights: catchup.fw_bucket_bounds,
-            bw_weights: catchup.bw_bucket_bounds,
+            fw_weights: fw_bucket_bounds,
+            bw_weights: bw_bucket_bounds,
             stack: Vec::new(),
             potentials: TimestampedVector::new(n),
             backward_distances: TimestampedVector::new(n),
             global_upper: INFINITY,
             departure: INFINITY,
-            bucket_to_metric: catchup.bucket_to_metric.into(),
+            bucket_to_metric: bucket_to_metric.into(),
             num_pot_computations: 0,
             num_metrics: 0,
-            live_done_after,
         }
     }
-}
 
-impl IntervalMinPotential<'_> {
     fn num_buckets(&self) -> usize {
         self.bucket_to_metric.len()
     }
@@ -443,7 +522,7 @@ impl IntervalMinPotential<'_> {
     }
 }
 
-impl TDPotential for IntervalMinPotential<'_> {
+impl<W: TDBounds> TDPotential for IntervalMinPotential<'_, W> {
     fn report_stats(&self) {
         report!("num_pot_computations", self.num_pot_computations);
         report!("num_metrics", self.num_metrics);
@@ -456,7 +535,7 @@ impl TDPotential for IntervalMinPotential<'_> {
         let source = self.minmax_pot.cch.node_order().rank(source);
         self.departure = departure;
 
-        self.minmax_pot.init(source, self.live_done_after - departure);
+        self.minmax_pot.init(source, departure);
 
         self.potentials.reset();
         self.backward_distances.reset();
