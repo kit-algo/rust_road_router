@@ -417,49 +417,49 @@ pub fn customize_internal<'a, 'b: 'a, const K: usize>(cch: &'a CCH, metric: &'b 
     report!("approx", f64::from(APPROX));
     report!("approx_threshold", APPROX_THRESHOLD);
 
-    if cfg!(feature = "tdcch-postcustomization") {
-        // do perfect bound based customization again, because we now have better bounds and can get rid of some additional shortcuts
-        let _subctxt = push_context("postcustomization");
-        report_time("TD-CCH Post-Customization", || {
-            static_perfect_customization.customize(&mut upward, &mut downward, |cb| {
-                PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::NONE; n as usize]), cb);
-            });
+    // if cfg!(feature = "tdcch-postcustomization") {
+    //     // do perfect bound based customization again, because we now have better bounds and can get rid of some additional shortcuts
+    //     let _subctxt = push_context("postcustomization");
+    //     report_time("TD-CCH Post-Customization", || {
+    //         static_perfect_customization.customize(&mut upward, &mut downward, |cb| {
+    //             PERFECT_WORKSPACE.set(&RefCell::new(vec![InRangeOption::NONE; n as usize]), cb);
+    //         });
 
-            // routine to disable shortcuts for which the perfect precustomization determined them to be irrelevant
-            let disable_dominated = |shortcut: &mut Shortcut| {
-                // shortcut contains shortest path length, lower bound the length of the specific path represented by the shortcut (not necessarily the shortest)
-                if shortcut.upper_bound.fuzzy_lt(shortcut.lower_bound) {
-                    shortcut.required = false;
-                }
-            };
+    //         // routine to disable shortcuts for which the perfect precustomization determined them to be irrelevant
+    //         let disable_dominated = |shortcut: &mut Shortcut| {
+    //             // shortcut contains shortest path length, lower bound the length of the specific path represented by the shortcut (not necessarily the shortest)
+    //             if shortcut.upper_bound.fuzzy_lt(shortcut.lower_bound) {
+    //                 shortcut.required = false;
+    //             }
+    //         };
 
-            upward.par_iter_mut().for_each(disable_dominated);
-            downward.par_iter_mut().for_each(disable_dominated);
+    //         upward.par_iter_mut().for_each(disable_dominated);
+    //         downward.par_iter_mut().for_each(disable_dominated);
 
-            for current_node in 0..n {
-                let (upward_below, upward_above) = upward.split_at_mut(cch.first_out[current_node as usize] as usize);
-                let upward_active = &mut upward_above[0..cch.neighbor_edge_indices(current_node as NodeId).len()];
-                let (downward_below, downward_above) = downward.split_at_mut(cch.first_out[current_node as usize] as usize);
-                let downward_active = &mut downward_above[0..cch.neighbor_edge_indices(current_node as NodeId).len()];
-                let shortcut_graph = PartialShortcutGraph::new(metric, upward_below, downward_below, 0);
+    //         for current_node in 0..n {
+    //             let (upward_below, upward_above) = upward.split_at_mut(cch.first_out[current_node as usize] as usize);
+    //             let upward_active = &mut upward_above[0..cch.neighbor_edge_indices(current_node as NodeId).len()];
+    //             let (downward_below, downward_above) = downward.split_at_mut(cch.first_out[current_node as usize] as usize);
+    //             let downward_active = &mut downward_above[0..cch.neighbor_edge_indices(current_node as NodeId).len()];
+    //             let shortcut_graph = PartialShortcutGraph::new(metric, upward_below, downward_below, 0);
 
-                for shortcut in upward_active {
-                    shortcut.disable_if_unneccesary(&shortcut_graph);
-                }
+    //             for shortcut in upward_active {
+    //                 shortcut.disable_if_unneccesary(&shortcut_graph);
+    //             }
 
-                for shortcut in downward_active {
-                    shortcut.disable_if_unneccesary(&shortcut_graph);
-                }
-            }
+    //             for shortcut in downward_active {
+    //                 shortcut.disable_if_unneccesary(&shortcut_graph);
+    //             }
+    //         }
 
-            upward
-                .par_iter()
-                .for_each(|s| debug_assert!(!s.required || s.lower_bound.fuzzy_lt(FlWeight::INFINITY)));
-            downward
-                .par_iter()
-                .for_each(|s| debug_assert!(!s.required || s.lower_bound.fuzzy_lt(FlWeight::INFINITY)));
-        });
-    }
+    //         upward
+    //             .par_iter()
+    //             .for_each(|s| debug_assert!(!s.required || s.lower_bound.fuzzy_lt(FlWeight::INFINITY)));
+    //         downward
+    //             .par_iter()
+    //             .for_each(|s| debug_assert!(!s.required || s.lower_bound.fuzzy_lt(FlWeight::INFINITY)));
+    //     });
+    // }
 
     let fw_required: Vec<_> = upward.iter().map(|s| s.required).collect();
     let bw_required: Vec<_> = downward.iter().map(|s| s.required).collect();
