@@ -1,8 +1,9 @@
 //! CATCHUp Customization
 
 use super::*;
+use crate::datastr::graph::first_out_graph::degrees_to_first_out;
 use crate::report::*;
-use floating_time_dependent::*;
+use floating_time_dependent::{shortcut_source::ShortcutSourceData, *};
 use std::{
     cmp::{min, Ordering as Ord},
     sync::atomic::Ordering,
@@ -24,6 +25,10 @@ pub struct PotData {
     pub bw_bucket_bounds: Vec<Weight>,
     pub fw_required: Vec<bool>,
     pub bw_required: Vec<bool>,
+    pub fw_first_source: Vec<u32>,
+    pub bw_first_source: Vec<u32>,
+    pub fw_sources: Vec<(Timestamp, ShortcutSourceData)>,
+    pub bw_sources: Vec<(Timestamp, ShortcutSourceData)>,
     pub bucket_to_metric: Vec<usize>,
 }
 
@@ -35,6 +40,10 @@ impl<'a> crate::io::Deconstruct for PotData {
         store("bw_static_bound", &self.bw_static_bound)?;
         store("fw_bucket_bounds", &self.fw_bucket_bounds)?;
         store("bw_bucket_bounds", &self.bw_bucket_bounds)?;
+        store("fw_first_source", &self.fw_first_source)?;
+        store("bw_first_source", &self.bw_first_source)?;
+        store("fw_sources", &self.fw_sources)?;
+        store("bw_sources", &self.bw_sources)?;
         store("bucket_to_metric", &self.bucket_to_metric)?;
         Ok(())
     }
@@ -53,6 +62,10 @@ impl<'a> crate::io::Reconstruct for PotData {
             bw_bucket_bounds: loader.load("bw_bucket_bounds")?,
             fw_required: loader.load("fw_required")?,
             bw_required: loader.load("bw_required")?,
+            fw_first_source: loader.load("fw_first_source")?,
+            bw_first_source: loader.load("bw_first_source")?,
+            fw_sources: loader.load("fw_sources")?,
+            bw_sources: loader.load("bw_sources")?,
             bucket_to_metric: loader.load("bucket_to_metric").unwrap_or_else(|err| {
                 dbg!(err);
                 (0..num_buckets).collect()
@@ -451,6 +464,11 @@ pub fn customize_internal<'a, 'b: 'a, const K: usize>(cch: &'a CCH, metric: &'b 
     let fw_required: Vec<_> = upward.iter().map(|s| s.required).collect();
     let bw_required: Vec<_> = downward.iter().map(|s| s.required).collect();
 
+    let fw_sources = upward.iter().flat_map(|s| s.sources_iter()).collect();
+    let fw_first_source = degrees_to_first_out(upward.iter().map(|shortcut| shortcut.num_sources() as u32)).collect();
+    let bw_sources = downward.iter().flat_map(|s| s.sources_iter()).collect();
+    let bw_first_source = degrees_to_first_out(downward.iter().map(|shortcut| shortcut.num_sources() as u32)).collect();
+
     let fw_static_bound: Vec<_> = upward
         .into_iter()
         .map(|s| (extract_lower_bound(s.lower_bound), extract_upper_bound(s.upper_bound)))
@@ -481,6 +499,10 @@ pub fn customize_internal<'a, 'b: 'a, const K: usize>(cch: &'a CCH, metric: &'b 
             .collect(),
         fw_static_bound,
         bw_static_bound,
+        fw_sources,
+        fw_first_source,
+        bw_sources,
+        bw_first_source,
         bucket_to_metric: (0..K).collect(),
     }
 }
