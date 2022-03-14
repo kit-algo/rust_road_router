@@ -84,7 +84,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let customized_folder = path.join("customized_corridor_mins");
     let catchup = customization::ftd_for_pot::PotData::reconstruct_from(&customized_folder)?;
-    let interval_min_pot = IntervalMinPotential::new_for_live(&cch, catchup, &live_graph);
+    let interval_min_pot = IntervalMinPotential::new_for_live(&cch, catchup, &live_graph, t_live);
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs");
 

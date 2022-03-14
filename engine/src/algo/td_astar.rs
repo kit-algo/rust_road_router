@@ -329,7 +329,76 @@ pub struct IntervalMinPotential<'a, W> {
 }
 
 impl<'a> IntervalMinPotential<'a, (Weight, Weight)> {
-    pub fn new(cch: &'a CCH, catchup: customizable_contraction_hierarchy::customization::ftd_for_pot::PotData) -> Self {
+    pub fn new(cch: &'a CCH, mut catchup: customizable_contraction_hierarchy::customization::ftd_for_pot::PotData, upper_bound: BorrowedGraph) -> Self {
+        let mut fw_predicted_upper_bounds: Vec<_> = catchup.fw_static_bound.iter().map(|&(_, u)| u).collect();
+        let mut bw_predicted_upper_bounds: Vec<_> = catchup.bw_static_bound.iter().map(|&(_, u)| u).collect();
+        let customized = {
+            let _blocked = block_reporting();
+            customize(cch, &upper_bound)
+        };
+        for (catchup_pred, static_pred) in fw_predicted_upper_bounds.iter_mut().zip(customized.forward_graph().weight()) {
+            *catchup_pred = min(*catchup_pred, *static_pred);
+        }
+        for (catchup_pred, static_pred) in bw_predicted_upper_bounds.iter_mut().zip(customized.backward_graph().weight()) {
+            *catchup_pred = min(*catchup_pred, *static_pred);
+        }
+
+        let mut fw_predicted_valid_from = vec![0; cch.num_arcs()];
+        let mut bw_predicted_valid_from = vec![0; cch.num_arcs()];
+
+        customization::validity::customize_perfect_with_validity(
+            cch,
+            &mut fw_predicted_upper_bounds,
+            &mut bw_predicted_upper_bounds,
+            &mut fw_predicted_valid_from,
+            &mut bw_predicted_valid_from,
+        );
+
+        for ((_, pred_upper), perfect_upper) in catchup.fw_static_bound.iter_mut().zip(fw_predicted_upper_bounds) {
+            *pred_upper = min(*pred_upper, perfect_upper);
+        }
+        for ((_, pred_upper), perfect_upper) in catchup.bw_static_bound.iter_mut().zip(bw_predicted_upper_bounds) {
+            *pred_upper = min(*pred_upper, perfect_upper);
+        }
+
+        Self::new_int(
+            cch,
+            catchup.fw_static_bound,
+            catchup.bw_static_bound,
+            catchup.fw_bucket_bounds,
+            catchup.bw_bucket_bounds,
+            catchup.fw_required,
+            catchup.bw_required,
+            catchup.bucket_to_metric,
+        )
+    }
+
+    pub fn new_for_simple_live(
+        cch: &'a CCH,
+        mut catchup: customizable_contraction_hierarchy::customization::ftd_for_pot::PotData,
+        live_graph: &PessimisticLiveTDGraph,
+        _t_live: Timestamp,
+    ) -> Self {
+        let upper_bound = (0..live_graph.num_arcs() as EdgeId)
+            .map(|edge_id| live_graph.upper_bound(edge_id))
+            .collect::<Box<[Weight]>>();
+        let customized_live = {
+            let _blocked = block_reporting();
+            let mut customized = customize(
+                cch,
+                &FirstOutGraph::new(live_graph.graph().first_out(), live_graph.graph().head(), &upper_bound),
+            );
+            customization::customize_perfect_without_rebuild(&mut customized);
+            customized
+        };
+
+        for ((_, pred_upper), live_upper) in catchup.fw_static_bound.iter_mut().zip(customized_live.forward_graph().weight()) {
+            *pred_upper = *live_upper;
+        }
+        for ((_, pred_upper), live_upper) in catchup.bw_static_bound.iter_mut().zip(customized_live.backward_graph().weight()) {
+            *pred_upper = *live_upper;
+        }
+
         Self::new_int(
             cch,
             catchup.fw_static_bound,
@@ -346,22 +415,146 @@ impl<'a> IntervalMinPotential<'a, (Weight, Weight)> {
 impl<'a> IntervalMinPotential<'a, LiveToPredictedBounds> {
     pub fn new_for_live(
         cch: &'a CCH,
-        catchup: customizable_contraction_hierarchy::customization::ftd_for_pot::PotData,
+        mut catchup: customizable_contraction_hierarchy::customization::ftd_for_pot::PotData,
         live_graph: &PessimisticLiveTDGraph,
+        t_live: Timestamp,
     ) -> Self {
-        let customized = customization::validity::customize_upper_bounds_with_limited_validity(cch, live_graph);
+        use crate::datastr::graph::floating_time_dependent::{
+            shortcut_source::{ShortcutSource, SourceCursor},
+            Timestamp as FlTimestamp,
+        };
 
-        for valid in &customized.upward_valid {
-            eprint!("{valid} ");
+        let longest_live = (0..live_graph.num_arcs())
+            .map(|edge| live_graph.live_ended_at(edge as EdgeId))
+            .max()
+            .unwrap_or(0);
+
+        let m = cch.num_arcs();
+        let mut fw_predicted_valid_from = vec![0; m];
+        let mut bw_predicted_valid_from = vec![0; m];
+        for edge_idx in 0..m {
+            let sources_idxs = catchup.fw_first_source[edge_idx] as usize..catchup.fw_first_source[edge_idx + 1] as usize;
+            let sources = &catchup.fw_sources[sources_idxs];
+            if !sources.is_empty() {
+                let mut cursor = SourceCursor::valid_at(sources, FlTimestamp::new(t_live as f64 / 1000.0));
+                while cursor.cur().0.fuzzy_lt(FlTimestamp::new(longest_live as f64 / 1000.0)) {
+                    let source_live_until = match cursor.cur().1.into() {
+                        ShortcutSource::Shortcut(down, up) => max(bw_predicted_valid_from[down as usize], fw_predicted_valid_from[up as usize]),
+                        ShortcutSource::OriginalEdge(edge) => live_graph.live_ended_at(edge),
+                        _ => 0,
+                    };
+                    fw_predicted_valid_from[edge_idx] = max(
+                        fw_predicted_valid_from[edge_idx],
+                        min(source_live_until, (f64::from(cursor.next().0) * 1000.0).ceil() as Timestamp),
+                    );
+                    cursor.advance();
+                }
+            }
+
+            let sources_idxs = catchup.bw_first_source[edge_idx] as usize..catchup.bw_first_source[edge_idx + 1] as usize;
+            let sources = &catchup.bw_sources[sources_idxs];
+            if !sources.is_empty() {
+                let mut cursor = SourceCursor::valid_at(sources, FlTimestamp::new(t_live as f64 / 1000.0));
+                while cursor.cur().0.fuzzy_lt(FlTimestamp::new(longest_live as f64 / 1000.0)) {
+                    let source_live_until = match cursor.cur().1.into() {
+                        ShortcutSource::Shortcut(down, up) => max(bw_predicted_valid_from[down as usize], fw_predicted_valid_from[up as usize]),
+                        ShortcutSource::OriginalEdge(edge) => live_graph.live_ended_at(edge),
+                        _ => 0,
+                    };
+                    bw_predicted_valid_from[edge_idx] = max(
+                        bw_predicted_valid_from[edge_idx],
+                        min(source_live_until, (f64::from(cursor.next().0) * 1000.0).ceil() as Timestamp),
+                    );
+                    cursor.advance();
+                }
+            }
         }
-        eprintln!();
+
+        let upper_bound = (0..live_graph.num_arcs() as EdgeId)
+            .map(|edge_id| live_graph.upper_bound(edge_id))
+            .collect::<Box<[Weight]>>();
+        let customized_live = {
+            let _blocked = block_reporting();
+            let mut customized = customize(
+                cch,
+                &FirstOutGraph::new(live_graph.graph().first_out(), live_graph.graph().head(), &upper_bound),
+            );
+            customization::customize_perfect_without_rebuild(&mut customized);
+            customized
+        };
+
+        let mut fw_predicted_upper_bounds: Vec<_> = catchup.fw_static_bound.iter().map(|&(_, u)| u).collect();
+        let mut bw_predicted_upper_bounds: Vec<_> = catchup.bw_static_bound.iter().map(|&(_, u)| u).collect();
+        let customized = {
+            let _blocked = block_reporting();
+            let upper_bound_pred = (0..live_graph.num_arcs() as EdgeId)
+                .map(|edge_id| live_graph.predicted_upper_bound(edge_id))
+                .collect::<Box<[Weight]>>();
+            customize(
+                cch,
+                &FirstOutGraph::new(live_graph.graph().first_out(), live_graph.graph().head(), &upper_bound_pred),
+            )
+        };
+        for (catchup_pred, static_pred) in fw_predicted_upper_bounds.iter_mut().zip(customized.forward_graph().weight()) {
+            *catchup_pred = min(*catchup_pred, *static_pred);
+        }
+        for (catchup_pred, static_pred) in bw_predicted_upper_bounds.iter_mut().zip(customized.backward_graph().weight()) {
+            *catchup_pred = min(*catchup_pred, *static_pred);
+        }
+
+        customization::validity::customize_perfect_with_validity(
+            cch,
+            &mut fw_predicted_upper_bounds,
+            &mut bw_predicted_upper_bounds,
+            &mut fw_predicted_valid_from,
+            &mut bw_predicted_valid_from,
+        );
+
+        for edge_idx in 0..m {
+            debug_assert!(fw_predicted_upper_bounds[edge_idx] <= customized_live.forward_graph().weight()[edge_idx]);
+            if catchup.fw_static_bound[edge_idx].0 > fw_predicted_upper_bounds[edge_idx] {
+                catchup.fw_required[edge_idx] = false;
+            }
+            debug_assert!(bw_predicted_upper_bounds[edge_idx] <= customized_live.backward_graph().weight()[edge_idx]);
+            if catchup.bw_static_bound[edge_idx].0 > bw_predicted_upper_bounds[edge_idx] {
+                catchup.bw_required[edge_idx] = false;
+            }
+        }
+
+        for edge_idx in 0..m {
+            let sources_idxs = catchup.fw_first_source[edge_idx] as usize..catchup.fw_first_source[edge_idx + 1] as usize;
+            let sources = &catchup.fw_sources[sources_idxs];
+
+            let any_required = sources.iter().map(|(_, s)| ShortcutSource::from(*s)).any(|source| match source {
+                ShortcutSource::Shortcut(down, up) => catchup.bw_required[down as usize] && catchup.fw_required[up as usize],
+                ShortcutSource::OriginalEdge(_) => true,
+                _ => false,
+            });
+            if !any_required {
+                catchup.fw_required[edge_idx] = false;
+            }
+
+            let sources_idxs = catchup.bw_first_source[edge_idx] as usize..catchup.bw_first_source[edge_idx + 1] as usize;
+            let sources = &catchup.bw_sources[sources_idxs];
+
+            let any_required = sources.iter().map(|(_, s)| ShortcutSource::from(*s)).any(|source| match source {
+                ShortcutSource::Shortcut(down, up) => catchup.bw_required[down as usize] && catchup.fw_required[up as usize],
+                ShortcutSource::OriginalEdge(_) => true,
+                _ => false,
+            });
+            if !any_required {
+                catchup.bw_required[edge_idx] = false;
+            }
+        }
 
         let fw_bounds = catchup
             .fw_static_bound
             .into_iter()
-            .zip(customized.upward_weights)
-            .zip(customized.upward_valid)
-            .map(|(((pred_l, pred_u), live_u), pred_valid)| LiveToPredictedBounds {
+            .map(|(l, _)| l)
+            .zip(fw_predicted_upper_bounds)
+            .zip(customized_live.forward_graph().weight())
+            .zip(fw_predicted_valid_from)
+            .map(|(((pred_l, pred_u), &live_u), pred_valid)| LiveToPredictedBounds {
                 lower: pred_l,
                 live_upper: live_u,
                 predicted_upper: pred_u,
@@ -372,9 +565,11 @@ impl<'a> IntervalMinPotential<'a, LiveToPredictedBounds> {
         let bw_bounds = catchup
             .bw_static_bound
             .into_iter()
-            .zip(customized.downward_weights)
-            .zip(customized.downward_valid)
-            .map(|(((pred_l, pred_u), live_u), pred_valid)| LiveToPredictedBounds {
+            .map(|(l, _)| l)
+            .zip(bw_predicted_upper_bounds)
+            .zip(customized_live.backward_graph().weight())
+            .zip(bw_predicted_valid_from)
+            .map(|(((pred_l, pred_u), &live_u), pred_valid)| LiveToPredictedBounds {
                 lower: pred_l,
                 live_upper: live_u,
                 predicted_upper: pred_u,

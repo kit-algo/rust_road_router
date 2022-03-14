@@ -274,7 +274,11 @@ impl Shortcut {
     }
 
     pub fn disable_if_bounds_overlap(&mut self, shortcut_graph: &impl ShortcutGraphTrt<OriginalGraph = TDGraph>) {
-        self.finalize_bounds_int::<_, false>(shortcut_graph)
+        self.finalize_bounds_int::<_, false>(shortcut_graph);
+        self.upper_bound = self
+            .periodic_ttf(shortcut_graph)
+            .map(|ttf| ttf.static_upper_bound())
+            .unwrap_or(FlWeight::INFINITY);
     }
     /// Once the TTF of this Shortcut is final, we can tighten the lower bound.
     /// When we know or detect, that we don't need this shortcut, we set all bounds to infinity.
@@ -436,11 +440,11 @@ impl Shortcut {
     }
 
     /// Returns an iterator over all the sources combined with a Timestamp for the time from which the corresponding source becomes valid.
-    pub fn sources_iter<'s>(&'s self) -> impl Iterator<Item = (Timestamp, ShortcutSourceData)> + 's {
+    pub fn sources_iter(&self) -> impl Iterator<Item = (Timestamp, ShortcutSourceData)> + '_ {
         self.sources_for(Timestamp::ZERO, period())
     }
 
-    pub fn sources_for<'s>(&'s self, start: Timestamp, end: Timestamp) -> impl Iterator<Item = (Timestamp, ShortcutSourceData)> + 's {
+    pub fn sources_for(&self, start: Timestamp, end: Timestamp) -> impl Iterator<Item = (Timestamp, ShortcutSourceData)> + '_ {
         self.sources.wrapping_iter_for(start, end)
     }
 
