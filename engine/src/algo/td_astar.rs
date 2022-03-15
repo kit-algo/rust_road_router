@@ -9,6 +9,8 @@ use crate::{
 
 use std::cmp::{max, min};
 
+use rayon::prelude::*;
+
 pub trait TDPotential {
     fn init(&mut self, source: NodeId, target: NodeId, departure: Timestamp);
     fn potential(&mut self, node: NodeId, t: Option<Timestamp>) -> Option<Weight>;
@@ -344,12 +346,20 @@ impl<'a> IntervalMinPotential<'a, (Weight, Weight)> {
             &mut bw_predicted_valid_from,
         );
 
-        for ((_, pred_upper), perfect_upper) in catchup.fw_static_bound.iter_mut().zip(fw_predicted_upper_bounds) {
-            *pred_upper = min(*pred_upper, perfect_upper);
-        }
-        for ((_, pred_upper), perfect_upper) in catchup.bw_static_bound.iter_mut().zip(bw_predicted_upper_bounds) {
-            *pred_upper = min(*pred_upper, perfect_upper);
-        }
+        catchup
+            .fw_static_bound
+            .par_iter_mut()
+            .zip(fw_predicted_upper_bounds)
+            .for_each(|((_, pred_upper), perfect_upper)| {
+                *pred_upper = min(*pred_upper, perfect_upper);
+            });
+        catchup
+            .bw_static_bound
+            .par_iter_mut()
+            .zip(bw_predicted_upper_bounds)
+            .for_each(|((_, pred_upper), perfect_upper)| {
+                *pred_upper = min(*pred_upper, perfect_upper);
+            });
 
         Self::new_int(
             cch,
@@ -382,12 +392,20 @@ impl<'a> IntervalMinPotential<'a, (Weight, Weight)> {
             customized
         };
 
-        for ((_, pred_upper), live_upper) in catchup.fw_static_bound.iter_mut().zip(customized_live.forward_graph().weight()) {
-            *pred_upper = *live_upper;
-        }
-        for ((_, pred_upper), live_upper) in catchup.bw_static_bound.iter_mut().zip(customized_live.backward_graph().weight()) {
-            *pred_upper = *live_upper;
-        }
+        catchup
+            .fw_static_bound
+            .par_iter_mut()
+            .zip(customized_live.forward_graph().weight())
+            .for_each(|((_, pred_upper), live_upper)| {
+                *pred_upper = *live_upper;
+            });
+        catchup
+            .bw_static_bound
+            .par_iter_mut()
+            .zip(customized_live.backward_graph().weight())
+            .for_each(|((_, pred_upper), live_upper)| {
+                *pred_upper = *live_upper;
+            });
 
         Self::new_int(
             cch,
@@ -415,6 +433,7 @@ impl<'a> IntervalMinPotential<'a, LiveToPredictedBounds> {
         };
 
         let longest_live = (0..live_graph.num_arcs())
+            .into_par_iter()
             .map(|edge| live_graph.live_ended_at(edge as EdgeId))
             .max()
             .unwrap_or(0);
@@ -484,16 +503,30 @@ impl<'a> IntervalMinPotential<'a, LiveToPredictedBounds> {
             &mut bw_predicted_valid_from,
         );
 
-        for edge_idx in 0..m {
-            debug_assert!(fw_predicted_upper_bounds[edge_idx] <= customized_live.forward_graph().weight()[edge_idx]);
-            if catchup.fw_static_bound[edge_idx].0 > fw_predicted_upper_bounds[edge_idx] {
-                catchup.fw_required[edge_idx] = false;
-            }
-            debug_assert!(bw_predicted_upper_bounds[edge_idx] <= customized_live.backward_graph().weight()[edge_idx]);
-            if catchup.bw_static_bound[edge_idx].0 > bw_predicted_upper_bounds[edge_idx] {
-                catchup.bw_required[edge_idx] = false;
-            }
-        }
+        catchup
+            .fw_required
+            .par_iter_mut()
+            .zip(&fw_predicted_upper_bounds)
+            .zip(&catchup.fw_static_bound)
+            .zip(customized_live.forward_graph().weight())
+            .for_each(|(((required, pred_upper), (pred_lower, _)), live_upper)| {
+                debug_assert!(pred_upper <= live_upper);
+                if pred_lower > pred_upper {
+                    *required = false;
+                }
+            });
+        catchup
+            .bw_required
+            .par_iter_mut()
+            .zip(&bw_predicted_upper_bounds)
+            .zip(&catchup.bw_static_bound)
+            .zip(customized_live.backward_graph().weight())
+            .for_each(|(((required, pred_upper), (pred_lower, _)), live_upper)| {
+                debug_assert!(pred_upper <= live_upper);
+                if pred_lower > pred_upper {
+                    *required = false;
+                }
+            });
 
         for edge_idx in 0..m {
             let sources_idxs = catchup.fw_first_source[edge_idx] as usize..catchup.fw_first_source[edge_idx + 1] as usize;
