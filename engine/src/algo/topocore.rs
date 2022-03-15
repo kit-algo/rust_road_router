@@ -806,7 +806,7 @@ fn biconnected<Graph: LinkIterable<NodeIdT>>(graph: &Graph) -> Vec<Vec<(NodeId, 
     let mut stack = Vec::new();
 
     let mut dfs_num_counter = 0;
-    let mut dfs_num = vec![InRangeOption::<usize>::new(None); graph.num_nodes()];
+    let mut dfs_num = vec![InRangeOption::<usize>::NONE; graph.num_nodes()];
     let mut dfs_low = vec![0; graph.num_nodes()];
     let mut dfs_parent = vec![0; graph.num_nodes()];
     let mut edge_stack = Vec::new();

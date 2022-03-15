@@ -634,42 +634,38 @@ impl<'a, W: TDBounds> IntervalMinPotential<'a, W> {
         let fw_head: std::rc::Rc<[_]> = fw_head.into();
         let bw_head: std::rc::Rc<[_]> = bw_head.into();
 
-        let fw_bucket_graph = UnweightedFirstOutGraph::new(fw_first_out.clone(), fw_head.clone());
-        let bw_bucket_graph = UnweightedFirstOutGraph::new(bw_first_out.clone(), bw_head.clone());
+        let fw_bucket_graph = UnweightedFirstOutGraph::new(fw_first_out, fw_head);
+        let bw_bucket_graph = UnweightedFirstOutGraph::new(bw_first_out, bw_head);
 
-        // let mut fw_first_out = Vec::with_capacity(n + 1);
-        // fw_first_out.push(0);
-        // let mut bw_first_out = Vec::with_capacity(n + 1);
-        // bw_first_out.push(0);
-        // let mut fw_head = Vec::with_capacity(m);
-        // let mut bw_head = Vec::with_capacity(m);
-        // for node in 0..n {
-        //     for (NodeIdT(head), EdgeIdT(edge_id)) in LinkIterable::<(NodeIdT, EdgeIdT)>::link_iter(&g, node as NodeId) {
-        //         if Self::keep(&fw_static_bound[edge_id as usize]) {
-        //             fw_head.push(head);
-        //         }
-        //         if Self::keep(&bw_static_bound[edge_id as usize]) {
-        //             bw_head.push(head);
-        //         }
-        //     }
-        //     fw_first_out.push(fw_head.len() as EdgeId);
-        //     bw_first_out.push(bw_head.len() as EdgeId);
-        // }
+        let mut fw_first_out = Vec::with_capacity(n + 1);
+        fw_first_out.push(0);
+        let mut bw_first_out = Vec::with_capacity(n + 1);
+        bw_first_out.push(0);
+        let mut fw_head = Vec::with_capacity(m);
+        let mut bw_head = Vec::with_capacity(m);
+        for node in 0..n {
+            for (NodeIdT(head), EdgeIdT(edge_id)) in LinkIterable::<(NodeIdT, EdgeIdT)>::link_iter(&g, node as NodeId) {
+                if Self::keep(&fw_static_bound[edge_id as usize]) {
+                    fw_head.push(head);
+                }
+                if Self::keep(&bw_static_bound[edge_id as usize]) {
+                    bw_head.push(head);
+                }
+            }
+            fw_first_out.push(fw_head.len() as EdgeId);
+            bw_first_out.push(bw_head.len() as EdgeId);
+        }
 
-        // let fw_first_out: std::rc::Rc<[_]> = fw_first_out.into();
-        // let bw_first_out: std::rc::Rc<[_]> = bw_first_out.into();
-        // let fw_head: std::rc::Rc<[_]> = fw_head.into();
-        // let bw_head: std::rc::Rc<[_]> = bw_head.into();
+        let fw_first_out: std::rc::Rc<[_]> = fw_first_out.into();
+        let bw_first_out: std::rc::Rc<[_]> = bw_first_out.into();
+        let fw_head: std::rc::Rc<[_]> = fw_head.into();
+        let bw_head: std::rc::Rc<[_]> = bw_head.into();
 
-        // fw_bucket_bounds.retain(crate::util::with_index(|idx, _| Self::keep(&fw_static_bound[idx % m])));
         fw_bucket_bounds.retain(crate::util::with_index(|idx, _| Self::keep(&fw_static_bound[idx % m]) && fw_required[idx % m]));
-        // bw_bucket_bounds.retain(crate::util::with_index(|idx, _| Self::keep(&bw_static_bound[idx % m])));
         bw_bucket_bounds.retain(crate::util::with_index(|idx, _| Self::keep(&bw_static_bound[idx % m]) && bw_required[idx % m]));
 
-        // fw_static_bound.retain(Self::keep);
-        fw_static_bound.retain(crate::util::with_index(|idx, bounds| Self::keep(bounds) && fw_required[idx]));
-        // bw_static_bound.retain(Self::keep);
-        bw_static_bound.retain(crate::util::with_index(|idx, bounds| Self::keep(bounds) && bw_required[idx]));
+        fw_static_bound.retain(Self::keep);
+        bw_static_bound.retain(Self::keep);
 
         Self {
             minmax_pot: MinMaxPotential {
