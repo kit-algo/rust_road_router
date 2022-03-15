@@ -116,17 +116,38 @@ impl OwnedGraph {
 
 impl<G: LinkIterable<Link>> BuildReversed<G> for OwnedGraph {
     fn reversed(graph: &G) -> Self {
-        // vector of adjacency lists for the reverse graph
-        let mut reversed: Vec<Vec<Link>> = (0..graph.num_nodes()).map(|_| Vec::<Link>::new()).collect();
+        let mut reversed_first_out = vec![0u32; graph.num_nodes() + 1];
+        for node in 0..(graph.num_nodes() as NodeId) {
+            for Link { node: neighbor, .. } in graph.link_iter(node) {
+                reversed_first_out[neighbor as usize + 1] += 1;
+            }
+        }
+
+        let mut prefix_sum = 0;
+        for deg in &mut reversed_first_out {
+            prefix_sum += *deg;
+            *deg = prefix_sum;
+        }
+
+        let mut head = vec![0; graph.num_arcs()];
+        let mut weights = vec![0; graph.num_arcs()];
 
         // iterate over all edges and insert them in the reversed structure
         for node in 0..(graph.num_nodes() as NodeId) {
             for Link { node: neighbor, weight } in graph.link_iter(node) {
-                reversed[neighbor as usize].push(Link { node, weight });
+                let idx = reversed_first_out[neighbor as usize] as usize;
+                reversed_first_out[neighbor as usize] += 1;
+                head[idx] = node;
+                weights[idx] = weight;
             }
         }
 
-        OwnedGraph::from_adjancecy_lists(reversed)
+        for node in (1..graph.num_nodes()).rev() {
+            reversed_first_out[node] = reversed_first_out[node - 1];
+        }
+        reversed_first_out[0] = 0;
+
+        OwnedGraph::new(reversed_first_out, head, weights)
     }
 }
 
@@ -457,17 +478,39 @@ impl UnweightedOwnedGraph {
 
 impl<G: LinkIterable<NodeIdT>> BuildReversed<G> for UnweightedOwnedGraph {
     fn reversed(graph: &G) -> Self {
-        // vector of adjacency lists for the reverse graph
-        let mut reversed: Vec<Vec<NodeId>> = (0..graph.num_nodes()).map(|_| Vec::<NodeId>::new()).collect();
+        let mut reversed_first_out = vec![0u32; graph.num_nodes() + 1];
+        for node in 0..(graph.num_nodes() as NodeId) {
+            for NodeIdT(neighbor) in graph.link_iter(node) {
+                reversed_first_out[neighbor as usize + 1] += 1;
+            }
+        }
+
+        let mut prefix_sum = 0;
+        for deg in &mut reversed_first_out {
+            prefix_sum += *deg;
+            *deg = prefix_sum;
+        }
+
+        let mut head = vec![0; graph.num_arcs()];
 
         // iterate over all edges and insert them in the reversed structure
         for node in 0..(graph.num_nodes() as NodeId) {
             for NodeIdT(neighbor) in graph.link_iter(node) {
-                reversed[neighbor as usize].push(node);
+                let idx = reversed_first_out[neighbor as usize] as usize;
+                reversed_first_out[neighbor as usize] += 1;
+                head[idx] = node;
             }
         }
 
-        Self::from_adjancecy_lists(reversed)
+        for node in (1..graph.num_nodes()).rev() {
+            reversed_first_out[node] = reversed_first_out[node - 1];
+        }
+        reversed_first_out[0] = 0;
+
+        Self {
+            first_out: reversed_first_out,
+            head,
+        }
     }
 }
 
