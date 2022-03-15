@@ -31,9 +31,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let lower_bound = (0..graph.num_arcs() as EdgeId)
         .map(|edge_id| graph.travel_time_function(edge_id).lower_bound())
         .collect::<Box<[Weight]>>();
-    let upper_bound = (0..graph.num_arcs() as EdgeId)
-        .map(|edge_id| graph.travel_time_function(edge_id).upper_bound())
-        .collect::<Box<[Weight]>>();
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs");
 
@@ -92,7 +89,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let customized_folder = path.join("customized_corridor_mins");
     let catchup = customization::ftd_for_pot::PotData::reconstruct_from(&customized_folder)?;
-    let interval_min_pot = IntervalMinPotential::new(&cch, catchup, BorrowedGraph::new(graph.first_out(), graph.head(), &upper_bound));
+    let interval_min_pot = IntervalMinPotential::new(&cch, catchup);
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
     let mut cb_server = Server::new(&graph, interval_min_pot, TDDijkstraOps::default());

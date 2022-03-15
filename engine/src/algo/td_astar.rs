@@ -329,19 +329,9 @@ pub struct IntervalMinPotential<'a, W> {
 }
 
 impl<'a> IntervalMinPotential<'a, (Weight, Weight)> {
-    pub fn new(cch: &'a CCH, mut catchup: customizable_contraction_hierarchy::customization::ftd_for_pot::PotData, upper_bound: BorrowedGraph) -> Self {
+    pub fn new(cch: &'a CCH, mut catchup: customizable_contraction_hierarchy::customization::ftd_for_pot::PotData) -> Self {
         let mut fw_predicted_upper_bounds: Vec<_> = catchup.fw_static_bound.iter().map(|&(_, u)| u).collect();
         let mut bw_predicted_upper_bounds: Vec<_> = catchup.bw_static_bound.iter().map(|&(_, u)| u).collect();
-        let customized = {
-            let _blocked = block_reporting();
-            customize(cch, &upper_bound)
-        };
-        for (catchup_pred, static_pred) in fw_predicted_upper_bounds.iter_mut().zip(customized.forward_graph().weight()) {
-            *catchup_pred = min(*catchup_pred, *static_pred);
-        }
-        for (catchup_pred, static_pred) in bw_predicted_upper_bounds.iter_mut().zip(customized.backward_graph().weight()) {
-            *catchup_pred = min(*catchup_pred, *static_pred);
-        }
 
         let mut fw_predicted_valid_from = vec![0; cch.num_arcs()];
         let mut bw_predicted_valid_from = vec![0; cch.num_arcs()];
@@ -485,22 +475,6 @@ impl<'a> IntervalMinPotential<'a, LiveToPredictedBounds> {
 
         let mut fw_predicted_upper_bounds: Vec<_> = catchup.fw_static_bound.iter().map(|&(_, u)| u).collect();
         let mut bw_predicted_upper_bounds: Vec<_> = catchup.bw_static_bound.iter().map(|&(_, u)| u).collect();
-        let customized = {
-            let _blocked = block_reporting();
-            let upper_bound_pred = (0..live_graph.num_arcs() as EdgeId)
-                .map(|edge_id| live_graph.predicted_upper_bound(edge_id))
-                .collect::<Box<[Weight]>>();
-            customize(
-                cch,
-                &FirstOutGraph::new(live_graph.graph().first_out(), live_graph.graph().head(), &upper_bound_pred),
-            )
-        };
-        for (catchup_pred, static_pred) in fw_predicted_upper_bounds.iter_mut().zip(customized.forward_graph().weight()) {
-            *catchup_pred = min(*catchup_pred, *static_pred);
-        }
-        for (catchup_pred, static_pred) in bw_predicted_upper_bounds.iter_mut().zip(customized.backward_graph().weight()) {
-            *catchup_pred = min(*catchup_pred, *static_pred);
-        }
 
         customization::validity::customize_perfect_with_validity(
             cch,

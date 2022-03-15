@@ -74,7 +74,25 @@ impl<'a> crate::io::Reconstruct for PotData {
     }
 }
 
-pub fn customize_internal<'a, 'b: 'a, const K: usize>(cch: &'a CCH, metric: &'b TDGraph) -> PotData {
+pub fn customize<'a, 'b: 'a, const K: usize>(cch: &'a CCH, metric: &'b TDGraph) -> PotData {
+    let mut catchup = customize_internal::<K>(cch, metric);
+
+    let upper_bound = (0..metric.num_arcs() as EdgeId)
+        .map(|edge_id| extract_upper_bound(metric.travel_time_function(edge_id).upper_bound()))
+        .collect::<Box<[Weight]>>();
+
+    let customized = super::customize(cch, &BorrowedGraph::new(metric.first_out(), metric.head(), &upper_bound));
+    for ((_, td_upper), static_pred) in catchup.fw_static_bound.iter_mut().zip(customized.forward_graph().weight()) {
+        *td_upper = min(*td_upper, *static_pred);
+    }
+    for ((_, td_upper), static_pred) in catchup.bw_static_bound.iter_mut().zip(customized.backward_graph().weight()) {
+        *td_upper = min(*td_upper, *static_pred);
+    }
+
+    catchup
+}
+
+fn customize_internal<'a, 'b: 'a, const K: usize>(cch: &'a CCH, metric: &'b TDGraph) -> PotData {
     report!("algo", "Floating TDCCH Customization");
 
     let n = (cch.first_out.len() - 1) as NodeId;

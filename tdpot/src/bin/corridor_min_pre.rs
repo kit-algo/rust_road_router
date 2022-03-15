@@ -12,7 +12,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm"))?);
     let cch = CCH::fix_order_and_build(&graph, order);
 
-    let catchup = customization::ftd_for_pot::customize_internal::<96>(&cch, &graph);
+    let catchup = customization::ftd_for_pot::customize::<96>(&cch, &graph);
 
     let customized_folder = path.join(args.next().unwrap_or("customized_corridor_mins".to_string()));
     if !customized_folder.exists() {
