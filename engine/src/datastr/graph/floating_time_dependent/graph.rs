@@ -208,9 +208,7 @@ impl GraphTrait for Graph {
 }
 
 impl EdgeIdGraph for Graph {
-    // https://github.com/rust-lang/rustfmt/issues/4911
-    #[rustfmt::skip]
-    type IdxIter<'a> where Self: 'a = impl Iterator<Item = EdgeIdT> + 'a;
+    type IdxIter<'a> = impl Iterator<Item = EdgeIdT> + 'a where Self: 'a;
 
     fn edge_indices(&self, from: NodeId, to: NodeId) -> Self::IdxIter<'_> {
         self.neighbor_edge_indices(from).filter(move |&e| self.head[e as usize] == to).map(EdgeIdT)

@@ -339,10 +339,7 @@ where
     O: DijkstraOps<G, Label = Timestamp>,
     G: LinkIterable<NodeIdT> + LinkIterable<O::Arc>,
 {
-    type P<'s>
-    where
-        Self: 's,
-    = PathServerWrapper<'s, G, O, P, TDQuery<Timestamp>, BCC_CORE, SKIP_DEG_2, SKIP_DEG_3>;
+    type P<'s> = PathServerWrapper<'s, G, O, P, TDQuery<Timestamp>, BCC_CORE, SKIP_DEG_2, SKIP_DEG_3> where Self: 's;
 
     fn td_query(&mut self, query: TDQuery<Timestamp>) -> QueryResult<Self::P<'_>, Weight> {
         QueryResult::new(self.distance(query, |_, _, _, _| ()), PathServerWrapper(self, query))
@@ -581,10 +578,7 @@ where
     O: DijkstraOps<G, Label = Timestamp>,
     G: LinkIterable<NodeIdT> + LinkIterable<O::Arc> + SymmetricDegreeGraph,
 {
-    type P<'s>
-    where
-        Self: 's,
-    = BiconnectedPathServerWrapper<'s, G, O, P, TDQuery<Timestamp>, SKIP_DEG_2, SKIP_DEG_3>;
+    type P<'s> = BiconnectedPathServerWrapper<'s, G, O, P, TDQuery<Timestamp>, SKIP_DEG_2, SKIP_DEG_3> where Self: 's;
 
     fn td_query(&mut self, query: TDQuery<Timestamp>) -> QueryResult<Self::P<'_>, Weight> {
         QueryResult::new(self.distance(query, |_, _, _| (), INFINITY), BiconnectedPathServerWrapper(self, query))

@@ -69,10 +69,7 @@ pub mod disconnected_targets {
     where
         S: TDQueryServer<Timestamp, Weight>,
     {
-        type P<'s>
-        where
-            Self: 's,
-        = Option<S::P<'s>>;
+        type P<'s> = Option<S::P<'s>> where Self: 's;
 
         fn td_query(&mut self, query: TDQuery<Timestamp>) -> QueryResult<Self::P<'_>, Weight> {
             if self.check_target(query.from(), query.to()) {
@@ -88,10 +85,7 @@ pub mod disconnected_targets {
     where
         S: QueryServer,
     {
-        type P<'s>
-        where
-            Self: 's,
-        = Option<S::P<'s>>;
+        type P<'s> = Option<S::P<'s>> where Self: 's;
 
         fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight> {
             if self.check_target(query.from(), query.to()) {

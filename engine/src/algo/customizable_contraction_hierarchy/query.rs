@@ -173,10 +173,7 @@ impl<'s, C: Customized> PathServer for PathServerWrapper<'s, C> {
 }
 
 impl<'a, C: Customized> QueryServer for Server<C> {
-    type P<'s>
-    where
-        Self: 's,
-    = PathServerWrapper<'s, C>;
+    type P<'s> = PathServerWrapper<'s, C> where Self: 's;
 
     fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight> {
         QueryResult::new(self.distance(query.from, query.to), PathServerWrapper(self, query))

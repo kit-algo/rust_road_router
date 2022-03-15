@@ -33,10 +33,7 @@ impl<'a, G: Graph, H> Graph for UndirectedGraph<'a, G, H> {
 }
 
 impl<'b, L, G: LinkIterable<L>, H: LinkIterable<L>> LinkIterable<L> for UndirectedGraph<'b, G, H> {
-    type Iter<'a>
-    where
-        Self: 'a,
-    = std::iter::Chain<G::Iter<'a>, H::Iter<'a>>;
+    type Iter<'a> = std::iter::Chain<G::Iter<'a>, H::Iter<'a>> where Self: 'a;
 
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         self.ins.link_iter(node).chain(self.outs.link_iter(node))
@@ -719,10 +716,7 @@ impl<G: Graph> Graph for VirtualTopocoreGraph<G> {
 }
 
 impl<G: LinkIterable<L>, L> LinkIterable<L> for VirtualTopocoreGraph<G> {
-    type Iter<'a>
-    where
-        Self: 'a,
-    = <G as LinkIterable<L>>::Iter<'a>;
+    type Iter<'a> = <G as LinkIterable<L>>::Iter<'a> where Self: 'a;
 
     #[inline(always)]
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
@@ -760,9 +754,7 @@ impl<G: BuildReversed<G>> BuildReversed<VirtualTopocoreGraph<G>> for VirtualTopo
 }
 
 impl<G: EdgeIdGraph> EdgeIdGraph for VirtualTopocoreGraph<G> {
-    // https://github.com/rust-lang/rustfmt/issues/4911
-    #[rustfmt::skip]
-    type IdxIter<'a> where Self: 'a = G::IdxIter<'a>;
+    type IdxIter<'a> = G::IdxIter<'a> where Self: 'a;
 
     fn edge_indices(&self, from: NodeId, to: NodeId) -> Self::IdxIter<'_> {
         self.graph.edge_indices(from, to)

@@ -318,10 +318,7 @@ where
     O: DijkstraOps<G, Label = Timestamp>,
     G: LinkIterable<NodeIdT> + LinkIterable<O::Arc>,
 {
-    type P<'s>
-    where
-        Self: 's,
-    = PathServerWrapper<'s, G, O, P, TDQuery<Timestamp>, BCC_CORE, SKIP_DEG_2, SKIP_DEG_3>;
+    type P<'s> = PathServerWrapper<'s, G, O, P, TDQuery<Timestamp>, BCC_CORE, SKIP_DEG_2, SKIP_DEG_3> where Self: 's;
 
     fn td_query(&mut self, query: TDQuery<Timestamp>) -> QueryResult<Self::P<'_>, Weight> {
         QueryResult::new(self.distance(query, |_, _, _, _| ()), PathServerWrapper(self, query))
@@ -334,10 +331,7 @@ where
     O: DijkstraOps<G, Label = Timestamp>,
     G: LinkIterable<NodeIdT> + LinkIterable<O::Arc>,
 {
-    type P<'s>
-    where
-        Self: 's,
-    = PathServerWrapper<'s, G, O, P, Query, BCC_CORE, SKIP_DEG_2, SKIP_DEG_3>;
+    type P<'s> = PathServerWrapper<'s, G, O, P, Query, BCC_CORE, SKIP_DEG_2, SKIP_DEG_3> where Self: 's;
 
     fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight> {
         QueryResult::new(self.distance(query, |_, _, _, _| ()), PathServerWrapper(self, query))
@@ -614,10 +608,7 @@ where
     O: DijkstraOps<G, Label = Timestamp>,
     G: LinkIterable<NodeIdT> + LinkIterable<O::Arc> + SymmetricDegreeGraph,
 {
-    type P<'s>
-    where
-        Self: 's,
-    = BiconnectedPathServerWrapper<'s, G, O, P, TDQuery<Timestamp>, SKIP_DEG_2, SKIP_DEG_3>;
+    type P<'s> = BiconnectedPathServerWrapper<'s, G, O, P, TDQuery<Timestamp>, SKIP_DEG_2, SKIP_DEG_3> where Self: 's;
 
     fn td_query(&mut self, query: TDQuery<Timestamp>) -> QueryResult<Self::P<'_>, Weight> {
         QueryResult::new(self.distance(query, |_, _, _| (), INFINITY), BiconnectedPathServerWrapper(self, query))
@@ -630,10 +621,7 @@ where
     O: DijkstraOps<G, Label = Timestamp>,
     G: LinkIterable<NodeIdT> + LinkIterable<O::Arc> + SymmetricDegreeGraph,
 {
-    type P<'s>
-    where
-        Self: 's,
-    = BiconnectedPathServerWrapper<'s, G, O, P, Query, SKIP_DEG_2, SKIP_DEG_3>;
+    type P<'s> = BiconnectedPathServerWrapper<'s, G, O, P, Query, SKIP_DEG_2, SKIP_DEG_3> where Self: 's;
 
     fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight> {
         QueryResult::new(self.distance(query, |_, _, _| (), INFINITY), BiconnectedPathServerWrapper(self, query))
@@ -723,10 +711,7 @@ where
     P: BiDirPotential,
     D: BidirChooseDir,
 {
-    type P<'s>
-    where
-        Self: 's,
-    = BiDirPathServerWrapper<'s, P, D, Query>;
+    type P<'s> = BiDirPathServerWrapper<'s, P, D, Query> where Self: 's;
 
     fn query(&mut self, mut query: Query) -> QueryResult<Self::P<'_>, Weight> {
         query.permutate(&self.virtual_topocore.order);
@@ -849,10 +834,7 @@ where
     P: BiDirPotential,
     D: BidirChooseDir,
 {
-    type P<'s>
-    where
-        Self: 's,
-    = BiDirCorePathServerWrapper<'s, P, D, Query>;
+    type P<'s> = BiDirCorePathServerWrapper<'s, P, D, Query> where Self: 's;
 
     fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight> {
         QueryResult::new(self.runner.distance(query, INFINITY, None), BiDirCorePathServerWrapper(self, query))
@@ -1338,10 +1320,7 @@ impl<P> QueryServer for MultiThreadedBiDirSkipLowDegServer<P>
 where
     P: BiDirPotential + Clone + Send,
 {
-    type P<'s>
-    where
-        Self: 's,
-    = MultiThreadedBiDirCorePathServerWrapper<'s, P, Query>;
+    type P<'s> = MultiThreadedBiDirCorePathServerWrapper<'s, P, Query> where Self: 's;
 
     fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight> {
         QueryResult::new(self.distance(query, INFINITY, None), MultiThreadedBiDirCorePathServerWrapper(self, query))

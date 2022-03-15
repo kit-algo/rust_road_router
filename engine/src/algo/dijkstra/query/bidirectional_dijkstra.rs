@@ -209,10 +209,7 @@ impl<'s, G: LinkIterGraph, H: LinkIterGraph, P: BiDirPotential, D: BidirChooseDi
 }
 
 impl<G: LinkIterGraph, H: LinkIterGraph, P: BiDirPotential, D: BidirChooseDir> QueryServer for Server<G, H, P, D> {
-    type P<'s>
-    where
-        Self: 's,
-    = PathServerWrapper<'s, G, H, P, D>;
+    type P<'s> = PathServerWrapper<'s, G, H, P, D> where Self: 's;
 
     fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight> {
         QueryResult::new(self.distance(query.from, query.to), PathServerWrapper(self, query))

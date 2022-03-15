@@ -235,10 +235,7 @@ impl<G: Graph> Graph for InfinityFilteringGraph<G> {
 }
 
 impl<G: LinkIterable<Link>> LinkIterable<Link> for InfinityFilteringGraph<G> {
-    type Iter<'a>
-    where
-        Self: 'a,
-    = std::iter::Filter<<G as LinkIterable<Link>>::Iter<'a>, fn(&Link) -> bool>;
+    type Iter<'a> = std::iter::Filter<<G as LinkIterable<Link>>::Iter<'a>, fn(&Link) -> bool> where Self: 'a;
 
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         self.0.link_iter(node).filter(|l| l.weight < INFINITY)
@@ -246,10 +243,7 @@ impl<G: LinkIterable<Link>> LinkIterable<Link> for InfinityFilteringGraph<G> {
 }
 
 impl<G: LinkIterable<Link>> LinkIterable<NodeIdT> for InfinityFilteringGraph<G> {
-    type Iter<'a>
-    where
-        Self: 'a,
-    = std::iter::Map<<Self as LinkIterable<Link>>::Iter<'a>, fn(Link) -> NodeIdT>;
+    type Iter<'a> = std::iter::Map<<Self as LinkIterable<Link>>::Iter<'a>, fn(Link) -> NodeIdT> where Self: 'a;
 
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         LinkIterable::<Link>::link_iter(self, node).map(|l| NodeIdT(l.node))

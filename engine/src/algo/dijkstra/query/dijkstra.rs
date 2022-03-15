@@ -174,10 +174,7 @@ impl<'s, G: LinkIterable<O::Arc>, O: DijkstraOps<G, Label = Weight>, P: Potentia
 }
 
 impl<G: LinkIterable<O::Arc>, O: DijkstraOps<G, Label = Weight> + Default, P: Potential, B: Borrow<G>> QueryServer for Server<G, O, P, B> {
-    type P<'s>
-    where
-        Self: 's,
-    = PathServerWrapper<'s, Query, G, O, P, B>;
+    type P<'s> = PathServerWrapper<'s, Query, G, O, P, B> where Self: 's;
 
     fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight> {
         QueryResult::new(self.distance(query), PathServerWrapper(self, query))
@@ -185,10 +182,7 @@ impl<G: LinkIterable<O::Arc>, O: DijkstraOps<G, Label = Weight> + Default, P: Po
 }
 
 impl<G: LinkIterable<O::Arc>, O: DijkstraOps<G, Label = Weight> + Default, P: Potential, B: Borrow<G>> TDQueryServer<Timestamp, Weight> for Server<G, O, P, B> {
-    type P<'s>
-    where
-        Self: 's,
-    = PathServerWrapper<'s, TDQuery<Timestamp>, G, O, P, B>;
+    type P<'s> = PathServerWrapper<'s, TDQuery<Timestamp>, G, O, P, B> where Self: 's;
 
     fn td_query(&mut self, query: TDQuery<Timestamp>) -> QueryResult<Self::P<'_>, Weight> {
         QueryResult::new(self.distance(query), PathServerWrapper(self, query))
