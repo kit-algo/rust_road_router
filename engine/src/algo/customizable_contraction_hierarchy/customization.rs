@@ -2,7 +2,7 @@ use super::*;
 use rayon::prelude::*;
 use std::{cell::RefCell, cmp::min};
 
-mod parallelization;
+pub mod parallelization;
 use parallelization::*;
 pub mod directed;
 pub mod ftd;

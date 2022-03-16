@@ -427,9 +427,12 @@ impl<'a> IntervalMinPotential<'a, LiveToPredictedBounds> {
         live_graph: &PessimisticLiveTDGraph,
         t_live: Timestamp,
     ) -> Self {
-        use crate::datastr::graph::floating_time_dependent::{
-            shortcut_source::{ShortcutSource, SourceCursor},
-            Timestamp as FlTimestamp,
+        use crate::{
+            algo::customizable_contraction_hierarchy::customization::parallelization::SeperatorBasedParallelCustomization,
+            datastr::graph::floating_time_dependent::{
+                shortcut_source::{ShortcutSource, ShortcutSourceData, SourceCursor},
+                Timestamp as FlTimestamp,
+            },
         };
 
         let longest_live = (0..live_graph.num_arcs())
@@ -441,43 +444,42 @@ impl<'a> IntervalMinPotential<'a, LiveToPredictedBounds> {
         let m = cch.num_arcs();
         let mut fw_predicted_valid_from = vec![0; m];
         let mut bw_predicted_valid_from = vec![0; m];
-        for edge_idx in 0..m {
-            let sources_idxs = catchup.fw_first_source[edge_idx] as usize..catchup.fw_first_source[edge_idx + 1] as usize;
-            let sources = &catchup.fw_sources[sources_idxs];
-            if !sources.is_empty() {
-                let mut cursor = SourceCursor::valid_at(sources, FlTimestamp::new(t_live as f64 / 1000.0));
-                while cursor.cur().0.fuzzy_lt(FlTimestamp::new(longest_live as f64 / 1000.0)) {
-                    let source_live_until = match cursor.cur().1.into() {
-                        ShortcutSource::Shortcut(down, up) => max(bw_predicted_valid_from[down as usize], fw_predicted_valid_from[up as usize]),
-                        ShortcutSource::OriginalEdge(edge) => live_graph.live_ended_at(edge),
-                        _ => 0,
-                    };
-                    fw_predicted_valid_from[edge_idx] = max(
-                        fw_predicted_valid_from[edge_idx],
-                        min(source_live_until, (f64::from(cursor.next().0) * 1000.0).ceil() as Timestamp),
-                    );
-                    cursor.advance();
-                }
-            }
 
-            let sources_idxs = catchup.bw_first_source[edge_idx] as usize..catchup.bw_first_source[edge_idx + 1] as usize;
-            let sources = &catchup.bw_sources[sources_idxs];
-            if !sources.is_empty() {
-                let mut cursor = SourceCursor::valid_at(sources, FlTimestamp::new(t_live as f64 / 1000.0));
-                while cursor.cur().0.fuzzy_lt(FlTimestamp::new(longest_live as f64 / 1000.0)) {
-                    let source_live_until = match cursor.cur().1.into() {
-                        ShortcutSource::Shortcut(down, up) => max(bw_predicted_valid_from[down as usize], fw_predicted_valid_from[up as usize]),
-                        ShortcutSource::OriginalEdge(edge) => live_graph.live_ended_at(edge),
-                        _ => 0,
-                    };
-                    bw_predicted_valid_from[edge_idx] = max(
-                        bw_predicted_valid_from[edge_idx],
-                        min(source_live_until, (f64::from(cursor.next().0) * 1000.0).ceil() as Timestamp),
-                    );
-                    cursor.advance();
-                }
+        let set_prediction_validity_from_sources = |nodes: Range<usize>, edge_offset: usize, fw_validity: &mut [Timestamp], bw_validity: &mut [Timestamp]| {
+            for current_node in nodes {
+                let edges = cch.neighbor_edge_indices_usize(current_node as NodeId);
+                let (fw_validity_below, fw_validity) = fw_validity.split_at_mut(edges.start - edge_offset);
+                let (bw_validity_below, bw_validity) = bw_validity.split_at_mut(edges.start - edge_offset);
+                let set_validity_for_edges = |validities: &mut [Timestamp], first_source: &[u32], sources: &[(FlTimestamp, ShortcutSourceData)]| {
+                    for (validity, edge_idx) in validities.iter_mut().zip(edges.clone()) {
+                        let sources_idxs = first_source[edge_idx] as usize..first_source[edge_idx + 1] as usize;
+                        let sources = &sources[sources_idxs];
+                        if !sources.is_empty() {
+                            let mut cursor = SourceCursor::valid_at(sources, FlTimestamp::new(t_live as f64 / 1000.0));
+                            while cursor.cur().0.fuzzy_lt(FlTimestamp::new(longest_live as f64 / 1000.0)) {
+                                let source_live_until = match cursor.cur().1.into() {
+                                    ShortcutSource::Shortcut(down, up) => {
+                                        max(bw_validity_below[down as usize - edge_offset], fw_validity_below[up as usize - edge_offset])
+                                    }
+                                    ShortcutSource::OriginalEdge(edge) => live_graph.live_ended_at(edge),
+                                    _ => 0,
+                                };
+                                *validity = max(*validity, min(source_live_until, (f64::from(cursor.next().0) * 1000.0).ceil() as Timestamp));
+                                cursor.advance();
+                            }
+                        }
+                    }
+                };
+                set_validity_for_edges(&mut fw_validity[..edges.end - edges.start], &catchup.fw_first_source, &catchup.fw_sources);
+                set_validity_for_edges(&mut bw_validity[..edges.end - edges.start], &catchup.bw_first_source, &catchup.bw_sources);
             }
-        }
+        };
+
+        SeperatorBasedParallelCustomization::new_undirected(cch, set_prediction_validity_from_sources, set_prediction_validity_from_sources).customize(
+            &mut fw_predicted_valid_from,
+            &mut bw_predicted_valid_from,
+            |cb| cb(),
+        );
 
         let upper_bound = (0..live_graph.num_arcs() as EdgeId)
             .map(|edge_id| live_graph.upper_bound(edge_id))
@@ -528,31 +530,37 @@ impl<'a> IntervalMinPotential<'a, LiveToPredictedBounds> {
                 }
             });
 
-        for edge_idx in 0..m {
-            let sources_idxs = catchup.fw_first_source[edge_idx] as usize..catchup.fw_first_source[edge_idx + 1] as usize;
-            let sources = &catchup.fw_sources[sources_idxs];
-
-            let any_required = sources.iter().map(|(_, s)| ShortcutSource::from(*s)).any(|source| match source {
-                ShortcutSource::Shortcut(down, up) => catchup.bw_required[down as usize] && catchup.fw_required[up as usize],
-                ShortcutSource::OriginalEdge(_) => true,
-                _ => false,
-            });
-            if !any_required {
-                catchup.fw_required[edge_idx] = false;
+        let disable_shortcuts_with_invalid_sources = |nodes: Range<usize>, edge_offset: usize, fw_required: &mut [bool], bw_required: &mut [bool]| {
+            for current_node in nodes {
+                let edges = cch.neighbor_edge_indices_usize(current_node as NodeId);
+                let (fw_required_below, fw_required) = fw_required.split_at_mut(edges.start - edge_offset);
+                let (bw_required_below, bw_required) = bw_required.split_at_mut(edges.start - edge_offset);
+                let process_edges = |requireds: &mut [bool], first_source: &[u32], sources: &[(FlTimestamp, ShortcutSourceData)]| {
+                    for (required, edge_idx) in requireds.iter_mut().zip(edges.clone()) {
+                        let sources_idxs = first_source[edge_idx] as usize..first_source[edge_idx + 1] as usize;
+                        let sources = &sources[sources_idxs];
+                        let any_required = sources.iter().map(|(_, s)| ShortcutSource::from(*s)).any(|source| match source {
+                            ShortcutSource::Shortcut(down, up) => {
+                                bw_required_below[down as usize - edge_offset] && fw_required_below[up as usize - edge_offset]
+                            }
+                            ShortcutSource::OriginalEdge(_) => true,
+                            _ => false,
+                        });
+                        if !any_required {
+                            *required = false;
+                        }
+                    }
+                };
+                process_edges(&mut fw_required[..edges.end - edges.start], &catchup.fw_first_source, &catchup.fw_sources);
+                process_edges(&mut bw_required[..edges.end - edges.start], &catchup.bw_first_source, &catchup.bw_sources);
             }
+        };
 
-            let sources_idxs = catchup.bw_first_source[edge_idx] as usize..catchup.bw_first_source[edge_idx + 1] as usize;
-            let sources = &catchup.bw_sources[sources_idxs];
-
-            let any_required = sources.iter().map(|(_, s)| ShortcutSource::from(*s)).any(|source| match source {
-                ShortcutSource::Shortcut(down, up) => catchup.bw_required[down as usize] && catchup.fw_required[up as usize],
-                ShortcutSource::OriginalEdge(_) => true,
-                _ => false,
-            });
-            if !any_required {
-                catchup.bw_required[edge_idx] = false;
-            }
-        }
+        SeperatorBasedParallelCustomization::new_undirected(cch, disable_shortcuts_with_invalid_sources, disable_shortcuts_with_invalid_sources).customize(
+            &mut catchup.fw_required,
+            &mut catchup.bw_required,
+            |cb| cb(),
+        );
 
         let fw_bounds = catchup
             .fw_static_bound
