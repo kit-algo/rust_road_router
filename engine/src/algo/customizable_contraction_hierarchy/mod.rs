@@ -37,6 +37,7 @@ pub struct CCH {
     backward_cch_edge_to_orig_arc: Vecs<EdgeIdT>,
     elimination_tree: Vec<InRangeOption<NodeId>>,
     inverted: ReversedGraphWithEdgeIds,
+    separator_tree: SeparatorTree,
 }
 
 impl Deconstruct for CCH {
@@ -106,15 +107,11 @@ impl CCH {
             node_order,
             forward_cch_edge_to_orig_arc,
             backward_cch_edge_to_orig_arc,
-            elimination_tree,
             tail,
             inverted,
+            separator_tree: SeparatorTree::new(&elimination_tree),
+            elimination_tree,
         }
-    }
-
-    /// Reconstruct the separators of the nested dissection order.
-    pub fn separators(&self) -> SeparatorTree {
-        SeparatorTree::new(&self.elimination_tree)
     }
 
     fn build_elimination_tree(graph: &UnweightedOwnedGraph) -> Vec<InRangeOption<NodeId>> {
@@ -217,6 +214,7 @@ impl CCH {
             elimination_tree: self.elimination_tree,
             forward_inverted,
             backward_inverted,
+            separator_tree: self.separator_tree,
         }
     }
 }
@@ -259,9 +257,7 @@ pub trait CCHT {
     fn node_order(&self) -> &NodeOrder;
 
     /// Reconstruct the separators of the nested dissection order.
-    fn separators(&self) -> SeparatorTree {
-        SeparatorTree::new(self.elimination_tree())
-    }
+    fn separators(&self) -> &SeparatorTree;
 }
 
 pub fn unpack_arc(
@@ -345,6 +341,10 @@ impl CCHT for CCH {
 
     fn elimination_tree(&self) -> &[InRangeOption<NodeId>] {
         &self.elimination_tree[..]
+    }
+
+    fn separators(&self) -> &SeparatorTree {
+        &self.separator_tree
     }
 }
 
@@ -503,6 +503,7 @@ pub struct DirectedCCH {
     elimination_tree: Vec<InRangeOption<NodeId>>,
     forward_inverted: ReversedGraphWithEdgeIds,
     backward_inverted: ReversedGraphWithEdgeIds,
+    separator_tree: SeparatorTree,
 }
 
 impl DirectedCCH {
@@ -557,5 +558,9 @@ impl CCHT for DirectedCCH {
 
     fn elimination_tree(&self) -> &[InRangeOption<NodeId>] {
         &self.elimination_tree[..]
+    }
+
+    fn separators(&self) -> &SeparatorTree {
+        &self.separator_tree
     }
 }

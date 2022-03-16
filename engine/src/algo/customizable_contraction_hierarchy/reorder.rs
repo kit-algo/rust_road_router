@@ -54,19 +54,19 @@ fn reorder_children_by_size(separators: &mut SeparatorTree) {
     }
 }
 
-fn to_ordering(seperators: SeparatorTree, order: &mut Vec<NodeId>) {
-    order.extend(seperators.nodes);
-    for child in seperators.children {
+fn to_ordering(seperators: &SeparatorTree, order: &mut Vec<NodeId>) {
+    order.extend(&seperators.nodes);
+    for child in &seperators.children {
         to_ordering(child, order);
     }
 }
 
 /// Try to reorder separator nodes of top levels such that they follow a linear order based on their geographic position
 pub fn reorder(cch: &CCH, latitude: &[f32], longitude: &[f32]) -> NodeOrder {
-    let mut separators = cch.separators();
+    let mut separators = cch.separators().clone();
     reorder_tree(&mut separators, 0, cch.node_order(), latitude, longitude);
     let mut order = Vec::new();
-    to_ordering(separators, &mut order);
+    to_ordering(&separators, &mut order);
 
     for rank in &mut order {
         *rank = cch.node_order.node(*rank);
@@ -80,7 +80,7 @@ pub fn reorder(cch: &CCH, latitude: &[f32], longitude: &[f32]) -> NodeOrder {
 pub fn reorder_for_seperator_based_customization(cch_order: &NodeOrder, mut separators: SeparatorTree) -> NodeOrder {
     reorder_children_by_size(&mut separators);
     let mut order = Vec::new();
-    to_ordering(separators, &mut order);
+    to_ordering(&separators, &mut order);
 
     for rank in &mut order {
         *rank = cch_order.node(*rank);
@@ -95,7 +95,7 @@ pub fn reorder_bfs(cch: &CCH) -> NodeOrder {
     let mut order = Vec::new();
 
     let mut queue = std::collections::VecDeque::new();
-    queue.push_back(&separators);
+    queue.push_back(separators);
 
     while let Some(sep) = queue.pop_front() {
         order.extend_from_slice(&sep.nodes);

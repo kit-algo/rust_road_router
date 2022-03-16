@@ -68,7 +68,6 @@ impl<F: Sync + Fn(Range<usize>, usize, usize, &mut [T], &mut [T], &mut [E], &mut
 /// Parallelization of basic customization.
 pub struct SeperatorBasedParallelCustomization<'a, T, F, G, C, E = ()> {
     cch: &'a C,
-    separators: SeparatorTree,
     customize_cell: F,
     customize_separator: G,
     _t: std::marker::PhantomData<T>,
@@ -125,14 +124,12 @@ where
     C: CCHT + Sync,
 {
     pub fn new_with_aux(cch: &'a C, customize_cell: F, customize_separator: G) -> Self {
-        let separators = cch.separators();
         if !cfg!(feature = "cch-disable-par") {
-            separators.validate_for_parallelization();
+            cch.separators().validate_for_parallelization();
         }
 
         Self {
             cch,
-            separators,
             customize_cell,
             customize_separator,
             _t: std::marker::PhantomData::<T>,
@@ -161,7 +158,7 @@ where
                         affinity::set_thread_affinity(&[available_cpus[thread.index()]]).unwrap();
                         setup(Box::new(|| thread.run()));
                     },
-                    |pool| pool.install(|| self.customize_tree(&self.separators, 0, upward, downward, up_aux, down_aux)),
+                    |pool| pool.install(|| self.customize_tree(self.cch.separators(), 0, upward, downward, up_aux, down_aux)),
                 )
                 .unwrap();
         }
@@ -271,7 +268,6 @@ impl<F: Sync + Fn(Range<usize>, *mut T, *mut T, *mut E, *mut E), T, E> SubgraphP
 
 pub struct SeperatorBasedPerfectParallelCustomization<'a, T, F, G, E = ()> {
     cch: &'a CCH,
-    separators: SeparatorTree,
     customize_cell: F,
     customize_separator: G,
     _t: std::marker::PhantomData<T>,
@@ -323,7 +319,6 @@ where
 
         Self {
             cch,
-            separators,
             customize_cell,
             customize_separator,
             _t: std::marker::PhantomData::<T>,
@@ -364,7 +359,7 @@ where
                     |pool| {
                         pool.install(|| {
                             self.customize_tree(
-                                &self.separators,
+                                self.cch.separators(),
                                 self.cch.num_nodes(),
                                 upward.as_mut_ptr(),
                                 downward.as_mut_ptr(),

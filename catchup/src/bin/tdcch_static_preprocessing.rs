@@ -37,7 +37,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let cch = contract(&graph, cch_order.clone());
     drop(cch_build_ctxt);
 
-    let cch_order = reorder_for_seperator_based_customization(&cch_order, cch.separators());
+    // TODO optimize away the clone
+    let cch_order = reorder_for_seperator_based_customization(&cch_order, cch.separators().clone());
     if !cch_folder.exists() {
         std::fs::create_dir(&cch_folder)?;
     }

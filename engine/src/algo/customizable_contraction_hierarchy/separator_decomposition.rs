@@ -2,6 +2,7 @@
 
 use super::*;
 
+#[derive(Clone)]
 pub struct SeparatorTree {
     pub nodes: Vec<NodeId>,
     pub children: Vec<SeparatorTree>,
