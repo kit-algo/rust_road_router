@@ -334,7 +334,11 @@ pub fn customize_perfect_without_rebuild(customized: &mut CustomizedBasic<CCH>) 
     (upward_modified, downward_modified)
 }
 
-fn rebuild_customized_perfect<'c>(customized: CustomizedBasic<'c, CCH>, upward_modified: &[bool], downward_modified: &[bool]) -> CustomizedPerfect<'c, CCH> {
+pub fn rebuild_customized_perfect<'c>(
+    customized: CustomizedBasic<'c, CCH>,
+    upward_modified: &[bool],
+    downward_modified: &[bool],
+) -> CustomizedPerfect<'c, CCH> {
     let cch = customized.cch;
     let n = cch.num_nodes();
     let m = cch.num_arcs();

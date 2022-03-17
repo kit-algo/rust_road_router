@@ -54,19 +54,54 @@ impl<P: TDPotential> TDPotential for TDPotentialForPermutated<P> {
 
 use std::ops::Range;
 
-pub struct MultiMetric<C> {
+pub fn ranges() -> Vec<Range<Timestamp>> {
+    // 1*24h
+    let mut ranges = vec![0..24 * 60 * 60 * 1000];
+    // 48*1h
+    let half_an_hour = 30 * 60 * 1000;
+    for i in 0..48 {
+        ranges.push(i * half_an_hour..(i + 3) * half_an_hour);
+    }
+    // 24*2h
+    let hour = 2 * half_an_hour;
+    for i in 0..24 {
+        ranges.push(i * hour..(i + 3) * hour);
+    }
+    // 12*4h
+    let two_hours = 2 * hour;
+    for i in 0..12 {
+        ranges.push(i * two_hours..(i + 3) * two_hours);
+    }
+    // 6*8h
+    let four_hours = 4 * hour;
+    for i in 0..6 {
+        ranges.push(i * four_hours..(i + 3) * four_hours);
+    }
+    // 4*12h
+    let six_hours = 6 * hour;
+    for i in 0..4 {
+        ranges.push(i * six_hours..(i + 3) * six_hours);
+    }
+    ranges
+}
+
+pub struct MultiMetric<'a> {
+    cch: &'a CCH,
     metric_ranges: Vec<(Range<Timestamp>, usize)>,
-    metrics: Vec<C>,
+    fw_graph: UnweightedOwnedGraph,
+    bw_graph: UnweightedOwnedGraph,
+    fw_metrics: Vec<Weight>,
+    bw_metrics: Vec<Weight>,
     stack: Vec<NodeId>,
     potentials: TimestampedVector<InRangeOption<Weight>>,
     backward_distances: TimestampedVector<Weight>,
     backward_parents: Vec<(NodeId, EdgeId)>,
-    upper_bound_dist: query::Server<C>,
+    upper_bound_dist: query::Server<CustomizedPerfect<'a, CCH>>,
     num_pot_computations: usize,
     current_metric: Option<usize>,
 }
 
-impl<'a> MultiMetric<CustomizedBasic<'a, CCH>> {
+impl<'a> MultiMetric<'a> {
     pub fn build(cch: &'a CCH, metric_ranges: Vec<Range<Timestamp>>, graph: &TDGraph) -> Self {
         let metrics: Vec<Box<[_]>> = metric_ranges
             .iter()
@@ -90,16 +125,64 @@ impl<'a> MultiMetric<CustomizedBasic<'a, CCH>> {
     pub fn new(cch: &'a CCH, metric_ranges: Vec<(Range<Timestamp>, usize)>, metrics: &[BorrowedGraph], upper_bound: BorrowedGraph) -> Self {
         let n = cch.num_nodes();
         let m = cch.num_arcs();
+
+        let mut upper_bound_customized = customize(cch, &upper_bound);
+        let modified = customization::customize_perfect_without_rebuild(&mut upper_bound_customized);
+
+        let global_lower_customized = customize(cch, &metrics[0]);
+
+        let mut fw_first_out = vec![0];
+        let mut bw_first_out = vec![0];
+        let mut fw_head = Vec::with_capacity(m);
+        let mut bw_head = Vec::with_capacity(m);
+
+        for node in 0..n {
+            for edge_id in cch.neighbor_edge_indices_usize(node) {
+                if upper_bound_customized.forward_graph().weight()[edge_id] >= global_lower_customized.forward_graph().weight()[edge_id] {
+                    fw_head.push(cch.head()[edge_id]);
+                }
+                if upper_bound_customized.backward_graph().weight()[edge_id] >= global_lower_customized.backward_graph().weight()[edge_id] {
+                    bw_head.push(cch.head()[edge_id]);
+                }
+            }
+            fw_first_out.push(fw_head.len() as EdgeId);
+            bw_first_out.push(bw_head.len() as EdgeId);
+        }
+
+        let (mut fw_metrics, mut bw_metrics) = metrics
+            .iter()
+            .flat_map(|m| {
+                let customized = customize(cch, m);
+                customized
+                    .forward_graph()
+                    .weight()
+                    .iter()
+                    .copied()
+                    .zip(customized.backward_graph().weight().iter().copied())
+            })
+            .unzip();
+
+        fw_metrics.retain(crate::util::with_index(|idx, _| {
+            upper_bound_customized.forward_graph().weight()[idx] >= global_lower_customized.forward_graph().weight()[idx]
+        }));
+        bw_metrics.retain(crate::util::with_index(|idx, _| {
+            upper_bound_customized.backward_graph().weight()[idx] >= global_lower_customized.backward_graph().weight()[idx]
+        }));
+
         Self {
+            cch,
             metric_ranges,
-            metrics: metrics.iter().map(|m| customize(cch, m)).collect(),
+            fw_graph: UnweightedOwnedGraph::new(fw_first_out, fw_head),
+            bw_graph: UnweightedOwnedGraph::new(bw_first_out, bw_head),
+            fw_metrics,
+            bw_metrics,
             stack: Vec::new(),
             backward_distances: TimestampedVector::new(n),
             backward_parents: vec![(n as NodeId, m as EdgeId); n],
             potentials: TimestampedVector::new(n),
             num_pot_computations: 0,
             current_metric: None,
-            upper_bound_dist: query::Server::new(customize(cch, &upper_bound)),
+            upper_bound_dist: query::Server::new(customization::rebuild_customized_perfect(upper_bound_customized, modified.0, modified.1)),
         }
     }
 }
@@ -122,7 +205,7 @@ fn range_contains(covered: &Range<Timestamp>, to_cover: &Range<Timestamp>) -> bo
     covered.start <= to_cover.start && covered.end >= to_cover.end
 }
 
-impl<C: Customized> TDPotential for MultiMetric<C> {
+impl TDPotential for MultiMetric<'_> {
     fn init(&mut self, source: NodeId, target: NodeId, departure: Timestamp) {
         let departure = departure % period();
         self.num_pot_computations = 0;
@@ -143,14 +226,15 @@ impl<C: Customized> TDPotential for MultiMetric<C> {
                 }
             }
 
-            let metric = &self.metrics[best_range.as_ref().unwrap().1];
-            let bw_graph = metric.backward_graph();
+            let metric_idx = best_range.as_ref().unwrap().1;
+            let weights = &self.bw_metrics[self.bw_graph.num_arcs() * metric_idx..self.bw_graph.num_arcs() * (metric_idx + 1)];
+            let bw_graph = BorrowedGraph::new(self.bw_graph.first_out(), self.bw_graph.head(), weights);
 
-            let target = metric.cch().node_order().rank(target);
+            let target = self.cch.node_order().rank(target);
 
             let mut walk = EliminationTreeWalk::query(
                 &bw_graph,
-                metric.cch().elimination_tree(),
+                self.cch.elimination_tree(),
                 &mut self.backward_distances,
                 &mut self.backward_parents,
                 target,
@@ -171,16 +255,17 @@ impl<C: Customized> TDPotential for MultiMetric<C> {
         }
     }
     fn potential(&mut self, node: NodeId, _t: Option<Timestamp>) -> Option<Weight> {
-        self.current_metric.and_then(|best_metric| {
-            let metric = &self.metrics[best_metric];
+        self.current_metric.and_then(|metric_idx| {
+            let weights = &self.fw_metrics[self.fw_graph.num_arcs() * metric_idx..self.fw_graph.num_arcs() * (metric_idx + 1)];
+            let fw_graph = BorrowedGraph::new(self.fw_graph.first_out(), self.fw_graph.head(), weights);
 
-            let node = metric.cch().node_order().rank(node);
+            let node = self.cch.node_order().rank(node);
 
             let mut cur_node = node;
             while self.potentials[cur_node as usize].value().is_none() {
                 self.num_pot_computations += 1;
                 self.stack.push(cur_node);
-                if let Some(parent) = metric.cch().elimination_tree()[cur_node as usize].value() {
+                if let Some(parent) = self.cch.elimination_tree()[cur_node as usize].value() {
                     cur_node = parent;
                 } else {
                     break;
@@ -190,7 +275,7 @@ impl<C: Customized> TDPotential for MultiMetric<C> {
             while let Some(node) = self.stack.pop() {
                 let mut dist = self.backward_distances[node as usize];
 
-                for edge in LinkIterable::<Link>::link_iter(&metric.forward_graph(), node) {
+                for edge in LinkIterable::<Link>::link_iter(&fw_graph, node) {
                     dist = min(dist, edge.weight + self.potentials[edge.node as usize].value().unwrap())
                 }
 
