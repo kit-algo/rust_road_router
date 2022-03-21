@@ -60,27 +60,27 @@ pub fn ranges() -> Vec<Range<Timestamp>> {
     // 48*1h
     let half_an_hour = 30 * 60 * 1000;
     for i in 0..48 {
-        ranges.push(i * half_an_hour..(i + 3) * half_an_hour);
+        ranges.push(i * half_an_hour..(i + 2) * half_an_hour);
     }
     // 24*2h
     let hour = 2 * half_an_hour;
     for i in 0..24 {
-        ranges.push(i * hour..(i + 3) * hour);
+        ranges.push(i * hour..(i + 2) * hour);
     }
     // 12*4h
     let two_hours = 2 * hour;
     for i in 0..12 {
-        ranges.push(i * two_hours..(i + 3) * two_hours);
+        ranges.push(i * two_hours..(i + 2) * two_hours);
     }
     // 6*8h
     let four_hours = 4 * hour;
     for i in 0..6 {
-        ranges.push(i * four_hours..(i + 3) * four_hours);
+        ranges.push(i * four_hours..(i + 2) * four_hours);
     }
     // 4*12h
     let six_hours = 6 * hour;
     for i in 0..4 {
-        ranges.push(i * six_hours..(i + 3) * six_hours);
+        ranges.push(i * six_hours..(i + 2) * six_hours);
     }
     ranges
 }
@@ -271,7 +271,7 @@ impl TDPotential for MultiMetric<'_> {
                 let mut dist = self.backward_distances[node as usize];
 
                 for edge in LinkIterable::<Link>::link_iter(&fw_graph, node) {
-                    dist = min(dist, edge.weight + self.potentials[edge.node as usize].value().unwrap())
+                    dist = min(dist, edge.weight + unsafe { self.potentials.get_unchecked(edge.node as usize).assume_some() })
                 }
 
                 self.potentials[node as usize] = InRangeOption::some(dist);
