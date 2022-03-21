@@ -158,10 +158,10 @@ impl<'a> MultiMetric<'a> {
             .unzip();
 
         fw_metrics.retain(crate::util::with_index(|idx, _| {
-            upper_bound_customized.forward_graph().weight()[idx] >= global_lower_customized.forward_graph().weight()[idx]
+            upper_bound_customized.forward_graph().weight()[idx % m] >= global_lower_customized.forward_graph().weight()[idx % m]
         }));
         bw_metrics.retain(crate::util::with_index(|idx, _| {
-            upper_bound_customized.backward_graph().weight()[idx] >= global_lower_customized.backward_graph().weight()[idx]
+            upper_bound_customized.backward_graph().weight()[idx % m] >= global_lower_customized.backward_graph().weight()[idx % m]
         }));
 
         Self {
