@@ -388,6 +388,10 @@ impl<'a, C: CCHT> CustomizedBasic<'a, C> {
             down_unpacking,
         }
     }
+
+    pub fn into_weights(self) -> (Vec<Weight>, Vec<Weight>) {
+        (self.upward, self.downward)
+    }
 }
 impl<'a, C: CCHT> Customized for CustomizedBasic<'a, C> {
     type CCH = C;

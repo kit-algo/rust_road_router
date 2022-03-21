@@ -136,7 +136,7 @@ impl<'a> MultiMetric<'a> {
         let mut fw_head = Vec::with_capacity(m);
         let mut bw_head = Vec::with_capacity(m);
 
-        for node in 0..n {
+        for node in 0..n as NodeId {
             for edge_id in cch.neighbor_edge_indices_usize(node) {
                 if upper_bound_customized.forward_graph().weight()[edge_id] >= global_lower_customized.forward_graph().weight()[edge_id] {
                     fw_head.push(cch.head()[edge_id]);
@@ -149,16 +149,11 @@ impl<'a> MultiMetric<'a> {
             bw_first_out.push(bw_head.len() as EdgeId);
         }
 
-        let (mut fw_metrics, mut bw_metrics) = metrics
+        let (mut fw_metrics, mut bw_metrics): (Vec<_>, Vec<_>) = metrics
             .iter()
             .flat_map(|m| {
-                let customized = customize(cch, m);
-                customized
-                    .forward_graph()
-                    .weight()
-                    .iter()
-                    .copied()
-                    .zip(customized.backward_graph().weight().iter().copied())
+                let (fw, bw) = customize(cch, m).into_weights();
+                fw.into_iter().zip(bw.into_iter())
             })
             .unzip();
 
@@ -182,7 +177,7 @@ impl<'a> MultiMetric<'a> {
             potentials: TimestampedVector::new(n),
             num_pot_computations: 0,
             current_metric: None,
-            upper_bound_dist: query::Server::new(customization::rebuild_customized_perfect(upper_bound_customized, modified.0, modified.1)),
+            upper_bound_dist: query::Server::new(customization::rebuild_customized_perfect(upper_bound_customized, &modified.0, &modified.1)),
         }
     }
 }
