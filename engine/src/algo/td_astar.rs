@@ -52,62 +52,91 @@ impl<P: TDPotential> TDPotential for TDPotentialForPermutated<P> {
     }
 }
 
-use std::ops::Range;
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TRange<T> {
+    pub start: T,
+    pub end: T,
+}
 
-pub fn ranges() -> Vec<Range<Timestamp>> {
-    // 1*24h
-    let mut ranges = vec![0..24 * 60 * 60 * 1000];
+impl TRange<Timestamp> {
+    fn includes_instant(self, instant: Timestamp) -> bool {
+        self.start <= instant && instant < self.end
+    }
+
+    fn duration(&self) -> Weight {
+        self.end - self.start
+    }
+}
+
+pub fn ranges() -> Vec<TRange<Timestamp>> {
+    // all day
+    let mut ranges = vec![TRange { start: 0, end: INFINITY }];
     // 48*1h
     let half_an_hour = 30 * 60 * 1000;
     for i in 0..48 {
-        ranges.push(i * half_an_hour..(i + 2) * half_an_hour);
+        ranges.push(TRange {
+            start: i * half_an_hour,
+            end: (i + 2) * half_an_hour,
+        });
     }
     // 24*2h
     let hour = 2 * half_an_hour;
     for i in 0..24 {
-        ranges.push(i * hour..(i + 2) * hour);
+        ranges.push(TRange {
+            start: i * hour,
+            end: (i + 2) * hour,
+        });
     }
     // 12*4h
     let two_hours = 2 * hour;
     for i in 0..12 {
-        ranges.push(i * two_hours..(i + 2) * two_hours);
+        ranges.push(TRange {
+            start: i * two_hours,
+            end: (i + 2) * two_hours,
+        });
     }
     // 6*8h
     let four_hours = 4 * hour;
     for i in 0..6 {
-        ranges.push(i * four_hours..(i + 2) * four_hours);
+        ranges.push(TRange {
+            start: i * four_hours,
+            end: (i + 2) * four_hours,
+        });
     }
     // 4*12h
     let six_hours = 6 * hour;
     for i in 0..4 {
-        ranges.push(i * six_hours..(i + 2) * six_hours);
+        ranges.push(TRange {
+            start: i * six_hours,
+            end: (i + 2) * six_hours,
+        });
     }
     ranges
 }
 
 pub struct MultiMetric<'a> {
     cch: &'a CCH,
-    metric_ranges: Vec<(Range<Timestamp>, usize)>,
+    metric_ranges: Vec<(TRange<Timestamp>, usize)>,
     fw_graph: UnweightedOwnedGraph,
     bw_graph: UnweightedOwnedGraph,
     fw_metrics: Vec<Weight>,
     bw_metrics: Vec<Weight>,
     stack: Vec<NodeId>,
-    potentials: TimestampedVector<InRangeOption<Weight>>,
+    potentials: TimestampedVector<InRangeOption<(Weight, u32)>>,
     backward_distances: TimestampedVector<Weight>,
     backward_parents: Vec<(NodeId, EdgeId)>,
     upper_bound_dist: query::Server<CustomizedPerfect<'a, CCH>>,
     num_pot_computations: usize,
-    current_metric: Option<usize>,
+    current_metrics: Vec<(TRange<Timestamp>, usize)>,
 }
 
 impl<'a> MultiMetric<'a> {
-    pub fn build(cch: &'a CCH, metric_ranges: Vec<Range<Timestamp>>, graph: &TDGraph) -> Self {
+    pub fn build(cch: &'a CCH, metric_ranges: Vec<TRange<Timestamp>>, graph: &TDGraph) -> Self {
         let metrics: Vec<Box<[_]>> = metric_ranges
             .iter()
             .map(|r| {
                 (0..graph.num_arcs())
-                    .map(|e| graph.travel_time_function(e as EdgeId).lower_bound_in_range(r.clone()))
+                    .map(|e| graph.travel_time_function(e as EdgeId).lower_bound_in_range(r.start..r.end))
                     .collect()
             })
             .collect();
@@ -122,7 +151,7 @@ impl<'a> MultiMetric<'a> {
         )
     }
 
-    pub fn new(cch: &'a CCH, metric_ranges: Vec<(Range<Timestamp>, usize)>, metrics: &[BorrowedGraph], upper_bound: BorrowedGraph) -> Self {
+    pub fn new(cch: &'a CCH, metric_ranges: Vec<(TRange<Timestamp>, usize)>, metrics: &[BorrowedGraph], upper_bound: BorrowedGraph) -> Self {
         let n = cch.num_nodes();
         let m = cch.num_arcs();
 
@@ -176,28 +205,10 @@ impl<'a> MultiMetric<'a> {
             backward_parents: vec![(n as NodeId, m as EdgeId); n],
             potentials: TimestampedVector::new(n),
             num_pot_computations: 0,
-            current_metric: None,
+            current_metrics: Vec::new(),
             upper_bound_dist: query::Server::new(customization::rebuild_customized_perfect(upper_bound_customized, &modified.0, &modified.1)),
         }
     }
-}
-
-fn range_included(covered: &Range<Timestamp>, to_cover: &Range<Timestamp>) -> bool {
-    use crate::datastr::graph::time_dependent::math::RangeExtensions;
-    debug_assert!(covered.start < period());
-    debug_assert!(to_cover.start < period());
-    let (covered_first, mut covered_second) = covered.clone().split(period());
-    let (to_cover_first, mut to_cover_second) = to_cover.clone().split(period());
-    covered_second.start %= period();
-    covered_second.end %= period();
-    to_cover_second.start %= period();
-    to_cover_second.end %= period();
-    (to_cover_first.is_empty() || range_contains(&covered_first, &to_cover_first) || range_contains(&covered_second, &to_cover_first))
-        && (to_cover_second.is_empty() || range_contains(&covered_first, &to_cover_second) || range_contains(&covered_second, &to_cover_second))
-}
-
-fn range_contains(covered: &Range<Timestamp>, to_cover: &Range<Timestamp>) -> bool {
-    covered.start <= to_cover.start && covered.end >= to_cover.end
 }
 
 impl TDPotential for MultiMetric<'_> {
@@ -205,23 +216,43 @@ impl TDPotential for MultiMetric<'_> {
         let departure = departure % period();
         self.num_pot_computations = 0;
         self.potentials.reset();
+        self.current_metrics.clear();
 
         if let Some(upper_bound) = self.upper_bound_dist.query(Query { from: source, to: target }).distance() {
             let latest_arrival = departure + upper_bound;
-            let mut best_range: Option<(Range<Timestamp>, usize)> = None;
-            for (range, idx) in &self.metric_ranges {
-                if range_included(range, &(departure..latest_arrival + 1)) {
-                    if let Some(best_range) = &mut best_range {
-                        if range.end - range.start < best_range.0.end - best_range.0.start {
-                            *best_range = (range.clone(), *idx);
-                        }
-                    } else {
-                        best_range = Some((range.clone(), *idx));
+            let end_on_day = latest_arrival / period();
+            self.current_metrics.push(self.metric_ranges[0]);
+            for &(mut range, idx) in &self.metric_ranges[1..] {
+                for _ in 0..=end_on_day {
+                    if range.includes_instant(latest_arrival) {
+                        self.current_metrics.push((range, idx));
                     }
+                    range.start += period();
+                    range.end += period();
                 }
             }
 
-            let metric_idx = best_range.as_ref().unwrap().1;
+            self.current_metrics.sort_unstable_by_key(|(r, _)| (r.start, r.end));
+            let first_inner = self
+                .current_metrics
+                .iter()
+                .position(|(r, _)| !r.includes_instant(departure))
+                .unwrap_or(self.current_metrics.len());
+            if first_inner > 1 {
+                self.current_metrics.drain(..first_inner - 1);
+            }
+
+            let mut prev_duration = self.current_metrics[0].0.duration() + 1;
+            self.current_metrics.retain(|(r, _)| {
+                if r.duration() < prev_duration {
+                    prev_duration = r.duration();
+                    true
+                } else {
+                    false
+                }
+            });
+
+            let metric_idx = self.current_metrics[0].1;
             let weights = &self.bw_metrics[self.bw_graph.num_arcs() * metric_idx..self.bw_graph.num_arcs() * (metric_idx + 1)];
             let bw_graph = BorrowedGraph::new(self.bw_graph.first_out(), self.bw_graph.head(), weights);
 
@@ -243,22 +274,37 @@ impl TDPotential for MultiMetric<'_> {
                     walk.next();
                 }
             }
-
-            self.current_metric = Some(best_range.unwrap().1);
-        } else {
-            self.current_metric = None;
         }
     }
-    fn potential(&mut self, node: NodeId, _t: Option<Timestamp>) -> Option<Weight> {
-        self.current_metric.and_then(|metric_idx| {
+    fn potential(&mut self, node: NodeId, t: Option<Timestamp>) -> Option<Weight> {
+        let relevant_idx = if let Some(t) = t {
+            debug_assert!(t < period() * 2);
+            let mut last_valid = 0;
+            for (idx, (r, _)) in self.current_metrics.iter().enumerate() {
+                if r.includes_instant(t) {
+                    last_valid = idx;
+                } else {
+                    break;
+                }
+            }
+            last_valid
+        } else {
+            0
+        };
+
+        self.current_metrics.get(relevant_idx).and_then(|(_, metric_idx)| {
             let weights = &self.fw_metrics[self.fw_graph.num_arcs() * metric_idx..self.fw_graph.num_arcs() * (metric_idx + 1)];
             let fw_graph = BorrowedGraph::new(self.fw_graph.first_out(), self.fw_graph.head(), weights);
 
             let node = self.cch.node_order().rank(node);
 
             let mut cur_node = node;
-            while self.potentials[cur_node as usize].value().is_none() {
-                self.num_pot_computations += 1;
+            loop {
+                if let Some((_estimate, earliest_metric_idx)) = self.potentials[cur_node as usize].value() {
+                    if earliest_metric_idx as usize <= relevant_idx {
+                        break;
+                    }
+                }
                 self.stack.push(cur_node);
                 if let Some(parent) = self.cch.elimination_tree()[cur_node as usize].value() {
                     cur_node = parent;
@@ -268,16 +314,20 @@ impl TDPotential for MultiMetric<'_> {
             }
 
             while let Some(node) = self.stack.pop() {
-                let mut dist = self.backward_distances[node as usize];
+                self.num_pot_computations += 1;
+                let mut dist = self.potentials[node as usize]
+                    .value()
+                    .map(|(est, _)| est)
+                    .unwrap_or(self.backward_distances[node as usize]);
 
                 for edge in LinkIterable::<Link>::link_iter(&fw_graph, node) {
-                    dist = min(dist, edge.weight + unsafe { self.potentials.get_unchecked(edge.node as usize).assume_some() })
+                    dist = min(dist, edge.weight + unsafe { self.potentials.get_unchecked(edge.node as usize).assume_some().0 })
                 }
 
-                self.potentials[node as usize] = InRangeOption::some(dist);
+                self.potentials[node as usize] = InRangeOption::some((dist, relevant_idx as u32));
             }
 
-            let dist = self.potentials[node as usize].value().unwrap();
+            let dist = self.potentials[node as usize].value().unwrap().0;
             if dist < INFINITY {
                 Some(dist)
             } else {
@@ -514,6 +564,7 @@ impl<'a> IntervalMinPotential<'a, LiveToPredictedBounds> {
                 Timestamp as FlTimestamp,
             },
         };
+        use std::ops::Range;
 
         let longest_live = (0..live_graph.num_arcs())
             .into_par_iter()
