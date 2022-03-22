@@ -50,14 +50,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut blocked_but_also_long_term: usize = 0;
     let max_t_soon = period();
     report!("max_t_soon", max_t_soon);
-    let mut max_duration = 0;
+    let mut live_counter = 0;
     for (edge, weight, duration) in live_data {
         if weight >= INFINITY {
             blocked += 1;
         }
         if duration < max_t_soon {
             live[edge as usize] = InRangeOption::some((weight, duration + t_live));
-            max_duration = std::cmp::max(max_duration, duration);
+            live_counter += 1;
         } else {
             if weight >= INFINITY && duration >= max_t_soon {
                 blocked_but_also_long_term += 1;
@@ -65,6 +65,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             not_really_live += 1;
         }
     }
+    report!("num_applied_live_dates", live_counter);
     report!("num_long_term_live_reports", not_really_live);
     report!("blocked", blocked);
     report!("num_long_term_blocks", blocked_but_also_long_term);
@@ -84,7 +85,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let customized_folder = path.join("customized_corridor_mins");
     let catchup = customization::ftd_for_pot::PotData::reconstruct_from(&customized_folder)?;
-    let interval_min_pot = IntervalMinPotential::new_for_live(&cch, catchup, &live_graph, t_live);
+    let interval_min_pot = report_time_with_key("pot_creation", "pot_creation", || {
+        IntervalMinPotential::new_for_live(&cch, catchup, &live_graph, t_live)
+    });
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs");
 
@@ -106,41 +109,36 @@ fn main() -> Result<(), Box<dyn Error>> {
         |_, _, _| None,
     );
 
-    // let mut ranges = vec![0..24 * 60 * 60 * 1000];
-    // for i in 0..48 {
-    //     ranges.push(i * 30 * 60 * 1000..(i + 3) * 30 * 60 * 1000)
-    // }
-
-    // let multi_metric_pot = {
-    //     let _blocked = block_reporting();
-    //     MultiMetric::build(&cch, ranges, &graph)
-    // };
-
-    // let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
-    // let mut mm_server = Server::new(&graph, multi_metric_pot, TDDijkstraOps::default());
-    // drop(virtual_topocore_ctxt);
-
-    // experiments::run_random_td_queries(
-    //     n,
-    //     t_live..=t_live,
-    //     &mut mm_server,
-    //     &mut rng.clone(),
-    //     &mut algo_runs_ctxt,
-    //     experiments::chpot::num_queries(),
-    //     |_, _, _, _| (),
-    //     |from, to, departure| {
-    //         let _blocked = block_reporting();
-    //         Some(server.td_query(TDQuery { from, to, departure }).distance())
-    //     },
-    // );
+    let multi_metric_pot = {
+        let _blocked = block_reporting();
+        MultiMetric::build_live(&cch, td_astar::ranges(), &live_graph, t_live)
+    };
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
-    let mut cb_server = Server::new(&live_graph, interval_min_pot, PessimisticLiveTDDijkstraOps::default());
+    let mut mm_server = Server::new(&live_graph, multi_metric_pot, PessimisticLiveTDDijkstraOps::default());
     drop(virtual_topocore_ctxt);
+
+    experiments::run_random_td_queries(
+        n,
+        t_live..=t_live,
+        &mut mm_server,
+        &mut rng.clone(),
+        &mut algo_runs_ctxt,
+        experiments::chpot::num_queries(),
+        |_, _, _, _| (),
+        |from, to, departure| {
+            let _blocked = block_reporting();
+            Some(server.td_query(TDQuery { from, to, departure }).distance())
+        },
+    );
 
     let mut total_live: u64 = 0;
     let mut total_td: u64 = 0;
     let mut num_affected: u64 = 0;
+
+    let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
+    let mut cb_server = Server::new(&live_graph, interval_min_pot, PessimisticLiveTDDijkstraOps::default());
+    drop(virtual_topocore_ctxt);
 
     experiments::run_random_td_queries(
         n,
@@ -151,6 +149,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         experiments::chpot::num_queries(),
         |_, _, _, _| (),
         // |_, _, _| None,
+        // |from, to, departure| {
+        //     let _blocked = block_reporting();
+        //     Some(server.td_query(TDQuery { from, to, departure }).distance())
+        // },
         |from, to, departure| {
             let _blocked = block_reporting();
             let live_result = server.td_query(TDQuery { from, to, departure }).distance();

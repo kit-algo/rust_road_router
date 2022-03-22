@@ -59,11 +59,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         |_, _, _| None,
     );
 
-    let mut ranges = vec![0..24 * 60 * 60 * 1000];
-    for i in 0..48 {
-        ranges.push(i * 30 * 60 * 1000..(i + 3) * 30 * 60 * 1000)
-    }
-
     let multi_metric_pot = {
         let _blocked = block_reporting();
         MultiMetric::build(&cch, td_astar::ranges(), &graph)
