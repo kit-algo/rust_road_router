@@ -258,7 +258,12 @@ impl<'a> MultiMetric<'a> {
         let mut upper_bound_customized = customize(cch, &upper_bound);
         let modified = customization::customize_perfect_without_rebuild(&mut upper_bound_customized);
 
-        let global_lower_customized = customize(cch, &metrics[0]);
+        let global_lower_idx = metric_ranges
+            .iter()
+            .find(|(r, _, periodic)| !periodic && r.start == 0 && r.end == INFINITY)
+            .unwrap()
+            .1 as usize;
+        let global_lower_customized = customize(cch, &metrics[global_lower_idx]);
 
         let mut fw_first_out = vec![0];
         let mut bw_first_out = vec![0];
