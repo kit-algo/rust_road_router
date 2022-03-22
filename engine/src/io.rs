@@ -65,6 +65,12 @@ impl<T: Copy> DataBytes for Vec<T> {
     }
 }
 
+impl<T: Copy> DataBytes for Box<[T]> {
+    fn data_bytes(&self) -> &[u8] {
+        self[..].data_bytes()
+    }
+}
+
 impl<T: Copy> DataBytesMut for [T] {
     fn data_bytes_mut(&mut self) -> &mut [u8] {
         let num_bytes = self.len() * mem::size_of::<T>();

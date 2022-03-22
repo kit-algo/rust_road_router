@@ -436,8 +436,6 @@ impl TDPotential for MultiMetric<'_> {
     }
 }
 
-use std::rc::Rc;
-
 pub trait TDBounds: Copy {
     fn lower(&self) -> Weight;
     fn td_upper(&self, t: Timestamp) -> Weight;
@@ -456,7 +454,7 @@ impl TDBounds for (Weight, Weight) {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct LiveToPredictedBounds {
     lower: Weight,
     live_upper: Weight,
@@ -484,11 +482,11 @@ impl TDBounds for LiveToPredictedBounds {
 // Careful, this one works in reversed direction compared to most of the other CH-Pots
 pub struct MinMaxPotential<'a, W> {
     cch: &'a CCH,
+    fw_graph: OwnedGraph<W>,
+    bw_graph: OwnedGraph<W>,
     stack: Vec<NodeId>,
     fw_distances: TimestampedVector<(Weight, Weight)>,
     potentials: TimestampedVector<InRangeOption<(Weight, Weight)>>,
-    forward_cch_graph: FirstOutGraph<Rc<[EdgeId]>, Rc<[NodeId]>, Vec<W>, W>,
-    backward_cch_graph: FirstOutGraph<Rc<[EdgeId]>, Rc<[NodeId]>, Vec<W>, W>,
     departure: Timestamp,
 }
 
@@ -500,7 +498,7 @@ impl<'a, W: TDBounds> MinMaxPotential<'a, W> {
         self.fw_distances[target as usize] = (0, 0);
         let mut node = Some(target);
         while let Some(current) = node {
-            for (NodeIdT(head), bounds, EdgeIdT(_)) in LinkIterable::<(NodeIdT, W, EdgeIdT)>::link_iter(&self.forward_cch_graph, current) {
+            for (NodeIdT(head), bounds, EdgeIdT(_)) in LinkIterable::<(NodeIdT, W, EdgeIdT)>::link_iter(&self.fw_graph, current) {
                 self.fw_distances[head as usize].0 = min(self.fw_distances[head as usize].0, self.fw_distances[current as usize].0 + bounds.lower());
                 self.fw_distances[head as usize].1 = min(
                     self.fw_distances[head as usize].1,
@@ -525,7 +523,7 @@ impl<'a, W: TDBounds> MinMaxPotential<'a, W> {
         while let Some(node) = self.stack.pop() {
             let mut dist = self.fw_distances[node as usize];
 
-            for (NodeIdT(head), bounds, EdgeIdT(_)) in LinkIterable::<(NodeIdT, W, EdgeIdT)>::link_iter(&self.backward_cch_graph, node) {
+            for (NodeIdT(head), bounds, EdgeIdT(_)) in LinkIterable::<(NodeIdT, W, EdgeIdT)>::link_iter(&self.bw_graph, node) {
                 let (head_lower, head_upper) = unsafe { self.potentials.get_unchecked(head as usize).assume_some() };
                 dist.0 = min(dist.0, bounds.lower() + head_lower);
                 dist.1 = min(dist.1, bounds.td_upper(self.departure + head_lower) + head_upper);
@@ -543,10 +541,34 @@ impl<'a, W: TDBounds> MinMaxPotential<'a, W> {
     }
 }
 
+impl<W: Copy> crate::io::Deconstruct for MinMaxPotential<'_, W> {
+    fn save_each(&self, store: &dyn Fn(&str, &dyn crate::io::Save) -> std::io::Result<()>) -> std::io::Result<()> {
+        store("fw_graph", &crate::io::Sub(&self.fw_graph))?;
+        store("bw_graph", &crate::io::Sub(&self.bw_graph))?;
+        Ok(())
+    }
+}
+
+impl<'a, W: Copy + Default> crate::io::ReconstructPrepared<MinMaxPotential<'a, W>> for &'a CCH {
+    fn reconstruct_with(self, loader: crate::io::Loader) -> std::io::Result<MinMaxPotential<'a, W>> {
+        let _blocked = block_reporting();
+        let n = self.num_nodes();
+        Ok(MinMaxPotential {
+            cch: self,
+            fw_graph: loader.reconstruct("fw_graph")?,
+            bw_graph: loader.reconstruct("bw_graph")?,
+            stack: Vec::new(),
+            fw_distances: TimestampedVector::new(n),
+            potentials: TimestampedVector::new(n),
+            departure: INFINITY,
+        })
+    }
+}
+
 pub struct IntervalMinPotential<'a, W> {
     minmax_pot: MinMaxPotential<'a, W>,
-    fw_graph: UnweightedFirstOutGraph<Rc<[EdgeId]>, Rc<[NodeId]>>,
-    bw_graph: UnweightedFirstOutGraph<Rc<[EdgeId]>, Rc<[NodeId]>>,
+    fw_graph: UnweightedOwnedGraph,
+    bw_graph: UnweightedOwnedGraph,
     fw_weights: Vec<Weight>,
     bw_weights: Vec<Weight>,
     stack: Vec<NodeId>,
@@ -557,6 +579,40 @@ pub struct IntervalMinPotential<'a, W> {
     bucket_to_metric: Box<[usize]>,
     num_pot_computations: usize,
     num_metrics: usize,
+}
+
+impl<W: Copy> crate::io::Deconstruct for IntervalMinPotential<'_, W> {
+    fn save_each(&self, store: &dyn Fn(&str, &dyn crate::io::Save) -> std::io::Result<()>) -> std::io::Result<()> {
+        store("minmax_pot", &crate::io::Sub(&self.minmax_pot))?;
+        store("fw_graph", &crate::io::Sub(&self.fw_graph))?;
+        store("bw_graph", &crate::io::Sub(&self.bw_graph))?;
+        store("fw_weights", &self.fw_weights)?;
+        store("bw_weights", &self.bw_weights)?;
+        store("bucket_to_metric", &self.bucket_to_metric)?;
+        Ok(())
+    }
+}
+
+impl<'a, W: Copy + Default> crate::io::ReconstructPrepared<IntervalMinPotential<'a, W>> for &'a CCH {
+    fn reconstruct_with(self, loader: crate::io::Loader) -> std::io::Result<IntervalMinPotential<'a, W>> {
+        let _blocked = block_reporting();
+        let n = self.num_nodes();
+        Ok(IntervalMinPotential {
+            minmax_pot: loader.reconstruct_prepared("minmax_pot", self)?,
+            fw_graph: loader.reconstruct("fw_graph")?,
+            bw_graph: loader.reconstruct("bw_graph")?,
+            fw_weights: loader.load("fw_weights")?,
+            bw_weights: loader.load("bw_weights")?,
+            bucket_to_metric: loader.load("bucket_to_metric")?,
+            stack: Vec::new(),
+            backward_distances: TimestampedVector::new(n),
+            potentials: TimestampedVector::new(n),
+            departure: INFINITY,
+            global_upper: INFINITY,
+            num_pot_computations: 0,
+            num_metrics: 0,
+        })
+    }
 }
 
 impl<'a> IntervalMinPotential<'a, (Weight, Weight)> {
@@ -874,10 +930,6 @@ impl<'a, W: TDBounds> IntervalMinPotential<'a, W> {
             fw_first_out.push(fw_head.len() as EdgeId);
             bw_first_out.push(bw_head.len() as EdgeId);
         }
-        let fw_first_out: std::rc::Rc<[_]> = fw_first_out.into();
-        let bw_first_out: std::rc::Rc<[_]> = bw_first_out.into();
-        let fw_head: std::rc::Rc<[_]> = fw_head.into();
-        let bw_head: std::rc::Rc<[_]> = bw_head.into();
 
         let fw_bucket_graph = UnweightedFirstOutGraph::new(fw_first_out, fw_head);
         let bw_bucket_graph = UnweightedFirstOutGraph::new(bw_first_out, bw_head);
@@ -901,11 +953,6 @@ impl<'a, W: TDBounds> IntervalMinPotential<'a, W> {
             bw_first_out.push(bw_head.len() as EdgeId);
         }
 
-        let fw_first_out: std::rc::Rc<[_]> = fw_first_out.into();
-        let bw_first_out: std::rc::Rc<[_]> = bw_first_out.into();
-        let fw_head: std::rc::Rc<[_]> = fw_head.into();
-        let bw_head: std::rc::Rc<[_]> = bw_head.into();
-
         fw_bucket_bounds.retain(crate::util::with_index(|idx, _| Self::keep(&fw_static_bound[idx % m]) && fw_required[idx % m]));
         bw_bucket_bounds.retain(crate::util::with_index(|idx, _| Self::keep(&bw_static_bound[idx % m]) && bw_required[idx % m]));
 
@@ -918,8 +965,8 @@ impl<'a, W: TDBounds> IntervalMinPotential<'a, W> {
                 stack: Vec::new(),
                 potentials: TimestampedVector::new(n),
                 fw_distances: TimestampedVector::new(n),
-                forward_cch_graph: FirstOutGraph::new(fw_first_out, fw_head, fw_static_bound),
-                backward_cch_graph: FirstOutGraph::new(bw_first_out, bw_head, bw_static_bound),
+                fw_graph: FirstOutGraph::new(fw_first_out, fw_head, fw_static_bound),
+                bw_graph: FirstOutGraph::new(bw_first_out, bw_head, bw_static_bound),
                 departure: INFINITY,
             },
             fw_graph: fw_bucket_graph,

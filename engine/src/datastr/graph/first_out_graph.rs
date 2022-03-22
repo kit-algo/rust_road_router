@@ -79,11 +79,12 @@ where
     }
 }
 
-impl<FirstOutContainer, HeadContainer, WeightContainer> Deconstruct for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+impl<FirstOutContainer, HeadContainer, WeightContainer, W> Deconstruct for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer, W>
 where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
-    WeightContainer: AsRef<[Weight]>,
+    WeightContainer: AsRef<[W]>,
+    W: Copy,
 {
     fn save_each(&self, store: &dyn Fn(&str, &dyn Save) -> std::io::Result<()>) -> std::io::Result<()> {
         store("first_out", &self.first_out())?;
@@ -93,11 +94,11 @@ where
     }
 }
 
-impl<FirstOutContainer, HeadContainer, WeightContainer> Reconstruct for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+impl<FirstOutContainer, HeadContainer, WeightContainer, W> Reconstruct for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer, W>
 where
     FirstOutContainer: Load + AsRef<[EdgeId]>,
     HeadContainer: Load + AsRef<[NodeId]>,
-    WeightContainer: Load + AsRef<[Weight]>,
+    WeightContainer: Load + AsRef<[W]>,
 {
     fn reconstruct_with(loader: Loader) -> std::io::Result<Self> {
         Ok(Self::new(loader.load("first_out")?, loader.load("head")?, loader.load("weights")?))
