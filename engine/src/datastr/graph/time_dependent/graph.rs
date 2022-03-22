@@ -430,6 +430,14 @@ impl PessimisticLiveTDGraph {
         self.live[edge_id as usize].value().map(|(_, t)| t).unwrap_or(0)
     }
 
+    pub fn live_starts_switching_at(&self, edge_id: EdgeId) -> Option<Weight> {
+        self.live[edge_id as usize].value().map(|(live, soon)| {
+            let ttf = self.graph.travel_time_function(edge_id);
+            let tt_soon = ttf.eval(soon);
+            soon.saturating_sub(live.saturating_sub(tt_soon))
+        })
+    }
+
     pub fn graph(&self) -> &Graph {
         &self.graph
     }
