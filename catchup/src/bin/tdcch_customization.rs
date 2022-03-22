@@ -25,9 +25,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let _cch_customization_ctxt = algo_runs_ctxt.push_collection_item();
     let td_cch_graph = ftd_cch::customize(&cch, &graph);
-    if !customized_folder.exists() {
-        std::fs::create_dir(&customized_folder)?;
-    }
     td_cch_graph.deconstruct_to(&customized_folder)?;
 
     Ok(())

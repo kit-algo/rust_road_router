@@ -95,7 +95,7 @@ impl NodeOrder {
 }
 
 impl Deconstruct for NodeOrder {
-    fn store_each(&self, store: &dyn Fn(&str, &dyn Store) -> std::io::Result<()>) -> std::io::Result<()> {
+    fn save_each(&self, store: &dyn Fn(&str, &dyn Save) -> std::io::Result<()>) -> std::io::Result<()> {
         store("ranks", &&self.ranks[..])
     }
 }

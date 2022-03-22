@@ -41,7 +41,7 @@ pub struct CCH {
 }
 
 impl Deconstruct for CCH {
-    fn store_each(&self, store: &dyn Fn(&str, &dyn Store) -> std::io::Result<()>) -> std::io::Result<()> {
+    fn save_each(&self, store: &dyn Fn(&str, &dyn Save) -> std::io::Result<()>) -> std::io::Result<()> {
         store("cch_first_out", &self.first_out)?;
         store("cch_head", &self.head)?;
         Ok(())
@@ -491,6 +491,47 @@ impl<'a, C: CCHT> Customized for CustomizedPerfect<'a, C> {
     }
     fn backward_unpacking(&self) -> &[(InRangeOption<EdgeId>, InRangeOption<EdgeId>)] {
         &self.down_unpacking
+    }
+}
+
+impl<C> crate::io::Deconstruct for CustomizedPerfect<'_, C> {
+    fn save_each(&self, store: &dyn Fn(&str, &dyn crate::io::Save) -> std::io::Result<()>) -> std::io::Result<()> {
+        store("fw_graph", &Sub(&self.upward))?;
+        store("bw_graph", &Sub(&self.downward))?;
+        store("up_unpacking", &self.up_unpacking)?;
+        store("down_unpacking", &self.down_unpacking)?;
+        Ok(())
+    }
+}
+
+impl<'a, C: CCHT> crate::io::ReconstructPrepared<CustomizedPerfect<'a, C>> for &'a C {
+    fn reconstruct_with(self, loader: Loader) -> std::io::Result<CustomizedPerfect<'a, C>> {
+        let upward: OwnedGraph = loader.reconstruct("fw_graph")?;
+        let downward: OwnedGraph = loader.reconstruct("bw_graph")?;
+
+        let forward_tail = upward
+            .first_out()
+            .array_windows::<2>()
+            .enumerate()
+            .flat_map(|(tail, [idx_from, idx_to])| std::iter::repeat(tail as EdgeId).take((idx_to - idx_from) as usize))
+            .collect();
+
+        let backward_tail = downward
+            .first_out()
+            .array_windows::<2>()
+            .enumerate()
+            .flat_map(|(tail, [idx_from, idx_to])| std::iter::repeat(tail as EdgeId).take((idx_to - idx_from) as usize))
+            .collect();
+
+        Ok(CustomizedPerfect {
+            cch: self,
+            upward,
+            downward,
+            up_unpacking: loader.load("up_unpacking")?,
+            down_unpacking: loader.load("down_unpacking")?,
+            forward_tail,
+            backward_tail,
+        })
     }
 }
 

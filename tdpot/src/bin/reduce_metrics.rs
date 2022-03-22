@@ -36,9 +36,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     catchup.bucket_to_metric = bucket_to_metric;
 
     let customized_folder = path.join(args.next().unwrap_or("customized_corridor_mins".to_string()));
-    if !customized_folder.exists() {
-        std::fs::create_dir(&customized_folder)?;
-    }
     catchup.deconstruct_to(&customized_folder)?;
 
     Ok(())

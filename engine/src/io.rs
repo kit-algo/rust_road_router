@@ -61,7 +61,7 @@ impl<T: Copy> DataBytes for &[T] {
 
 impl<T: Copy> DataBytes for Vec<T> {
     fn data_bytes(&self) -> &[u8] {
-        &self[..].data_bytes()
+        self[..].data_bytes()
     }
 }
 
@@ -136,13 +136,31 @@ impl<T: Default + Copy> Load for Box<[T]> {
 pub trait Deconstruct: Sized {
     /// Will be called indirectly and should call the `store_callback` for each file that should be written to disk.
     /// The first param of the callback is a name to identify the file, the second param the data to be stored.
-    fn store_each(&self, store_callback: &dyn Fn(&str, &dyn Store) -> Result<()>) -> Result<()>;
+    fn save_each(&self, store_callback: &dyn Fn(&str, &dyn Save) -> Result<()>) -> Result<()>;
 
     /// Call with a directory arg to store this object in this directory.
-    fn deconstruct_to<D: AsRef<OsStr>>(&self, dir: &D) -> Result<()> {
-        let path = Path::new(dir);
+    fn deconstruct_to(&self, dir: &dyn AsRef<Path>) -> Result<()> {
+        if dir.as_ref().exists() {
+            std::fs::create_dir(dir)?;
+        }
+        self.save_each(&|name, object: &dyn Save| object.save(&dir.as_ref().join(name)))
+    }
+}
 
-        self.store_each(&|name, object: &dyn Store| object.write_to(&path.join(name)))
+pub trait Save {
+    fn save(&self, path: &dyn AsRef<Path>) -> Result<()>;
+}
+
+impl<T: Store> Save for T {
+    fn save(&self, path: &dyn AsRef<Path>) -> Result<()> {
+        self.write_to(path)
+    }
+}
+
+pub struct Sub<'a, T>(pub &'a T);
+impl<T: Deconstruct> Save for Sub<'_, T> {
+    fn save(&self, path: &dyn AsRef<Path>) -> Result<()> {
+        self.0.deconstruct_to(path)
     }
 }
 
@@ -160,8 +178,16 @@ impl<'a> Loader<'a> {
         T::load_from(self.path.join(path))
     }
 
+    pub fn reconstruct<T: Reconstruct, P: AsRef<Path>>(&self, path: P) -> Result<T> {
+        T::reconstruct_from(&self.path.join(path))
+    }
+
+    pub fn reconstruct_prepared<T, R: ReconstructPrepared<T>, P: AsRef<Path>>(&self, path: P, prep: R) -> Result<T> {
+        prep.reconstruct_from(&self.path.join(path))
+    }
+
     pub fn path(&self) -> &Path {
-        &self.path
+        self.path
     }
 }
 

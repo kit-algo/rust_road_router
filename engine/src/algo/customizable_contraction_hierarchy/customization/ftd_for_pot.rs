@@ -33,7 +33,7 @@ pub struct PotData {
 }
 
 impl<'a> crate::io::Deconstruct for PotData {
-    fn store_each(&self, store: &dyn Fn(&str, &dyn Store) -> std::io::Result<()>) -> std::io::Result<()> {
+    fn save_each(&self, store: &dyn Fn(&str, &dyn Save) -> std::io::Result<()>) -> std::io::Result<()> {
         store("fw_required", &self.fw_required)?;
         store("bw_required", &self.bw_required)?;
         store("fw_static_bound", &self.fw_static_bound)?;

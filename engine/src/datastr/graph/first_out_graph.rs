@@ -85,11 +85,22 @@ where
     HeadContainer: AsRef<[NodeId]>,
     WeightContainer: AsRef<[Weight]>,
 {
-    fn store_each(&self, store: &dyn Fn(&str, &dyn Store) -> std::io::Result<()>) -> std::io::Result<()> {
+    fn save_each(&self, store: &dyn Fn(&str, &dyn Save) -> std::io::Result<()>) -> std::io::Result<()> {
         store("first_out", &self.first_out())?;
         store("head", &self.head())?;
         store("weights", &self.weight())?;
         Ok(())
+    }
+}
+
+impl<FirstOutContainer, HeadContainer, WeightContainer> Reconstruct for FirstOutGraph<FirstOutContainer, HeadContainer, WeightContainer>
+where
+    FirstOutContainer: Load + AsRef<[EdgeId]>,
+    HeadContainer: Load + AsRef<[NodeId]>,
+    WeightContainer: Load + AsRef<[Weight]>,
+{
+    fn reconstruct_with(loader: Loader) -> std::io::Result<Self> {
+        Ok(Self::new(loader.load("first_out")?, loader.load("head")?, loader.load("weights")?))
     }
 }
 
@@ -511,6 +522,18 @@ impl<G: LinkIterable<NodeIdT>> BuildReversed<G> for UnweightedOwnedGraph {
             first_out: reversed_first_out,
             head,
         }
+    }
+}
+
+impl<FirstOutContainer, HeadContainer> Deconstruct for UnweightedFirstOutGraph<FirstOutContainer, HeadContainer>
+where
+    FirstOutContainer: AsRef<[EdgeId]>,
+    HeadContainer: AsRef<[NodeId]>,
+{
+    fn save_each(&self, store: &dyn Fn(&str, &dyn Save) -> std::io::Result<()>) -> std::io::Result<()> {
+        store("first_out", &self.first_out())?;
+        store("head", &self.head())?;
+        Ok(())
     }
 }
 

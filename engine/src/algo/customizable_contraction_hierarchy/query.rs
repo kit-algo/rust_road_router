@@ -32,6 +32,10 @@ impl<C: Customized> Server<C> {
         std::mem::swap(&mut self.customized, &mut customized);
     }
 
+    pub fn customized(&self) -> &C {
+        &self.customized
+    }
+
     fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
         let from = self.customized.cch().node_order().rank(from);
         let to = self.customized.cch().node_order().rank(to);

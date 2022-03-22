@@ -130,6 +130,41 @@ pub struct MultiMetric<'a> {
     current_metrics: Vec<(TRange<Timestamp>, usize)>,
 }
 
+impl crate::io::Deconstruct for MultiMetric<'_> {
+    fn save_each(&self, store: &dyn Fn(&str, &dyn crate::io::Save) -> std::io::Result<()>) -> std::io::Result<()> {
+        store("metric_ranges", &self.metric_ranges)?;
+        store("fw_graph", &crate::io::Sub(&self.fw_graph))?;
+        store("bw_graph", &crate::io::Sub(&self.bw_graph))?;
+        store("fw_metrics", &self.fw_metrics)?;
+        store("bw_metrics", &self.bw_metrics)?;
+        store("upper_bound_customized", &crate::io::Sub(self.upper_bound_dist.customized()))?;
+        Ok(())
+    }
+}
+
+impl<'a> crate::io::ReconstructPrepared<MultiMetric<'a>> for &'a CCH {
+    fn reconstruct_with(self, loader: crate::io::Loader) -> std::io::Result<MultiMetric<'a>> {
+        let _blocked = block_reporting();
+        let n = self.num_nodes();
+        let m = self.num_arcs();
+        Ok(MultiMetric {
+            cch: self,
+            metric_ranges: loader.load("metric_ranges")?,
+            fw_metrics: loader.load("fw_metrics")?,
+            bw_metrics: loader.load("bw_metrics")?,
+            fw_graph: loader.reconstruct("fw_graph")?,
+            bw_graph: loader.reconstruct("bw_graph")?,
+            upper_bound_dist: query::Server::new(loader.reconstruct_prepared("upper_bound_customized", self)?),
+            stack: Vec::new(),
+            backward_distances: TimestampedVector::new(n),
+            backward_parents: vec![(n as NodeId, m as EdgeId); n],
+            potentials: TimestampedVector::new(n),
+            num_pot_computations: 0,
+            current_metrics: Vec::new(),
+        })
+    }
+}
+
 impl<'a> MultiMetric<'a> {
     pub fn build(cch: &'a CCH, metric_ranges: Vec<TRange<Timestamp>>, graph: &TDGraph) -> Self {
         let metrics: Vec<Box<[_]>> = metric_ranges

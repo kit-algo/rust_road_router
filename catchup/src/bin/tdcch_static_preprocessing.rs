@@ -39,9 +39,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // TODO optimize away the clone
     let cch_order = reorder_for_seperator_based_customization(&cch_order, cch.separators().clone());
-    if !cch_folder.exists() {
-        std::fs::create_dir(&cch_folder)?;
-    }
     cch_order.deconstruct_to(&cch_folder)?;
 
     let cch_build_ctxt = algo_runs_ctxt.push_collection_item();
