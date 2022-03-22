@@ -69,8 +69,7 @@ impl TRange<Timestamp> {
 }
 
 pub fn ranges() -> Vec<TRange<Timestamp>> {
-    // all day
-    let mut ranges = vec![TRange { start: 0, end: INFINITY }];
+    let mut ranges = Vec::new();
     // 48*1h
     let half_an_hour = 30 * 60 * 1000;
     for i in 0..48 {
@@ -116,7 +115,7 @@ pub fn ranges() -> Vec<TRange<Timestamp>> {
 
 pub struct MultiMetric<'a> {
     cch: &'a CCH,
-    metric_ranges: Vec<(TRange<Timestamp>, usize)>,
+    metric_ranges: Vec<(TRange<Timestamp>, u16, bool)>,
     fw_graph: UnweightedOwnedGraph,
     bw_graph: UnweightedOwnedGraph,
     fw_metrics: Vec<Weight>,
@@ -166,8 +165,75 @@ impl<'a> crate::io::ReconstructPrepared<MultiMetric<'a>> for &'a CCH {
 }
 
 impl<'a> MultiMetric<'a> {
-    pub fn build(cch: &'a CCH, metric_ranges: Vec<TRange<Timestamp>>, graph: &TDGraph) -> Self {
-        let metrics: Vec<Box<[_]>> = metric_ranges
+    pub fn build_live(cch: &'a CCH, mut times: Vec<TRange<Timestamp>>, graph: &PessimisticLiveTDGraph, t_live: Timestamp) -> Self {
+        let end_of_live_metric = t_live + 59 * 60 * 1000;
+        times.push(TRange { start: 0, end: INFINITY });
+        let mut metric_ranges: Vec<_> = times.iter().enumerate().map(|(i, &r)| (r, i as u16, true)).collect();
+        metric_ranges.last_mut().unwrap().2 = false;
+        metric_ranges.push((
+            TRange {
+                start: t_live,
+                end: end_of_live_metric,
+            },
+            metric_ranges.len() as u16,
+            false,
+        ));
+        let mut metrics: Vec<Box<[_]>> = times
+            .iter()
+            .map(|r| {
+                (0..graph.num_arcs())
+                    .map(|e| graph.graph().travel_time_function(e as EdgeId).lower_bound_in_range(r.start..r.end))
+                    .collect()
+            })
+            .collect();
+        metrics.push(
+            (0..graph.num_arcs())
+                .map(|e| graph.live_lower_bound(e as EdgeId, t_live, end_of_live_metric))
+                .collect(),
+        );
+        let upper_bound: Box<[_]> = (0..graph.num_arcs()).map(|e| graph.upper_bound(e as EdgeId, t_live)).collect();
+        let metric_graphs: Box<[_]> = metrics
+            .iter()
+            .map(|w| BorrowedGraph::new(graph.graph().first_out(), graph.graph().head(), w))
+            .collect();
+        Self::new(
+            cch,
+            metric_ranges,
+            &metric_graphs,
+            BorrowedGraph::new(graph.graph().first_out(), graph.graph().head(), &upper_bound),
+        )
+    }
+
+    pub fn build_simple_live(cch: &'a CCH, mut times: Vec<TRange<Timestamp>>, graph: &PessimisticLiveTDGraph, t_live: Timestamp) -> Self {
+        times.push(TRange { start: 0, end: INFINITY });
+        let mut metric_ranges: Vec<_> = times.iter().enumerate().map(|(i, &r)| (r, i as u16, true)).collect();
+        metric_ranges.last_mut().unwrap().2 = false;
+        let metrics: Vec<Box<[_]>> = times
+            .iter()
+            .map(|r| {
+                (0..graph.num_arcs())
+                    .map(|e| graph.graph().travel_time_function(e as EdgeId).lower_bound_in_range(r.start..r.end))
+                    .collect()
+            })
+            .collect();
+        let upper_bound: Box<[_]> = (0..graph.num_arcs()).map(|e| graph.upper_bound(e as EdgeId, t_live)).collect();
+        let metric_graphs: Box<[_]> = metrics
+            .iter()
+            .map(|w| BorrowedGraph::new(graph.graph().first_out(), graph.graph().head(), w))
+            .collect();
+        Self::new(
+            cch,
+            metric_ranges,
+            &metric_graphs,
+            BorrowedGraph::new(graph.graph().first_out(), graph.graph().head(), &upper_bound),
+        )
+    }
+
+    pub fn build(cch: &'a CCH, mut times: Vec<TRange<Timestamp>>, graph: &TDGraph) -> Self {
+        times.push(TRange { start: 0, end: INFINITY });
+        let mut metric_ranges: Vec<_> = times.iter().enumerate().map(|(i, &r)| (r, i as u16, true)).collect();
+        metric_ranges.last_mut().unwrap().2 = false;
+        let metrics: Vec<Box<[_]>> = times
             .iter()
             .map(|r| {
                 (0..graph.num_arcs())
@@ -175,7 +241,6 @@ impl<'a> MultiMetric<'a> {
                     .collect()
             })
             .collect();
-        let metric_ranges = metric_ranges.into_iter().enumerate().map(|(i, r)| (r, i)).collect();
         let upper_bound: Box<[_]> = (0..graph.num_arcs()).map(|e| graph.travel_time_function(e as EdgeId).upper_bound()).collect();
         let metric_graphs: Box<[_]> = metrics.iter().map(|w| BorrowedGraph::new(graph.first_out(), graph.head(), w)).collect();
         Self::new(
@@ -186,7 +251,7 @@ impl<'a> MultiMetric<'a> {
         )
     }
 
-    pub fn new(cch: &'a CCH, metric_ranges: Vec<(TRange<Timestamp>, usize)>, metrics: &[BorrowedGraph], upper_bound: BorrowedGraph) -> Self {
+    pub fn new(cch: &'a CCH, metric_ranges: Vec<(TRange<Timestamp>, u16, bool)>, metrics: &[BorrowedGraph], upper_bound: BorrowedGraph) -> Self {
         let n = cch.num_nodes();
         let m = cch.num_arcs();
 
@@ -256,11 +321,10 @@ impl TDPotential for MultiMetric<'_> {
         if let Some(upper_bound) = self.upper_bound_dist.query(Query { from: source, to: target }).distance() {
             let latest_arrival = departure + upper_bound;
             let end_on_day = latest_arrival / period();
-            self.current_metrics.push(self.metric_ranges[0]);
-            for &(mut range, idx) in &self.metric_ranges[1..] {
-                for _ in 0..=end_on_day {
+            for &(mut range, idx, periodic) in &self.metric_ranges {
+                for _ in 0..=if periodic { end_on_day } else { 0 } {
                     if range.includes_instant(latest_arrival) {
-                        self.current_metrics.push((range, idx));
+                        self.current_metrics.push((range, idx as usize));
                     }
                     range.start += period();
                     range.end += period();
@@ -542,10 +606,10 @@ impl<'a> IntervalMinPotential<'a, (Weight, Weight)> {
         cch: &'a CCH,
         mut catchup: customizable_contraction_hierarchy::customization::ftd_for_pot::PotData,
         live_graph: &PessimisticLiveTDGraph,
-        _t_live: Timestamp,
+        t_live: Timestamp,
     ) -> Self {
         let upper_bound = (0..live_graph.num_arcs() as EdgeId)
-            .map(|edge_id| live_graph.upper_bound(edge_id))
+            .map(|edge_id| live_graph.upper_bound(edge_id, t_live))
             .collect::<Box<[Weight]>>();
         let customized_live = {
             let _blocked = block_reporting();
@@ -648,7 +712,7 @@ impl<'a> IntervalMinPotential<'a, LiveToPredictedBounds> {
         );
 
         let upper_bound = (0..live_graph.num_arcs() as EdgeId)
-            .map(|edge_id| live_graph.upper_bound(edge_id))
+            .map(|edge_id| live_graph.upper_bound(edge_id, t_live))
             .collect::<Box<[Weight]>>();
         let customized_live = {
             let _blocked = block_reporting();

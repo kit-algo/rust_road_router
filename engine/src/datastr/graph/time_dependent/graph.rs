@@ -400,9 +400,26 @@ impl PessimisticLiveTDGraph {
         }
     }
 
-    pub fn upper_bound(&self, edge_id: EdgeId) -> Weight {
+    pub fn upper_bound(&self, edge_id: EdgeId, now: Timestamp) -> Weight {
         let ttf = self.graph.travel_time_function(edge_id);
-        std::cmp::max(ttf.upper_bound(), self.live[edge_id as usize].value().map(|(l, _)| l).unwrap_or(0))
+        std::cmp::max(
+            ttf.upper_bound(),
+            std::cmp::min(self.live[edge_id as usize].value().map(|(l, _)| l).unwrap_or(0), self.eval(edge_id, now)),
+        )
+    }
+
+    pub fn live_lower_bound(&self, edge_id: EdgeId, now: Timestamp, until: Timestamp) -> Weight {
+        let ttf = self.graph.travel_time_function(edge_id);
+        if let Some((live, soon)) = self.live[edge_id as usize].value() {
+            if until >= soon {
+                ttf.lower_bound_in_range(soon..until)
+            } else {
+                let tt_soon = ttf.eval(soon);
+                std::cmp::min(live, tt_soon.saturating_add(soon - until))
+            }
+        } else {
+            ttf.lower_bound_in_range(now..until)
+        }
     }
 
     pub fn predicted_upper_bound(&self, edge_id: EdgeId) -> Weight {
