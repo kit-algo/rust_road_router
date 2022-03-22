@@ -98,7 +98,7 @@ pub fn run_queries<S: QueryServer>(
             report!("result", dist);
 
             if let Some(gt) = ground_truth(from, to) {
-                assert_eq!(dist, gt);
+                assert_eq!(dist, gt, "from {from} to {to}");
             }
 
             // with_result(&mut res);
@@ -113,7 +113,7 @@ pub fn run_queries<S: QueryServer>(
 }
 
 pub fn run_random_td_queries<
-    T: Copy + serde::ser::Serialize + SampleUniform + Eq + PartialOrd,
+    T: Copy + serde::ser::Serialize + SampleUniform + Eq + PartialOrd + std::fmt::Display,
     W: Copy + Eq + std::fmt::Debug + serde::ser::Serialize,
     S: TDQueryServer<T, W>,
     R: rand::distributions::uniform::SampleRange<T> + Clone,
@@ -145,7 +145,7 @@ pub fn run_random_td_queries<
     );
 }
 
-pub fn run_td_queries<T: Copy + serde::ser::Serialize, W: Copy + Eq + std::fmt::Debug + serde::ser::Serialize, S: TDQueryServer<T, W>>(
+pub fn run_td_queries<T: Copy + serde::ser::Serialize + std::fmt::Display, W: Copy + Eq + std::fmt::Debug + serde::ser::Serialize, S: TDQueryServer<T, W>>(
     query_iter: impl Iterator<Item = (NodeId, NodeId, T)>,
     server: &mut S,
     mut reporting_context: Option<&mut CollectionContextGuard>,
@@ -173,7 +173,7 @@ pub fn run_td_queries<T: Copy + serde::ser::Serialize, W: Copy + Eq + std::fmt::
             report!("result", dist);
 
             if let Some(gt) = ground_truth(from, to, at) {
-                assert_eq!(dist, gt);
+                assert_eq!(dist, gt, "from {from} to {to} at {at}");
             }
 
             // with_result(&mut res);
