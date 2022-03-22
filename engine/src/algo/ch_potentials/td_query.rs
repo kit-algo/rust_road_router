@@ -95,7 +95,7 @@ where
 
         let into_core = virtual_topocore.bridge_node(query.from()).unwrap_or(query.from());
         let out_of_core = virtual_topocore.bridge_node(query.to()).unwrap_or(query.to());
-        let into_core_pot = potential.potential(into_core, None)?;
+        let into_core_pot = potential.potential(into_core, None).unwrap_or(INFINITY);
 
         let mut comp_search = TopoDijkstraRun::query(
             &self.comp_graph,
@@ -116,10 +116,6 @@ where
             {
                 break;
             }
-        }
-
-        if *comp_search.tentative_distance(into_core) >= INFINITY {
-            return None;
         }
 
         let mut pushs = comp_search.num_queue_pushs();
@@ -143,17 +139,17 @@ where
             );
 
             if let Some(reported) = capture.reported() {
-                if let ReportingValue::Value(serde_json::Value::Number(number)) = &reported["num_queue_pops"] {
+                if let Some(ReportingValue::Value(serde_json::Value::Number(number))) = reported.get("num_queue_pops") {
                     if let Some(num) = number.as_u64() {
                         num_queue_pops += num as usize;
                     }
                 }
-                if let ReportingValue::Value(serde_json::Value::Number(number)) = &reported["num_queue_pushs"] {
+                if let Some(ReportingValue::Value(serde_json::Value::Number(number))) = reported.get("num_queue_pushs") {
                     if let Some(num) = number.as_u64() {
                         pushs += num as usize;
                     }
                 }
-                if let ReportingValue::Value(serde_json::Value::Number(number)) = &reported["num_relaxed_arcs"] {
+                if let Some(ReportingValue::Value(serde_json::Value::Number(number))) = reported.get("num_relaxed_arcs") {
                     if let Some(num) = number.as_u64() {
                         relaxed += num as usize;
                     }
