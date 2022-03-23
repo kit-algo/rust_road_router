@@ -18,7 +18,6 @@ use rust_road_router::{
     experiments,
     io::*,
     report::*,
-    util::in_range_option::*,
 };
 use std::{env, error::Error, path::Path};
 
@@ -38,38 +37,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         .map(|edge_id| graph.travel_time_function(edge_id).lower_bound())
         .collect::<Box<[Weight]>>();
 
-    let t_live = args.next().unwrap_or("0".to_string()).parse().unwrap();
-    report!("t_live", t_live);
-    let live_data_file = args.next().unwrap_or("live_data".to_string());
-    report!("live_data_file", live_data_file);
-    let mut live = vec![InRangeOption::NONE; m];
-    let live_data = Vec::<(EdgeId, Weight, Weight)>::load_from(path.join(live_data_file))?;
-    report!("num_edges_with_live", live_data.len());
-    let mut not_really_live: usize = 0;
-    let mut blocked: usize = 0;
-    let mut blocked_but_also_long_term: usize = 0;
-    let max_t_soon = period();
-    report!("max_t_soon", max_t_soon);
-    let mut live_counter = 0;
-    for (edge, weight, duration) in live_data {
-        if weight >= INFINITY {
-            blocked += 1;
-        }
-        if duration < max_t_soon {
-            live[edge as usize] = InRangeOption::some((weight, duration + t_live));
-            live_counter += 1;
-        } else {
-            if weight >= INFINITY && duration >= max_t_soon {
-                blocked_but_also_long_term += 1;
-            }
-            not_really_live += 1;
-        }
-    }
-    report!("num_applied_live_dates", live_counter);
-    report!("num_long_term_live_reports", not_really_live);
-    report!("blocked", blocked);
-    report!("num_long_term_blocks", blocked_but_also_long_term);
-
     let cch = {
         let _blocked = block_reporting();
         let order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm"))?);
@@ -81,13 +48,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         CCHPotData::new(&cch, &BorrowedGraph::new(graph.first_out(), graph.head(), &lower_bound))
     };
 
-    let live_graph = PessimisticLiveTDGraph::new(graph, live);
-
-    let customized_folder = path.join("customized_corridor_mins");
-    let catchup = customization::ftd_for_pot::PotData::reconstruct_from(&customized_folder)?;
-    let interval_min_pot = report_time_with_key("pot_creation", "pot_creation", || {
-        IntervalMinPotential::new_for_live(&cch, catchup, &live_graph, t_live)
-    });
+    let t_live = args.next().unwrap_or("0".to_string()).parse().unwrap();
+    report!("t_live", t_live);
+    let live_data_file = args.next().unwrap_or("live_data".to_string());
+    report!("live_data_file", live_data_file);
+    let live_graph = (graph, live_data_file, t_live).reconstruct_from(&path)?;
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs");
 
@@ -111,7 +76,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let multi_metric_pot = {
         let _blocked = block_reporting();
-        MultiMetric::build_live(&cch, td_astar::ranges(), &live_graph, t_live)
+        let mut mmp = MultiMetricPreprocessed::new(&cch, td_astar::ranges(), live_graph.graph(), None);
+        mmp.customize_live(&live_graph, t_live);
+        MultiMetric::new(mmp)
     };
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
@@ -135,6 +102,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut total_live: u64 = 0;
     let mut total_td: u64 = 0;
     let mut num_affected: u64 = 0;
+
+    let customized_folder = path.join("customized_corridor_mins");
+    let catchup = customization::ftd_for_pot::PotData::reconstruct_from(&customized_folder)?;
+    let interval_min_pot = report_time_with_key("pot_creation", "pot_creation", || {
+        let _blocked = block_reporting();
+        IntervalMinPotential::new_for_live(&cch, catchup, &live_graph, t_live)
+    });
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
     let mut cb_server = Server::new(&live_graph, interval_min_pot, PessimisticLiveTDDijkstraOps::default());

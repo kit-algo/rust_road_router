@@ -61,7 +61,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let multi_metric_pot = {
         let _blocked = block_reporting();
-        MultiMetric::build(&cch, td_astar::ranges(), &graph)
+        MultiMetric::new(MultiMetricPreprocessed::new(&cch, td_astar::ranges(), &graph, None))
     };
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();

@@ -164,76 +164,22 @@ impl<'a> crate::io::ReconstructPrepared<MultiMetric<'a>> for &'a CCH {
     }
 }
 
-impl<'a> MultiMetric<'a> {
-    pub fn build_live(cch: &'a CCH, mut times: Vec<TRange<Timestamp>>, graph: &PessimisticLiveTDGraph, t_live: Timestamp) -> Self {
-        let end_of_live_metric = t_live + 59 * 60 * 1000;
+pub struct MultiMetricPreprocessed<'a> {
+    metric_ranges: Vec<(TRange<Timestamp>, u16, bool)>,
+    fw_metrics: Vec<Weight>,
+    bw_metrics: Vec<Weight>,
+    fw_upper: Vec<Weight>,
+    bw_upper: Vec<Weight>,
+    customized_upper: CustomizedPerfect<'a, CCH>,
+}
+
+impl<'a> MultiMetricPreprocessed<'a> {
+    pub fn new(cch: &'a CCH, mut times: Vec<TRange<Timestamp>>, graph: &TDGraph, reduce: Option<usize>) -> Self {
+        let m = graph.num_arcs();
         times.push(TRange { start: 0, end: INFINITY });
         let mut metric_ranges: Vec<_> = times.iter().enumerate().map(|(i, &r)| (r, i as u16, true)).collect();
         metric_ranges.last_mut().unwrap().2 = false;
-        metric_ranges.push((
-            TRange {
-                start: t_live,
-                end: end_of_live_metric,
-            },
-            metric_ranges.len() as u16,
-            false,
-        ));
         let mut metrics: Vec<Box<[_]>> = times
-            .iter()
-            .map(|r| {
-                (0..graph.num_arcs())
-                    .map(|e| graph.graph().travel_time_function(e as EdgeId).lower_bound_in_range(r.start..r.end))
-                    .collect()
-            })
-            .collect();
-        metrics.push(
-            (0..graph.num_arcs())
-                .map(|e| graph.live_lower_bound(e as EdgeId, t_live, end_of_live_metric))
-                .collect(),
-        );
-        let upper_bound: Box<[_]> = (0..graph.num_arcs()).map(|e| graph.upper_bound(e as EdgeId, t_live)).collect();
-        let metric_graphs: Box<[_]> = metrics
-            .iter()
-            .map(|w| BorrowedGraph::new(graph.graph().first_out(), graph.graph().head(), w))
-            .collect();
-        Self::new(
-            cch,
-            metric_ranges,
-            &metric_graphs,
-            BorrowedGraph::new(graph.graph().first_out(), graph.graph().head(), &upper_bound),
-        )
-    }
-
-    pub fn build_simple_live(cch: &'a CCH, mut times: Vec<TRange<Timestamp>>, graph: &PessimisticLiveTDGraph, t_live: Timestamp) -> Self {
-        times.push(TRange { start: 0, end: INFINITY });
-        let mut metric_ranges: Vec<_> = times.iter().enumerate().map(|(i, &r)| (r, i as u16, true)).collect();
-        metric_ranges.last_mut().unwrap().2 = false;
-        let metrics: Vec<Box<[_]>> = times
-            .iter()
-            .map(|r| {
-                (0..graph.num_arcs())
-                    .map(|e| graph.graph().travel_time_function(e as EdgeId).lower_bound_in_range(r.start..r.end))
-                    .collect()
-            })
-            .collect();
-        let upper_bound: Box<[_]> = (0..graph.num_arcs()).map(|e| graph.upper_bound(e as EdgeId, t_live)).collect();
-        let metric_graphs: Box<[_]> = metrics
-            .iter()
-            .map(|w| BorrowedGraph::new(graph.graph().first_out(), graph.graph().head(), w))
-            .collect();
-        Self::new(
-            cch,
-            metric_ranges,
-            &metric_graphs,
-            BorrowedGraph::new(graph.graph().first_out(), graph.graph().head(), &upper_bound),
-        )
-    }
-
-    pub fn build(cch: &'a CCH, mut times: Vec<TRange<Timestamp>>, graph: &TDGraph) -> Self {
-        times.push(TRange { start: 0, end: INFINITY });
-        let mut metric_ranges: Vec<_> = times.iter().enumerate().map(|(i, &r)| (r, i as u16, true)).collect();
-        metric_ranges.last_mut().unwrap().2 = false;
-        let metrics: Vec<Box<[_]>> = times
             .iter()
             .map(|r| {
                 (0..graph.num_arcs())
@@ -241,41 +187,144 @@ impl<'a> MultiMetric<'a> {
                     .collect()
             })
             .collect();
+
+        if let Some(reduce) = reduce {
+            let refs: Box<[_]> = metrics.iter().map(|m| &m[..]).collect();
+            let merged = crate::algo::metric_merging::merge(&refs, reduce);
+            for (new_idx, metrics) in merged.iter().enumerate() {
+                for &metric in metrics {
+                    metric_ranges[metric].1 = new_idx as u16;
+                }
+            }
+            metrics = merged
+                .iter()
+                .map(|group| {
+                    (0..m)
+                        .map(|edge_idx| group.iter().map(|&metric_idx| metrics[metric_idx][edge_idx]).min().unwrap())
+                        .collect()
+                })
+                .collect();
+        }
+
         let upper_bound: Box<[_]> = (0..graph.num_arcs()).map(|e| graph.travel_time_function(e as EdgeId).upper_bound()).collect();
-        let metric_graphs: Box<[_]> = metrics.iter().map(|w| BorrowedGraph::new(graph.first_out(), graph.head(), w)).collect();
-        Self::new(
-            cch,
+        let mut upper_bound_customized = customize(cch, &BorrowedGraph::new(graph.first_out(), graph.head(), &upper_bound));
+        let modified = customization::customize_perfect_without_rebuild(&mut upper_bound_customized);
+
+        let (fw_metrics, bw_metrics): (Vec<_>, Vec<_>) = metrics
+            .iter()
+            .flat_map(|m| {
+                let (fw, bw) = customize(cch, &BorrowedGraph::new(graph.first_out(), graph.head(), m)).into_weights();
+                fw.into_iter().zip(bw.into_iter())
+            })
+            .unzip();
+
+        MultiMetricPreprocessed {
             metric_ranges,
-            &metric_graphs,
-            BorrowedGraph::new(graph.first_out(), graph.head(), &upper_bound),
-        )
+            fw_metrics,
+            bw_metrics,
+            fw_upper: upper_bound_customized.forward_graph().weight().to_vec(),
+            bw_upper: upper_bound_customized.backward_graph().weight().to_vec(),
+            customized_upper: customization::rebuild_customized_perfect(upper_bound_customized, &modified.0, &modified.1),
+        }
     }
 
-    pub fn new(cch: &'a CCH, metric_ranges: Vec<(TRange<Timestamp>, u16, bool)>, metrics: &[BorrowedGraph], upper_bound: BorrowedGraph) -> Self {
+    pub fn customize_simple_live(&mut self, graph: &PessimisticLiveTDGraph, t_live: Timestamp) {
+        let cch = self.customized_upper.cch;
+        let upper_bound: Box<[_]> = (0..graph.num_arcs()).map(|e| graph.upper_bound(e as EdgeId, t_live)).collect();
+        let mut upper_bound_customized = customize(cch, &BorrowedGraph::new(graph.graph().first_out(), graph.graph().head(), &upper_bound));
+        let modified = customization::customize_perfect_without_rebuild(&mut upper_bound_customized);
+        self.fw_upper = upper_bound_customized.forward_graph().weight().to_vec();
+        self.bw_upper = upper_bound_customized.backward_graph().weight().to_vec();
+        self.customized_upper = customization::rebuild_customized_perfect(upper_bound_customized, &modified.0, &modified.1);
+    }
+
+    pub fn customize_live(&mut self, graph: &PessimisticLiveTDGraph, t_live: Timestamp) {
+        let cch = self.customized_upper.cch;
+        let num_metrics = self.fw_metrics.len() / cch.num_arcs();
+        let end_of_live_metric = t_live + 59 * 60 * 1000;
+        self.metric_ranges.push((
+            TRange {
+                start: t_live,
+                end: end_of_live_metric,
+            },
+            num_metrics as u16,
+            false,
+        ));
+
+        let live_metric: Vec<_> = (0..graph.num_arcs())
+            .map(|e| graph.live_lower_bound(e as EdgeId, t_live, end_of_live_metric))
+            .collect();
+        let live_customized = customize(cch, &BorrowedGraph::new(graph.graph().first_out(), graph.graph().head(), &live_metric));
+
+        let (fw_cap, bw_cap) = (self.fw_metrics.capacity(), self.bw_metrics.capacity());
+        self.fw_metrics.extend_from_slice(live_customized.forward_graph().weight());
+        self.bw_metrics.extend_from_slice(live_customized.backward_graph().weight());
+        if fw_cap < self.fw_metrics.len() || bw_cap < self.bw_metrics.len() {
+            dbg!("unnecessary expensive reallocation happened");
+        }
+
+        self.customize_simple_live(graph, t_live);
+    }
+
+    pub fn reserve_space_for_additional_metrics(&mut self, num_metrics: usize) {
+        let additional = num_metrics * self.customized_upper.cch.num_arcs();
+        self.fw_metrics.reserve(additional);
+        self.bw_metrics.reserve(additional);
+    }
+}
+
+impl crate::io::Deconstruct for MultiMetricPreprocessed<'_> {
+    fn save_each(&self, store: &dyn Fn(&str, &dyn crate::io::Save) -> std::io::Result<()>) -> std::io::Result<()> {
+        store("metric_ranges", &self.metric_ranges)?;
+        store("fw_metrics", &self.fw_metrics)?;
+        store("bw_metrics", &self.bw_metrics)?;
+        store("fw_upper", &self.fw_upper)?;
+        store("bw_upper", &self.bw_upper)?;
+        store("customized_upper", &crate::io::Sub(&self.customized_upper))?;
+        Ok(())
+    }
+}
+
+impl<'a> crate::io::ReconstructPrepared<MultiMetricPreprocessed<'a>> for &'a CCH {
+    fn reconstruct_with(self, loader: crate::io::Loader) -> std::io::Result<MultiMetricPreprocessed<'a>> {
+        Ok(MultiMetricPreprocessed {
+            metric_ranges: loader.load("metric_ranges")?,
+            fw_metrics: loader.load("fw_metrics")?,
+            bw_metrics: loader.load("bw_metrics")?,
+            fw_upper: loader.load("fw_upper")?,
+            bw_upper: loader.load("bw_upper")?,
+            customized_upper: loader.reconstruct_prepared("customized_upper", self)?,
+        })
+    }
+}
+
+impl<'a> MultiMetric<'a> {
+    pub fn new(mut mmp: MultiMetricPreprocessed<'a>) -> Self {
+        let cch = mmp.customized_upper.cch;
         let n = cch.num_nodes();
         let m = cch.num_arcs();
 
-        let mut upper_bound_customized = customize(cch, &upper_bound);
-        let modified = customization::customize_perfect_without_rebuild(&mut upper_bound_customized);
-
-        let global_lower_idx = metric_ranges
+        let global_lower_idx = mmp
+            .metric_ranges
             .iter()
             .find(|(r, _, periodic)| !periodic && r.start == 0 && r.end == INFINITY)
             .unwrap()
             .1 as usize;
-        let global_lower_customized = customize(cch, &metrics[global_lower_idx]);
+        let fw_lower = mmp.fw_metrics[m * global_lower_idx..m * (global_lower_idx + 1)].to_vec();
+        let bw_lower = mmp.bw_metrics[m * global_lower_idx..m * (global_lower_idx + 1)].to_vec();
 
         let mut fw_first_out = vec![0];
         let mut bw_first_out = vec![0];
         let mut fw_head = Vec::with_capacity(m);
         let mut bw_head = Vec::with_capacity(m);
 
+        // TODO parallelize
         for node in 0..n as NodeId {
             for edge_id in cch.neighbor_edge_indices_usize(node) {
-                if upper_bound_customized.forward_graph().weight()[edge_id] >= global_lower_customized.forward_graph().weight()[edge_id] {
+                if mmp.fw_upper[edge_id] >= fw_lower[edge_id] {
                     fw_head.push(cch.head()[edge_id]);
                 }
-                if upper_bound_customized.backward_graph().weight()[edge_id] >= global_lower_customized.backward_graph().weight()[edge_id] {
+                if mmp.bw_upper[edge_id] >= bw_lower[edge_id] {
                     bw_head.push(cch.head()[edge_id]);
                 }
             }
@@ -283,35 +332,25 @@ impl<'a> MultiMetric<'a> {
             bw_first_out.push(bw_head.len() as EdgeId);
         }
 
-        let (mut fw_metrics, mut bw_metrics): (Vec<_>, Vec<_>) = metrics
-            .iter()
-            .flat_map(|m| {
-                let (fw, bw) = customize(cch, m).into_weights();
-                fw.into_iter().zip(bw.into_iter())
-            })
-            .unzip();
+        mmp.fw_metrics
+            .retain(crate::util::with_index(|idx, _| mmp.fw_upper[idx % m] >= fw_lower[idx % m]));
+        mmp.bw_metrics
+            .retain(crate::util::with_index(|idx, _| mmp.bw_upper[idx % m] >= bw_lower[idx % m]));
 
-        fw_metrics.retain(crate::util::with_index(|idx, _| {
-            upper_bound_customized.forward_graph().weight()[idx % m] >= global_lower_customized.forward_graph().weight()[idx % m]
-        }));
-        bw_metrics.retain(crate::util::with_index(|idx, _| {
-            upper_bound_customized.backward_graph().weight()[idx % m] >= global_lower_customized.backward_graph().weight()[idx % m]
-        }));
-
-        Self {
+        MultiMetric {
             cch,
-            metric_ranges,
+            metric_ranges: mmp.metric_ranges,
             fw_graph: UnweightedOwnedGraph::new(fw_first_out, fw_head),
             bw_graph: UnweightedOwnedGraph::new(bw_first_out, bw_head),
-            fw_metrics,
-            bw_metrics,
+            fw_metrics: mmp.fw_metrics,
+            bw_metrics: mmp.bw_metrics,
             stack: Vec::new(),
             backward_distances: TimestampedVector::new(n),
             backward_parents: vec![(n as NodeId, m as EdgeId); n],
             potentials: TimestampedVector::new(n),
             num_pot_computations: 0,
             current_metrics: Vec::new(),
-            upper_bound_dist: query::Server::new(customization::rebuild_customized_perfect(upper_bound_customized, &modified.0, &modified.1)),
+            upper_bound_dist: query::Server::new(mmp.customized_upper),
         }
     }
 }

@@ -365,7 +365,7 @@ pub trait Customized {
 
 /// A struct containing the results of the second preprocessing phase.
 pub struct CustomizedBasic<'a, CCH> {
-    cch: &'a CCH,
+    pub cch: &'a CCH,
     upward: Vec<Weight>,
     downward: Vec<Weight>,
     up_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,
@@ -429,7 +429,7 @@ impl<'a, C: CCHT> Customized for CustomizedBasic<'a, C> {
 }
 
 pub struct CustomizedPerfect<'a, CCH> {
-    cch: &'a CCH,
+    pub cch: &'a CCH,
     upward: OwnedGraph,
     downward: OwnedGraph,
     up_unpacking: Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>,

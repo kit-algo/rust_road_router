@@ -512,3 +512,37 @@ impl BuildPermutated<PessimisticLiveTDGraph> for PessimisticLiveTDGraph {
         }
     }
 }
+
+impl ReconstructPrepared<PessimisticLiveTDGraph> for (Graph, String, Timestamp) {
+    fn reconstruct_with(self, loader: Loader) -> std::io::Result<PessimisticLiveTDGraph> {
+        let (graph, live_data_file, t_live) = self;
+        let mut live = vec![InRangeOption::NONE; graph.num_arcs()];
+        let live_data: Vec<(EdgeId, Weight, Weight)> = loader.load(live_data_file)?;
+        report!("num_edges_with_live", live_data.len());
+        let mut not_really_live: usize = 0;
+        let mut blocked: usize = 0;
+        let mut blocked_but_also_long_term: usize = 0;
+        let max_t_soon = period();
+        report!("max_t_soon", max_t_soon);
+        let mut live_counter = 0;
+        for (edge, weight, duration) in live_data {
+            if weight >= INFINITY {
+                blocked += 1;
+            }
+            if duration < max_t_soon {
+                live[edge as usize] = InRangeOption::some((weight, duration + t_live));
+                live_counter += 1;
+            } else {
+                if weight >= INFINITY && duration >= max_t_soon {
+                    blocked_but_also_long_term += 1;
+                }
+                not_really_live += 1;
+            }
+        }
+        report!("num_applied_live_dates", live_counter);
+        report!("num_long_term_live_reports", not_really_live);
+        report!("blocked", blocked);
+        report!("num_long_term_blocks", blocked_but_also_long_term);
+        Ok(PessimisticLiveTDGraph::new(graph, live))
+    }
+}
