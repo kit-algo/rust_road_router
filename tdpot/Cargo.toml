@@ -7,4 +7,4 @@ authors = ["Tim 'tim3z' Zeitz <mail@tim3z.net>"]
 [dependencies]
 rust_road_router = { path = "../engine" }
 csv = "^1.1.6"
-rayon = "^1.5.1"
+rand = "^0.8.4"
