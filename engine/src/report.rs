@@ -328,6 +328,11 @@ pub fn block_reporting() -> BlockedReportingContextGuard {
     BlockedReportingContextGuard()
 }
 
+pub fn without_reporting<O>(f: impl FnOnce() -> O) -> O {
+    let _blocked = block_reporting();
+    f()
+}
+
 #[must_use]
 pub struct CaptureReportingContextGuard();
 
