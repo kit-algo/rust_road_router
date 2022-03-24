@@ -16,8 +16,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let t_live = args.next().unwrap_or("0".to_string()).parse().unwrap();
     let live_data_file = args.next().unwrap_or("live_data".to_string());
-    let pre_in = args.next().unwrap_or("multi_metric_pre".to_string());
-    let pot_out = args.next().unwrap_or("multi_metric_pot".to_string());
+    let pre_in = args.next().unwrap_or("customized_corridor_mins".to_string());
+    let pot_out = args.next().unwrap_or("interval_min_pot".to_string());
 
     let live_graph = (live_data_file, t_live).reconstruct_from(&path)?;
     let order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm"))?);
