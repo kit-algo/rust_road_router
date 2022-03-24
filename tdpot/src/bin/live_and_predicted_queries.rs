@@ -26,7 +26,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let sources = Vec::<NodeId>::load_from(path.join(&queries).join("source"))?;
     let targets = Vec::<NodeId>::load_from(path.join(&queries).join("target"))?;
     let mut ranks = Vec::<u32>::load_from(path.join(&queries).join("rank")).ok().map(Vec::into_iter);
-    let query_iter = sources.into_iter().zip(targets).map(|(from, to)| (from, to, t_live)).take(num_queries());
     let mut report_ranks = || {
         if let Some(ranks) = ranks.as_mut() {
             report!("rank", ranks.next().unwrap());
@@ -35,6 +34,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let t_live = args.next().unwrap_or("0".to_string()).parse().unwrap();
     let live_data_file = args.next().unwrap_or("live_data".to_string());
+
+    let query_iter = sources.into_iter().zip(targets).map(|(from, to)| (from, to, t_live)).take(num_queries());
+
     let pot = args.next();
 
     report!("t_live", t_live);
