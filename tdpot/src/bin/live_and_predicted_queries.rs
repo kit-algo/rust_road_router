@@ -16,7 +16,7 @@ use rust_road_router::{
 use std::{env, error::Error, path::Path};
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let _reporter = enable_reporting("live_queries");
+    let _reporter = enable_reporting("live_and_predicted_queries");
 
     let mut args = env::args().skip(1);
     let arg = args.next().ok_or(CliErr("No directory arg given"))?;
