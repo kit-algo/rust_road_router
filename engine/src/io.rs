@@ -146,7 +146,7 @@ pub trait Deconstruct: Sized {
 
     /// Call with a directory arg to store this object in this directory.
     fn deconstruct_to(&self, dir: &dyn AsRef<Path>) -> Result<()> {
-        if dir.as_ref().exists() {
+        if !dir.as_ref().exists() {
             std::fs::create_dir(dir)?;
         }
         self.save_each(&|name, object: &dyn Save| object.save(&dir.as_ref().join(name)))
