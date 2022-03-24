@@ -513,9 +513,11 @@ impl BuildPermutated<PessimisticLiveTDGraph> for PessimisticLiveTDGraph {
     }
 }
 
-impl ReconstructPrepared<PessimisticLiveTDGraph> for (Graph, String, Timestamp) {
+impl ReconstructPrepared<PessimisticLiveTDGraph> for (String, Timestamp) {
     fn reconstruct_with(self, loader: Loader) -> std::io::Result<PessimisticLiveTDGraph> {
-        let (graph, live_data_file, t_live) = self;
+        let graph: Graph = loader.reconstruct("")?;
+        let (live_data_file, t_live) = self;
+
         let mut live = vec![InRangeOption::NONE; graph.num_arcs()];
         let live_data: Vec<(EdgeId, Weight, Weight)> = loader.load(live_data_file)?;
         report!("num_edges_with_live", live_data.len());

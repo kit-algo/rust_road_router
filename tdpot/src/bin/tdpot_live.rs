@@ -11,10 +11,7 @@ use rust_road_router::{
         *,
     },
     cli::CliErr,
-    datastr::{
-        graph::{time_dependent::*, *},
-        node_order::*,
-    },
+    datastr::{graph::*, node_order::*},
     experiments,
     io::*,
     report::*,
@@ -30,7 +27,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = args.next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(&arg);
 
-    let graph = TDGraph::reconstruct_from(&path)?;
+    let t_live = args.next().unwrap_or("0".to_string()).parse().unwrap();
+    report!("t_live", t_live);
+    let live_data_file = args.next().unwrap_or("live_data".to_string());
+    report!("live_data_file", live_data_file);
+    let live_graph = (live_data_file, t_live).reconstruct_from(&path)?;
+
+    let graph = live_graph.graph();
     let n = graph.num_nodes();
     let m = graph.num_arcs();
     let lower_bound = (0..m as EdgeId)
@@ -40,19 +43,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let cch = {
         let _blocked = block_reporting();
         let order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm"))?);
-        CCH::fix_order_and_build(&graph, order)
+        CCH::fix_order_and_build(graph, order)
     };
     report!("num_cch_edges", cch.num_arcs());
     let cch_pot_data = {
         let _blocked = block_reporting();
         CCHPotData::new(&cch, &BorrowedGraph::new(graph.first_out(), graph.head(), &lower_bound))
     };
-
-    let t_live = args.next().unwrap_or("0".to_string()).parse().unwrap();
-    report!("t_live", t_live);
-    let live_data_file = args.next().unwrap_or("live_data".to_string());
-    report!("live_data_file", live_data_file);
-    let live_graph = (graph, live_data_file, t_live).reconstruct_from(&path)?;
 
     let mut algo_runs_ctxt = push_collection_context("algo_runs");
 
@@ -105,10 +102,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let customized_folder = path.join("customized_corridor_mins");
     let catchup = customization::ftd_for_pot::PotData::reconstruct_from(&customized_folder)?;
-    let interval_min_pot = report_time_with_key("pot_creation", "pot_creation", || {
+    let interval_min_pot = {
         let _blocked = block_reporting();
         IntervalMinPotential::new_for_live(&cch, catchup, &live_graph, t_live)
-    });
+    };
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
     let mut cb_server = Server::new(&live_graph, interval_min_pot, PessimisticLiveTDDijkstraOps::default());

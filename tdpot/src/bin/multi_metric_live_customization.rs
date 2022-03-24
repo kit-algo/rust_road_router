@@ -1,7 +1,7 @@
 use rust_road_router::{
     algo::{customizable_contraction_hierarchy::*, td_astar::*},
     cli::CliErr,
-    datastr::{graph::*, node_order::*},
+    datastr::node_order::*,
     io::*,
     report::*,
 };
@@ -19,14 +19,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let pre_in = args.next().unwrap_or("multi_metric_pre".to_string());
     let pot_out = args.next().unwrap_or("multi_metric_pot".to_string());
 
-    let graph = time_dependent::TDGraph::reconstruct_from(&path)?;
+    let live_graph = (live_data_file, t_live).reconstruct_from(&path)?;
     let order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm"))?);
-    let cch = CCH::fix_order_and_build(&graph, order);
+    let cch = CCH::fix_order_and_build(live_graph.graph(), order);
 
     let mut mmp: MultiMetricPreprocessed = cch.reconstruct_from(&path.join(pre_in))?;
     mmp.reserve_space_for_additional_metrics(1);
-
-    let live_graph = (graph, live_data_file, t_live).reconstruct_from(&path)?;
 
     let multi_metric_pot = report_time_with_key("customization", "customization", || {
         let _blocked = block_reporting();
