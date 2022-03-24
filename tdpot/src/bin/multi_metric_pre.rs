@@ -20,18 +20,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let graph = time_dependent::TDGraph::reconstruct_from(&path)?;
     let order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm"))?);
-    let cch = CCH::fix_order_and_build(&graph, order);
+    let cch = report_time_with_key("cch_preprocessing", "cch_preprocessing", || CCH::fix_order_and_build(&graph, order));
 
     let mmp = report_time_with_key("preprocessing", "preprocessing", || {
-        let _blocked = block_reporting();
-        MultiMetricPreprocessed::new(&cch, ranges(), &graph, num_metrics)
+        without_reporting(|| MultiMetricPreprocessed::new(&cch, ranges(), &graph, num_metrics))
     });
     mmp.deconstruct_to(&path.join(pre_out))?;
 
-    let multi_metric_pot = report_time_with_key("build", "build", || {
-        let _blocked = block_reporting();
-        MultiMetric::new(mmp)
-    });
+    let multi_metric_pot = report_time_with_key("build", "build", || without_reporting(|| MultiMetric::new(mmp)));
     multi_metric_pot.deconstruct_to(&path.join(pot_out))?;
 
     Ok(())
