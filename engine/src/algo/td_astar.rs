@@ -317,8 +317,6 @@ impl<'a> MultiMetric<'a> {
 
         let mut fw_first_out = vec![0; cch.first_out().len()];
         let mut bw_first_out = vec![0; cch.first_out().len()];
-        let mut fw_head = vec![0; m];
-        let mut bw_head = vec![0; m];
 
         let mut edges_of_each_thread = vec![(0, 0); k + 1];
         let mut local_edge_counts = &mut edges_of_each_thread[1..];
@@ -363,6 +361,11 @@ impl<'a> MultiMetric<'a> {
             *fw_count = prefixes.0;
             *bw_count = prefixes.1;
         }
+
+        let m_fw = edges_of_each_thread[k].0;
+        let m_bw = edges_of_each_thread[k].1;
+        let mut fw_head = vec![0; m_fw];
+        let mut bw_head = vec![0; m_bw];
 
         rayon::scope(|s| {
             let mut forward_first_out = &mut fw_first_out[..];
@@ -423,10 +426,6 @@ impl<'a> MultiMetric<'a> {
             }
         });
 
-        fw_head.truncate(edges_of_each_thread[k].0);
-        bw_head.truncate(edges_of_each_thread[k].1);
-        let m_fw = fw_head.len();
-        let m_bw = bw_head.len();
         fw_first_out[n] = m_fw as EdgeId;
         bw_first_out[n] = m_bw as EdgeId;
 
@@ -1084,11 +1083,7 @@ impl<'a> IntervalMinPotential<'a, LiveToPredictedBounds> {
     }
 }
 
-impl<'a, W: TDBounds> IntervalMinPotential<'a, W> {
-    fn keep(b: &W) -> bool {
-        b.lower() < INFINITY && b.lower() <= b.pessimistic_upper()
-    }
-
+impl<'a, W: TDBounds + Default + Send + Sync> IntervalMinPotential<'a, W> {
     fn new_int(
         cch: &'a CCH,
         mut fw_static_bound: Vec<W>,
@@ -1099,59 +1094,284 @@ impl<'a, W: TDBounds> IntervalMinPotential<'a, W> {
         bw_required: Vec<bool>,
         bucket_to_metric: Vec<usize>,
     ) -> Self {
-        let g = UnweightedFirstOutGraph::new(cch.first_out(), cch.head());
         let n = cch.num_nodes();
         let m = cch.num_arcs();
         assert_eq!(fw_static_bound.len(), m);
         assert_eq!(bw_static_bound.len(), m);
 
-        // TODO parallelize
-        let mut fw_first_out = Vec::with_capacity(n + 1);
-        fw_first_out.push(0);
-        let mut bw_first_out = Vec::with_capacity(n + 1);
-        bw_first_out.push(0);
-        let mut fw_head = Vec::with_capacity(m);
-        let mut bw_head = Vec::with_capacity(m);
-        for node in 0..n {
-            for (NodeIdT(head), EdgeIdT(edge_id)) in LinkIterable::<(NodeIdT, EdgeIdT)>::link_iter(&g, node as NodeId) {
-                if Self::keep(&fw_static_bound[edge_id as usize]) && fw_required[edge_id as usize] {
-                    fw_head.push(head);
-                }
-                if Self::keep(&bw_static_bound[edge_id as usize]) && bw_required[edge_id as usize] {
-                    bw_head.push(head);
+        let k = rayon::current_num_threads() * 4;
+
+        let mut edges_of_each_thread = vec![(0, 0); k + 1];
+        let mut local_edge_counts = &mut edges_of_each_thread[1..];
+        let target_edges_per_thread = (m + k - 1) / k;
+        let first_node_of_chunk: Vec<_> = cch
+            .forward_tail()
+            .chunks(target_edges_per_thread)
+            .map(|chunk| chunk[0] as usize)
+            .chain(std::iter::once(n))
+            .collect();
+
+        // BUCKETS
+        let mut fw_first_out = vec![0; cch.first_out().len()];
+        let mut bw_first_out = vec![0; cch.first_out().len()];
+
+        rayon::scope(|s| {
+            let fw_static = &fw_static_bound;
+            let bw_static = &bw_static_bound;
+            let fw_required = &fw_required;
+            let bw_required = &bw_required;
+
+            for i in 0..k {
+                let (local_count, rest_counts) = local_edge_counts.split_first_mut().unwrap();
+                local_edge_counts = rest_counts;
+                let local_nodes = first_node_of_chunk[i]..first_node_of_chunk[i + 1];
+                let local_edges = cch.first_out()[local_nodes.start] as usize..cch.first_out()[local_nodes.end] as usize;
+                s.spawn(move |_| {
+                    local_count.0 = fw_static[local_edges.clone()]
+                        .iter()
+                        .zip(&fw_required[local_edges.clone()])
+                        .filter(|&(stat, req)| Self::keep(stat) && *req)
+                        .count();
+                    local_count.1 = bw_static[local_edges.clone()]
+                        .iter()
+                        .zip(&bw_required[local_edges.clone()])
+                        .filter(|&(stat, req)| Self::keep(stat) && *req)
+                        .count();
+                });
+            }
+        });
+
+        let mut prefixes = (0, 0);
+        for (fw_count, bw_count) in &mut edges_of_each_thread {
+            prefixes.0 += *fw_count;
+            prefixes.1 += *bw_count;
+            *fw_count = prefixes.0;
+            *bw_count = prefixes.1;
+        }
+
+        let m_fw = edges_of_each_thread[k].0;
+        let m_bw = edges_of_each_thread[k].1;
+        let mut fw_head = vec![0; m_fw];
+        let mut bw_head = vec![0; m_bw];
+
+        rayon::scope(|s| {
+            let mut forward_first_out = &mut fw_first_out[..];
+            let mut forward_head = &mut fw_head[..];
+            let mut backward_first_out = &mut bw_first_out[..];
+            let mut backward_head = &mut bw_head[..];
+
+            let fw_static = &fw_static_bound;
+            let bw_static = &bw_static_bound;
+            let fw_required = &fw_required;
+            let bw_required = &bw_required;
+
+            for i in 0..k {
+                let local_nodes = first_node_of_chunk[i]..first_node_of_chunk[i + 1];
+                debug_assert!(local_nodes.start <= local_nodes.end);
+                let num_fw_edges_before = edges_of_each_thread[i].0;
+                let num_bw_edges_before = edges_of_each_thread[i].1;
+
+                let (local_fw_fo, rest_fw_fo) = forward_first_out.split_at_mut(local_nodes.end - local_nodes.start);
+                forward_first_out = rest_fw_fo;
+                let (local_bw_fo, rest_bw_fo) = backward_first_out.split_at_mut(local_nodes.end - local_nodes.start);
+                backward_first_out = rest_bw_fo;
+                let (local_fw_head, rest_fw_head) = forward_head.split_at_mut(edges_of_each_thread[i + 1].0 - num_fw_edges_before);
+                forward_head = rest_fw_head;
+                let (local_bw_head, rest_bw_head) = backward_head.split_at_mut(edges_of_each_thread[i + 1].1 - num_bw_edges_before);
+                backward_head = rest_bw_head;
+
+                s.spawn(move |_| {
+                    let mut fw_edge_count = 0;
+                    let mut bw_edge_count = 0;
+                    for (local_node_idx, node) in local_nodes.enumerate() {
+                        local_fw_fo[local_node_idx] = (num_fw_edges_before + fw_edge_count) as EdgeId;
+                        local_bw_fo[local_node_idx] = (num_bw_edges_before + bw_edge_count) as EdgeId;
+
+                        let edge_ids = cch.neighbor_edge_indices_usize(node as NodeId);
+                        for ((head, stat), req) in cch.head()[edge_ids.clone()]
+                            .iter()
+                            .zip(&fw_static[edge_ids.clone()])
+                            .zip(&fw_required[edge_ids.clone()])
+                        {
+                            if Self::keep(stat) && *req {
+                                local_fw_head[fw_edge_count] = *head;
+                                fw_edge_count += 1;
+                            }
+                        }
+                        for ((head, stat), req) in cch.head()[edge_ids.clone()]
+                            .iter()
+                            .zip(&bw_static[edge_ids.clone()])
+                            .zip(&bw_required[edge_ids.clone()])
+                        {
+                            if Self::keep(stat) && *req {
+                                local_bw_head[bw_edge_count] = *head;
+                                bw_edge_count += 1;
+                            }
+                        }
+                    }
+                });
+            }
+        });
+
+        fw_first_out[n] = m_fw as EdgeId;
+        bw_first_out[n] = m_bw as EdgeId;
+
+        let num_buckets = fw_bucket_bounds.len() / m;
+        let mut fw_buckets = vec![0; m_fw * num_buckets];
+        let mut bw_buckets = vec![0; m_bw * num_buckets];
+
+        rayon::scope(|s| {
+            let prev_fw_buckets = &fw_bucket_bounds;
+            let prev_bw_buckets = &bw_bucket_bounds;
+            let mut fw_buckets = &mut fw_buckets[..];
+            let mut bw_buckets = &mut bw_buckets[..];
+
+            let fw_static = &fw_static_bound;
+            let bw_static = &bw_static_bound;
+            let fw_required = &fw_required;
+            let bw_required = &bw_required;
+
+            for metric_idx in 0..num_buckets {
+                for i in 0..k {
+                    let local_nodes = first_node_of_chunk[i]..first_node_of_chunk[i + 1];
+                    debug_assert!(local_nodes.start <= local_nodes.end);
+                    let num_fw_edges_before = edges_of_each_thread[i].0;
+                    let num_bw_edges_before = edges_of_each_thread[i].1;
+
+                    let (local_fw_buckets, rest_fw_buckets) = fw_buckets.split_at_mut(edges_of_each_thread[i + 1].0 - num_fw_edges_before);
+                    fw_buckets = rest_fw_buckets;
+                    let (local_bw_buckets, rest_bw_buckets) = bw_buckets.split_at_mut(edges_of_each_thread[i + 1].1 - num_bw_edges_before);
+                    bw_buckets = rest_bw_buckets;
+
+                    s.spawn(move |_| {
+                        let mut fw_edge_count = 0;
+                        let mut bw_edge_count = 0;
+                        for node in local_nodes {
+                            let edge_ids = cch.neighbor_edge_indices_usize(node as NodeId);
+                            let metric_offset = m * metric_idx;
+                            let weights = &prev_fw_buckets[metric_offset + edge_ids.start..metric_offset + edge_ids.end];
+                            for ((weight, stat), req) in weights.iter().zip(&fw_static[edge_ids.clone()]).zip(&fw_required[edge_ids.clone()]) {
+                                if Self::keep(stat) && *req {
+                                    local_fw_buckets[fw_edge_count] = *weight;
+                                    fw_edge_count += 1;
+                                }
+                            }
+                            let weights = &prev_bw_buckets[metric_offset + edge_ids.start..metric_offset + edge_ids.end];
+                            for ((weight, stat), req) in weights.iter().zip(&bw_static[edge_ids.clone()]).zip(&bw_required[edge_ids.clone()]) {
+                                if Self::keep(stat) && *req {
+                                    local_bw_buckets[bw_edge_count] = *weight;
+                                    bw_edge_count += 1;
+                                }
+                            }
+                        }
+                    });
                 }
             }
-            fw_first_out.push(fw_head.len() as EdgeId);
-            bw_first_out.push(bw_head.len() as EdgeId);
-        }
+        });
+        fw_bucket_bounds = fw_buckets;
+        bw_bucket_bounds = bw_buckets;
 
         let fw_bucket_graph = UnweightedFirstOutGraph::new(fw_first_out, fw_head);
         let bw_bucket_graph = UnweightedFirstOutGraph::new(bw_first_out, bw_head);
 
-        let mut fw_first_out = Vec::with_capacity(n + 1);
-        fw_first_out.push(0);
-        let mut bw_first_out = Vec::with_capacity(n + 1);
-        bw_first_out.push(0);
-        let mut fw_head = Vec::with_capacity(m);
-        let mut bw_head = Vec::with_capacity(m);
-        for node in 0..n {
-            for (NodeIdT(head), EdgeIdT(edge_id)) in LinkIterable::<(NodeIdT, EdgeIdT)>::link_iter(&g, node as NodeId) {
-                if Self::keep(&fw_static_bound[edge_id as usize]) {
-                    fw_head.push(head);
-                }
-                if Self::keep(&bw_static_bound[edge_id as usize]) {
-                    bw_head.push(head);
-                }
+        // STATIC BOUNDS
+        let mut fw_first_out = vec![0; cch.first_out().len()];
+        let mut bw_first_out = vec![0; cch.first_out().len()];
+
+        let mut local_edge_counts = &mut edges_of_each_thread[1..];
+
+        rayon::scope(|s| {
+            let fw_static = &fw_static_bound;
+            let bw_static = &bw_static_bound;
+
+            for i in 0..k {
+                let (local_count, rest_counts) = local_edge_counts.split_first_mut().unwrap();
+                local_edge_counts = rest_counts;
+                let local_nodes = first_node_of_chunk[i]..first_node_of_chunk[i + 1];
+                let local_edges = cch.first_out()[local_nodes.start] as usize..cch.first_out()[local_nodes.end] as usize;
+                s.spawn(move |_| {
+                    local_count.0 = fw_static[local_edges.clone()].iter().filter(|stat| Self::keep(stat)).count();
+                    local_count.1 = bw_static[local_edges.clone()].iter().filter(|stat| Self::keep(stat)).count();
+                });
             }
-            fw_first_out.push(fw_head.len() as EdgeId);
-            bw_first_out.push(bw_head.len() as EdgeId);
+        });
+
+        let mut prefixes = (0, 0);
+        for (fw_count, bw_count) in &mut edges_of_each_thread {
+            prefixes.0 += *fw_count;
+            prefixes.1 += *bw_count;
+            *fw_count = prefixes.0;
+            *bw_count = prefixes.1;
         }
 
-        fw_bucket_bounds.retain(crate::util::with_index(|idx, _| Self::keep(&fw_static_bound[idx % m]) && fw_required[idx % m]));
-        bw_bucket_bounds.retain(crate::util::with_index(|idx, _| Self::keep(&bw_static_bound[idx % m]) && bw_required[idx % m]));
+        let m_fw = edges_of_each_thread[k].0;
+        let m_bw = edges_of_each_thread[k].1;
+        let mut fw_head = vec![0; m_fw];
+        let mut bw_head = vec![0; m_bw];
+        let mut fw_new_static = vec![W::default(); m_fw];
+        let mut bw_new_static = vec![W::default(); m_bw];
 
-        fw_static_bound.retain(Self::keep);
-        bw_static_bound.retain(Self::keep);
+        rayon::scope(|s| {
+            let mut forward_first_out = &mut fw_first_out[..];
+            let mut forward_head = &mut fw_head[..];
+            let mut fw_new_static = &mut fw_new_static[..];
+            let mut backward_first_out = &mut bw_first_out[..];
+            let mut backward_head = &mut bw_head[..];
+            let mut bw_new_static = &mut bw_new_static[..];
+
+            let fw_static = &fw_static_bound;
+            let bw_static = &bw_static_bound;
+
+            for i in 0..k {
+                let local_nodes = first_node_of_chunk[i]..first_node_of_chunk[i + 1];
+                debug_assert!(local_nodes.start <= local_nodes.end);
+                let num_fw_edges_before = edges_of_each_thread[i].0;
+                let num_bw_edges_before = edges_of_each_thread[i].1;
+
+                let (local_fw_fo, rest_fw_fo) = forward_first_out.split_at_mut(local_nodes.end - local_nodes.start);
+                forward_first_out = rest_fw_fo;
+                let (local_bw_fo, rest_bw_fo) = backward_first_out.split_at_mut(local_nodes.end - local_nodes.start);
+                backward_first_out = rest_bw_fo;
+                let (local_fw_head, rest_fw_head) = forward_head.split_at_mut(edges_of_each_thread[i + 1].0 - num_fw_edges_before);
+                forward_head = rest_fw_head;
+                let (local_bw_head, rest_bw_head) = backward_head.split_at_mut(edges_of_each_thread[i + 1].1 - num_bw_edges_before);
+                backward_head = rest_bw_head;
+                let (local_fw_static, rest_fw_static) = fw_new_static.split_at_mut(edges_of_each_thread[i + 1].0 - num_fw_edges_before);
+                fw_new_static = rest_fw_static;
+                let (local_bw_static, rest_bw_static) = bw_new_static.split_at_mut(edges_of_each_thread[i + 1].1 - num_bw_edges_before);
+                bw_new_static = rest_bw_static;
+
+                s.spawn(move |_| {
+                    let mut fw_edge_count = 0;
+                    let mut bw_edge_count = 0;
+                    for (local_node_idx, node) in local_nodes.enumerate() {
+                        local_fw_fo[local_node_idx] = (num_fw_edges_before + fw_edge_count) as EdgeId;
+                        local_bw_fo[local_node_idx] = (num_bw_edges_before + bw_edge_count) as EdgeId;
+
+                        let edge_ids = cch.neighbor_edge_indices_usize(node as NodeId);
+                        for (head, stat) in cch.head()[edge_ids.clone()].iter().zip(&fw_static[edge_ids.clone()]) {
+                            if Self::keep(stat) {
+                                local_fw_head[fw_edge_count] = *head;
+                                local_fw_static[fw_edge_count] = *stat;
+                                fw_edge_count += 1;
+                            }
+                        }
+                        for (head, stat) in cch.head()[edge_ids.clone()].iter().zip(&bw_static[edge_ids.clone()]) {
+                            if Self::keep(stat) {
+                                local_bw_head[bw_edge_count] = *head;
+                                local_bw_static[bw_edge_count] = *stat;
+                                bw_edge_count += 1;
+                            }
+                        }
+                    }
+                });
+            }
+        });
+
+        fw_first_out[n] = m_fw as EdgeId;
+        bw_first_out[n] = m_bw as EdgeId;
+        fw_static_bound = fw_new_static;
+        bw_static_bound = bw_new_static;
 
         Self {
             minmax_pot: MinMaxPotential {
@@ -1176,6 +1396,12 @@ impl<'a, W: TDBounds> IntervalMinPotential<'a, W> {
             num_pot_computations: 0,
             num_metrics: 0,
         }
+    }
+}
+
+impl<'a, W: TDBounds> IntervalMinPotential<'a, W> {
+    fn keep(b: &W) -> bool {
+        b.lower() < INFINITY && b.lower() <= b.pessimistic_upper()
     }
 
     fn num_buckets(&self) -> usize {
