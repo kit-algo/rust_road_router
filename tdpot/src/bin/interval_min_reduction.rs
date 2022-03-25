@@ -31,9 +31,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let metrics: Vec<_> = catchup.fw_bucket_bounds.chunks(m).collect();
     let num_buckets = metrics.len();
     assert_eq!(catchup.bucket_to_metric.len(), num_buckets);
-    let merged = report_time_with_key("merging", "build", || {
-        rust_road_router::algo::metric_merging::merge(&metrics, target_num_metrics)
-    });
+    let merged = report_time_with_key("merge", "merge", || rust_road_router::algo::metric_merging::merge(&metrics, target_num_metrics));
     catchup.fw_bucket_bounds = merged
         .iter()
         .flat_map(|group| (0..m).map(|edge_idx| group.iter().map(|&metric_idx| metrics[metric_idx][edge_idx]).min().unwrap()))
