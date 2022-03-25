@@ -180,7 +180,7 @@ impl<'a> MultiMetricPreprocessed<'a> {
         let mut metric_ranges: Vec<_> = times.iter().enumerate().map(|(i, &r)| (r, i as u16, true)).collect();
         metric_ranges.last_mut().unwrap().2 = false;
         let mut metrics: Vec<Box<[_]>> = times
-            .iter()
+            .par_iter()
             .map(|r| {
                 (0..graph.num_arcs())
                     .map(|e| graph.travel_time_function(e as EdgeId).lower_bound_in_range(r.start..r.end))
@@ -313,29 +313,178 @@ impl<'a> MultiMetric<'a> {
         let fw_lower = mmp.fw_metrics[m * global_lower_idx..m * (global_lower_idx + 1)].to_vec();
         let bw_lower = mmp.bw_metrics[m * global_lower_idx..m * (global_lower_idx + 1)].to_vec();
 
-        let mut fw_first_out = vec![0];
-        let mut bw_first_out = vec![0];
-        let mut fw_head = Vec::with_capacity(m);
-        let mut bw_head = Vec::with_capacity(m);
+        let k = rayon::current_num_threads() * 4;
 
-        // TODO parallelize
-        for node in 0..n as NodeId {
-            for edge_id in cch.neighbor_edge_indices_usize(node) {
-                if mmp.fw_upper[edge_id] >= fw_lower[edge_id] {
-                    fw_head.push(cch.head()[edge_id]);
-                }
-                if mmp.bw_upper[edge_id] >= bw_lower[edge_id] {
-                    bw_head.push(cch.head()[edge_id]);
-                }
+        let mut fw_first_out = vec![0; cch.first_out().len()];
+        let mut bw_first_out = vec![0; cch.first_out().len()];
+        let mut fw_head = vec![0; m];
+        let mut bw_head = vec![0; m];
+
+        let mut edges_of_each_thread = vec![(0, 0); k + 1];
+        let mut local_edge_counts = &mut edges_of_each_thread[1..];
+        let target_edges_per_thread = (m + k - 1) / k;
+        let first_node_of_chunk: Vec<_> = cch
+            .forward_tail()
+            .chunks(target_edges_per_thread)
+            .map(|chunk| chunk[0] as usize)
+            .chain(std::iter::once(n))
+            .collect();
+
+        rayon::scope(|s| {
+            let fw_lower = &fw_lower;
+            let bw_lower = &bw_lower;
+            let fw_upper = &mmp.fw_upper;
+            let bw_upper = &mmp.bw_upper;
+
+            for i in 0..k {
+                let (local_count, rest_counts) = local_edge_counts.split_first_mut().unwrap();
+                local_edge_counts = rest_counts;
+                let local_nodes = first_node_of_chunk[i]..first_node_of_chunk[i + 1];
+                let local_edges = cch.first_out()[local_nodes.start] as usize..cch.first_out()[local_nodes.end] as usize;
+                s.spawn(move |_| {
+                    local_count.0 = fw_lower[local_edges.clone()]
+                        .iter()
+                        .zip(fw_upper[local_edges.clone()].iter())
+                        .filter(|&(l, u)| l <= u)
+                        .count();
+                    local_count.1 = bw_lower[local_edges.clone()]
+                        .iter()
+                        .zip(bw_upper[local_edges.clone()].iter())
+                        .filter(|&(l, u)| l <= u)
+                        .count();
+                });
             }
-            fw_first_out.push(fw_head.len() as EdgeId);
-            bw_first_out.push(bw_head.len() as EdgeId);
+        });
+
+        let mut prefixes = (0, 0);
+        for (fw_count, bw_count) in &mut edges_of_each_thread {
+            prefixes.0 += *fw_count;
+            prefixes.1 += *bw_count;
+            *fw_count = prefixes.0;
+            *bw_count = prefixes.1;
         }
 
-        mmp.fw_metrics
-            .retain(crate::util::with_index(|idx, _| mmp.fw_upper[idx % m] >= fw_lower[idx % m]));
-        mmp.bw_metrics
-            .retain(crate::util::with_index(|idx, _| mmp.bw_upper[idx % m] >= bw_lower[idx % m]));
+        rayon::scope(|s| {
+            let mut forward_first_out = &mut fw_first_out[..];
+            let mut forward_head = &mut fw_head[..];
+            let mut backward_first_out = &mut bw_first_out[..];
+            let mut backward_head = &mut bw_head[..];
+
+            let fw_lower = &fw_lower;
+            let bw_lower = &bw_lower;
+            let fw_upper = &mmp.fw_upper;
+            let bw_upper = &mmp.bw_upper;
+
+            for i in 0..k {
+                let local_nodes = first_node_of_chunk[i]..first_node_of_chunk[i + 1];
+                debug_assert!(local_nodes.start <= local_nodes.end);
+                let num_fw_edges_before = edges_of_each_thread[i].0;
+                let num_bw_edges_before = edges_of_each_thread[i].1;
+
+                let (local_fw_fo, rest_fw_fo) = forward_first_out.split_at_mut(local_nodes.end - local_nodes.start);
+                forward_first_out = rest_fw_fo;
+                let (local_bw_fo, rest_bw_fo) = backward_first_out.split_at_mut(local_nodes.end - local_nodes.start);
+                backward_first_out = rest_bw_fo;
+                let (local_fw_head, rest_fw_head) = forward_head.split_at_mut(edges_of_each_thread[i + 1].0 - num_fw_edges_before);
+                forward_head = rest_fw_head;
+                let (local_bw_head, rest_bw_head) = backward_head.split_at_mut(edges_of_each_thread[i + 1].1 - num_bw_edges_before);
+                backward_head = rest_bw_head;
+
+                s.spawn(move |_| {
+                    let mut fw_edge_count = 0;
+                    let mut bw_edge_count = 0;
+                    for (local_node_idx, node) in local_nodes.enumerate() {
+                        local_fw_fo[local_node_idx] = (num_fw_edges_before + fw_edge_count) as EdgeId;
+                        local_bw_fo[local_node_idx] = (num_bw_edges_before + bw_edge_count) as EdgeId;
+
+                        let edge_ids = cch.neighbor_edge_indices_usize(node as NodeId);
+                        for ((head, lower), upper) in cch.head()[edge_ids.clone()]
+                            .iter()
+                            .zip(&fw_lower[edge_ids.clone()])
+                            .zip(&fw_upper[edge_ids.clone()])
+                        {
+                            if lower <= upper {
+                                local_fw_head[fw_edge_count] = *head;
+                                fw_edge_count += 1;
+                            }
+                        }
+                        for ((head, lower), upper) in cch.head()[edge_ids.clone()]
+                            .iter()
+                            .zip(&bw_lower[edge_ids.clone()])
+                            .zip(&bw_upper[edge_ids.clone()])
+                        {
+                            if lower <= upper {
+                                local_bw_head[bw_edge_count] = *head;
+                                bw_edge_count += 1;
+                            }
+                        }
+                    }
+                });
+            }
+        });
+
+        fw_head.truncate(edges_of_each_thread[k].0);
+        bw_head.truncate(edges_of_each_thread[k].1);
+        let m_fw = fw_head.len();
+        let m_bw = bw_head.len();
+        fw_first_out[n] = m_fw as EdgeId;
+        bw_first_out[n] = m_bw as EdgeId;
+
+        let num_metrics = mmp.fw_metrics.len() / m;
+        let mut fw_metrics = vec![0; m_fw * num_metrics];
+        let mut bw_metrics = vec![0; m_bw * num_metrics];
+
+        rayon::scope(|s| {
+            let prev_fw_metrics = &mmp.fw_metrics;
+            let prev_bw_metrics = &mmp.bw_metrics;
+            let mut fw_metrics = &mut fw_metrics[..];
+            let mut bw_metrics = &mut bw_metrics[..];
+
+            let fw_lower = &fw_lower;
+            let bw_lower = &bw_lower;
+            let fw_upper = &mmp.fw_upper;
+            let bw_upper = &mmp.bw_upper;
+
+            for metric_idx in 0..num_metrics {
+                for i in 0..k {
+                    let local_nodes = first_node_of_chunk[i]..first_node_of_chunk[i + 1];
+                    debug_assert!(local_nodes.start <= local_nodes.end);
+                    let num_fw_edges_before = edges_of_each_thread[i].0;
+                    let num_bw_edges_before = edges_of_each_thread[i].1;
+
+                    let (local_fw_metrics, rest_fw_metrics) = fw_metrics.split_at_mut(edges_of_each_thread[i + 1].0 - num_fw_edges_before);
+                    fw_metrics = rest_fw_metrics;
+                    let (local_bw_metrics, rest_bw_metrics) = bw_metrics.split_at_mut(edges_of_each_thread[i + 1].1 - num_bw_edges_before);
+                    bw_metrics = rest_bw_metrics;
+
+                    s.spawn(move |_| {
+                        let mut fw_edge_count = 0;
+                        let mut bw_edge_count = 0;
+                        for node in local_nodes {
+                            let edge_ids = cch.neighbor_edge_indices_usize(node as NodeId);
+                            let metric_offset = m * metric_idx;
+                            let weights = &prev_fw_metrics[metric_offset + edge_ids.start..metric_offset + edge_ids.end];
+                            for ((weight, lower), upper) in weights.iter().zip(&fw_lower[edge_ids.clone()]).zip(&fw_upper[edge_ids.clone()]) {
+                                if lower <= upper {
+                                    local_fw_metrics[fw_edge_count] = *weight;
+                                    fw_edge_count += 1;
+                                }
+                            }
+                            let weights = &prev_bw_metrics[metric_offset + edge_ids.start..metric_offset + edge_ids.end];
+                            for ((weight, lower), upper) in weights.iter().zip(&bw_lower[edge_ids.clone()]).zip(&bw_upper[edge_ids.clone()]) {
+                                if lower <= upper {
+                                    local_bw_metrics[bw_edge_count] = *weight;
+                                    bw_edge_count += 1;
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+        });
+
+        mmp.fw_metrics = fw_metrics;
+        mmp.bw_metrics = bw_metrics;
 
         MultiMetric {
             cch,
@@ -956,6 +1105,7 @@ impl<'a, W: TDBounds> IntervalMinPotential<'a, W> {
         assert_eq!(fw_static_bound.len(), m);
         assert_eq!(bw_static_bound.len(), m);
 
+        // TODO parallelize
         let mut fw_first_out = Vec::with_capacity(n + 1);
         fw_first_out.push(0);
         let mut bw_first_out = Vec::with_capacity(n + 1);
