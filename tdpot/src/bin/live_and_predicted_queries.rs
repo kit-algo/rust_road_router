@@ -22,23 +22,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = args.next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(&arg);
 
-    let queries = args.next().unwrap();
-    let sources = Vec::<NodeId>::load_from(path.join(&queries).join("source"))?;
-    let targets = Vec::<NodeId>::load_from(path.join(&queries).join("target"))?;
-    let mut ranks = Vec::<u32>::load_from(path.join(&queries).join("rank")).ok().map(Vec::into_iter);
-    let mut report_ranks = || {
-        if let Some(ranks) = ranks.as_mut() {
-            report!("rank", ranks.next().unwrap());
-        }
-    };
-
     let t_live = args.next().unwrap_or("0".to_string()).parse().unwrap();
     let live_data_file = args.next().unwrap_or("live_data".to_string());
-
-    let query_iter = sources.into_iter().zip(targets).map(|(from, to)| (from, to, t_live)).take(num_queries());
-
-    let pot = args.next();
-
     report!("t_live", t_live);
     report!("live_data_file", live_data_file);
 
@@ -50,6 +35,19 @@ fn main() -> Result<(), Box<dyn Error>> {
         let order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm"))?);
         CCH::fix_order_and_build(graph, order)
     };
+
+    let queries = args.next().unwrap();
+    let sources = Vec::<NodeId>::load_from(path.join(&queries).join("source"))?;
+    let targets = Vec::<NodeId>::load_from(path.join(&queries).join("target"))?;
+    let mut ranks = Vec::<u32>::load_from(path.join(&queries).join("rank")).ok().map(Vec::into_iter);
+    let mut report_ranks = || {
+        if let Some(ranks) = ranks.as_mut() {
+            report!("rank", ranks.next().unwrap());
+        }
+    };
+    let query_iter = sources.into_iter().zip(targets).map(|(from, to)| (from, to, t_live)).take(num_queries());
+
+    let pot = args.next();
 
     match pot.as_deref() {
         Some("interval_min_pot") => {
