@@ -4,8 +4,8 @@ fn main() {
     // write build time info
     built::write_built_file().expect("Failed to acquire build-time information");
     // unconditionally rerun this build script so build time info is always up to date
-    #[cfg(not(debug_assertions))]
-    println!("cargo:rerun-if-changed=foobaz");
+    // #[cfg(not(debug_assertions))]
+    // println!("cargo:rerun-if-changed=foobaz");
 
     // the following lines allow overriding certain experimental params through env vars.
     // If the env var is set, we enable a certain feature.
