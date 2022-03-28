@@ -40,7 +40,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
 
         while let Some(node) = dijkstra.next() {
-            if *dijkstra.tentative_distance(node) > 3600 * tt_units_per_s {
+            if *dijkstra.tentative_distance(node) - at > 3600 * tt_units_per_s {
                 sources_1h.push(from);
                 targets_1h.push(node);
                 departures_1h.push(at);
