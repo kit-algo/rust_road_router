@@ -28,6 +28,19 @@ where
     }
 }
 
+impl<Graph, Ops: DijkstraOps<Graph, Label = Timestamp>, P: TDPotential> Server<Graph, Ops, P, false, false, false>
+where
+    Graph: LinkIterable<NodeIdT> + LinkIterable<Ops::Arc>,
+{
+    pub fn new_no_topo<G>(graph: &G, potential: P, ops: Ops) -> Self
+    where
+        G: LinkIterable<NodeIdT>,
+        Graph: BuildPermutated<G>,
+    {
+        Self::new_custom(graph, potential, ops)
+    }
+}
+
 impl<Graph, Ops: DijkstraOps<Graph, Label = Timestamp>, P: TDPotential, const BCC_CORE: bool, const SKIP_DEG_2: bool, const SKIP_DEG_3: bool>
     Server<Graph, Ops, P, BCC_CORE, SKIP_DEG_2, SKIP_DEG_3>
 where
