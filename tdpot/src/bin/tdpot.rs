@@ -84,11 +84,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let customized_folder = path.join("customized_corridor_mins");
     let catchup = customization::ftd_for_pot::PotData::reconstruct_from(&customized_folder)?;
-    let interval_min_pot = IntervalMinPotential::new(&cch, catchup);
-
-    let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
-    let mut cb_server = Server::new(&graph, interval_min_pot, TDDijkstraOps::default());
-    drop(virtual_topocore_ctxt);
+    let mut cb_server = without_reporting(|| {
+        let interval_min_pot = IntervalMinPotential::new(&cch, catchup);
+        Server::new(&graph, interval_min_pot, TDDijkstraOps::default())
+    });
 
     experiments::run_random_td_queries(
         n,
