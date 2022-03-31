@@ -70,45 +70,17 @@ impl TRange<Timestamp> {
 
 pub fn ranges() -> Vec<TRange<Timestamp>> {
     let mut ranges = Vec::new();
-    // 48*1h
+
     let half_an_hour = 30 * 60 * 1000;
-    for i in 0..48 {
-        ranges.push(TRange {
-            start: i * half_an_hour,
-            end: (i + 2) * half_an_hour,
-        });
-    }
-    // 24*2h
-    let hour = 2 * half_an_hour;
-    for i in 0..24 {
-        ranges.push(TRange {
-            start: i * hour,
-            end: (i + 2) * hour,
-        });
-    }
-    // 12*4h
-    let two_hours = 2 * hour;
-    for i in 0..12 {
-        ranges.push(TRange {
-            start: i * two_hours,
-            end: (i + 2) * two_hours,
-        });
-    }
-    // 6*8h
-    let four_hours = 4 * hour;
-    for i in 0..6 {
-        ranges.push(TRange {
-            start: i * four_hours,
-            end: (i + 2) * four_hours,
-        });
-    }
-    // 4*12h
-    let six_hours = 6 * hour;
-    for i in 0..4 {
-        ranges.push(TRange {
-            start: i * six_hours,
-            end: (i + 2) * six_hours,
-        });
+    // 6am until 10pm
+    for i in 12..44 {
+        let start = i * half_an_hour;
+        for len_hours in [1, 2, 4, 8] {
+            let end = start + len_hours * half_an_hour * 2;
+            if end <= 44 * half_an_hour {
+                ranges.push(TRange { start, end });
+            }
+        }
     }
     ranges
 }
