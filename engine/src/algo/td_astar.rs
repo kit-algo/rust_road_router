@@ -240,8 +240,8 @@ impl<'a> MultiMetricPreprocessed<'a> {
 
     pub fn reserve_space_for_additional_metrics(&mut self, num_metrics: usize) {
         let additional = num_metrics * self.customized_upper.cch.num_arcs();
-        self.fw_metrics.reserve(additional);
-        self.bw_metrics.reserve(additional);
+        self.fw_metrics.reserve_exact(additional);
+        self.bw_metrics.reserve_exact(additional);
     }
 }
 
