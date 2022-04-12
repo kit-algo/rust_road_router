@@ -618,6 +618,53 @@ impl<'a> IterativePathFixing<'a> {
     }
 }
 
+pub struct SmoothPathBaseline<'a> {
+    shortest_live_path: TopoDijkServer<OwnedGraph, DefaultOps, BorrowedCCHPot<'a>, true, true, true>,
+    shortest_path_by_smooth: TopoDijkServer<OwnedGraph, DefaultOps, BorrowedCCHPot<'a>, true, true, true>,
+    live_graph: BorrowedGraph<'a>,
+}
+
+impl<'a> SmoothPathBaseline<'a> {
+    pub fn new(smooth_graph: BorrowedGraph<'a>, live_graph: BorrowedGraph<'a>, smooth_cch_pot: &'a CCHPotData, live_cch_pot: &'a CCHPotData) -> Self {
+        let _blocked = block_reporting();
+        Self {
+            shortest_live_path: TopoDijkServer::new(&live_graph, live_cch_pot.forward_potential(), DefaultOps()),
+            shortest_path_by_smooth: TopoDijkServer::new(&smooth_graph, smooth_cch_pot.forward_potential(), DefaultOps()),
+            live_graph,
+        }
+    }
+
+    pub fn query(&mut self, query: Query) -> Option<()> {
+        report!("algo", "smooth_path_baseline");
+
+        let (res, time) = measure(|| {
+            let _expl_ctxt = push_context("exploration".to_string());
+            self.shortest_path_by_smooth.query(query)
+        });
+        report!("exploration_time_ms", time.as_secs_f64() * 1000.0);
+
+        let mut res = res.found()?;
+
+        let base_live_dist = {
+            let _blocked = block_reporting();
+            self.shortest_live_path.query(query).distance()
+        };
+        let path = res.node_path();
+        report!("num_nodes_on_path", path.len());
+
+        let final_live_dist = path_dist_iter(&path, &self.live_graph).last().unwrap();
+
+        report!("failed", false);
+        if let Some(base_live_dist) = base_live_dist {
+            report!(
+                "length_increase_percent",
+                (final_live_dist - base_live_dist) as f64 / base_live_dist as f64 * 100.0
+            );
+        }
+        Some(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
