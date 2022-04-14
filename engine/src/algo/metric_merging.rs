@@ -1,4 +1,5 @@
 use super::*;
+use crate::report::*;
 use std::{
     cmp::Reverse,
     collections::BinaryHeap,
@@ -6,6 +7,8 @@ use std::{
 };
 
 pub fn merge(metrics: &[&[Weight]], target_size: usize) -> Vec<Vec<usize>> {
+    report!("num_threads", rayon::current_num_threads());
+
     let m = metrics[0].len();
     for metric in metrics {
         assert_eq!(metric.len(), m);
