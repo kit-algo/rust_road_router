@@ -3,6 +3,8 @@
 
 use std::{env, error::Error, path::Path};
 
+#[macro_use]
+extern crate rust_road_router;
 use rust_road_router::{
     algo::customizable_contraction_hierarchy::*,
     cli::CliErr,
@@ -13,6 +15,7 @@ use rust_road_router::{
 
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting("cch_preprocessing");
+    report!("num_threads", rayon::current_num_threads());
     let arg = &env::args().skip(1).next().ok_or(CliErr("No directory arg given"))?;
     let path = Path::new(arg);
 
