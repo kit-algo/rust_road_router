@@ -561,7 +561,7 @@ impl DirectedCCH {
     }
 
     fn backward(&self) -> Slcs<EdgeId, NodeId> {
-        Slcs(&self.forward_first_out, &self.forward_head)
+        Slcs(&self.backward_first_out, &self.backward_head)
     }
 }
 
