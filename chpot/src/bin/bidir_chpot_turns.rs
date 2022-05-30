@@ -59,11 +59,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let chpot_data = CHPotLoader::reconstruct_from(&path.join("lower_bound_ch"))?;
     let pots = chpot_data.potentials();
-    let pots = (
-        TurnExpandedPotential::new(&graph, pots.0),
-        // since this is the reverse pot, head is the tail array of the reversed turn expanded graph
-        TurnExpandedPotential::new_with_tail(graph.head().to_vec(), pots.1),
-    );
+    let pots = (TurnExpandedPotential::new(&graph, pots.0), TurnExpandedPotential::new(&graph, pots.1));
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
     let mut server = BiDirTopo::<_, AlternatingDirs>::new(&exp_graph, SymmetricBiDirPotential::<_, _>::new(pots.0, pots.1));

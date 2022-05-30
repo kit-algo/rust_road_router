@@ -77,8 +77,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let pots = (
         TurnExpandedPotential::new(&graph, cch_pot_data.forward_potential()),
-        // since this is the reverse pot, head is the tail array of the reversed turn expanded graph
-        TurnExpandedPotential::new_with_tail(graph.head().to_vec(), cch_pot_data.backward_potential()),
+        TurnExpandedPotential::new(&graph, cch_pot_data.backward_potential()),
     );
 
     let virtual_topocore_ctxt = algo_runs_ctxt.push_collection_item();
