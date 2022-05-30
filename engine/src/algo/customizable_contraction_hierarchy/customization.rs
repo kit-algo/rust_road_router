@@ -49,6 +49,8 @@ where
     directed::customize_directed_basic(cch, upward_weights, downward_weights)
 }
 
+pub use directed::customize_directed_perfect;
+
 /// Customize with zero metric.
 /// Edges that have weight infinity after customization will have this weight
 /// for every metric and can be removed.
@@ -334,14 +336,15 @@ pub fn customize_perfect_without_rebuild(customized: &mut CustomizedBasic<CCH>) 
     (upward_modified, downward_modified)
 }
 
-pub fn rebuild_customized_perfect<'c>(
-    customized: CustomizedBasic<'c, CCH>,
+pub fn rebuild_customized_perfect<'c, C: CCHT + Sync>(
+    customized: CustomizedBasic<'c, C>,
     upward_modified: &[bool],
     downward_modified: &[bool],
-) -> CustomizedPerfect<'c, CCH> {
+) -> CustomizedPerfect<'c, C> {
     let cch = customized.cch;
-    let n = cch.num_nodes();
-    let m = cch.num_arcs();
+    let n = cch.num_cch_nodes();
+    let m_fw = cch.forward_head().len();
+    let m_bw = cch.backward_head().len();
 
     report_time_with_key("Build Perfect Customized Graph", "graph_build_running_time_ms", || {
         let forward = customized.forward_graph();
@@ -363,29 +366,29 @@ pub fn rebuild_customized_perfect<'c>(
         let mut backward_id_mapping = Vec::new();
 
         if cfg!(feature = "cch-disable-par") {
-            forward_first_out = Vec::with_capacity(cch.first_out.len());
+            forward_first_out = Vec::with_capacity(cch.forward_first_out().len());
             forward_first_out.push(0);
-            forward_head = Vec::with_capacity(m);
-            forward_tail = Vec::with_capacity(m);
-            forward_weight = Vec::with_capacity(m);
-            forward_unpacking = Vec::with_capacity(m);
+            forward_head = Vec::with_capacity(m_fw);
+            forward_tail = Vec::with_capacity(m_fw);
+            forward_weight = Vec::with_capacity(m_fw);
+            forward_unpacking = Vec::with_capacity(m_fw);
 
-            backward_first_out = Vec::with_capacity(cch.first_out.len());
+            backward_first_out = Vec::with_capacity(cch.backward_first_out().len());
             backward_first_out.push(0);
-            backward_head = Vec::with_capacity(m);
-            backward_tail = Vec::with_capacity(m);
-            backward_weight = Vec::with_capacity(m);
-            backward_unpacking = Vec::with_capacity(m);
+            backward_head = Vec::with_capacity(m_bw);
+            backward_tail = Vec::with_capacity(m_bw);
+            backward_weight = Vec::with_capacity(m_bw);
+            backward_unpacking = Vec::with_capacity(m_bw);
 
-            forward_id_mapping = vec![m as EdgeId; m];
-            backward_id_mapping = vec![m as EdgeId; m];
+            forward_id_mapping = vec![m_fw as EdgeId; m_fw];
+            backward_id_mapping = vec![m_bw as EdgeId; m_bw];
 
             for node in 0..n as NodeId {
-                let edge_ids = cch.neighbor_edge_indices_usize(node);
+                let fw_edge_ids = cch.forward().range(node as usize);
                 for (((link, &modified), unpack), edge_idx) in LinkIterable::<Link>::link_iter(&forward, node)
-                    .zip(&upward_modified[edge_ids.clone()])
-                    .zip(&customized.up_unpacking[edge_ids.clone()])
-                    .zip(edge_ids.clone())
+                    .zip(&upward_modified[fw_edge_ids.clone()])
+                    .zip(&customized.up_unpacking[fw_edge_ids.clone()])
+                    .zip(fw_edge_ids)
                 {
                     if !modified {
                         debug_assert!(link.weight < INFINITY);
@@ -399,10 +402,11 @@ pub fn rebuild_customized_perfect<'c>(
                         ));
                     }
                 }
+                let bw_edge_ids = cch.forward().range(node as usize);
                 for (((link, &modified), unpack), edge_idx) in LinkIterable::<Link>::link_iter(&backward, node)
-                    .zip(&downward_modified[edge_ids.clone()])
-                    .zip(&customized.down_unpacking[edge_ids.clone()])
-                    .zip(edge_ids)
+                    .zip(&downward_modified[bw_edge_ids.clone()])
+                    .zip(&customized.down_unpacking[bw_edge_ids.clone()])
+                    .zip(bw_edge_ids)
                 {
                     if !modified {
                         debug_assert!(link.weight < INFINITY);
@@ -423,25 +427,25 @@ pub fn rebuild_customized_perfect<'c>(
             let k = rayon::current_num_threads() * 4;
 
             rayon::scope(|s| {
-                s.spawn(|_| forward_first_out = vec![0; cch.first_out.len()]);
-                s.spawn(|_| forward_head = vec![0; m]);
-                s.spawn(|_| forward_tail = vec![0; m]);
-                s.spawn(|_| forward_weight = vec![0; m]);
-                s.spawn(|_| forward_unpacking = vec![(InRangeOption::NONE, InRangeOption::NONE); m]);
-                s.spawn(|_| forward_id_mapping = vec![m as EdgeId; m]);
-                s.spawn(|_| backward_first_out = vec![0; cch.first_out.len()]);
-                s.spawn(|_| backward_head = vec![0; m]);
-                s.spawn(|_| backward_tail = vec![0; m]);
-                s.spawn(|_| backward_weight = vec![0; m]);
-                s.spawn(|_| backward_unpacking = vec![(InRangeOption::NONE, InRangeOption::NONE); m]);
-                s.spawn(|_| backward_id_mapping = vec![m as EdgeId; m]);
+                s.spawn(|_| forward_first_out = vec![0; cch.forward_first_out().len()]);
+                s.spawn(|_| forward_head = vec![0; m_fw]);
+                s.spawn(|_| forward_tail = vec![0; m_fw]);
+                s.spawn(|_| forward_weight = vec![0; m_fw]);
+                s.spawn(|_| forward_unpacking = vec![(InRangeOption::NONE, InRangeOption::NONE); m_fw]);
+                s.spawn(|_| forward_id_mapping = vec![m_fw as EdgeId; m_fw]);
+                s.spawn(|_| backward_first_out = vec![0; cch.backward_first_out().len()]);
+                s.spawn(|_| backward_head = vec![0; m_bw]);
+                s.spawn(|_| backward_tail = vec![0; m_bw]);
+                s.spawn(|_| backward_weight = vec![0; m_bw]);
+                s.spawn(|_| backward_unpacking = vec![(InRangeOption::NONE, InRangeOption::NONE); m_bw]);
+                s.spawn(|_| backward_id_mapping = vec![m_bw as EdgeId; m_bw]);
             });
 
             let mut edges_of_each_thread = vec![(0, 0); k + 1];
             let mut local_edge_counts = &mut edges_of_each_thread[1..];
-            let target_edges_per_thread = (m + k - 1) / k;
+            let target_edges_per_thread = (m_fw + k - 1) / k;
             let first_node_of_chunk: Vec<_> = cch
-                .tail
+                .forward_tail()
                 .chunks(target_edges_per_thread)
                 .map(|chunk| chunk[0] as usize)
                 .chain(std::iter::once(n))
@@ -458,10 +462,11 @@ pub fn rebuild_customized_perfect<'c>(
                     let (local_count, rest_counts) = local_edge_counts.split_first_mut().unwrap();
                     local_edge_counts = rest_counts;
                     let local_nodes = first_node_of_chunk[i]..first_node_of_chunk[i + 1];
-                    let local_edges = cch.first_out()[local_nodes.start] as usize..cch.first_out()[local_nodes.end] as usize;
+                    let local_fw_edges = cch.forward_first_out()[local_nodes.start] as usize..cch.forward_first_out()[local_nodes.end] as usize;
+                    let local_bw_edges = cch.backward_first_out()[local_nodes.start] as usize..cch.backward_first_out()[local_nodes.end] as usize;
                     s.spawn(move |_| {
-                        local_count.0 = upward_modified[local_edges.clone()].iter().filter(|&&m| !m).count();
-                        local_count.1 = downward_modified[local_edges].iter().filter(|&&m| !m).count();
+                        local_count.0 = upward_modified[local_fw_edges].iter().filter(|&&m| !m).count();
+                        local_count.1 = downward_modified[local_bw_edges].iter().filter(|&&m| !m).count();
                     });
                 }
             });
@@ -498,7 +503,8 @@ pub fn rebuild_customized_perfect<'c>(
                 for i in 0..k {
                     let local_nodes = first_node_of_chunk[i]..first_node_of_chunk[i + 1];
                     debug_assert!(local_nodes.start <= local_nodes.end);
-                    let num_cch_edges_in_batch = cch.first_out()[local_nodes.end] - cch.first_out()[local_nodes.start];
+                    let num_cch_fw_edges_in_batch = cch.forward_first_out()[local_nodes.end] - cch.forward_first_out()[local_nodes.start];
+                    let num_cch_bw_edges_in_batch = cch.backward_first_out()[local_nodes.end] - cch.backward_first_out()[local_nodes.start];
                     let num_fw_edges_before = edges_of_each_thread[i].0;
                     let num_bw_edges_before = edges_of_each_thread[i].1;
 
@@ -514,7 +520,7 @@ pub fn rebuild_customized_perfect<'c>(
                     forward_weight = rest_fw_weight;
                     let (local_fw_unpacking, rest_fw_unpacking) = forward_unpacking.split_at_mut(edges_of_each_thread[i + 1].0 - num_fw_edges_before);
                     forward_unpacking = rest_fw_unpacking;
-                    let (local_fw_mapping, rest_fw_mapping) = forward_mapping.split_at_mut(num_cch_edges_in_batch as usize);
+                    let (local_fw_mapping, rest_fw_mapping) = forward_mapping.split_at_mut(num_cch_fw_edges_in_batch as usize);
                     forward_mapping = rest_fw_mapping;
                     let (local_bw_head, rest_bw_head) = backward_head.split_at_mut(edges_of_each_thread[i + 1].1 - num_bw_edges_before);
                     backward_head = rest_bw_head;
@@ -524,22 +530,23 @@ pub fn rebuild_customized_perfect<'c>(
                     backward_weight = rest_bw_weight;
                     let (local_bw_unpacking, rest_bw_unpacking) = backward_unpacking.split_at_mut(edges_of_each_thread[i + 1].1 - num_bw_edges_before);
                     backward_unpacking = rest_bw_unpacking;
-                    let (local_bw_mapping, rest_bw_mapping) = backward_mapping.split_at_mut(num_cch_edges_in_batch as usize);
+                    let (local_bw_mapping, rest_bw_mapping) = backward_mapping.split_at_mut(num_cch_bw_edges_in_batch as usize);
                     backward_mapping = rest_bw_mapping;
 
                     s.spawn(move |_| {
                         let mut fw_edge_count = 0;
                         let mut bw_edge_count = 0;
-                        let edge_offset = cch.first_out()[local_nodes.start] as usize;
+                        let fw_edge_offset = cch.forward_first_out()[local_nodes.start] as usize;
+                        let bw_edge_offset = cch.backward_first_out()[local_nodes.start] as usize;
                         for (local_node_idx, node) in local_nodes.enumerate() {
                             local_fw_fo[local_node_idx] = (num_fw_edges_before + fw_edge_count) as EdgeId;
                             local_bw_fo[local_node_idx] = (num_bw_edges_before + bw_edge_count) as EdgeId;
 
-                            let edge_ids = cch.neighbor_edge_indices_usize(node as NodeId);
+                            let fw_edge_ids = cch.forward().range(node);
                             for (((link, &modified), unpack), edge_idx) in LinkIterable::<Link>::link_iter(forward, node as NodeId)
-                                .zip(&upward_modified[edge_ids.clone()])
-                                .zip(&up_unpacking[edge_ids.clone()])
-                                .zip(edge_ids.clone())
+                                .zip(&upward_modified[fw_edge_ids.clone()])
+                                .zip(&up_unpacking[fw_edge_ids.clone()])
+                                .zip(fw_edge_ids)
                             {
                                 if !modified {
                                     // debug_assert!(link.weight < INFINITY);
@@ -547,14 +554,15 @@ pub fn rebuild_customized_perfect<'c>(
                                     local_fw_tail[fw_edge_count] = node as NodeId;
                                     local_fw_weight[fw_edge_count] = link.weight;
                                     local_fw_unpacking[fw_edge_count] = *unpack;
-                                    local_fw_mapping[edge_idx - edge_offset] = (num_fw_edges_before + fw_edge_count) as EdgeId;
+                                    local_fw_mapping[edge_idx - fw_edge_offset] = (num_fw_edges_before + fw_edge_count) as EdgeId;
                                     fw_edge_count += 1;
                                 }
                             }
+                            let bw_edge_ids = cch.backward().range(node);
                             for (((link, &modified), unpack), edge_idx) in LinkIterable::<Link>::link_iter(backward, node as NodeId)
-                                .zip(&downward_modified[edge_ids.clone()])
-                                .zip(&down_unpacking[edge_ids.clone()])
-                                .zip(edge_ids)
+                                .zip(&downward_modified[bw_edge_ids.clone()])
+                                .zip(&down_unpacking[bw_edge_ids.clone()])
+                                .zip(bw_edge_ids)
                             {
                                 if !modified {
                                     // debug_assert!(link.weight < INFINITY);
@@ -562,7 +570,7 @@ pub fn rebuild_customized_perfect<'c>(
                                     local_bw_tail[bw_edge_count] = node as NodeId;
                                     local_bw_weight[bw_edge_count] = link.weight;
                                     local_bw_unpacking[bw_edge_count] = *unpack;
-                                    local_bw_mapping[edge_idx - edge_offset] = (num_bw_edges_before + bw_edge_count) as EdgeId;
+                                    local_bw_mapping[edge_idx - bw_edge_offset] = (num_bw_edges_before + bw_edge_count) as EdgeId;
                                     bw_edge_count += 1;
                                 }
                             }

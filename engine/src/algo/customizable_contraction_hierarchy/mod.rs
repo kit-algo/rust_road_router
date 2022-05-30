@@ -13,7 +13,7 @@ mod contraction;
 use contraction::*;
 pub mod customization;
 pub use customization::ftd as ftd_cch;
-pub use customization::{customize, customize_directed, customize_perfect};
+pub use customization::{customize, customize_directed, customize_directed_perfect, customize_perfect};
 pub mod separator_decomposition;
 use separator_decomposition::*;
 mod reorder;
@@ -236,6 +236,9 @@ impl Graph for CCH {
 
 /// Trait for directed and undirected CCHs
 pub trait CCHT {
+    fn num_cch_nodes(&self) -> usize {
+        self.forward_first_out().len() - 1
+    }
     fn forward_first_out(&self) -> &[EdgeId];
     fn backward_first_out(&self) -> &[EdgeId];
     fn forward_head(&self) -> &[NodeId];
@@ -258,6 +261,14 @@ pub trait CCHT {
 
     /// Reconstruct the separators of the nested dissection order.
     fn separators(&self) -> &SeparatorTree;
+
+    fn forward(&self) -> Slcs<EdgeId, NodeId> {
+        Slcs(self.forward_first_out(), self.forward_head())
+    }
+
+    fn backward(&self) -> Slcs<EdgeId, NodeId> {
+        Slcs(self.backward_first_out(), self.backward_head())
+    }
 }
 
 pub fn unpack_arc(
@@ -554,14 +565,6 @@ pub struct DirectedCCH {
 impl DirectedCCH {
     fn num_nodes(&self) -> usize {
         self.forward_first_out.len() - 1
-    }
-
-    fn forward(&self) -> Slcs<EdgeId, NodeId> {
-        Slcs(&self.forward_first_out, &self.forward_head)
-    }
-
-    fn backward(&self) -> Slcs<EdgeId, NodeId> {
-        Slcs(&self.backward_first_out, &self.backward_head)
     }
 }
 

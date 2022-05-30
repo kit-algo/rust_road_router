@@ -266,30 +266,32 @@ impl<F: Sync + Fn(Range<usize>, *mut T, *mut T, *mut E, *mut E), T, E> SubgraphP
     }
 }
 
-pub struct SeperatorBasedPerfectParallelCustomization<'a, T, F, G, E = ()> {
-    cch: &'a CCH,
+pub struct SeperatorBasedPerfectParallelCustomization<'a, T, F, G, C, E = ()> {
+    cch: &'a C,
     customize_cell: F,
     customize_separator: G,
     _t: std::marker::PhantomData<T>,
     _e: std::marker::PhantomData<E>,
 }
 
-impl<'a, T, F, G> SeperatorBasedPerfectParallelCustomization<'a, T, NoAux<F>, NoAux<G>>
+impl<'a, T, F, G, C> SeperatorBasedPerfectParallelCustomization<'a, T, NoAux<F>, NoAux<G>, C>
 where
     T: Send + Sync,
     F: Sync + Fn(Range<usize>, *mut T, *mut T),
     G: Sync + Fn(Range<usize>, *mut T, *mut T),
+    C: CCHT + Sync,
 {
-    pub fn new(cch: &'a CCH, customize_cell: F, customize_separator: G) -> Self {
+    pub fn new(cch: &'a C, customize_cell: F, customize_separator: G) -> Self {
         Self::new_with_aux(cch, NoAux(customize_cell), NoAux(customize_separator))
     }
 }
 
-impl<'a, T, F, G> SeperatorBasedPerfectParallelCustomization<'a, T, F, G>
+impl<'a, T, F, G, C> SeperatorBasedPerfectParallelCustomization<'a, T, F, G, C>
 where
     T: Send + Sync,
     F: SubgraphPerfectCustomization<T, ()>,
     G: SubgraphPerfectCustomization<T, ()>,
+    C: CCHT + Sync,
 {
     pub fn customize(&self, upward: &'a mut [T], downward: &'a mut [T], setup: impl Fn(Box<dyn FnOnce() + '_>) + Sync) {
         let mut up_aux = vec![(); upward.len()];
@@ -299,19 +301,20 @@ where
 }
 
 /// Parallelization of perfect customization.
-impl<'a, T, F, G, E> SeperatorBasedPerfectParallelCustomization<'a, T, F, G, E>
+impl<'a, T, F, G, C, E> SeperatorBasedPerfectParallelCustomization<'a, T, F, G, C, E>
 where
     T: Send + Sync,
     E: Send + Sync,
     F: SubgraphPerfectCustomization<T, E>,
     G: SubgraphPerfectCustomization<T, E>,
+    C: CCHT + Sync,
 {
     /// Setup for parallelization, we need a cch, and a routine for customization of cells
     /// and one for customization of separators.
     /// These should do the same thing in the end, but may achieve it in different ways because there are different performance trade-offs.
     /// The cell routine will be invoked several times in parallel and nodes will mostly have low degrees.
     /// The separator routine will be invoked only very few times in parallel, the final separator will be customized completely alone and nodes have high degrees.
-    pub fn new_with_aux(cch: &'a CCH, customize_cell: F, customize_separator: G) -> Self {
+    pub fn new_with_aux(cch: &'a C, customize_cell: F, customize_separator: G) -> Self {
         let separators = cch.separators();
         if cfg!(feature = "cch-disable-par") {
             separators.validate_for_parallelization();
@@ -341,7 +344,7 @@ where
         if cfg!(feature = "cch-disable-par") {
             setup(Box::new(|| {
                 self.customize_cell.exec(
-                    0..self.cch.num_nodes(),
+                    0..self.cch.num_cch_nodes(),
                     upward.as_mut_ptr(),
                     downward.as_mut_ptr(),
                     up_aux.as_mut_ptr(),
@@ -360,7 +363,7 @@ where
                         pool.install(|| {
                             self.customize_tree(
                                 self.cch.separators(),
-                                self.cch.num_nodes(),
+                                self.cch.num_cch_nodes(),
                                 upward.as_mut_ptr(),
                                 downward.as_mut_ptr(),
                                 up_aux.as_mut_ptr(),
@@ -374,7 +377,7 @@ where
     }
 
     fn customize_tree(&self, sep_tree: &SeparatorTree, offset: usize, upward: *mut T, downward: *mut T, up_aux: *mut E, down_aux: *mut E) {
-        if sep_tree.num_nodes < self.cch.num_nodes() / (32 * rayon::current_num_threads()) {
+        if sep_tree.num_nodes < self.cch.num_cch_nodes() / (32 * rayon::current_num_threads()) {
             // if the current cell is small enough (load balancing parameters) run the customize_cell routine on it
             self.customize_cell
                 .exec(offset - sep_tree.num_nodes..offset, upward, downward, up_aux, down_aux);

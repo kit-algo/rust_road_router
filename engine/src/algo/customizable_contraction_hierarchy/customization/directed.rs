@@ -168,3 +168,119 @@ pub fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weigh
 
     CustomizedBasic::new(cch, upward_weights, downward_weights, upward_unpack, downward_unpack)
 }
+
+pub fn customize_directed_perfect(mut customized: CustomizedBasic<DirectedCCH>) -> CustomizedPerfect<DirectedCCH> {
+    let (upward_modified, downward_modified) = customize_directed_perfect_without_rebuild(&mut customized);
+    rebuild_customized_perfect(customized, &upward_modified, &downward_modified)
+}
+
+scoped_thread_local!(static PERFECT_WORKSPACE: RefCell<Vec<(InRangeOption<EdgeId>, InRangeOption<EdgeId>)>>);
+
+pub fn customize_directed_perfect_without_rebuild(customized: &mut CustomizedBasic<DirectedCCH>) -> (Vec<bool>, Vec<bool>) {
+    let cch = customized.cch;
+    let n = cch.num_nodes();
+    // Routine for perfect precustomization.
+    // The interface is similar to the one for the basic customization, but we need access to nonconsecutive ranges of edges,
+    // so we can't use slices. Thus, we just take a mutable pointer to the shortcut vecs.
+    // The logic of the perfect customization based on separators guarantees, that we will never concurrently modify
+    // the same shortcuts, but so far I haven't found a way to express that in safe rust.
+    let customize_perfect = |nodes: Range<usize>, upward: *mut Weight, downward: *mut Weight, up_mod: *mut bool, down_mod: *mut bool| {
+        PERFECT_WORKSPACE.with(|node_edge_ids| {
+            let mut node_edge_ids = node_edge_ids.borrow_mut();
+
+            // processing nodes in reverse order
+            for current_node in nodes.rev() {
+                // store mapping of head node to corresponding outgoing edge id
+                for (&node, edge_id) in cch.forward()[current_node].iter().zip(cch.forward().range(current_node)) {
+                    node_edge_ids[node as usize].0 = InRangeOption::some(edge_id as EdgeId);
+                }
+                for (&node, edge_id) in cch.backward()[current_node].iter().zip(cch.backward().range(current_node)) {
+                    node_edge_ids[node as usize].1 = InRangeOption::some(edge_id as EdgeId);
+                }
+
+                for (&node, edge_id) in cch.forward()[current_node].iter().zip(cch.forward().range(current_node)) {
+                    for (&target, shortcut_edge_id) in cch.forward()[node as usize].iter().zip(cch.forward().range(node as usize)) {
+                        if let Some(other_edge_id) = node_edge_ids[target as usize].0.value() {
+                            unsafe {
+                                let relax_weight = (*upward.add(edge_id as usize)) + (*upward.add(shortcut_edge_id as usize));
+                                let edge_weight = upward.add(other_edge_id as usize);
+                                if relax_weight < *edge_weight {
+                                    *edge_weight = relax_weight;
+                                    *up_mod.add(other_edge_id as usize) = true;
+                                }
+                            }
+                        }
+                    }
+
+                    for (&target, shortcut_edge_id) in cch.backward()[node as usize].iter().zip(cch.backward().range(node as usize)) {
+                        if let Some(other_edge_id) = node_edge_ids[target as usize].0.value() {
+                            unsafe {
+                                let relax_weight = (*upward.add(other_edge_id as usize)) + (*downward.add(shortcut_edge_id as usize));
+                                let edge_weight = upward.add(edge_id as usize);
+                                if relax_weight < *edge_weight {
+                                    *edge_weight = relax_weight;
+                                    *up_mod.add(edge_id as usize) = true;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                for (&node, edge_id) in cch.backward()[current_node].iter().zip(cch.backward().range(current_node)) {
+                    for (&target, shortcut_edge_id) in cch.forward()[node as usize].iter().zip(cch.forward().range(node as usize)) {
+                        if let Some(other_edge_id) = node_edge_ids[target as usize].1.value() {
+                            unsafe {
+                                let relax_weight = (*downward.add(other_edge_id as usize)) + (*upward.add(shortcut_edge_id as usize));
+                                let edge_weight = downward.add(edge_id as usize);
+                                if relax_weight < *edge_weight {
+                                    *edge_weight = relax_weight;
+                                    *down_mod.add(edge_id as usize) = true;
+                                }
+                            }
+                        }
+                    }
+
+                    for (&target, shortcut_edge_id) in cch.backward()[node as usize].iter().zip(cch.backward().range(node as usize)) {
+                        if let Some(other_edge_id) = node_edge_ids[target as usize].1.value() {
+                            unsafe {
+                                let relax_weight = (*downward.add(edge_id as usize)) + (*downward.add(shortcut_edge_id as usize));
+                                let edge_weight = downward.add(other_edge_id as usize);
+                                if relax_weight < *edge_weight {
+                                    *edge_weight = relax_weight;
+                                    *down_mod.add(other_edge_id as usize) = true;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // reset the mapping
+                for &node in &cch.forward()[current_node] {
+                    node_edge_ids[node as usize].0 = InRangeOption::NONE;
+                }
+                for &node in &cch.backward()[current_node] {
+                    node_edge_ids[node as usize].1 = InRangeOption::NONE;
+                }
+            }
+        });
+    };
+
+    let static_perfect_customization = SeperatorBasedPerfectParallelCustomization::new_with_aux(cch, customize_perfect, customize_perfect);
+
+    let mut upward_modified = vec![false; customized.upward.len()];
+    let mut downward_modified = vec![false; customized.downward.len()];
+
+    report_time_with_key("CCH Perfect Customization", "perfect_customization_running_time_ms", || {
+        static_perfect_customization.customize_with_aux(
+            &mut customized.upward,
+            &mut customized.downward,
+            &mut upward_modified,
+            &mut downward_modified,
+            |cb| {
+                PERFECT_WORKSPACE.set(&RefCell::new(vec![(InRangeOption::NONE, InRangeOption::NONE); n as usize]), cb);
+            },
+        );
+    });
+
+    (upward_modified, downward_modified)
+}
