@@ -1,4 +1,5 @@
 use super::*;
+use crate::report::*;
 use rayon::prelude::*;
 use std::{cell::RefCell, cmp::min};
 
@@ -114,6 +115,7 @@ fn prepare_zero_weights(cch: &impl CCHT, upward_weights: &mut [Weight], downward
 fn customize_basic(cch: &CCH, mut upward_weights: Vec<Weight>, mut downward_weights: Vec<Weight>) -> CustomizedBasic<CCH> {
     let n = cch.num_nodes() as NodeId;
     let m = cch.num_arcs() as EdgeId;
+    report!("num_cch_edges", m);
 
     // Main customization routine.
     // Executed by one thread for a consecutive range of nodes.
@@ -251,12 +253,15 @@ pub fn customize_perfect(mut customized: CustomizedBasic<CCH>) -> CustomizedPerf
 pub fn customize_perfect_without_rebuild(customized: &mut CustomizedBasic<CCH>) -> (Vec<bool>, Vec<bool>) {
     let cch = customized.cch;
     let n = cch.num_nodes();
+    let num_triangles = std::sync::atomic::AtomicU64::new(0);
     // Routine for perfect precustomization.
     // The interface is similar to the one for the basic customization, but we need access to nonconsecutive ranges of edges,
     // so we can't use slices. Thus, we just take a mutable pointer to the shortcut vecs.
     // The logic of the perfect customization based on separators guarantees, that we will never concurrently modify
     // the same shortcuts, but so far I haven't found a way to express that in safe rust.
     let customize_perfect = |nodes: Range<usize>, upward: *mut Weight, downward: *mut Weight, up_mod: *mut bool, down_mod: *mut bool| {
+        let mut num_cell_triangles = 0;
+
         PERFECT_WORKSPACE.with(|node_edge_ids| {
             let mut node_edge_ids = node_edge_ids.borrow_mut();
 
@@ -272,6 +277,7 @@ pub fn customize_perfect_without_rebuild(customized: &mut CustomizedBasic<CCH>) 
                     let shortcut_edge_ids = cch.neighbor_edge_indices(node);
                     for (target, shortcut_edge_id) in cch.neighbor_iter(node).zip(shortcut_edge_ids) {
                         if let Some(other_edge_id) = node_edge_ids[target as usize].value() {
+                            num_cell_triangles += 1;
                             // Here we have both an intermediate and an upper triangle
                             // depending on which edge we take as the base
                             // Relax all them.
@@ -314,6 +320,8 @@ pub fn customize_perfect_without_rebuild(customized: &mut CustomizedBasic<CCH>) 
                 }
             }
         });
+
+        num_triangles.fetch_add(num_cell_triangles, std::sync::atomic::Ordering::SeqCst);
     };
 
     let static_perfect_customization = SeperatorBasedPerfectParallelCustomization::new_with_aux(cch, customize_perfect, customize_perfect);
@@ -332,6 +340,8 @@ pub fn customize_perfect_without_rebuild(customized: &mut CustomizedBasic<CCH>) 
             },
         );
     });
+
+    report!("num_triangles", num_triangles.load(std::sync::atomic::Ordering::SeqCst));
 
     (upward_modified, downward_modified)
 }
@@ -599,6 +609,9 @@ pub fn rebuild_customized_perfect<'c, C: CCHT + Sync>(
                 *up = InRangeOption::new(up.value().map(|idx| forward_id_mapping[idx as usize] as EdgeId));
             });
         }
+
+        report!("num_fw_edges_in_perfect", forward_head.len());
+        report!("num_bw_edges_in_perfect", backward_head.len());
 
         CustomizedPerfect::new(
             cch,

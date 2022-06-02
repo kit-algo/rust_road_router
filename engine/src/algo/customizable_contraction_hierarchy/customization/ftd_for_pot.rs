@@ -2,7 +2,6 @@
 
 use super::*;
 use crate::datastr::graph::first_out_graph::degrees_to_first_out;
-use crate::report::*;
 use floating_time_dependent::{shortcut_source::ShortcutSourceData, *};
 use std::{
     cmp::{min, Ordering as Ord},

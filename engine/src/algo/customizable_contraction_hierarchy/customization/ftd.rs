@@ -1,7 +1,6 @@
 //! CATCHUp Customization
 
 use super::*;
-use crate::report::*;
 use floating_time_dependent::*;
 use std::{
     cmp::{min, Ordering as Ord},

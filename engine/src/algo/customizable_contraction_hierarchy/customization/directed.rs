@@ -4,6 +4,8 @@ pub fn customize_directed_basic(cch: &DirectedCCH, mut upward_weights: Vec<Weigh
     let n = cch.num_nodes() as NodeId;
     let m_up = cch.forward_head().len() as EdgeId;
     let m_down = cch.backward_head().len() as EdgeId;
+    report!("num_cch_fw_edges", m_up);
+    report!("num_cch_bw_edges", m_down);
 
     // Main customization routine.
     // Executed by one thread for a consecutive range of nodes.
@@ -179,12 +181,15 @@ scoped_thread_local!(static PERFECT_WORKSPACE: RefCell<Vec<(InRangeOption<EdgeId
 pub fn customize_directed_perfect_without_rebuild(customized: &mut CustomizedBasic<DirectedCCH>) -> (Vec<bool>, Vec<bool>) {
     let cch = customized.cch;
     let n = cch.num_nodes();
+    let num_triangles = std::sync::atomic::AtomicU64::new(0);
     // Routine for perfect precustomization.
     // The interface is similar to the one for the basic customization, but we need access to nonconsecutive ranges of edges,
     // so we can't use slices. Thus, we just take a mutable pointer to the shortcut vecs.
     // The logic of the perfect customization based on separators guarantees, that we will never concurrently modify
     // the same shortcuts, but so far I haven't found a way to express that in safe rust.
     let customize_perfect = |nodes: Range<usize>, upward: *mut Weight, downward: *mut Weight, up_mod: *mut bool, down_mod: *mut bool| {
+        let mut num_cell_triangles = 0;
+
         PERFECT_WORKSPACE.with(|node_edge_ids| {
             let mut node_edge_ids = node_edge_ids.borrow_mut();
 
@@ -209,6 +214,7 @@ pub fn customize_directed_perfect_without_rebuild(customized: &mut CustomizedBas
                                     *up_mod.add(other_edge_id as usize) = true;
                                 }
                             }
+                            num_cell_triangles += 1;
                         }
                     }
 
@@ -222,6 +228,7 @@ pub fn customize_directed_perfect_without_rebuild(customized: &mut CustomizedBas
                                     *up_mod.add(edge_id as usize) = true;
                                 }
                             }
+                            num_cell_triangles += 1;
                         }
                     }
                 }
@@ -237,6 +244,7 @@ pub fn customize_directed_perfect_without_rebuild(customized: &mut CustomizedBas
                                     *down_mod.add(edge_id as usize) = true;
                                 }
                             }
+                            num_cell_triangles += 1;
                         }
                     }
 
@@ -250,6 +258,7 @@ pub fn customize_directed_perfect_without_rebuild(customized: &mut CustomizedBas
                                     *down_mod.add(other_edge_id as usize) = true;
                                 }
                             }
+                            num_cell_triangles += 1;
                         }
                     }
                 }
@@ -263,6 +272,8 @@ pub fn customize_directed_perfect_without_rebuild(customized: &mut CustomizedBas
                 }
             }
         });
+
+        num_triangles.fetch_add(num_cell_triangles, std::sync::atomic::Ordering::SeqCst);
     };
 
     let static_perfect_customization = SeperatorBasedPerfectParallelCustomization::new_with_aux(cch, customize_perfect, customize_perfect);
@@ -281,6 +292,11 @@ pub fn customize_directed_perfect_without_rebuild(customized: &mut CustomizedBas
             },
         );
     });
+
+    report!(
+        "num_directed_upper_and_intermediate_triangles",
+        num_triangles.load(std::sync::atomic::Ordering::SeqCst)
+    );
 
     (upward_modified, downward_modified)
 }
