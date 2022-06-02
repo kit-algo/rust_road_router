@@ -15,7 +15,7 @@ seed=5489
   flow_cutter_set random_seed $seed \
   reorder_nodes_at_random \
   reorder_nodes_in_preorder \
-  flow_cutter_set thread_count ${2:-1} \
+  flow_cutter_set thread_count ${2:--1} \
   flow_cutter_set BulkDistance no \
   flow_cutter_set max_cut_size 100000000 \
   flow_cutter_set distance_ordering_cutter_count 0 \
@@ -29,4 +29,4 @@ seed=5489
   reorder_nodes_in_accelerated_flow_cutter_cch_order \
   do_not_report_time \
   examine_chordal_supergraph \
-  save_routingkit_node_permutation_since_last_load "$1/cch_perm" \
+  save_routingkit_node_permutation_since_last_load "$1/cch_perm"
