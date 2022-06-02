@@ -234,7 +234,7 @@ impl CCH {
                 .iter()
                 .zip(forward.weight().iter())
                 .zip(backward.weight().iter())
-                .filter(|((_, fw_w), bw_w)| **fw_w < INFINITY && **bw_w < INFINITY)
+                .filter(|((_, fw_w), bw_w)| **fw_w < INFINITY || **bw_w < INFINITY)
                 .map(|((slc, _), _)| slc.iter().copied()),
         );
         let backward_cch_edge_to_orig_arc = Vecs::from_iters(
@@ -242,7 +242,7 @@ impl CCH {
                 .iter()
                 .zip(forward.weight().iter())
                 .zip(backward.weight().iter())
-                .filter(|((_, fw_w), bw_w)| **fw_w < INFINITY && **bw_w < INFINITY)
+                .filter(|((_, fw_w), bw_w)| **fw_w < INFINITY || **bw_w < INFINITY)
                 .map(|((slc, _), _)| slc.iter().copied()),
         );
 
@@ -253,7 +253,7 @@ impl CCH {
                     .iter()
                     .zip(forward.weight()[range.clone()].iter())
                     .zip(backward.weight()[range].iter())
-                    .filter(|((_, fw_w), bw_w)| **fw_w < INFINITY && **bw_w < INFINITY)
+                    .filter(|((_, fw_w), bw_w)| **fw_w < INFINITY || **bw_w < INFINITY)
                     .map(|((head, _), _)| *head),
             );
             tail.extend(std::iter::repeat(node).take(head.len() - *first_out.last().unwrap() as usize));
