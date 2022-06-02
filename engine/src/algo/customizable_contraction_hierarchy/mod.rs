@@ -158,9 +158,9 @@ impl CCH {
 
     /// Transform into a directed CCH which is more efficient
     /// for turn expanded graphs because many edges can be removed.
-    pub fn into_directed_cch(self) -> DirectedCCH {
+    pub fn to_directed_cch(&self) -> DirectedCCH {
         // identify arcs which are always infinity and can be removed
-        let customized = customization::always_infinity(&self);
+        let customized = customization::always_infinity(self);
         let forward = customized.forward_graph();
         let backward = customized.backward_graph();
 
@@ -208,19 +208,19 @@ impl CCH {
             backward_first_out,
             backward_head,
             backward_tail,
-            node_order: self.node_order,
+            node_order: self.node_order.clone(),
             forward_cch_edge_to_orig_arc,
             backward_cch_edge_to_orig_arc,
-            elimination_tree: self.elimination_tree,
+            elimination_tree: self.elimination_tree.clone(),
             forward_inverted,
             backward_inverted,
-            separator_tree: self.separator_tree,
+            separator_tree: self.separator_tree.clone(),
         }
     }
 
-    pub fn remove_always_infinity(self) -> CCH {
+    pub fn remove_always_infinity(&self) -> CCH {
         // identify arcs which are always infinity and can be removed
-        let customized = customization::always_infinity(&self);
+        let customized = customization::always_infinity(self);
         let forward = customized.forward_graph();
         let backward = customized.backward_graph();
 
@@ -266,12 +266,12 @@ impl CCH {
             first_out,
             head,
             tail,
-            node_order: self.node_order,
+            node_order: self.node_order.clone(),
             forward_cch_edge_to_orig_arc,
             backward_cch_edge_to_orig_arc,
-            elimination_tree: self.elimination_tree,
+            elimination_tree: self.elimination_tree.clone(),
             inverted,
-            separator_tree: self.separator_tree,
+            separator_tree: self.separator_tree.clone(),
         }
     }
 }
