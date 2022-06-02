@@ -186,6 +186,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cchpp"
+version = "0.1.0"
+dependencies = [
+ "affinity",
+ "rand 0.8.5",
+ "rayon",
+ "rust_road_router",
+]
+
+[[package]]
 name = "cfg-if"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
