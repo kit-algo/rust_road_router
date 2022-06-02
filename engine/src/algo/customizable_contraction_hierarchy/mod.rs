@@ -217,6 +217,63 @@ impl CCH {
             separator_tree: self.separator_tree,
         }
     }
+
+    pub fn remove_always_infinity(self) -> CCH {
+        // identify arcs which are always infinity and can be removed
+        let customized = customization::always_infinity(&self);
+        let forward = customized.forward_graph();
+        let backward = customized.backward_graph();
+
+        let mut first_out = Vec::with_capacity(self.first_out.len());
+        first_out.push(0);
+        let mut head = Vec::with_capacity(self.head.len());
+        let mut tail = Vec::with_capacity(self.head.len());
+
+        let forward_cch_edge_to_orig_arc = Vecs::from_iters(
+            self.forward_cch_edge_to_orig_arc
+                .iter()
+                .zip(forward.weight().iter())
+                .zip(backward.weight().iter())
+                .filter(|((_, fw_w), bw_w)| **fw_w < INFINITY && **bw_w < INFINITY)
+                .map(|((slc, _), _)| slc.iter().copied()),
+        );
+        let backward_cch_edge_to_orig_arc = Vecs::from_iters(
+            self.backward_cch_edge_to_orig_arc
+                .iter()
+                .zip(forward.weight().iter())
+                .zip(backward.weight().iter())
+                .filter(|((_, fw_w), bw_w)| **fw_w < INFINITY && **bw_w < INFINITY)
+                .map(|((slc, _), _)| slc.iter().copied()),
+        );
+
+        for node in 0..self.num_nodes() as NodeId {
+            let range = self.neighbor_edge_indices_usize(node);
+            head.extend(
+                self.head[range.clone()]
+                    .iter()
+                    .zip(forward.weight()[range.clone()].iter())
+                    .zip(backward.weight()[range].iter())
+                    .filter(|((_, fw_w), bw_w)| **fw_w < INFINITY && **bw_w < INFINITY)
+                    .map(|((head, _), _)| *head),
+            );
+            tail.extend(std::iter::repeat(node).take(head.len() - *first_out.last().unwrap() as usize));
+            first_out.push(head.len() as EdgeId);
+        }
+
+        let inverted = ReversedGraphWithEdgeIds::reversed(&UnweightedFirstOutGraph::new(&first_out[..], &head[..]));
+
+        CCH {
+            first_out,
+            head,
+            tail,
+            node_order: self.node_order,
+            forward_cch_edge_to_orig_arc,
+            backward_cch_edge_to_orig_arc,
+            elimination_tree: self.elimination_tree,
+            inverted,
+            separator_tree: self.separator_tree,
+        }
+    }
 }
 
 impl Graph for CCH {
