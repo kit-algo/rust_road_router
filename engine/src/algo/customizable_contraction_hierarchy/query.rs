@@ -1,6 +1,7 @@
 //! CCH query based on elimination tree
 
 use super::*;
+pub mod nearest_neighbor;
 pub mod stepped_elimination_tree;
 use stepped_elimination_tree::EliminationTreeWalk;
 

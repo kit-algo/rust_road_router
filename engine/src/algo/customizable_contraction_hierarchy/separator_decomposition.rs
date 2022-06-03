@@ -46,7 +46,7 @@ impl SeparatorNodes {
         }
     }
 
-    fn highest_ranked_node(&self) -> Option<NodeId> {
+    pub fn highest_ranked_node(&self) -> Option<NodeId> {
         match self {
             SeparatorNodes::Random(nodes) => nodes.first().copied(),
             SeparatorNodes::Consecutive(range) => range.clone().rev().next(),
@@ -68,6 +68,13 @@ impl SeparatorNodes {
         match self {
             SeparatorNodes::Random(nodes) => nodes,
             SeparatorNodes::Consecutive(_) => unreachable!(),
+        }
+    }
+
+    pub fn separator_nodes_range(&self) -> Range<NodeId> {
+        match self {
+            SeparatorNodes::Random(_) => panic!("nonconsecutive node IDs"),
+            SeparatorNodes::Consecutive(r) => r.clone(),
         }
     }
 }
