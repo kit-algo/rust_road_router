@@ -2,7 +2,7 @@
 
 seed=5489
 
-./InertialFlowCutterModified/build/console \
+./lib/InertialFlowCutter/build/console \
    load_routingkit_unweighted_graph "$1/first_out" "$1/head" \
    load_routingkit_longitude "$1/longitude" \
    load_routingkit_latitude "$1/latitude" \
