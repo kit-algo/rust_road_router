@@ -22,5 +22,4 @@ seed=5489
    report_time \
    reorder_arcs_in_accelerated_flow_cutter_cch_order reorder\
    do_not_report_time \
-   examine_chordal_supergraph \
    save_routingkit_arc_permutation_since_last_load "$1_exp/cch_perm_cuts_reorder"
