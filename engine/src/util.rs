@@ -306,6 +306,27 @@ where
     }
 }
 
+pub enum EitherOrIterator<I, J> {
+    Either(I),
+    Or(J),
+}
+
+impl<T, I, J> Iterator for EitherOrIterator<I, J>
+where
+    T: Ord,
+    I: Iterator<Item = T>,
+    J: Iterator<Item = T>,
+{
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            EitherOrIterator::Either(it) => it.next(),
+            EitherOrIterator::Or(it) => it.next(),
+        }
+    }
+}
+
 pub trait MyFrom<T>: Sized {
     /// Performs the conversion.
     fn mfrom(_: T) -> Self;

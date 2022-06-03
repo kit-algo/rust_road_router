@@ -45,7 +45,7 @@ fn debug_sep_tree(sep_tree: &separator_decomposition::SeparatorTree, cch: &CCH, 
 
     let mut up_deg = 0;
     let mut down_deg = 0;
-    for &node in &sep_tree.nodes {
+    for node in sep_tree.nodes.iter() {
         up_deg += cch.degree(node);
         down_deg += down_degs[node as usize];
     }

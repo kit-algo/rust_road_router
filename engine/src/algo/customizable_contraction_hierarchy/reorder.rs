@@ -31,7 +31,7 @@ fn reorder_tree(separators: &mut SeparatorTree, level: usize, order: &NodeOrder,
         return;
     }
 
-    reorder_sep(&mut separators.nodes, order, latitude, longitude);
+    reorder_sep(separators.nodes.mut_nodes(), order, latitude, longitude);
     for child in &mut separators.children {
         reorder_tree(child, level + 1, order, latitude, longitude);
         // if let Some(&first) = child.nodes.first() {
@@ -55,7 +55,7 @@ fn reorder_children_by_size(separators: &mut SeparatorTree) {
 }
 
 fn to_ordering(seperators: &SeparatorTree, order: &mut Vec<NodeId>) {
-    order.extend(&seperators.nodes);
+    order.extend(seperators.nodes.iter());
     for child in &seperators.children {
         to_ordering(child, order);
     }
@@ -98,7 +98,7 @@ pub fn reorder_bfs(cch: &CCH) -> NodeOrder {
     queue.push_back(separators);
 
     while let Some(sep) = queue.pop_front() {
-        order.extend_from_slice(&sep.nodes);
+        order.extend(sep.nodes.iter());
         for child in &sep.children {
             queue.push_back(child);
         }

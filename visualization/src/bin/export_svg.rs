@@ -653,7 +653,7 @@ fn assign_cell_levels(
         cell_stack.pop();
     }
 
-    for &node in &sep_tree.nodes {
+    for node in sep_tree.nodes.iter() {
         node_cell_levels[cch.node_order().node(node) as usize] = level;
         cell_path[cch.node_order().node(node) as usize] = cell_stack.clone();
     }

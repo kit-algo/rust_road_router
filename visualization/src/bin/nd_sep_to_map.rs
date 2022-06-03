@@ -30,7 +30,7 @@ fn level_sizes(sep_tree: &separator_decomposition::SeparatorTree, cch: &CCH, lev
     }
     sizes[level] += sep_tree.nodes.len();
     cells[level] += 1;
-    for &node in &sep_tree.nodes {
+    for node in sep_tree.nodes.iter() {
         let node = cch.node_order().node(node) as usize;
         println!(
             "L.marker([{}, {}], {{ icon: L.dataIcon({{ data: {{ level: {} }}, ...blueIconOptions }}) }}).addTo(map);",
