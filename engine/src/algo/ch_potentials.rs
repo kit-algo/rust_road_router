@@ -129,19 +129,16 @@ impl<'a> BorrowedCCHPot<'a> {
     }
 }
 
-impl<'a, GF, GB> CCHPotential<'a, GF, GB> {
-    pub fn num_pot_computations(&self) -> usize {
-        self.num_pot_computations
-    }
-}
-
-impl<'a, GF, GB> Potential for CCHPotential<'a, GF, GB>
+impl<'a, GF, GB> CCHPotential<'a, GF, GB>
 where
     GF: LinkIterGraph,
     GB: LinkIterable<(NodeIdT, Weight, EdgeIdT)>,
 {
-    fn init(&mut self, target: NodeId) {
-        let target = self.cch.node_order().rank(target);
+    pub fn num_pot_computations(&self) -> usize {
+        self.num_pot_computations
+    }
+
+    pub fn init_with_cch_rank(&mut self, target: NodeId) {
         self.potentials.reset();
         for _ in EliminationTreeWalk::query(
             &self.backward_cch_graph,
@@ -153,9 +150,7 @@ where
         self.num_pot_computations = 0;
     }
 
-    fn potential(&mut self, node: NodeId) -> Option<u32> {
-        let node = self.cch.node_order().rank(node);
-
+    pub fn potential_with_cch_rank(&mut self, node: NodeId) -> Option<u32> {
         let mut cur_node = node;
         while self.potentials[cur_node as usize].value().is_none() {
             self.num_pot_computations += 1;
@@ -183,6 +178,20 @@ where
         } else {
             None
         }
+    }
+}
+
+impl<'a, GF, GB> Potential for CCHPotential<'a, GF, GB>
+where
+    GF: LinkIterGraph,
+    GB: LinkIterable<(NodeIdT, Weight, EdgeIdT)>,
+{
+    fn init(&mut self, target: NodeId) {
+        self.init_with_cch_rank(self.cch.node_order().rank(target))
+    }
+
+    fn potential(&mut self, node: NodeId) -> Option<u32> {
+        self.potential_with_cch_rank(self.cch.node_order().rank(node))
     }
 }
 
