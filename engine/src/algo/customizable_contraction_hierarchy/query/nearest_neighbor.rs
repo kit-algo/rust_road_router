@@ -8,39 +8,25 @@ pub struct NearestNeighborServer<'a> {
     cch: &'a CCH,
     one_to_many: BorrowedCCHPot<'a>,
     targets: Vec<NodeId>,
-    num_targets_with_smaller_id: Vec<u32>,
     stack: Vec<(Weight, &'a SeparatorTree)>,
     closest_targets: BinaryHeap<(Weight, NodeId)>,
 }
 
 impl<'a> NearestNeighborServer<'a> {
     pub fn new(cch: &'a CCH, one_to_many: BorrowedCCHPot<'a>) -> Self {
-        let n = cch.num_nodes();
         NearestNeighborServer {
             cch,
             one_to_many,
             targets: Vec::new(),
-            num_targets_with_smaller_id: vec![0; n + 1],
             stack: Vec::new(),
             closest_targets: BinaryHeap::new(),
         }
     }
 
     pub fn select_targets(&mut self, targets: &[NodeId]) -> NearestNeighborSelectedTargets<'_, 'a> {
-        let n = self.cch.num_nodes();
         self.targets.clear();
         self.targets.extend(targets.iter().map(|&node| self.cch.node_order().rank(node)));
         self.targets.sort_unstable();
-        let mut prev_target = 0;
-        for (count, &target) in self.targets.iter().enumerate() {
-            for node_target_counter in &mut self.num_targets_with_smaller_id[prev_target..=target as usize] {
-                *node_target_counter = count as u32;
-                prev_target = target as usize + 1;
-            }
-        }
-        for node_target_counter in &mut self.num_targets_with_smaller_id[prev_target..=n] {
-            *node_target_counter = targets.len() as u32;
-        }
 
         NearestNeighborSelectedTargets(self)
     }
@@ -62,17 +48,23 @@ impl<'a> NearestNeighborServer<'a> {
             if self.closest_targets.len() >= k && min_dist >= self.closest_targets.peek().unwrap().0 {
                 continue;
             }
-            let sep_nodes_range = cell.nodes.separator_nodes_range();
+            let mut sep_nodes_range = cell.nodes.separator_nodes_range();
             let cell_nodes_range = if sep_nodes_range.is_empty() {
+                sep_nodes_range = cell.num_nodes as NodeId..cell.num_nodes as NodeId;
                 0..cell.num_nodes as NodeId
             } else {
                 sep_nodes_range.end - cell.num_nodes as NodeId..sep_nodes_range.end
             };
 
-            let sep_targets_range = self.num_targets_with_smaller_id[sep_nodes_range.start as usize] as usize
-                ..self.num_targets_with_smaller_id[sep_nodes_range.end as usize] as usize;
-            let cell_targets_range = self.num_targets_with_smaller_id[cell_nodes_range.start as usize] as usize
-                ..self.num_targets_with_smaller_id[cell_nodes_range.end as usize] as usize;
+            let cell_targets_start_idx = match self.targets.binary_search(&cell_nodes_range.start) {
+                Ok(idx) => idx,
+                Err(idx) => idx,
+            };
+            let cell_targets_end_idx = match self.targets.binary_search(&cell_nodes_range.end) {
+                Ok(idx) => idx,
+                Err(idx) => idx,
+            };
+            let cell_targets_range = cell_targets_start_idx..cell_targets_end_idx;
 
             if cell_targets_range.len() < TARGETS_PER_CELL_THRESHOLD {
                 for &target in &self.targets[cell_targets_range] {
@@ -86,7 +78,10 @@ impl<'a> NearestNeighborServer<'a> {
                     }
                 }
             } else {
-                for &target in &self.targets[sep_targets_range] {
+                for &target in self.targets[cell_targets_range].iter().rev() {
+                    if target < sep_nodes_range.start {
+                        break;
+                    }
                     if let Some(dist) = self.one_to_many.potential_with_cch_rank(target) {
                         if self.closest_targets.len() < k {
                             self.closest_targets.push((dist, target));
