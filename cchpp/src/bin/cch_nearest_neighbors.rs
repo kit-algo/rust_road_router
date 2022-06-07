@@ -31,7 +31,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         let _blocked = block_reporting();
         CCHPotData::new(&cch, &graph)
     };
-    let mut cch_nn = customizable_contraction_hierarchy::query::nearest_neighbor::NearestNeighborServer::new(&cch, cch_pot_data.backward_potential());
+    let mut cch_nn = customizable_contraction_hierarchy::query::nearest_neighbor::SeparatorBasedNearestNeighbor::new(&cch, cch_pot_data.backward_potential());
+    let mut lr_nn = customizable_contraction_hierarchy::query::nearest_neighbor::LazyRphastNearestNeighbor::new(cch_pot_data.backward_potential());
+    let mut bcch_nn = customizable_contraction_hierarchy::query::nearest_neighbor::BCCHNearestNeighbor::new(cch_pot_data.customized());
 
     let num_targets_to_find = 4;
     let num_queries = 200;
@@ -76,9 +78,60 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
 
         if num_queries > 0 {
-            eprintln!("Avg. selection time {}ms", (total_selection_time / num_queries as u32).as_secs_f64() * 1000.0);
-            eprintln!("Avg. query time {}ms", (total_query_time / num_queries as u32).as_secs_f64() * 1000.0);
-            eprintln!("Avg. online query time {}ms", (total_time / num_queries as u32).as_secs_f64() * 1000.0);
+            eprintln!(
+                "SepBased: Avg. selection time {}ms",
+                (total_selection_time / num_queries as u32).as_secs_f64() * 1000.0
+            );
+            eprintln!("SepBased: Avg. query time {}ms", (total_query_time / num_queries as u32).as_secs_f64() * 1000.0);
+            eprintln!(
+                "SepBased: Avg. online query time {}ms",
+                (total_time / num_queries as u32).as_secs_f64() * 1000.0
+            );
+        };
+
+        let mut total_time = std::time::Duration::ZERO;
+
+        for (source, targets) in &queries {
+            let _alg_ctx = algos_ctxt.push_collection_item();
+            report_silent!("algo", "lazy_rphast_nearest_neighbor");
+            let (_, time) = measure(|| lr_nn.query(*source, &targets[..], num_targets_to_find));
+            report_silent!("running_time_ms", time.as_secs_f64() * 1000.0);
+            total_time += time;
+        }
+
+        if num_queries > 0 {
+            eprintln!(
+                "LazyRPHAST: Avg. online query time {}ms",
+                (total_time / num_queries as u32).as_secs_f64() * 1000.0
+            );
+        };
+
+        let mut total_query_time = std::time::Duration::ZERO;
+        let mut total_selection_time = std::time::Duration::ZERO;
+        let mut total_time = std::time::Duration::ZERO;
+
+        for (source, targets) in &queries {
+            let _alg_ctx = algos_ctxt.push_collection_item();
+            report_silent!("algo", "sep_based_cch_nearest_neighbor");
+            let (_, time) = measure(|| {
+                let (mut selection, selection_time) = measure(|| bcch_nn.select_targets(&targets[..]));
+                report_silent!("selection_time_ms", selection_time.as_secs_f64() * 1000.0);
+                total_selection_time += selection_time;
+                let (_, query_time) = measure(|| selection.query(*source, num_targets_to_find));
+                report_silent!("query_time_ms", query_time.as_secs_f64() * 1000.0);
+                total_query_time += query_time;
+            });
+            report_silent!("running_time_ms", time.as_secs_f64() * 1000.0);
+            total_time += time;
+        }
+
+        if num_queries > 0 {
+            eprintln!(
+                "BCCH: Avg. selection time {}ms",
+                (total_selection_time / num_queries as u32).as_secs_f64() * 1000.0
+            );
+            eprintln!("BCCH: Avg. query time {}ms", (total_query_time / num_queries as u32).as_secs_f64() * 1000.0);
+            eprintln!("BCCH: Avg. online query time {}ms", (total_time / num_queries as u32).as_secs_f64() * 1000.0);
         };
     }
 

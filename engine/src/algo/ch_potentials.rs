@@ -607,6 +607,10 @@ impl BucketCHSelectionData {
             used_terminals: Vec::new(),
         }
     }
+
+    pub fn buckets(&self, node: NodeId) -> &[(NodeId, Weight)] {
+        &self.distances[node as usize]
+    }
 }
 
 pub struct BucketCHSelectionRun<'a, G> {
@@ -675,6 +679,10 @@ impl<'a, G: LinkIterable<(NodeIdT, EdgeIdT)> + EdgeRandomAccessGraph<Link>> Buck
 
     pub fn tentative_distance(&self, node: NodeId) -> &[(u32, Weight)] {
         &self.distances[node as usize][..]
+    }
+
+    pub fn buckets_mut(&mut self, node: NodeId) -> &mut [(NodeId, Weight)] {
+        &mut self.distances[node as usize]
     }
 }
 

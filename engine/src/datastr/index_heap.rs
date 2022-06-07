@@ -161,6 +161,10 @@ impl<T: Ord + Indexing> IndexdMinHeap<T> {
         self.move_down_in_tree(position);
     }
 
+    pub fn drain(&mut self) -> impl Iterator<Item = T> + '_ {
+        self.data.drain(..).inspect(|item| self.positions[item.as_index()] = INVALID_POSITION)
+    }
+
     fn move_up_in_tree(&mut self, mut position: usize) {
         while position > 0 {
             let parent = (position - 1) / TREE_ARITY;
