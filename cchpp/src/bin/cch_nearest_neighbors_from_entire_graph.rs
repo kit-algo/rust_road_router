@@ -55,7 +55,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let mut queries = Vec::with_capacity(num_queries);
             for _ in 0..num_queries {
                 let targets: Box<[_]> = node_sampler.choose_multiple(&mut rng, 2usize.pow(target_set_size_exp)).copied().collect();
-                let sources = std::iter::repeat_with(|| rng.gen_range(0..n as NodeId)).take(num_queries).collect();
+                let sources: Box<[_]> = std::iter::repeat_with(|| rng.gen_range(0..n as NodeId)).take(num_queries).collect();
                 queries.push((sources, targets));
             }
 
@@ -67,7 +67,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     report_silent!("algo", "sep_based_cch_nearest_neighbor_selection");
                     silent_report_time(|| cch_nn.select_targets(&targets[..]))
                 };
-                for source in sources {
+                for source in &sources[..] {
                     let _alg_ctx = algos_ctxt.push_collection_item();
                     report_silent!("algo", "sep_based_cch_nearest_neighbor_query");
                     silent_report_time(|| selection.query(*source, num_targets_to_find));
@@ -75,10 +75,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
 
             for (sources, targets) in &queries {
-                for source in sources {
+                for source in &sources[..] {
                     let _alg_ctx = algos_ctxt.push_collection_item();
                     report_silent!("algo", "lazy_rphast_nearest_neighbor");
-                    silent_report_time(|| lr_nn.query(*source, num_targets_to_find));
+                    silent_report_time(|| lr_nn.query(*source, &targets[..], num_targets_to_find));
                 }
             }
 
@@ -88,7 +88,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     report_silent!("algo", "bcch_nearest_neighbor_selection");
                     silent_report_time(|| bcch_nn.select_targets(&targets[..]))
                 };
-                for source in sources {
+                for source in &sources[..] {
                     let _alg_ctx = algos_ctxt.push_collection_item();
                     report_silent!("algo", "bcch_nearest_neighbor_query");
                     silent_report_time(|| selection.query(*source, num_targets_to_find));
@@ -99,9 +99,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let mut selection = {
                     let _alg_ctx = algos_ctxt.push_collection_item();
                     report_silent!("algo", "dijkstra_nearest_neighbor_selection");
-                    silent_report_time(|| dijkstra.select_targets(&targets[..]))
+                    silent_report_time(|| dijkstra_nn.select_targets(&targets[..]))
                 };
-                for source in sources {
+                for source in &sources[..] {
                     let _alg_ctx = algos_ctxt.push_collection_item();
                     report_silent!("algo", "dijkstra_nearest_neighbor_query");
                     silent_report_time(|| selection.query(*source, num_targets_to_find));
