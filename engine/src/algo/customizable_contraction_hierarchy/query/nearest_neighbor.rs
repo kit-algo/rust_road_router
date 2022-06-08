@@ -181,9 +181,11 @@ impl<'a> BCCHNearestNeighbor<'a> {
     }
 
     pub fn select_targets<'s>(&'s mut self, targets: &'s [NodeId]) -> BCCHNearestNeighborSelectedTargets<'_, 'a> {
+        let fw_graph = self.customized.forward_graph();
         let bw_graph = self.customized.backward_graph();
         let mut selection = BucketCHSelectionRun::query(
             &bw_graph,
+            &fw_graph,
             &mut self.selection_data,
             targets.iter().map(|&node| self.customized.cch().node_order().rank(node)),
         );

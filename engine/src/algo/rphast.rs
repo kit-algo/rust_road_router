@@ -160,17 +160,14 @@ impl SSERPHASTQuery {
         }
     }
 
-    pub fn query<'a, GF: LinkIterable<(NodeIdT, EdgeIdT)> + EdgeRandomAccessGraph<Link>, GB>(
-        &'a mut self,
-        nodes: &[NodeId],
-        selection: &'a RPHAST<GF, GB>,
-    ) -> SSERPHASTResult<GF, GB> {
+    pub fn query<'a, GF: LinkIterable<Link>, GB: LinkIterable<Link>>(&'a mut self, nodes: &[NodeId], selection: &'a RPHAST<GF, GB>) -> SSERPHASTResult<GF, GB> {
         self.restricted_distances.resize(selection.restricted_nodes.len() * nodes.len(), INFINITY);
         for dist in self.restricted_distances.iter_mut() {
             *dist = INFINITY;
         }
         let mut query = BucketCHSelectionRun::query(
             &selection.forward,
+            &selection.backward,
             &mut self.dijkstra_data,
             nodes.iter().map(|&node| selection.order.rank(node)),
         );

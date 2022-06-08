@@ -478,7 +478,7 @@ pub struct BucketCHPotential<GF, GB> {
     num_targets: usize,
 }
 
-impl<GF: LinkIterGraph, GB: LinkIterGraph + LinkIterable<(NodeIdT, EdgeIdT)> + EdgeRandomAccessGraph<Link>> BucketCHPotential<GF, GB> {
+impl<GF: LinkIterGraph, GB: LinkIterGraph> BucketCHPotential<GF, GB> {
     pub fn new(forward: GF, backward: GB, order: NodeOrder) -> Self {
         let n = forward.num_nodes();
         Self {
@@ -554,7 +554,12 @@ impl<GF: LinkIterGraph, GB: LinkIterGraph + LinkIterable<(NodeIdT, EdgeIdT)> + E
         }
         self.pot_final.clear();
 
-        for _ in BucketCHSelectionRun::query(&self.backward, &mut self.dijkstra_data, targets.iter().map(|&node| self.order.rank(node))) {}
+        for _ in BucketCHSelectionRun::query(
+            &self.backward,
+            &self.forward,
+            &mut self.dijkstra_data,
+            targets.iter().map(|&node| self.order.rank(node)),
+        ) {}
     }
 
     pub fn potential(&mut self, node: NodeId) -> &[Weight] {
@@ -588,7 +593,8 @@ impl Indexing for NodeIdT {
 pub struct BucketCHSelectionData {
     distances: TimestampedVector<Vec<(NodeId, Weight)>>,
     queue: IndexdMinHeap<NodeIdT>,
-    incoming: Vec<Vec<(NodeIdT, EdgeIdT)>>,
+    incoming: Vec<Vec<(NodeIdT, Weight)>>,
+    incoming_pruning: Vec<Vec<(NodeIdT, Weight)>>,
     terminal_dists: Vec<Weight>,
     used_terminals: Vec<NodeIdT>,
 }
@@ -599,6 +605,7 @@ impl BucketCHSelectionData {
             distances: TimestampedVector::new(n),
             queue: IndexdMinHeap::new(n),
             incoming: vec![Vec::new(); n],
+            incoming_pruning: vec![Vec::new(); n],
             terminal_dists: vec![INFINITY; n],
             used_terminals: Vec::new(),
         }
@@ -609,22 +616,30 @@ impl BucketCHSelectionData {
     }
 }
 
-pub struct BucketCHSelectionRun<'a, G> {
+pub struct BucketCHSelectionRun<'a, G, H> {
     graph: &'a G,
+    pruning_graph: &'a H,
     distances: &'a mut TimestampedVector<Vec<(NodeId, Weight)>>,
     queue: &'a mut IndexdMinHeap<NodeIdT>,
-    incoming: &'a mut [Vec<(NodeIdT, EdgeIdT)>],
+    incoming: &'a mut [Vec<(NodeIdT, Weight)>],
+    incoming_pruning: &'a mut [Vec<(NodeIdT, Weight)>],
     terminal_dists: &'a mut [Weight],
     used_terminals: &'a mut Vec<NodeIdT>,
 }
 
-impl<'a, G: LinkIterable<(NodeIdT, EdgeIdT)> + EdgeRandomAccessGraph<Link>> BucketCHSelectionRun<'a, G> {
-    pub fn query(graph: &'a G, data: &'a mut BucketCHSelectionData, terminals: impl Iterator<Item = NodeId>) -> Self {
+impl<'a, G, H> BucketCHSelectionRun<'a, G, H>
+where
+    G: LinkIterable<Link>,
+    H: LinkIterable<Link>,
+{
+    pub fn query(graph: &'a G, pruning_graph: &'a H, data: &'a mut BucketCHSelectionData, terminals: impl Iterator<Item = NodeId>) -> Self {
         let mut s = Self {
             graph,
+            pruning_graph,
             distances: &mut data.distances,
             queue: &mut data.queue,
             incoming: &mut data.incoming,
+            incoming_pruning: &mut data.incoming_pruning,
             terminal_dists: &mut data.terminal_dists,
             used_terminals: &mut data.used_terminals,
         };
@@ -643,20 +658,32 @@ impl<'a, G: LinkIterable<(NodeIdT, EdgeIdT)> + EdgeRandomAccessGraph<Link>> Buck
 
     fn settle_next_node(&mut self) -> Option<NodeIdT> {
         self.queue.pop().map(|NodeIdT(node)| {
-            for (NodeIdT(head), edge_id) in LinkIterable::<(NodeIdT, EdgeIdT)>::link_iter(self.graph, node) {
-                self.incoming[head as usize].push((NodeIdT(node), edge_id));
-                self.queue.push_unless_contained(NodeIdT(head));
+            if !self.incoming[node as usize].is_empty() || !self.distances[node as usize].is_empty() {
+                for l in LinkIterable::<Link>::link_iter(self.graph, node) {
+                    self.incoming[l.node as usize].push((NodeIdT(node), l.weight));
+                    self.queue.push_unless_contained(NodeIdT(l.node));
+                }
+                for l in LinkIterable::<Link>::link_iter(self.pruning_graph, node) {
+                    self.incoming_pruning[l.node as usize].push((NodeIdT(node), l.weight));
+                    self.queue.push_unless_contained(NodeIdT(l.node));
+                }
             }
 
-            for (NodeIdT(low_neighbor), EdgeIdT(edge_id)) in self.incoming[node as usize].drain(..) {
-                let weight = self.graph.link(edge_id).weight;
-
+            for (NodeIdT(low_neighbor), weight) in self.incoming[node as usize].drain(..) {
                 for &(terminal, dist) in &self.distances[low_neighbor as usize] {
                     if self.terminal_dists[terminal as usize] == INFINITY {
                         self.used_terminals.push(NodeIdT(terminal));
                     }
                     self.terminal_dists[terminal as usize] = std::cmp::min(self.terminal_dists[terminal as usize], dist + weight);
                 }
+            }
+
+            if !self.used_terminals.is_empty() {
+                for (NodeIdT(low_neighbor), weight) in self.incoming_pruning[node as usize].drain(..) {
+                    self.distances[low_neighbor as usize].retain(|&(terminal, bucket_dist)| bucket_dist < self.terminal_dists[terminal as usize] + weight);
+                }
+            } else {
+                self.incoming_pruning[node as usize].clear();
             }
 
             self.distances[node as usize].extend(
@@ -682,7 +709,11 @@ impl<'a, G: LinkIterable<(NodeIdT, EdgeIdT)> + EdgeRandomAccessGraph<Link>> Buck
     }
 }
 
-impl<'a, G: LinkIterable<(NodeIdT, EdgeIdT)> + EdgeRandomAccessGraph<Link>> Iterator for BucketCHSelectionRun<'a, G> {
+impl<'a, G, H> Iterator for BucketCHSelectionRun<'a, G, H>
+where
+    G: LinkIterable<Link>,
+    H: LinkIterable<Link>,
+{
     type Item = NodeIdT;
 
     fn next(&mut self) -> Option<Self::Item> {
