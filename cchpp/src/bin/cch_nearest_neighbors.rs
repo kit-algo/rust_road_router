@@ -54,7 +54,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         for _ in 0..num_queries {
             let targets: Box<[_]> = node_sampler.choose_multiple(&mut rng, 2usize.pow(target_set_size_exp)).copied().collect();
             let source = rng.gen_range(0..n as NodeId);
-            queries.push((source, targets));
+            let mut gt = lr_nn.query(source, &targets[..], num_targets_to_find);
+            gt.sort_unstable();
+            queries.push((source, targets, gt));
         }
 
         let mut algos_ctxt = push_collection_context("algo_runs");
@@ -62,16 +64,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut total_selection_time = std::time::Duration::ZERO;
         let mut total_time = std::time::Duration::ZERO;
 
-        for (source, targets) in &queries {
+        for (source, targets, gt) in &queries {
             let _alg_ctx = algos_ctxt.push_collection_item();
             report_silent!("algo", "sep_based_cch_nearest_neighbor");
             let (_, time) = measure(|| {
                 let (mut selection, selection_time) = measure(|| cch_nn.select_targets(&targets[..]));
                 report_silent!("selection_time_ms", selection_time.as_secs_f64() * 1000.0);
                 total_selection_time += selection_time;
-                let (_, query_time) = measure(|| selection.query(*source, num_targets_to_find));
+                let (mut sol, query_time) = measure(|| selection.query(*source, num_targets_to_find));
                 report_silent!("query_time_ms", query_time.as_secs_f64() * 1000.0);
                 total_query_time += query_time;
+                sol.sort_unstable();
+                assert!(sol.iter().map(|&(d, _)| d).eq(gt.iter().map(|&(d, _)| d)));
             });
             report_silent!("running_time_ms", time.as_secs_f64() * 1000.0);
             total_time += time;
@@ -91,12 +95,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let mut total_time = std::time::Duration::ZERO;
 
-        for (source, targets) in &queries {
+        for (source, targets, gt) in &queries {
             let _alg_ctx = algos_ctxt.push_collection_item();
             report_silent!("algo", "lazy_rphast_nearest_neighbor");
-            let (_, time) = measure(|| lr_nn.query(*source, &targets[..], num_targets_to_find));
+            let (mut sol, time) = measure(|| lr_nn.query(*source, &targets[..], num_targets_to_find));
             report_silent!("running_time_ms", time.as_secs_f64() * 1000.0);
             total_time += time;
+            sol.sort_unstable();
+            assert!(sol.iter().map(|&(d, _)| d).eq(gt.iter().map(|&(d, _)| d)));
         }
 
         if num_queries > 0 {
@@ -110,16 +116,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut total_selection_time = std::time::Duration::ZERO;
         let mut total_time = std::time::Duration::ZERO;
 
-        for (source, targets) in &queries {
+        for (source, targets, gt) in &queries {
             let _alg_ctx = algos_ctxt.push_collection_item();
             report_silent!("algo", "sep_based_cch_nearest_neighbor");
             let (_, time) = measure(|| {
                 let (mut selection, selection_time) = measure(|| bcch_nn.select_targets(&targets[..]));
                 report_silent!("selection_time_ms", selection_time.as_secs_f64() * 1000.0);
                 total_selection_time += selection_time;
-                let (_, query_time) = measure(|| selection.query(*source, num_targets_to_find));
+                let (mut sol, query_time) = measure(|| selection.query(*source, num_targets_to_find));
                 report_silent!("query_time_ms", query_time.as_secs_f64() * 1000.0);
                 total_query_time += query_time;
+                sol.sort_unstable();
+                assert!(sol.iter().map(|&(d, _)| d).eq(gt.iter().map(|&(d, _)| d)));
             });
             report_silent!("running_time_ms", time.as_secs_f64() * 1000.0);
             total_time += time;
