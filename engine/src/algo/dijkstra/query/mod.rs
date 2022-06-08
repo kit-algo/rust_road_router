@@ -5,6 +5,7 @@ use super::*;
 pub mod bidirectional_dijkstra;
 pub mod dijkstra;
 pub mod floating_td_dijkstra;
+pub mod nearest_neighbor;
 pub mod td_dijkstra;
 
 pub mod disconnected_targets {
