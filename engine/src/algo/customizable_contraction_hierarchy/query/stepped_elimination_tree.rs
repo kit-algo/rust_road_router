@@ -5,20 +5,38 @@ use std::ops::IndexMut;
 use super::*;
 use crate::{datastr::timestamped_vector::TimestampedVector, util::in_range_option::InRangeOption};
 
-pub struct EliminationTreeWalk<'a, Graph, DistCont> {
+pub trait StoreParentInfo {
+    fn store(&mut self, node_idx: usize, parent_node: NodeId, parent_edge: EdgeId);
+}
+
+pub struct ForgetParentInfo();
+
+impl StoreParentInfo for ForgetParentInfo {
+    #[inline(always)]
+    fn store(&mut self, _node_idx: usize, _parent_node: NodeId, _parent_edge: EdgeId) {}
+}
+
+impl<T: IndexMut<usize, Output = (NodeId, EdgeId)>> StoreParentInfo for T {
+    #[inline(always)]
+    fn store(&mut self, node_idx: usize, parent_node: NodeId, parent_edge: EdgeId) {
+        self[node_idx] = (parent_node, parent_edge);
+    }
+}
+
+pub struct EliminationTreeWalk<'a, Graph, DistCont, ParentCont> {
     graph: &'a Graph,
     distances: &'a mut DistCont,
-    predecessors: &'a mut [(NodeId, EdgeId)],
+    predecessors: &'a mut ParentCont,
     elimination_tree: &'a [InRangeOption<NodeId>],
     next: Option<NodeId>,
 }
 
-impl<'a, Graph: LinkIterable<(NodeIdT, Weight, EdgeIdT)>> EliminationTreeWalk<'a, Graph, TimestampedVector<Weight>> {
+impl<'a, Graph: LinkIterable<(NodeIdT, Weight, EdgeIdT)>, ParentCont: StoreParentInfo> EliminationTreeWalk<'a, Graph, TimestampedVector<Weight>, ParentCont> {
     pub fn query(
         graph: &'a Graph,
         elimination_tree: &'a [InRangeOption<NodeId>],
         distances: &'a mut TimestampedVector<Weight>,
-        predecessors: &'a mut [(NodeId, EdgeId)],
+        predecessors: &'a mut ParentCont,
         from: NodeId,
     ) -> Self {
         distances.reset();
@@ -26,12 +44,14 @@ impl<'a, Graph: LinkIterable<(NodeIdT, Weight, EdgeIdT)>> EliminationTreeWalk<'a
     }
 }
 
-impl<'a, Graph: LinkIterable<(NodeIdT, Weight, EdgeIdT)>, DistCont: IndexMut<usize, Output = Weight>> EliminationTreeWalk<'a, Graph, DistCont> {
+impl<'a, Graph: LinkIterable<(NodeIdT, Weight, EdgeIdT)>, DistCont: IndexMut<usize, Output = Weight>, ParentCont: StoreParentInfo>
+    EliminationTreeWalk<'a, Graph, DistCont, ParentCont>
+{
     pub fn query_with_resetted(
         graph: &'a Graph,
         elimination_tree: &'a [InRangeOption<NodeId>],
         distances: &'a mut DistCont,
-        predecessors: &'a mut [(NodeId, EdgeId)],
+        predecessors: &'a mut ParentCont,
         from: NodeId,
     ) -> Self {
         if cfg!(debug_assertions) {
@@ -44,7 +64,7 @@ impl<'a, Graph: LinkIterable<(NodeIdT, Weight, EdgeIdT)>, DistCont: IndexMut<usi
 
         // Starte with origin
         distances[from as usize] = 0;
-        predecessors[from as usize] = (from, 0);
+        predecessors.store(from as usize, from, 0);
 
         Self {
             graph,
@@ -67,7 +87,7 @@ impl<'a, Graph: LinkIterable<(NodeIdT, Weight, EdgeIdT)>, DistCont: IndexMut<usi
                 if next_dist < self.distances[head as usize] {
                     // Relaxation, we have now found a better way
                     self.distances[head as usize] = next_dist;
-                    self.predecessors[head as usize] = (node, edge_idx);
+                    self.predecessors.store(head as usize, node, edge_idx);
                 }
             }
 
@@ -95,13 +115,11 @@ impl<'a, Graph: LinkIterable<(NodeIdT, Weight, EdgeIdT)>, DistCont: IndexMut<usi
     pub fn reset_distance(&mut self, node: NodeId) {
         self.distances[node as usize] = INFINITY;
     }
-
-    pub fn predecessor(&self, node: NodeId) -> NodeId {
-        self.predecessors[node as usize].0
-    }
 }
 
-impl<'a, Graph: LinkIterable<(NodeIdT, Weight, EdgeIdT)>, DistCont: IndexMut<usize, Output = Weight>> Iterator for EliminationTreeWalk<'a, Graph, DistCont> {
+impl<'a, Graph: LinkIterable<(NodeIdT, Weight, EdgeIdT)>, DistCont: IndexMut<usize, Output = Weight>, ParentCont: StoreParentInfo> Iterator
+    for EliminationTreeWalk<'a, Graph, DistCont, ParentCont>
+{
     type Item = NodeId;
     fn next(&mut self) -> Option<Self::Item> {
         self.settle_next_node()

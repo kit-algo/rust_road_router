@@ -38,14 +38,12 @@ impl<'a> CCHPotData<'a> {
 
     pub fn backward_potential(&self) -> BorrowedCCHPot {
         let n = self.customized.forward_graph().num_nodes();
-        let m = self.customized.forward_graph().num_arcs();
 
         CCHPotential {
             cch: self.customized.cch(),
             stack: Vec::new(),
             forward_cch_graph: self.customized.backward_graph(),
             backward_distances: TimestampedVector::new(n),
-            backward_parents: vec![(n as NodeId, m as EdgeId); n],
             backward_cch_graph: self.customized.forward_graph(),
             potentials: TimestampedVector::new(n),
             num_pot_computations: 0,
@@ -104,7 +102,6 @@ pub struct CCHPotential<'a, GF, GB> {
     potentials: TimestampedVector<InRangeOption<Weight>>,
     forward_cch_graph: GF,
     backward_distances: TimestampedVector<Weight>,
-    backward_parents: Vec<(NodeId, EdgeId)>,
     backward_cch_graph: GB,
     num_pot_computations: usize,
 }
@@ -114,14 +111,12 @@ pub type BorrowedCCHPot<'a> = CCHPotential<'a, BorrowedGraph<'a>, BorrowedGraph<
 impl<'a> BorrowedCCHPot<'a> {
     pub fn new_from_customized<C: Customized<CCH = CCH>>(customized: &'a C) -> Self {
         let n = customized.forward_graph().num_nodes();
-        let m = customized.forward_graph().num_arcs();
 
         Self {
             cch: customized.cch(),
             stack: Vec::new(),
             forward_cch_graph: customized.forward_graph(),
             backward_distances: TimestampedVector::new(n),
-            backward_parents: vec![(n as NodeId, m as EdgeId); n],
             backward_cch_graph: customized.backward_graph(),
             potentials: TimestampedVector::new(n),
             num_pot_computations: 0,
@@ -140,11 +135,12 @@ where
 
     pub fn init_with_cch_rank(&mut self, target: NodeId) {
         self.potentials.reset();
+        let mut parents = customizable_contraction_hierarchy::query::stepped_elimination_tree::ForgetParentInfo();
         for _ in EliminationTreeWalk::query(
             &self.backward_cch_graph,
             self.cch.elimination_tree(),
             &mut self.backward_distances,
-            &mut self.backward_parents,
+            &mut parents,
             target,
         ) {}
         self.num_pot_computations = 0;

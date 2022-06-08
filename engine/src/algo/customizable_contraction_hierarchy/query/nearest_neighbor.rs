@@ -161,7 +161,6 @@ pub struct BCCHNearestNeighbor<'a> {
     selection_data: BucketCHSelectionData,
     closest_targets: IndexdMinHeap<Reverse<(Weight, NodeId)>>,
     fw_distances: Vec<Weight>,
-    fw_parents: Vec<(NodeId, EdgeId)>,
 }
 
 impl Indexing for std::cmp::Reverse<(Weight, NodeId)> {
@@ -173,13 +172,11 @@ impl Indexing for std::cmp::Reverse<(Weight, NodeId)> {
 impl<'a> BCCHNearestNeighbor<'a> {
     pub fn new(customized: &'a CustomizedPerfect<'a, CCH>) -> Self {
         let n = customized.cch().num_nodes();
-        let m = customized.cch().num_arcs();
         Self {
             customized,
             selection_data: BucketCHSelectionData::new(n),
             closest_targets: IndexdMinHeap::new(n),
             fw_distances: vec![INFINITY; n],
-            fw_parents: vec![(n as NodeId, m as EdgeId); n],
         }
     }
 
@@ -200,12 +197,13 @@ impl<'a> BCCHNearestNeighbor<'a> {
     fn query(&mut self, source: NodeId, targets: &[NodeId], k: usize) -> Vec<(Weight, NodeId)> {
         let source = self.customized.cch().node_order().rank(source);
         let fw_graph = self.customized.forward_graph();
+        let mut parent_info = stepped_elimination_tree::ForgetParentInfo();
 
         let mut fw_walk = EliminationTreeWalk::query_with_resetted(
             &fw_graph,
             self.customized.cch().elimination_tree(),
             &mut self.fw_distances,
-            &mut self.fw_parents,
+            &mut parent_info,
             source,
         );
 

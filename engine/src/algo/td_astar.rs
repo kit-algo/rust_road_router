@@ -95,7 +95,6 @@ pub struct MultiMetric<'a> {
     stack: Vec<NodeId>,
     potentials: TimestampedVector<InRangeOption<(Weight, u32)>>,
     backward_distances: TimestampedVector<Weight>,
-    backward_parents: Vec<(NodeId, EdgeId)>,
     upper_bound_dist: query::Server<CustomizedPerfect<'a, CCH>>,
     num_pot_computations: usize,
     current_metrics: Vec<(TRange<Timestamp>, usize)>,
@@ -117,7 +116,6 @@ impl<'a> crate::io::ReconstructPrepared<MultiMetric<'a>> for &'a CCH {
     fn reconstruct_with(self, loader: crate::io::Loader) -> std::io::Result<MultiMetric<'a>> {
         let _blocked = block_reporting();
         let n = self.num_nodes();
-        let m = self.num_arcs();
         Ok(MultiMetric {
             cch: self,
             metric_ranges: loader.load("metric_ranges")?,
@@ -128,7 +126,6 @@ impl<'a> crate::io::ReconstructPrepared<MultiMetric<'a>> for &'a CCH {
             upper_bound_dist: query::Server::new(loader.reconstruct_prepared("upper_bound_customized", self)?),
             stack: Vec::new(),
             backward_distances: TimestampedVector::new(n),
-            backward_parents: vec![(n as NodeId, m as EdgeId); n],
             potentials: TimestampedVector::new(n),
             num_pot_computations: 0,
             current_metrics: Vec::new(),
@@ -466,7 +463,6 @@ impl<'a> MultiMetric<'a> {
             bw_metrics: mmp.bw_metrics,
             stack: Vec::new(),
             backward_distances: TimestampedVector::new(n),
-            backward_parents: vec![(n as NodeId, m as EdgeId); n],
             potentials: TimestampedVector::new(n),
             num_pot_computations: 0,
             current_metrics: Vec::new(),
@@ -521,13 +517,8 @@ impl TDPotential for MultiMetric<'_> {
 
             let target = self.cch.node_order().rank(target);
 
-            let mut walk = EliminationTreeWalk::query(
-                &bw_graph,
-                self.cch.elimination_tree(),
-                &mut self.backward_distances,
-                &mut self.backward_parents,
-                target,
-            );
+            let mut bw_parents = customizable_contraction_hierarchy::query::stepped_elimination_tree::ForgetParentInfo();
+            let mut walk = EliminationTreeWalk::query(&bw_graph, self.cch.elimination_tree(), &mut self.backward_distances, &mut bw_parents, target);
 
             while let Some(node) = walk.peek() {
                 if walk.tentative_distance(node) > upper_bound {
