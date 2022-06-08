@@ -5,6 +5,7 @@ use rust_road_router::{
     algo::{
         ch_potentials::*,
         customizable_contraction_hierarchy::{self, *},
+        dijkstra,
     },
     cli::CliErr,
     datastr::{graph::*, node_order::*},
@@ -34,6 +35,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut cch_nn = customizable_contraction_hierarchy::query::nearest_neighbor::SeparatorBasedNearestNeighbor::new(&cch, cch_pot_data.backward_potential());
     let mut lr_nn = customizable_contraction_hierarchy::query::nearest_neighbor::LazyRphastNearestNeighbor::new(cch_pot_data.backward_potential());
     let mut bcch_nn = customizable_contraction_hierarchy::query::nearest_neighbor::BCCHNearestNeighbor::new(cch_pot_data.customized());
+    let mut dijkstra_nn = dijkstra::query::nearest_neighbor::DijkstraNearestNeighbor::new(graph.borrowed());
 
     let num_targets_to_find = 4;
     let num_queries = 200;
@@ -140,6 +142,25 @@ fn main() -> Result<(), Box<dyn Error>> {
             );
             eprintln!("BCCH: Avg. query time {}ms", (total_query_time / num_queries as u32).as_secs_f64() * 1000.0);
             eprintln!("BCCH: Avg. online query time {}ms", (total_time / num_queries as u32).as_secs_f64() * 1000.0);
+        };
+
+        let mut total_time = std::time::Duration::ZERO;
+
+        for (source, targets, gt) in &queries {
+            let _alg_ctx = algos_ctxt.push_collection_item();
+            report_silent!("algo", "dijkstra_nearest_neighbor");
+            let (mut sol, time) = measure(|| dijkstra_nn.query(*source, &targets[..], num_targets_to_find));
+            report_silent!("running_time_ms", time.as_secs_f64() * 1000.0);
+            total_time += time;
+            sol.sort_unstable();
+            assert!(sol.iter().map(|&(d, _)| d).eq(gt.iter().map(|&(d, _)| d)));
+        }
+
+        if num_queries > 0 {
+            eprintln!(
+                "Dijkstra: Avg. online query time {}ms",
+                (total_time / num_queries as u32).as_secs_f64() * 1000.0
+            );
         };
     }
 
