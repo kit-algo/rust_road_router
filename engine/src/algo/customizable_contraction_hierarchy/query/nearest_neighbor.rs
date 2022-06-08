@@ -111,8 +111,7 @@ impl<'a> SeparatorBasedNearestNeighbor<'a> {
             }
         }
 
-        // TODO translate IDs back
-        Vec::from_iter(self.closest_targets.drain())
+        Vec::from_iter(self.closest_targets.drain().map(|(d, n)| (d, self.cch.node_order().node(n))))
     }
 }
 
@@ -151,7 +150,6 @@ impl<'a> LazyRphastNearestNeighbor<'a> {
             }
         }
 
-        // TODO translate IDs back
         Vec::from_iter(self.closest_targets.drain())
     }
 }
@@ -218,7 +216,7 @@ impl<'a> BCCHNearestNeighbor<'a> {
                     let dist = fw_dist + bw_dist;
                     if let Some(&Reverse((old_dist, _))) = self.closest_targets.get(target as usize) {
                         if dist < old_dist {
-                            self.closest_targets.decrease_key(Reverse((dist, target)));
+                            self.closest_targets.increase_key(Reverse((dist, target)));
                         }
                     } else {
                         if self.closest_targets.len() < k {
