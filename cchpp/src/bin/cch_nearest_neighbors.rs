@@ -144,19 +144,33 @@ fn main() -> Result<(), Box<dyn Error>> {
             eprintln!("BCCH: Avg. online query time {}ms", (total_time / num_queries as u32).as_secs_f64() * 1000.0);
         };
 
+        let mut total_query_time = std::time::Duration::ZERO;
+        let mut total_selection_time = std::time::Duration::ZERO;
         let mut total_time = std::time::Duration::ZERO;
 
         for (source, targets, gt) in &queries {
             let _alg_ctx = algos_ctxt.push_collection_item();
-            report_silent!("algo", "dijkstra_nearest_neighbor");
-            let (mut sol, time) = measure(|| dijkstra_nn.query(*source, &targets[..], num_targets_to_find));
+            report_silent!("algo", "sep_based_cch_nearest_neighbor");
+            let (_, time) = measure(|| {
+                let (mut selection, selection_time) = measure(|| dijkstra_nn.select_targets(&targets[..]));
+                report_silent!("selection_time_ms", selection_time.as_secs_f64() * 1000.0);
+                total_selection_time += selection_time;
+                let (mut sol, query_time) = measure(|| selection.query(*source, num_targets_to_find));
+                report_silent!("query_time_ms", query_time.as_secs_f64() * 1000.0);
+                total_query_time += query_time;
+                sol.sort_unstable();
+                assert!(sol.iter().map(|&(d, _)| d).eq(gt.iter().map(|&(d, _)| d)));
+            });
             report_silent!("running_time_ms", time.as_secs_f64() * 1000.0);
             total_time += time;
-            sol.sort_unstable();
-            assert!(sol.iter().map(|&(d, _)| d).eq(gt.iter().map(|&(d, _)| d)));
         }
 
         if num_queries > 0 {
+            eprintln!(
+                "Dijkstra: Avg. selection time {}ms",
+                (total_selection_time / num_queries as u32).as_secs_f64() * 1000.0
+            );
+            eprintln!("Dijkstra: Avg. query time {}ms", (total_query_time / num_queries as u32).as_secs_f64() * 1000.0);
             eprintln!(
                 "Dijkstra: Avg. online query time {}ms",
                 (total_time / num_queries as u32).as_secs_f64() * 1000.0

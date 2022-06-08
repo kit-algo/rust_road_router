@@ -16,12 +16,15 @@ impl<G: LinkIterGraph> DijkstraNearestNeighbor<G> {
         }
     }
 
-    pub fn query(&mut self, source: NodeId, targets: &[NodeId], k: usize) -> Vec<(Weight, NodeId)> {
+    pub fn select_targets(&mut self, targets: &[NodeId]) -> DijkstraNearestNeighborSelectedTargets<'_, G> {
         self.targets.clear();
         for &t in targets {
             self.targets.set(t as usize);
         }
+        DijkstraNearestNeighborSelectedTargets(self)
+    }
 
+    fn query(&mut self, source: NodeId, k: usize) -> Vec<(Weight, NodeId)> {
         let mut ops = DefaultOps();
         let mut run = DijkstraRun::query(&self.graph, &mut self.dijkstra, &mut ops, DijkstraInit::from(source));
         let mut closest = Vec::with_capacity(k);
@@ -35,5 +38,13 @@ impl<G: LinkIterGraph> DijkstraNearestNeighbor<G> {
         }
 
         closest
+    }
+}
+
+pub struct DijkstraNearestNeighborSelectedTargets<'s, G>(&'s mut DijkstraNearestNeighbor<G>);
+
+impl<'s, G: LinkIterGraph> DijkstraNearestNeighborSelectedTargets<'s, G> {
+    pub fn query(&mut self, source: NodeId, k: usize) -> Vec<(Weight, NodeId)> {
+        self.0.query(source, k)
     }
 }
