@@ -214,6 +214,11 @@ impl<'a> BCCHNearestNeighbor<'a> {
             if self.closest_targets.len() < k || fw_dist < self.closest_targets.peek().map(|&Reverse((d, _))| d).unwrap_or(INFINITY) {
                 for &(target, bw_dist) in self.selection_data.buckets(node).iter().take(k) {
                     let dist = fw_dist + bw_dist;
+
+                    if dist >= self.closest_targets.peek().map(|&Reverse((d, _))| d).unwrap_or(INFINITY) && self.closest_targets.len() >= k {
+                        break;
+                    }
+
                     if let Some(&Reverse((old_dist, _))) = self.closest_targets.get(target as usize) {
                         if dist < old_dist {
                             self.closest_targets.increase_key(Reverse((dist, target)));
