@@ -38,7 +38,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut dijkstra_nn = dijkstra::query::nearest_neighbor::DijkstraNearestNeighbor::new(graph.borrowed());
 
     let num_targets_to_find = 4;
-    let num_queries = 200;
+    let num_queries = 100;
 
     let mut exps_ctxt = push_collection_context("experiments");
 
