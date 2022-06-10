@@ -50,6 +50,14 @@ impl<'a> CCHPotData<'a> {
         }
     }
 
+    pub fn ch_forward_potential(&self) -> CHPotential<BorrowedGraph, BorrowedGraph> {
+        CHPotential::new(
+            self.customized.forward_graph(),
+            self.customized.backward_graph(),
+            self.customized.cch().node_order().clone(),
+        )
+    }
+
     pub fn forward_path_potential(&self) -> CCHPotentialWithPathUnpacking {
         let n = self.customized.forward_graph().num_nodes();
         let m = self.customized.forward_graph().num_arcs();
