@@ -101,7 +101,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     report_silent!("algo", "dijkstra_nearest_neighbor_selection");
                     silent_report_time(|| dijkstra_nn.select_targets(&targets[..]))
                 };
-                for source in &sources[..] {
+                for source in sources.iter().take(5) {
                     let _alg_ctx = algos_ctxt.push_collection_item();
                     report_silent!("algo", "dijkstra_nearest_neighbor_query");
                     silent_report_time(|| selection.query(*source, num_targets_to_find));
