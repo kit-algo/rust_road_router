@@ -72,43 +72,47 @@ where
     C: CCHT,
 {
     report_time_with_key("CCH apply weights", "respecting_running_time_ms", || {
-        upward_weights
-            .par_iter_mut()
-            .zip(cch.forward_cch_edge_to_orig_arc().par_iter())
-            .for_each(|(up_weight, up_arcs)| {
-                for &EdgeIdT(up_arc) in up_arcs {
-                    *up_weight = min(metric.link(up_arc).weight, *up_weight);
-                }
-            });
-        downward_weights
-            .par_iter_mut()
-            .zip(cch.backward_cch_edge_to_orig_arc().par_iter())
-            .for_each(|(down_weight, down_arcs)| {
-                for &EdgeIdT(down_arc) in down_arcs {
-                    *down_weight = min(metric.link(down_arc).weight, *down_weight);
-                }
-            });
+        #[cfg(not(feature = "cch-disable-par"))]
+        let iter = upward_weights.par_iter_mut().zip(cch.forward_cch_edge_to_orig_arc().par_iter());
+        #[cfg(feature = "cch-disable-par")]
+        let iter = upward_weights.iter_mut().zip(cch.forward_cch_edge_to_orig_arc().iter());
+        iter.for_each(|(up_weight, up_arcs)| {
+            for &EdgeIdT(up_arc) in up_arcs {
+                *up_weight = min(metric.link(up_arc).weight, *up_weight);
+            }
+        });
+        #[cfg(not(feature = "cch-disable-par"))]
+        let iter = downward_weights.par_iter_mut().zip(cch.backward_cch_edge_to_orig_arc().par_iter());
+        #[cfg(feature = "cch-disable-par")]
+        let iter = downward_weights.iter_mut().zip(cch.backward_cch_edge_to_orig_arc().iter());
+        iter.for_each(|(down_weight, down_arcs)| {
+            for &EdgeIdT(down_arc) in down_arcs {
+                *down_weight = min(metric.link(down_arc).weight, *down_weight);
+            }
+        });
     });
 }
 
 fn prepare_zero_weights(cch: &impl CCHT, upward_weights: &mut [Weight], downward_weights: &mut [Weight]) {
     report_time_with_key("CCH apply weights", "respecting_running_time_ms", || {
-        upward_weights
-            .par_iter_mut()
-            .zip(cch.forward_cch_edge_to_orig_arc().par_iter())
-            .for_each(|(up_weight, up_arcs)| {
-                if !up_arcs.is_empty() {
-                    *up_weight = 0;
-                }
-            });
-        downward_weights
-            .par_iter_mut()
-            .zip(cch.backward_cch_edge_to_orig_arc().par_iter())
-            .for_each(|(down_weight, down_arcs)| {
-                if !down_arcs.is_empty() {
-                    *down_weight = 0;
-                }
-            });
+        #[cfg(not(feature = "cch-disable-par"))]
+        let iter = upward_weights.par_iter_mut().zip(cch.forward_cch_edge_to_orig_arc().par_iter());
+        #[cfg(feature = "cch-disable-par")]
+        let iter = upward_weights.iter_mut().zip(cch.forward_cch_edge_to_orig_arc().iter());
+        iter.for_each(|(up_weight, up_arcs)| {
+            if !up_arcs.is_empty() {
+                *up_weight = 0;
+            }
+        });
+        #[cfg(not(feature = "cch-disable-par"))]
+        let iter = downward_weights.par_iter_mut().zip(cch.backward_cch_edge_to_orig_arc().par_iter());
+        #[cfg(feature = "cch-disable-par")]
+        let iter = downward_weights.iter_mut().zip(cch.backward_cch_edge_to_orig_arc().iter());
+        iter.for_each(|(down_weight, down_arcs)| {
+            if !down_arcs.is_empty() {
+                *down_weight = 0;
+            }
+        });
     });
 }
 
