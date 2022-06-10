@@ -14,6 +14,9 @@ use rust_road_router::{
 fn main() -> Result<(), Box<dyn Error>> {
     let _reporter = enable_reporting("cch_rand_queries_by_features");
     report!("num_threads", rayon::current_num_threads());
+    report!("remove_always_infinity", cfg!(feature = "remove-inf"));
+    report!("directed_hierarchies", cfg!(feature = "directed"));
+    report!("perfect_customization", cfg!(feature = "perfect-customization"));
     let mut rng = experiments::rng(Default::default());
     let mut args = env::args().skip(1);
     let arg = &args.next().ok_or(CliErr("No directory arg given"))?;
