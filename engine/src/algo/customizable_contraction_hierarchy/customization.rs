@@ -416,7 +416,7 @@ pub fn rebuild_customized_perfect<'c, C: CCHT + Sync>(
                         ));
                     }
                 }
-                let bw_edge_ids = cch.forward().range(node as usize);
+                let bw_edge_ids = cch.backward().range(node as usize);
                 for (((link, &modified), unpack), edge_idx) in LinkIterable::<Link>::link_iter(&backward, node)
                     .zip(&downward_modified[bw_edge_ids.clone()])
                     .zip(&customized.down_unpacking[bw_edge_ids.clone()])
