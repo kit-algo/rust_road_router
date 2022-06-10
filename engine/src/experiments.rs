@@ -79,37 +79,35 @@ pub fn run_queries<S: QueryServer>(
     // mut with_result: impl for<'a> FnMut(&mut QueryResult<S::P<'a>, Weight>),
     mut ground_truth: impl FnMut(NodeId, NodeId) -> Option<Option<Weight>>,
 ) {
-    pinned_to_cpu(move || {
-        let mut total_query_time = Duration::ZERO;
-        let mut num_queries = 0;
+    let mut total_query_time = Duration::ZERO;
+    let mut num_queries = 0;
 
-        for (from, to) in query_iter {
-            num_queries += 1;
-            let _query_ctxt = reporting_context.as_mut().map(|ctxt| ctxt.push_collection_item());
+    for (from, to) in query_iter {
+        num_queries += 1;
+        let _query_ctxt = reporting_context.as_mut().map(|ctxt| ctxt.push_collection_item());
 
-            report!("from", from);
-            report!("to", to);
+        report!("from", from);
+        report!("to", to);
 
-            pre_query(from, to, server);
+        pre_query(from, to, server);
 
-            let (res, time) = measure(|| server.query(Query { from, to }));
-            report!("running_time_ms", time.as_secs_f64() * 1000.0);
-            let dist = res.distance();
-            report!("result", dist);
+        let (res, time) = measure(|| server.query(Query { from, to }));
+        report!("running_time_ms", time.as_secs_f64() * 1000.0);
+        let dist = res.distance();
+        report!("result", dist);
 
-            if let Some(gt) = ground_truth(from, to) {
-                assert_eq!(dist, gt, "from {from} to {to}");
-            }
-
-            // with_result(&mut res);
-
-            total_query_time += time;
+        if let Some(gt) = ground_truth(from, to) {
+            assert_eq!(dist, gt, "from {from} to {to}");
         }
 
-        if num_queries > 0 {
-            eprintln!("Avg. query time {}ms", (total_query_time / num_queries as u32).as_secs_f64() * 1000.0)
-        };
-    })
+        // with_result(&mut res);
+
+        total_query_time += time;
+    }
+
+    if num_queries > 0 {
+        eprintln!("Avg. query time {}ms", (total_query_time / num_queries as u32).as_secs_f64() * 1000.0)
+    };
 }
 
 pub fn run_random_td_queries<
@@ -153,38 +151,36 @@ pub fn run_td_queries<T: Copy + serde::ser::Serialize + std::fmt::Display, W: Co
     // mut with_result: impl for<'a> FnMut(&mut QueryResult<S::P<'a>, W>),
     mut ground_truth: impl FnMut(NodeId, NodeId, T) -> Option<Option<W>>,
 ) {
-    pinned_to_cpu(move || {
-        let mut total_query_time = Duration::ZERO;
-        let mut num_queries = 0;
+    let mut total_query_time = Duration::ZERO;
+    let mut num_queries = 0;
 
-        for (from, to, at) in query_iter {
-            num_queries += 1;
-            let _query_ctxt = reporting_context.as_mut().map(|ctxt| ctxt.push_collection_item());
+    for (from, to, at) in query_iter {
+        num_queries += 1;
+        let _query_ctxt = reporting_context.as_mut().map(|ctxt| ctxt.push_collection_item());
 
-            report!("from", from);
-            report!("to", to);
-            report!("at", at);
+        report!("from", from);
+        report!("to", to);
+        report!("at", at);
 
-            pre_query(from, to, at, server);
+        pre_query(from, to, at, server);
 
-            let (res, time) = measure(|| server.td_query(TDQuery { from, to, departure: at }));
-            report!("running_time_ms", time.as_secs_f64() * 1000.0);
-            let dist = res.distance();
-            report!("result", dist);
+        let (res, time) = measure(|| server.td_query(TDQuery { from, to, departure: at }));
+        report!("running_time_ms", time.as_secs_f64() * 1000.0);
+        let dist = res.distance();
+        report!("result", dist);
 
-            if let Some(gt) = ground_truth(from, to, at) {
-                assert_eq!(dist, gt, "from {from} to {to} at {at}");
-            }
-
-            // with_result(&mut res);
-
-            total_query_time += time;
+        if let Some(gt) = ground_truth(from, to, at) {
+            assert_eq!(dist, gt, "from {from} to {to} at {at}");
         }
 
-        if num_queries > 0 {
-            eprintln!("Avg. query time {}ms", (total_query_time / num_queries as u32).as_secs_f64() * 1000.0)
-        };
-    })
+        // with_result(&mut res);
+
+        total_query_time += time;
+    }
+
+    if num_queries > 0 {
+        eprintln!("Avg. query time {}ms", (total_query_time / num_queries as u32).as_secs_f64() * 1000.0)
+    };
 }
 
 pub fn rng(seed: <StdRng as SeedableRng>::Seed) -> StdRng {
@@ -231,7 +227,7 @@ pub fn gen_many_to_many_queries(
     queries
 }
 
-fn pinned_to_cpu<T, F: FnOnce() -> T>(f: F) -> T {
+pub fn pinned_to_cpu<T, F: FnOnce() -> T>(f: F) -> T {
     let prev_pin_state = affinity::get_thread_affinity().unwrap();
     if let Some(pin) = std::env::var("PIN_QUERIES").map_or(Some(0), |c| c.parse().ok()) {
         affinity::set_thread_affinity(&[prev_pin_state[pin]]).unwrap();
