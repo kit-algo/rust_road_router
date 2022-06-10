@@ -33,7 +33,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut customizations_ctxt = push_collection_context("customizations");
 
-    for _ in 0..1 {
+    for _ in 0..100 {
         let _run = customizations_ctxt.push_collection_item();
 
         #[cfg(not(feature = "directed"))]
