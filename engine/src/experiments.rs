@@ -106,7 +106,7 @@ pub fn run_queries<S: QueryServer>(
     }
 
     if num_queries > 0 {
-        eprintln!("Avg. query time {}ms", (total_query_time / num_queries as u32).as_secs_f64() * 1000.0)
+        eprintln!("Avg. query time {}ms", (total_query_time / num_queries as u32).as_secs_f64() * 1000.0);
     };
 }
 

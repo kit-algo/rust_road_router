@@ -64,9 +64,12 @@ pub fn silent_report_time_with_key<Out, F: FnOnce() -> Out>(key: &'static str, f
 /// This function will measure how long it takes to execute the given lambda
 /// and return a tuple of the result of the lambda and a duration object.
 pub fn measure<Out, F: FnOnce() -> Out>(f: F) -> (Out, Duration) {
+    compiler_fence(SeqCst);
     let start = Instant::now();
     let res = f();
-    (res, start.elapsed())
+    let t_passed = start.elapsed();
+    compiler_fence(SeqCst);
+    (res, t_passed)
 }
 
 /// A struct to repeatedly measure the time passed since the timer was started

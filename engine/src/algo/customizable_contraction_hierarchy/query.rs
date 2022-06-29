@@ -177,7 +177,7 @@ impl<'s, C: Customized> PathServer for PathServerWrapper<'s, C> {
     }
 }
 
-impl<'a, C: Customized> QueryServer for Server<C> {
+impl<C: Customized> QueryServer for Server<C> {
     type P<'s> = PathServerWrapper<'s, C> where Self: 's;
 
     fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight> {
