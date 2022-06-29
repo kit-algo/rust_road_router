@@ -91,7 +91,7 @@ pub fn run_queries<S: QueryServer>(
 
         pre_query(from, to, server);
 
-        let (res, time) = measure(|| server.query(Query { from, to }));
+        let (res, time) = measure(|| server.query_no_inline(Query { from, to }));
         report!("running_time_ms", time.as_secs_f64() * 1000.0);
         let dist = res.distance();
         report!("result", dist);

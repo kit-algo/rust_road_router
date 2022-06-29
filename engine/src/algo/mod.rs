@@ -212,6 +212,11 @@ pub trait QueryServer {
     /// Calculate the shortest distance from a given source to target.
     /// Will return None if source and target are not connected.
     fn query(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight>;
+
+    #[inline(never)]
+    fn query_no_inline(&mut self, query: Query) -> QueryResult<Self::P<'_>, Weight> {
+        self.query(query)
+    }
 }
 
 /// Trait for time-dependent query algorithm servers.

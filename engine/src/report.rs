@@ -371,6 +371,7 @@ pub fn report(key: &'static str, val: Value) {
     report_silent(key, val)
 }
 
+#[inline(never)]
 pub fn report_silent(key: &'static str, val: Value) {
     REPORTER.with(|reporter| reporter.borrow_mut().as_mut().map(|r| r.report(key, val)));
 }
