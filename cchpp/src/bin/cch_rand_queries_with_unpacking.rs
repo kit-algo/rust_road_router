@@ -50,8 +50,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         report!("from", from);
         report!("to", to);
 
-        let mut res = silent_report_time(|| server.query(Query { from, to }));
-        silent_report_time_with_key("unpacking", || res.node_path());
+        let mut res = silent_report_time(|| server.query_no_inline(Query { from, to }));
+        let path = silent_report_time_with_key(
+            "unpacking",
+            #[inline(never)]
+            || res.node_path(),
+        );
+        report!("num_nodes_in_searchspace", res.data().num_nodes_in_searchspace());
+        report!("num_relaxed_edges", res.data().num_relaxed_edges());
+        if let Some(path) = path {
+            report!("num_nodes_on_path", path.len());
+        }
     }
 
     Ok(())

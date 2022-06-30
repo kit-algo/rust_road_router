@@ -29,6 +29,7 @@ pub struct EliminationTreeWalk<'a, Graph, DistCont, ParentCont> {
     predecessors: &'a mut ParentCont,
     elimination_tree: &'a [InRangeOption<NodeId>],
     next: Option<NodeId>,
+    relaxed_edges: usize,
 }
 
 impl<'a, Graph: LinkIterable<(NodeIdT, Weight, EdgeIdT)>, ParentCont: StoreParentInfo> EliminationTreeWalk<'a, Graph, TimestampedVector<Weight>, ParentCont> {
@@ -72,6 +73,7 @@ impl<'a, Graph: LinkIterable<(NodeIdT, Weight, EdgeIdT)>, DistCont: IndexMut<usi
             predecessors,
             elimination_tree,
             next: Some(from),
+            relaxed_edges: 0,
         }
     }
 
@@ -82,6 +84,7 @@ impl<'a, Graph: LinkIterable<(NodeIdT, Weight, EdgeIdT)>, DistCont: IndexMut<usi
             self.next = self.elimination_tree[node as usize].value();
 
             for (NodeIdT(head), weight, EdgeIdT(edge_idx)) in LinkIterable::<(NodeIdT, Weight, EdgeIdT)>::link_iter(self.graph, node) {
+                self.relaxed_edges += 1;
                 let next_dist = distance + weight;
 
                 if next_dist < self.distances[head as usize] {
@@ -114,6 +117,10 @@ impl<'a, Graph: LinkIterable<(NodeIdT, Weight, EdgeIdT)>, DistCont: IndexMut<usi
 
     pub fn reset_distance(&mut self, node: NodeId) {
         self.distances[node as usize] = INFINITY;
+    }
+
+    pub fn num_relaxed_edges(&self) -> usize {
+        self.relaxed_edges
     }
 }
 

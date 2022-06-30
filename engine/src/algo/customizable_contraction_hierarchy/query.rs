@@ -12,6 +12,8 @@ pub struct Server<Customized> {
     fw_parents: Vec<(NodeId, EdgeId)>,
     bw_parents: Vec<(NodeId, EdgeId)>,
     meeting_node: NodeId,
+    relaxed_edges: usize,
+    walked_nodes: usize,
 }
 
 impl<C: Customized> Server<C> {
@@ -25,6 +27,8 @@ impl<C: Customized> Server<C> {
             fw_parents: vec![(n as NodeId, m as EdgeId); n],
             bw_parents: vec![(n as NodeId, m as EdgeId); n],
             meeting_node: 0,
+            relaxed_edges: 0,
+            walked_nodes: 0,
         }
     }
 
@@ -38,6 +42,8 @@ impl<C: Customized> Server<C> {
     }
 
     fn distance(&mut self, from: NodeId, to: NodeId) -> Option<Weight> {
+        self.walked_nodes = 0;
+        self.relaxed_edges = 0;
         let from = self.customized.cch().node_order().rank(from);
         let to = self.customized.cch().node_order().rank(to);
 
@@ -66,15 +72,18 @@ impl<C: Customized> Server<C> {
         loop {
             match (fw_walk.peek(), bw_walk.peek()) {
                 (Some(fw_node), Some(bw_node)) if fw_node < bw_node => {
+                    self.walked_nodes += 1;
                     fw_walk.next();
                     fw_walk.reset_distance(fw_node);
                 }
                 (Some(fw_node), Some(bw_node)) if fw_node > bw_node => {
+                    self.walked_nodes += 1;
                     bw_walk.next();
                     bw_walk.reset_distance(bw_node);
                 }
                 (Some(node), Some(_node)) => {
                     debug_assert_eq!(node, _node);
+                    self.walked_nodes += 1;
                     if fw_walk.tentative_distance(node) < tentative_distance {
                         fw_walk.next();
                     } else {
@@ -98,16 +107,20 @@ impl<C: Customized> Server<C> {
                 // thus, there will be no path but we will still need
                 // to walk the path up to reset all distances
                 (Some(fw_node), None) => {
+                    self.walked_nodes += 1;
                     fw_walk.next();
                     fw_walk.reset_distance(fw_node);
                 }
                 (None, Some(bw_node)) => {
+                    self.walked_nodes += 1;
                     bw_walk.next();
                     bw_walk.reset_distance(bw_node);
                 }
                 (None, None) => break,
             }
         }
+
+        self.relaxed_edges = fw_walk.num_relaxed_edges() + bw_walk.num_relaxed_edges();
 
         match tentative_distance {
             INFINITY => None,
@@ -164,6 +177,15 @@ impl<C: Customized> Server<C> {
 }
 
 pub struct PathServerWrapper<'s, C>(&'s mut Server<C>, Query);
+
+impl<'s, C: Customized> PathServerWrapper<'s, C> {
+    pub fn num_nodes_in_searchspace(&self) -> usize {
+        self.0.walked_nodes
+    }
+    pub fn num_relaxed_edges(&self) -> usize {
+        self.0.relaxed_edges
+    }
+}
 
 impl<'s, C: Customized> PathServer for PathServerWrapper<'s, C> {
     type NodeInfo = NodeId;
