@@ -18,7 +18,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let graph = UnweightedOwnedGraph::reconstruct_from(&path)?;
 
-    let geo_distance = Vec::<EdgeId>::load_from(path.join("geo_distance"))?;
+    let geo_distance = Vec::<Weight>::load_from(path.join("geo_distance"))?;
+    let travel_time = Vec::<Weight>::load_from(path.join("travel_time"))?;
     let osm_node_ids = Vec::<u64>::load_from(path.join("osm_node_ids"))?;
 
     let mut osm_ids_present = BitVec::new(*osm_node_ids.last().unwrap() as usize + 1);
@@ -30,7 +31,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &args.next().ok_or(CliErr("No live data directory arg given"))?;
     let live_dir = Path::new(arg);
 
-    let mut live: Vec<Weight> = vec![0; graph.num_arcs()];
+    let mut live: Vec<Weight> = travel_time.clone();
 
     let mut total = 0;
     let mut found = 0;
@@ -49,11 +50,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             total += 1;
 
             let record = line?;
-            let from = record[0].parse()?;
-            let to = record[1].parse()?;
+            let osm_from = record[0].parse()?;
+            let osm_to = record[1].parse()?;
             let speed = record[2].parse::<u32>()?;
 
-            if let (Some(from), Some(to)) = (id_map.get(from), id_map.get(to)) {
+            if let (Some(from), Some(to)) = (id_map.get(osm_from), id_map.get(osm_to)) {
                 if let Some(EdgeIdT(edge_idx)) = graph.edge_indices(from as NodeId, to as NodeId).next() {
                     found += 1;
                     let edge_idx = edge_idx as usize;
