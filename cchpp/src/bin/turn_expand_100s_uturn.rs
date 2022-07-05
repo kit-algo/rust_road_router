@@ -12,7 +12,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let graph = WeightedGraphReconstructor("travel_time").reconstruct_from(&path)?;
     let lat = Vec::<f32>::load_from(path.join("latitude"))?;
     let lng = Vec::<f32>::load_from(path.join("longitude"))?;
-    let tt_units_per_second = Vec::<Weight>::load_from(path.join("tt_units_per_second"))?[0];
+    let tt_units_per_second = Vec::<Weight>::load_from(path.join("tt_units_per_s"))?[0];
 
     let mut tail = Vec::with_capacity(graph.num_arcs());
     for node in 0..graph.num_nodes() {
@@ -36,7 +36,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     exp_graph.weight().write_to(&out_path.join("travel_time"))?;
     new_lat.write_to(&out_path.join("latitude"))?;
     new_lng.write_to(&out_path.join("longitude"))?;
-    [tt_units_per_second].write_to(&out_path.join("tt_units_per_second"))?;
+    [tt_units_per_second].write_to(&out_path.join("tt_units_per_s"))?;
 
     Ok(())
 }
