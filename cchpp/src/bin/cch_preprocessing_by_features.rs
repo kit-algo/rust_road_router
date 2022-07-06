@@ -30,13 +30,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         let _run = preprocessings_ctxt.push_collection_item();
 
         report_time_with_key("Full Preprocessing", "total_preprocessing_ms", || {
-            let cch = CCH::fix_order_and_build(&graph, order.clone());
+            let _cch = CCH::fix_order_and_build(&graph, order.clone());
 
             #[cfg(all(feature = "remove-inf", not(feature = "directed")))]
-            let cch = without_reporting(|| cch.remove_always_infinity());
+            let _cch = without_reporting(|| _cch.remove_always_infinity());
 
             #[cfg(feature = "directed")]
-            let cch = without_reporting(|| cch.to_directed_cch());
+            let _cch = without_reporting(|| _cch.to_directed_cch());
         });
     }
 
