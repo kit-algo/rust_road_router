@@ -40,8 +40,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let mut total_query_time = std::time::Duration::ZERO;
-    // let num_queries = experiments::chpot::num_queries();
-    let num_queries = 10;
+    let num_queries = experiments::chpot::num_queries();
 
     for _i in 0..num_queries {
         let _query_ctxt = algo_runs_ctxt.push_collection_item();
