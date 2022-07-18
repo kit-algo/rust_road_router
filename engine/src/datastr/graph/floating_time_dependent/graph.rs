@@ -155,6 +155,7 @@ impl Graph {
         let mut sum_nonconst_upper = FlWeight::ZERO;
         let mut sum_rel_delays = 0.0;
         let mut sum_nonconst_rel_delays = 0.0;
+        let mut rel_delays = Vec::new();
 
         for edge_id in 0..self.num_arcs() {
             let ttf = self.travel_time_function(edge_id as EdgeId);
@@ -174,10 +175,13 @@ impl Graph {
                 if FlWeight::ZERO.fuzzy_lt(lower) {
                     sum_nonconst_rel_delays += f64::from((upper - lower) / lower);
                 }
+                rel_delays.push(f64::from((upper - lower) / lower));
             } else {
                 num_constant += 1;
             }
         }
+
+        rel_delays.sort_by_key(|d| (d * 1000.0) as u64);
 
         debug_assert_eq!(num_constant, self.num_constant());
 
@@ -187,7 +191,8 @@ impl Graph {
             "nonconst_mean": sum_nonconst_rel_delays / (self.num_arcs() - num_constant) as f64,
             "mean": sum_rel_delays / self.num_arcs() as f64,
             "nonconst_total_relative_delay": nonconst_total_relative_dekay,
-            "total_relative_delay": total_relative_dekay
+            "total_relative_delay": total_relative_dekay,
+            "median_relative_delay": rel_delays[rel_delays.len() / 2],
         });
     }
 }
