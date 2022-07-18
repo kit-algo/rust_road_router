@@ -159,7 +159,7 @@ pub fn read_graph(source: &dyn RdfDataSource, (min_lat, min_lon): (i64, i64), (m
     eprintln!("read nodes");
 
     let input_nodes = source.nodes();
-    let max_node_id = input_nodes.iter().filter(|&n| included(n)).map(|node| node.node_id).max().unwrap();
+    let max_node_id = input_nodes.iter().map(|node| node.node_id).max().unwrap();
     let mut filtered_node_ids = BitVec::new(max_node_id as usize + 1);
     for node in input_nodes.iter().filter(|&n| included(n)) {
         filtered_node_ids.set(node.node_id as usize);
@@ -167,11 +167,29 @@ pub fn read_graph(source: &dyn RdfDataSource, (min_lat, min_lon): (i64, i64), (m
 
     eprintln!("read nav links");
     // start with all nav links
-    let nav_links: Vec<RdfNavLink> = source.nav_links();
+    let mut nav_links: Vec<RdfNavLink> = source.nav_links();
+
+    eprintln!("read links");
+    let links: Vec<_> = source
+        .links()
+        .into_iter()
+        .filter(|link| filtered_node_ids.get(link.ref_node_id as usize) && filtered_node_ids.get(link.nonref_node_id as usize))
+        .collect();
+    let max_here_link_id = links.iter().map(|l| l.link_id).chain(nav_links.iter().map(|l| l.link_id)).max().unwrap() as usize;
+    let mut links_present = BitVec::new(max_here_link_id as usize + 1);
+    for link in &links {
+        links_present.set(link.link_id as usize);
+    }
+    let maximum_node_id = links
+        .iter()
+        .flat_map(|link| iter::once(link.ref_node_id).chain(iter::once(link.nonref_node_id)))
+        .max()
+        .unwrap();
 
     eprintln!("build link id mapping");
+    nav_links.retain(|nav_link| links_present.get(nav_link.link_id as usize));
     // local ids for links
-    let mut link_id_mapping = BitVec::new(nav_links.iter().map(|l| l.link_id).max().unwrap() as usize + 1);
+    let mut link_id_mapping = BitVec::new(max_here_link_id + 1);
     for nav_link in &nav_links {
         link_id_mapping.set(nav_link.link_id as usize);
     }
@@ -184,18 +202,6 @@ pub fn read_graph(source: &dyn RdfDataSource, (min_lat, min_lon): (i64, i64), (m
         sorted_nav_links[rank] = link;
     }
     let nav_links = sorted_nav_links;
-
-    eprintln!("read links");
-    let links: Vec<_> = source
-        .links()
-        .into_iter()
-        .filter(|link| filtered_node_ids.get(link.ref_node_id as usize) && filtered_node_ids.get(link.nonref_node_id as usize))
-        .collect();
-    let maximum_node_id = links
-        .iter()
-        .flat_map(|link| iter::once(link.ref_node_id).chain(iter::once(link.nonref_node_id)))
-        .max()
-        .unwrap();
 
     // a data structure to do the global to local node ids mapping
     let mut node_id_mapping = BitVec::new(maximum_node_id as usize + 1);
