@@ -14,7 +14,7 @@ use crate::io::*;
 const CACHE_LINE_WIDTH: usize = 64; // bytes
 
 /// number of bits (not bytes) in one 64 bit uint
-const STORAGE_BITS: usize = size_of::<u64>() * 8;
+const STORAGE_BITS: usize = u64::BITS as usize;
 
 /// Bitvector or rather Bitarray (size can't be changed after creation) with a few extras:
 /// - we need access to the ints containing the actualy bits, then do popcount on them
