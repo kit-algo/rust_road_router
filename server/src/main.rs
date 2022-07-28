@@ -149,15 +149,17 @@ impl<'de> Deserialize<'de> for SerializedWeight {
                     if w < INFINITY.into() {
                         Ok(SerializedWeight(w as Weight))
                     } else {
-                        Err(<D as Deserializer>::Error::custom(format!(
+                        Err(<D as Deserializer<'de>>::Error::custom(format!(
                             "Got {} as weight which is bigger than the max weight {}.",
                             w, INFINITY
                         )))
                     }
                 }
-                None => Err(<D as Deserializer>::Error::custom("Got float or negative number as weight")),
+                None => Err(<D as Deserializer<'de>>::Error::custom("Got float or negative number as weight")),
             },
-            _ => Err(<D as Deserializer>::Error::custom("Got invalid JSON Value for Weight, expected null or number")),
+            _ => Err(<D as Deserializer<'de>>::Error::custom(
+                "Got invalid JSON Value for Weight, expected null or number",
+            )),
         }
     }
 }
