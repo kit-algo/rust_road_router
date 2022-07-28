@@ -11,6 +11,8 @@ use crate::{
     report::*,
 };
 
+pub mod time_dependent;
+
 /// Maximum time (ms) per query
 #[cfg(not(override_traffic_max_query_time))]
 pub const TRAFFIC_MAX_QUERY_TIME: Option<u128> = Some(10000);
@@ -93,7 +95,7 @@ where
     }
 }
 
-pub struct BlockedPathsDijkstra {
+pub struct BlockedPathsDijkstra<O> {
     // Next Node, Next Node Local Offset
     forbidden_paths: Vec<Vec<(NodeIdT, u32)>>,
     // Global forbidden path id, offset on path, Tail node Local offset
@@ -101,16 +103,18 @@ pub struct BlockedPathsDijkstra {
     node_forbidden_path_counter: Vec<usize>,
     num_labels_pushed: usize,
     // num_forbidden_paths_with_shared_terminal_edges: usize,
+    ops: O,
 }
 
-impl BlockedPathsDijkstra {
-    pub fn new(n: usize, m: usize) -> Self {
+impl<O> BlockedPathsDijkstra<O> {
+    pub fn new(n: usize, m: usize, ops: O) -> Self {
         Self {
             forbidden_paths: Vec::new(),
             edge_forbidden_paths: vec![Vec::new(); m],
             node_forbidden_path_counter: vec![0; n],
             num_labels_pushed: 0,
             // num_forbidden_paths_with_shared_terminal_edges: 0,
+            ops,
         }
     }
 
@@ -203,7 +207,11 @@ impl BlockedPathsDijkstra {
     }
 }
 
-impl<G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> MultiCritDijkstraOps<G> for BlockedPathsDijkstra {
+impl<G, O> MultiCritDijkstraOps<G> for BlockedPathsDijkstra<O>
+where
+    G: EdgeIdGraph,
+    O: DijkstraOps<G, Label = Weight, Arc = (NodeIdT, EdgeIdT), LinkResult = Weight, PredecessorLink = ()>,
+{
     type Label = ForbiddenPathLabel;
     type Arc = (NodeIdT, EdgeIdT);
     type LinkResult = Option<ForbiddenPathLabel>;
@@ -211,16 +219,15 @@ impl<G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> MultiCritDijkstraOps<G> for B
 
     fn link(
         &mut self,
-        #[allow(unused)] graph: &G,
+        graph: &G,
         #[allow(unused)] labels: &TimestampedVector<MultiCritNodeData<Self::Label>>,
-        _parents: &[(NodeId, Self::PredecessorLink)],
+        parents: &[(NodeId, Self::PredecessorLink)],
         NodeIdT(tail): NodeIdT,
         _key: Weight,
         label: &Self::Label,
         &(NodeIdT(head), EdgeIdT(link_id)): &Self::Arc,
     ) -> Self::LinkResult {
         self.num_labels_pushed += 1;
-        let weight = graph.link(link_id).weight;
 
         let mut illegal = false;
         let mut head_active_forbidden_paths = ActiveForbittenPaths::new(self.node_forbidden_path_counter[head as usize]);
@@ -238,7 +245,11 @@ impl<G: EdgeIdGraph + EdgeRandomAccessGraph<Link>> MultiCritDijkstraOps<G> for B
         }
 
         if !illegal {
-            Some((label.0 + weight, head_active_forbidden_paths, (NodeIdT(tail), label.1.clone())))
+            Some((
+                self.ops.link(graph, parents, NodeIdT(tail), &label.0, &(NodeIdT(head), EdgeIdT(link_id))),
+                head_active_forbidden_paths,
+                (NodeIdT(tail), label.1.clone()),
+            ))
         } else {
             None
         }
@@ -283,16 +294,18 @@ impl Ord for NodeQueueLabelOrder<ForbiddenPathLabel> {
     }
 }
 
-pub struct BlockedDetoursDijkstra {
+pub struct BlockedDetoursDijkstra<O> {
     node_forbidden_paths: Vec<Vec<Box<[NodeIdT]>>>,
     forbidden_paths_end_nodes: Vec<NodeIdT>,
+    ops: O,
 }
 
-impl BlockedDetoursDijkstra {
-    pub fn new(n: usize) -> Self {
+impl<O> BlockedDetoursDijkstra<O> {
+    pub fn new(n: usize, ops: O) -> Self {
         Self {
             node_forbidden_paths: vec![Vec::new(); n],
             forbidden_paths_end_nodes: Vec::new(),
+            ops,
         }
     }
 
@@ -313,21 +326,24 @@ impl BlockedDetoursDijkstra {
     }
 }
 
-impl<G> DijkstraOps<G> for BlockedDetoursDijkstra {
+impl<G, O> DijkstraOps<G> for BlockedDetoursDijkstra<O>
+where
+    O: DijkstraOps<G, Label = Weight, Arc = (NodeIdT, EdgeIdT), LinkResult = Weight, PredecessorLink = ()>,
+{
     type Label = Weight;
-    type Arc = Link;
+    type Arc = (NodeIdT, EdgeIdT);
     type LinkResult = Weight;
     type PredecessorLink = ();
 
     fn link(
         &mut self,
-        _graph: &G,
+        graph: &G,
         parents: &[(NodeId, Self::PredecessorLink)],
         NodeIdT(tail): NodeIdT,
         label: &Self::Label,
-        link: &Self::Arc,
+        &(NodeIdT(head), EdgeIdT(link_id)): &Self::Arc,
     ) -> Self::LinkResult {
-        let illegal = self.node_forbidden_paths[link.node as usize].iter().any(|forbidden_path| {
+        let illegal = self.node_forbidden_paths[head as usize].iter().any(|forbidden_path| {
             let mut deviated = false;
             let mut cur = tail;
             for &NodeIdT(forbidden_parent) in forbidden_path.iter().rev() {
@@ -344,7 +360,7 @@ impl<G> DijkstraOps<G> for BlockedDetoursDijkstra {
         if illegal {
             INFINITY
         } else {
-            label + link.weight
+            self.ops.link(graph, parents, NodeIdT(tail), label, &(NodeIdT(head), EdgeIdT(link_id)))
         }
     }
     fn merge(&mut self, label: &mut Self::Label, linked: Self::LinkResult) -> bool {
@@ -364,7 +380,7 @@ pub struct TrafficAwareServer<'a> {
     dijkstra_data: DijkstraData<ForbiddenPathLabel, (), MultiCritNodeData<ForbiddenPathLabel>>,
     live_pot: BorrowedCCHPot<'a>,
     live_graph: BorrowedGraph<'a>,
-    dijkstra_ops: BlockedPathsDijkstra,
+    dijkstra_ops: BlockedPathsDijkstra<DefaultOpsByEdgeId>,
 }
 
 impl<'a> TrafficAwareServer<'a> {
@@ -376,7 +392,7 @@ impl<'a> TrafficAwareServer<'a> {
             dijkstra_data: DijkstraData::new(n),
             live_pot: live_cch_pot.forward_potential(),
             live_graph,
-            dijkstra_ops: BlockedPathsDijkstra::new(n, m),
+            dijkstra_ops: BlockedPathsDijkstra::new(n, m, DefaultOpsByEdgeId()),
         }
     }
 
@@ -503,7 +519,7 @@ use crate::algo::ch_potentials::query::Server as TopoDijkServer;
 
 pub struct HeuristicTrafficAwareServer<'a> {
     ubs_checker: MinimalNonShortestSubPaths<'a>,
-    shortest_path: TopoDijkServer<OwnedGraph, BlockedDetoursDijkstra, RecyclingPotential<BorrowedCCHPot<'a>>, true, true, true>,
+    shortest_path: TopoDijkServer<OwnedGraph, BlockedDetoursDijkstra<DefaultOpsByEdgeId>, RecyclingPotential<BorrowedCCHPot<'a>>, true, true, true>,
 }
 
 impl<'a> HeuristicTrafficAwareServer<'a> {
@@ -515,7 +531,7 @@ impl<'a> HeuristicTrafficAwareServer<'a> {
             shortest_path: TopoDijkServer::new(
                 &live_graph,
                 RecyclingPotential::new(live_cch_pot.forward_potential()),
-                BlockedDetoursDijkstra::new(n),
+                BlockedDetoursDijkstra::new(n, DefaultOpsByEdgeId()),
             ),
         }
     }
@@ -697,7 +713,7 @@ mod tests {
     #[test]
     fn test_linking_forbidden_paths() {
         let graph = FirstOutGraph::new(&[0, 1, 2], &[1, 0], &[1, 1]);
-        let mut ops = BlockedPathsDijkstra::new(2, 2);
+        let mut ops = BlockedPathsDijkstra::new(2, 2, DefaultOpsByEdgeId());
         let dd = DijkstraData::<ForbiddenPathLabel, (), MultiCritNodeData<ForbiddenPathLabel>>::new(2);
         ops.add_forbidden_path(&[0, 1], &graph);
 
@@ -715,7 +731,7 @@ mod tests {
             None,
         );
 
-        let mut ops = BlockedPathsDijkstra::new(2, 2);
+        let mut ops = BlockedPathsDijkstra::new(2, 2, DefaultOpsByEdgeId());
         ops.add_forbidden_path(&[0, 1, 0], &graph);
         assert_eq!(
             MultiCritDijkstraOps::link(
@@ -747,7 +763,7 @@ mod tests {
 
     #[test]
     fn test_merging() {
-        let mut ops = BlockedPathsDijkstra::new(0, 0);
+        let mut ops = BlockedPathsDijkstra::new(0, 0, DefaultOpsByEdgeId());
         let mut current = MultiCritNodeData::<ForbiddenPathLabel>::new();
         current.push(NodeQueueLabelOrder((
             10,

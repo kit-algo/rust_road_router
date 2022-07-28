@@ -52,6 +52,34 @@ impl<P: TDPotential> TDPotential for TDPotentialForPermutated<P> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct TDRecyclingPotential<Potential> {
+    potential: Potential,
+    query: Option<(NodeId, NodeId, Timestamp)>,
+}
+
+impl<P> TDRecyclingPotential<P> {
+    pub fn new(potential: P) -> Self {
+        Self { potential, query: None }
+    }
+
+    pub fn inner(&self) -> &P {
+        &self.potential
+    }
+}
+
+impl<P: TDPotential> TDPotential for TDRecyclingPotential<P> {
+    fn init(&mut self, source: NodeId, target: NodeId, departure: Timestamp) {
+        if self.query != Some((source, target, departure)) {
+            self.potential.init(source, target, departure);
+            self.query = Some((source, target, departure));
+        }
+    }
+    fn potential(&mut self, node: NodeId, t: Option<Timestamp>) -> Option<Weight> {
+        self.potential.potential(node, t)
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct TRange<T> {
     pub start: T,

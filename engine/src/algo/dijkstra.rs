@@ -192,6 +192,40 @@ impl<G> DijkstraOps<G> for DefaultOps {
 }
 
 #[derive(Debug, Clone, Copy, Default)]
+pub struct DefaultOpsByEdgeId();
+
+impl<G: EdgeRandomAccessGraph<Link>> DijkstraOps<G> for DefaultOpsByEdgeId {
+    type Label = Weight;
+    type Arc = (NodeIdT, EdgeIdT);
+    type LinkResult = Weight;
+    type PredecessorLink = ();
+
+    #[inline(always)]
+    fn link(
+        &mut self,
+        graph: &G,
+        _parents: &[(NodeId, Self::PredecessorLink)],
+        _tail: NodeIdT,
+        label: &Weight,
+        &(_, EdgeIdT(link_id)): &Self::Arc,
+    ) -> Self::LinkResult {
+        label + graph.link(link_id).weight
+    }
+
+    #[inline(always)]
+    fn merge(&mut self, label: &mut Weight, linked: Self::LinkResult) -> bool {
+        if linked < *label {
+            *label = linked;
+            return true;
+        }
+        false
+    }
+
+    #[inline(always)]
+    fn predecessor_link(&self, _link: &Self::Arc) -> Self::PredecessorLink {}
+}
+
+#[derive(Debug, Clone, Copy, Default)]
 pub struct DefaultOpsWithLinkPath();
 
 impl<G: EdgeIdGraph> DijkstraOps<G> for DefaultOpsWithLinkPath {
