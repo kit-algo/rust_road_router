@@ -12,21 +12,19 @@ pub struct TDTrafficAwareServer<'a, P> {
     dijkstra_ops: BlockedPathsDijkstra<TDDijkstraOps>,
 }
 
-impl<'a> TDTrafficAwareServer<'a, BorrowedCCHPot<'a>> {
-    pub fn new(smooth_graph: BorrowedGraph<'a>, live_graph: &'a time_dependent::TDGraph, smooth_cch_pot: &'a CCHPotData, live_cch_pot: &'a CCHPotData) -> Self {
+impl<'a, P: TDPotential> TDTrafficAwareServer<'a, P> {
+    pub fn new(smooth_graph: BorrowedGraph<'a>, live_graph: &'a time_dependent::TDGraph, smooth_cch_pot: &'a CCHPotData, live_pot: P) -> Self {
         let n = live_graph.num_nodes();
         let m = live_graph.num_arcs();
         Self {
             ubs_checker: MinimalNonShortestSubPaths::new(smooth_cch_pot, smooth_graph),
             dijkstra_data: DijkstraData::new(n),
-            live_pot: live_cch_pot.forward_potential(),
+            live_pot,
             live_graph,
             dijkstra_ops: BlockedPathsDijkstra::new(n, m, TDDijkstraOps()),
         }
     }
-}
 
-impl<'a, P: TDPotential> TDTrafficAwareServer<'a, P> {
     pub fn query(&mut self, query: TDQuery<Timestamp>, epsilon: f64) -> Option<()> {
         let timer = Timer::new();
         report!("algo", "iterative_path_blocking");
@@ -57,7 +55,11 @@ impl<'a, P: TDPotential> TDTrafficAwareServer<'a, P> {
                 &mut self.dijkstra_ops,
                 DijkstraInit {
                     source: NodeIdT(query.from),
-                    initial_state: (0, ActiveForbittenPaths::new(0), (NodeIdT(query.from), ActiveForbittenPaths::new(0))),
+                    initial_state: (
+                        query.departure,
+                        ActiveForbittenPaths::new(0),
+                        (NodeIdT(query.from), ActiveForbittenPaths::new(0)),
+                    ),
                 },
                 |node| live_pot.potential(node, None),
             );
