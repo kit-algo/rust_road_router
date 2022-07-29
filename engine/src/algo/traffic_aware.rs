@@ -11,6 +11,7 @@ use crate::{
     report::*,
 };
 
+pub mod td_traffic_pots;
 pub mod time_dependent;
 
 /// Maximum time (ms) per query

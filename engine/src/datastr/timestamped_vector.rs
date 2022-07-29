@@ -16,6 +16,9 @@ impl Reset for Weight {
 impl Reset for (Weight, Weight) {
     const DEFAULT: Self = (INFINITY, INFINITY);
 }
+impl Reset for (Weight, Weight, Weight) {
+    const DEFAULT: Self = (INFINITY, INFINITY, INFINITY);
+}
 impl<T: Sentinel + std::fmt::Debug> Reset for InRangeOption<T> {
     const DEFAULT: Self = InRangeOption::NONE;
 }

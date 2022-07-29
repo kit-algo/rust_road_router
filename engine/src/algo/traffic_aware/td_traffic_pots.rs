@@ -1,117 +1,17 @@
-use super::a_star::*;
-use super::customizable_contraction_hierarchy::{query::stepped_elimination_tree::EliminationTreeWalk, *};
 use super::*;
+
 use crate::{
-    datastr::{graph::time_dependent::*, timestamped_vector::*},
-    report::*,
+    algo::{
+        customizable_contraction_hierarchy::{query::stepped_elimination_tree::EliminationTreeWalk, query::Server as CCHServer, *},
+        td_astar::*,
+    },
+    datastr::graph::time_dependent::*,
     util::in_range_option::*,
 };
 
 use std::cmp::{max, min};
 
 use rayon::prelude::*;
-
-pub trait TDPotential {
-    fn init(&mut self, source: NodeId, target: NodeId, departure: Timestamp);
-    fn potential(&mut self, node: NodeId, t: Option<Timestamp>) -> Option<Weight>;
-    fn report_stats(&self) {}
-}
-
-impl<T: Potential> TDPotential for T {
-    fn init(&mut self, _source: NodeId, target: NodeId, _departure: Timestamp) {
-        self.init(target)
-    }
-    fn potential(&mut self, node: NodeId, _t: Option<Timestamp>) -> Option<Weight> {
-        self.potential(node)
-    }
-}
-
-#[derive(Clone)]
-pub struct TDPotentialForPermutated<P> {
-    pub potential: P,
-    pub order: NodeOrder,
-}
-
-impl<P> TDPotentialForPermutated<P> {
-    pub fn inner(&self) -> &P {
-        &self.potential
-    }
-}
-
-impl<P: TDPotential> TDPotential for TDPotentialForPermutated<P> {
-    fn init(&mut self, source: NodeId, target: NodeId, departure: Timestamp) {
-        self.potential.init(self.order.node(source), self.order.node(target), departure)
-    }
-
-    fn potential(&mut self, node: NodeId, t: Option<Timestamp>) -> Option<Weight> {
-        self.potential.potential(self.order.node(node), t)
-    }
-
-    fn report_stats(&self) {
-        self.potential.report_stats()
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct TDRecyclingPotential<Potential> {
-    potential: Potential,
-    query: Option<(NodeId, NodeId, Timestamp)>,
-}
-
-impl<P> TDRecyclingPotential<P> {
-    pub fn new(potential: P) -> Self {
-        Self { potential, query: None }
-    }
-
-    pub fn inner(&self) -> &P {
-        &self.potential
-    }
-}
-
-impl<P: TDPotential> TDPotential for TDRecyclingPotential<P> {
-    fn init(&mut self, source: NodeId, target: NodeId, departure: Timestamp) {
-        if self.query != Some((source, target, departure)) {
-            self.potential.init(source, target, departure);
-            self.query = Some((source, target, departure));
-        }
-    }
-    fn potential(&mut self, node: NodeId, t: Option<Timestamp>) -> Option<Weight> {
-        self.potential.potential(node, t)
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-pub struct TRange<T> {
-    pub start: T,
-    pub end: T,
-}
-
-impl TRange<Timestamp> {
-    pub fn includes_instant(self, instant: Timestamp) -> bool {
-        self.start <= instant && instant < self.end
-    }
-
-    pub fn duration(&self) -> Weight {
-        self.end - self.start
-    }
-}
-
-pub fn ranges() -> Vec<TRange<Timestamp>> {
-    let mut ranges = Vec::new();
-
-    let half_an_hour = 30 * 60 * 1000;
-    // 6am until 10pm
-    for i in 12..44 {
-        let start = i * half_an_hour;
-        for len_hours in [1, 2, 4, 8] {
-            let end = start + len_hours * half_an_hour * 2;
-            if end <= 44 * half_an_hour {
-                ranges.push(TRange { start, end });
-            }
-        }
-    }
-    ranges
-}
 
 pub struct MultiMetric<'a> {
     cch: &'a CCH,
@@ -123,9 +23,10 @@ pub struct MultiMetric<'a> {
     stack: Vec<NodeId>,
     potentials: TimestampedVector<InRangeOption<(Weight, u32)>>,
     backward_distances: TimestampedVector<Weight>,
-    upper_bound_dist: query::Server<CustomizedPerfect<'a, CCH>>,
+    sp_in_smooth: CCHServer<CustomizedPerfect<'a, CCH>>,
     num_pot_computations: usize,
     current_metrics: Vec<(TRange<Timestamp>, usize)>,
+    volatile_graph: &'a TDGraph,
 }
 
 impl crate::io::Deconstruct for MultiMetric<'_> {
@@ -135,28 +36,29 @@ impl crate::io::Deconstruct for MultiMetric<'_> {
         store("bw_graph", &crate::io::Sub(&self.bw_graph))?;
         store("fw_metrics", &self.fw_metrics)?;
         store("bw_metrics", &self.bw_metrics)?;
-        store("upper_bound_customized", &crate::io::Sub(self.upper_bound_dist.customized()))?;
+        store("customized_smooth", &crate::io::Sub(self.sp_in_smooth.customized()))?;
         Ok(())
     }
 }
 
-impl<'a> crate::io::ReconstructPrepared<MultiMetric<'a>> for &'a CCH {
+impl<'a> crate::io::ReconstructPrepared<MultiMetric<'a>> for (&'a CCH, &'a TDGraph) {
     fn reconstruct_with(self, loader: crate::io::Loader) -> std::io::Result<MultiMetric<'a>> {
         let _blocked = block_reporting();
-        let n = self.num_nodes();
+        let n = self.0.num_nodes();
         Ok(MultiMetric {
-            cch: self,
+            cch: self.0,
             metric_ranges: loader.load("metric_ranges")?,
             fw_metrics: loader.load("fw_metrics")?,
             bw_metrics: loader.load("bw_metrics")?,
             fw_graph: loader.reconstruct("fw_graph")?,
             bw_graph: loader.reconstruct("bw_graph")?,
-            upper_bound_dist: query::Server::new(loader.reconstruct_prepared("upper_bound_customized", self)?),
+            sp_in_smooth: CCHServer::new(loader.reconstruct_prepared("customized_smooth", self.0)?),
             stack: Vec::new(),
             backward_distances: TimestampedVector::new(n),
             potentials: TimestampedVector::new(n),
             num_pot_computations: 0,
             current_metrics: Vec::new(),
+            volatile_graph: self.1,
         })
     }
 }
@@ -167,11 +69,11 @@ pub struct MultiMetricPreprocessed<'a> {
     bw_metrics: Vec<Weight>,
     fw_upper: Vec<Weight>,
     bw_upper: Vec<Weight>,
-    customized_upper: CustomizedPerfect<'a, CCH>,
+    customized_smooth: CustomizedPerfect<'a, CCH>,
 }
 
 impl<'a> MultiMetricPreprocessed<'a> {
-    pub fn new(cch: &'a CCH, mut times: Vec<TRange<Timestamp>>, graph: &TDGraph, reduce: Option<usize>) -> Self {
+    pub fn new(cch: &'a CCH, mut times: Vec<TRange<Timestamp>>, graph: &TDGraph, smooth_graph: &BorrowedGraph, reduce: Option<usize>) -> Self {
         let m = graph.num_arcs();
         times.push(TRange { start: 0, end: INFINITY });
         let mut metric_ranges: Vec<_> = times.iter().enumerate().map(|(i, &r)| (r, i as u16, true)).collect();
@@ -205,7 +107,7 @@ impl<'a> MultiMetricPreprocessed<'a> {
 
         let upper_bound: Box<[_]> = (0..graph.num_arcs()).map(|e| graph.travel_time_function(e as EdgeId).upper_bound()).collect();
         let mut upper_bound_customized = customize(cch, &BorrowedGraph::new(graph.first_out(), graph.head(), &upper_bound));
-        let modified = customization::customize_perfect_without_rebuild(&mut upper_bound_customized);
+        customization::customize_perfect_without_rebuild(&mut upper_bound_customized);
 
         let (fw_metrics, bw_metrics): (Vec<_>, Vec<_>) = metrics
             .iter()
@@ -221,22 +123,21 @@ impl<'a> MultiMetricPreprocessed<'a> {
             bw_metrics,
             fw_upper: upper_bound_customized.forward_graph().weight().to_vec(),
             bw_upper: upper_bound_customized.backward_graph().weight().to_vec(),
-            customized_upper: customization::rebuild_customized_perfect(upper_bound_customized, &modified.0, &modified.1),
+            customized_smooth: customize_perfect(customize(cch, smooth_graph)),
         }
     }
 
     pub fn customize_simple_live(&mut self, graph: &PessimisticLiveTDGraph, t_live: Timestamp) {
-        let cch = self.customized_upper.cch;
+        let cch = self.customized_smooth.cch;
         let upper_bound: Box<[_]> = (0..graph.num_arcs()).map(|e| graph.upper_bound(e as EdgeId, t_live)).collect();
         let mut upper_bound_customized = customize(cch, &BorrowedGraph::new(graph.graph().first_out(), graph.graph().head(), &upper_bound));
-        let modified = customization::customize_perfect_without_rebuild(&mut upper_bound_customized);
+        customization::customize_perfect_without_rebuild(&mut upper_bound_customized);
         self.fw_upper = upper_bound_customized.forward_graph().weight().to_vec();
         self.bw_upper = upper_bound_customized.backward_graph().weight().to_vec();
-        self.customized_upper = customization::rebuild_customized_perfect(upper_bound_customized, &modified.0, &modified.1);
     }
 
     pub fn customize_live(&mut self, graph: &PessimisticLiveTDGraph, t_live: Timestamp) {
-        let cch = self.customized_upper.cch;
+        let cch = self.customized_smooth.cch;
         let num_metrics = self.fw_metrics.len() / cch.num_arcs();
         let end_of_live_metric = t_live + 59 * 60 * 1000;
         self.metric_ranges.push((
@@ -264,7 +165,7 @@ impl<'a> MultiMetricPreprocessed<'a> {
     }
 
     pub fn reserve_space_for_additional_metrics(&mut self, num_metrics: usize) {
-        let additional = num_metrics * self.customized_upper.cch.num_arcs();
+        let additional = num_metrics * self.customized_smooth.cch.num_arcs();
         self.fw_metrics.reserve_exact(additional);
         self.bw_metrics.reserve_exact(additional);
     }
@@ -277,7 +178,7 @@ impl crate::io::Deconstruct for MultiMetricPreprocessed<'_> {
         store("bw_metrics", &self.bw_metrics)?;
         store("fw_upper", &self.fw_upper)?;
         store("bw_upper", &self.bw_upper)?;
-        store("customized_upper", &crate::io::Sub(&self.customized_upper))?;
+        store("customized_smooth", &crate::io::Sub(&self.customized_smooth))?;
         Ok(())
     }
 }
@@ -290,14 +191,14 @@ impl<'a> crate::io::ReconstructPrepared<MultiMetricPreprocessed<'a>> for &'a CCH
             bw_metrics: loader.load("bw_metrics")?,
             fw_upper: loader.load("fw_upper")?,
             bw_upper: loader.load("bw_upper")?,
-            customized_upper: loader.reconstruct_prepared("customized_upper", self)?,
+            customized_smooth: loader.reconstruct_prepared("customized_smooth", self)?,
         })
     }
 }
 
 impl<'a> MultiMetric<'a> {
-    pub fn new(mut mmp: MultiMetricPreprocessed<'a>) -> Self {
-        let cch = mmp.customized_upper.cch;
+    pub fn new(mut mmp: MultiMetricPreprocessed<'a>, volatile_graph: &'a TDGraph) -> Self {
+        let cch = mmp.customized_smooth.cch;
         let n = cch.num_nodes();
         let m = cch.num_arcs();
 
@@ -494,7 +395,8 @@ impl<'a> MultiMetric<'a> {
             potentials: TimestampedVector::new(n),
             num_pot_computations: 0,
             current_metrics: Vec::new(),
-            upper_bound_dist: query::Server::new(mmp.customized_upper),
+            sp_in_smooth: CCHServer::new(mmp.customized_smooth),
+            volatile_graph,
         }
     }
 }
@@ -506,7 +408,10 @@ impl TDPotential for MultiMetric<'_> {
         self.potentials.reset();
         self.current_metrics.clear();
 
-        if let Some(upper_bound) = self.upper_bound_dist.query(Query { from: source, to: target }).distance() {
+        if let Some(smooth_shortest_path) = self.sp_in_smooth.query(Query { from: source, to: target }).node_path() {
+            let upper_bound = crate::algo::traffic_aware::time_dependent::path_dist_iter(&smooth_shortest_path, departure, self.volatile_graph)
+                .last()
+                .unwrap();
             let latest_arrival = departure + upper_bound;
             let end_on_day = latest_arrival / period();
             for &(mut range, idx, periodic) in &self.metric_ranges {
@@ -665,11 +570,11 @@ impl TDBounds for LiveToPredictedBounds {
 // Careful, this one works in reversed direction compared to most of the other CH-Pots
 pub struct MinMaxPotential<'a, W> {
     cch: &'a CCH,
-    fw_graph: OwnedGraph<W>,
-    bw_graph: OwnedGraph<W>,
+    fw_graph: OwnedGraph<(W, Weight)>,
+    bw_graph: OwnedGraph<(W, Weight)>,
     stack: Vec<NodeId>,
-    fw_distances: TimestampedVector<(Weight, Weight)>,
-    potentials: TimestampedVector<InRangeOption<(Weight, Weight)>>,
+    fw_distances: TimestampedVector<(Weight, Weight, Weight)>,
+    potentials: TimestampedVector<InRangeOption<(Weight, Weight, Weight)>>,
     departure: Timestamp,
 }
 
@@ -678,15 +583,16 @@ impl<'a, W: TDBounds> MinMaxPotential<'a, W> {
         self.departure = departure;
         self.potentials.reset();
         self.fw_distances.reset();
-        self.fw_distances[target as usize] = (0, 0);
+        self.fw_distances[target as usize] = (0, 0, 0);
         let mut node = Some(target);
         while let Some(current) = node {
-            for (NodeIdT(head), bounds, EdgeIdT(_)) in LinkIterable::<(NodeIdT, W, EdgeIdT)>::link_iter(&self.fw_graph, current) {
+            for (NodeIdT(head), (bounds, smooth), EdgeIdT(_)) in LinkIterable::<(NodeIdT, (W, Weight), EdgeIdT)>::link_iter(&self.fw_graph, current) {
                 self.fw_distances[head as usize].0 = min(self.fw_distances[head as usize].0, self.fw_distances[current as usize].0 + bounds.lower());
-                self.fw_distances[head as usize].1 = min(
-                    self.fw_distances[head as usize].1,
-                    self.fw_distances[current as usize].1 + bounds.td_upper(self.departure + self.fw_distances[current as usize].0),
-                );
+                if self.fw_distances[current as usize].2 + smooth < self.fw_distances[head as usize].2 {
+                    self.fw_distances[head as usize].2 = self.fw_distances[current as usize].2 + smooth;
+                    self.fw_distances[head as usize].1 =
+                        self.fw_distances[current as usize].1 + bounds.td_upper(self.departure + self.fw_distances[current as usize].0);
+                }
             }
             node = self.cch.elimination_tree()[current as usize].value();
         }
@@ -706,10 +612,13 @@ impl<'a, W: TDBounds> MinMaxPotential<'a, W> {
         while let Some(node) = self.stack.pop() {
             let mut dist = self.fw_distances[node as usize];
 
-            for (NodeIdT(head), bounds, EdgeIdT(_)) in LinkIterable::<(NodeIdT, W, EdgeIdT)>::link_iter(&self.bw_graph, node) {
-                let (head_lower, head_upper) = unsafe { self.potentials.get_unchecked(head as usize).assume_some() };
+            for (NodeIdT(head), (bounds, smooth), EdgeIdT(_)) in LinkIterable::<(NodeIdT, (W, Weight), EdgeIdT)>::link_iter(&self.bw_graph, node) {
+                let (head_lower, head_upper, head_smooth) = unsafe { self.potentials.get_unchecked(head as usize).assume_some() };
                 dist.0 = min(dist.0, bounds.lower() + head_lower);
-                dist.1 = min(dist.1, bounds.td_upper(self.departure + head_lower) + head_upper);
+                if head_smooth + smooth < dist.2 {
+                    dist.2 = head_smooth + smooth;
+                    dist.1 = bounds.td_upper(self.departure + head_lower) + head_upper;
+                }
             }
 
             self.potentials[node as usize] = InRangeOption::some(dist);
@@ -717,7 +626,7 @@ impl<'a, W: TDBounds> MinMaxPotential<'a, W> {
 
         let dist = self.potentials[node as usize].value().unwrap();
         if dist.0 < INFINITY {
-            Some(dist)
+            Some((dist.0, dist.1))
         } else {
             None
         }
@@ -799,7 +708,12 @@ impl<'a, W: Copy + Default> crate::io::ReconstructPrepared<IntervalMinPotential<
 }
 
 impl<'a> IntervalMinPotential<'a, (Weight, Weight)> {
-    pub fn new(cch: &'a CCH, mut catchup: customizable_contraction_hierarchy::customization::ftd_for_pot::PotData) -> Self {
+    pub fn new(
+        cch: &'a CCH,
+        mut catchup: customizable_contraction_hierarchy::customization::ftd_for_pot::PotData,
+        smooth_graph: BorrowedGraph,
+        graph: &TDGraph,
+    ) -> Self {
         let mut fw_predicted_upper_bounds: Vec<_> = catchup.fw_static_bound.iter().map(|&(_, u)| u).collect();
         let mut bw_predicted_upper_bounds: Vec<_> = catchup.bw_static_bound.iter().map(|&(_, u)| u).collect();
 
@@ -829,260 +743,320 @@ impl<'a> IntervalMinPotential<'a, (Weight, Weight)> {
                 *pred_upper = min(*pred_upper, perfect_upper);
             });
 
+        let mut customized_smooth = customize(cch, &smooth_graph);
+        let mut smooth_mod = customization::customize_perfect_without_rebuild(&mut customized_smooth);
+        smooth_mod.0.par_iter_mut().for_each(|b| *b = !*b);
+        smooth_mod.1.par_iter_mut().for_each(|b| *b = !*b);
+
+        let mut fw_upper_bound_by_smooth = vec![INFINITY; cch.num_arcs()];
+        let mut bw_upper_bound_by_smooth = vec![INFINITY; cch.num_arcs()];
+
+        for edge_idx in 0..cch.num_arcs() {
+            let (down, up) = customized_smooth.forward_unpacking()[edge_idx];
+            fw_upper_bound_by_smooth[edge_idx] = match (down.value(), up.value()) {
+                (Some(down), Some(up)) => bw_upper_bound_by_smooth[down as usize] + fw_upper_bound_by_smooth[up as usize],
+                (None, None) => cch.forward_cch_edge_to_orig_arc()[edge_idx]
+                    .iter()
+                    .min_by_key(|orig_edge_idx| smooth_graph.weight()[orig_edge_idx.0 as usize])
+                    .map(|orig_edge_idx| graph.travel_time_function(orig_edge_idx.0).upper_bound())
+                    .unwrap_or(INFINITY),
+                _ => unreachable!(),
+            };
+            let (down, up) = customized_smooth.backward_unpacking()[edge_idx];
+            bw_upper_bound_by_smooth[edge_idx] = match (down.value(), up.value()) {
+                (Some(down), Some(up)) => bw_upper_bound_by_smooth[down as usize] + fw_upper_bound_by_smooth[up as usize],
+                (None, None) => cch.backward_cch_edge_to_orig_arc()[edge_idx]
+                    .iter()
+                    .min_by_key(|orig_edge_idx| smooth_graph.weight()[orig_edge_idx.0 as usize])
+                    .map(|orig_edge_idx| graph.travel_time_function(orig_edge_idx.0).upper_bound())
+                    .unwrap_or(INFINITY),
+                _ => unreachable!(),
+            };
+        }
+
+        let mut fw_static_combined = vec![((INFINITY, INFINITY), INFINITY); cch.num_arcs()];
+        let mut bw_static_combined = vec![((INFINITY, INFINITY), INFINITY); cch.num_arcs()];
+
+        fw_static_combined
+            .par_iter_mut()
+            .zip(catchup.fw_static_bound.par_iter())
+            .zip(fw_upper_bound_by_smooth.par_iter())
+            .zip(customized_smooth.forward_graph().weight().par_iter())
+            .for_each(|(((comb, catchup_static), upper_by_smooth), smooth)| {
+                comb.0 .0 = catchup_static.0;
+                comb.0 .1 = *upper_by_smooth;
+                comb.1 = *smooth;
+            });
+
+        bw_static_combined
+            .par_iter_mut()
+            .zip(catchup.bw_static_bound.par_iter())
+            .zip(bw_upper_bound_by_smooth.par_iter())
+            .zip(customized_smooth.backward_graph().weight().par_iter())
+            .for_each(|(((comb, catchup_static), upper_by_smooth), smooth)| {
+                comb.0 .0 = catchup_static.0;
+                comb.0 .1 = *upper_by_smooth;
+                comb.1 = *smooth;
+            });
+
         Self::new_int(
             cch,
-            catchup.fw_static_bound,
-            catchup.bw_static_bound,
+            fw_static_combined,
+            bw_static_combined,
             catchup.fw_bucket_bounds,
             catchup.bw_bucket_bounds,
             catchup.fw_required,
             catchup.bw_required,
+            smooth_mod.0,
+            smooth_mod.1,
             catchup.bucket_to_metric,
         )
     }
 
-    pub fn new_for_simple_live(
-        cch: &'a CCH,
-        mut catchup: customizable_contraction_hierarchy::customization::ftd_for_pot::PotData,
-        live_graph: &PessimisticLiveTDGraph,
-        t_live: Timestamp,
-    ) -> Self {
-        let upper_bound = (0..live_graph.num_arcs() as EdgeId)
-            .map(|edge_id| live_graph.upper_bound(edge_id, t_live))
-            .collect::<Box<[Weight]>>();
-        let customized_live = {
-            let _blocked = block_reporting();
-            let mut customized = customize(
-                cch,
-                &FirstOutGraph::new(live_graph.graph().first_out(), live_graph.graph().head(), &upper_bound),
-            );
-            customization::customize_perfect_without_rebuild(&mut customized);
-            customized
-        };
+    // pub fn new_for_simple_live(
+    //     cch: &'a CCH,
+    //     mut catchup: customizable_contraction_hierarchy::customization::ftd_for_pot::PotData,
+    //     live_graph: &PessimisticLiveTDGraph,
+    //     t_live: Timestamp,
+    // ) -> Self {
+    //     let upper_bound = (0..live_graph.num_arcs() as EdgeId)
+    //         .map(|edge_id| live_graph.upper_bound(edge_id, t_live))
+    //         .collect::<Box<[Weight]>>();
+    //     let customized_live = {
+    //         let _blocked = block_reporting();
+    //         let mut customized = customize(
+    //             cch,
+    //             &FirstOutGraph::new(live_graph.graph().first_out(), live_graph.graph().head(), &upper_bound),
+    //         );
+    //         customization::customize_perfect_without_rebuild(&mut customized);
+    //         customized
+    //     };
 
-        catchup
-            .fw_static_bound
-            .par_iter_mut()
-            .zip(customized_live.forward_graph().weight())
-            .for_each(|((_, pred_upper), live_upper)| {
-                *pred_upper = *live_upper;
-            });
-        catchup
-            .bw_static_bound
-            .par_iter_mut()
-            .zip(customized_live.backward_graph().weight())
-            .for_each(|((_, pred_upper), live_upper)| {
-                *pred_upper = *live_upper;
-            });
+    //     catchup
+    //         .fw_static_bound
+    //         .par_iter_mut()
+    //         .zip(customized_live.forward_graph().weight())
+    //         .for_each(|((_, pred_upper), live_upper)| {
+    //             *pred_upper = *live_upper;
+    //         });
+    //     catchup
+    //         .bw_static_bound
+    //         .par_iter_mut()
+    //         .zip(customized_live.backward_graph().weight())
+    //         .for_each(|((_, pred_upper), live_upper)| {
+    //             *pred_upper = *live_upper;
+    //         });
 
-        Self::new_int(
-            cch,
-            catchup.fw_static_bound,
-            catchup.bw_static_bound,
-            catchup.fw_bucket_bounds,
-            catchup.bw_bucket_bounds,
-            catchup.fw_required,
-            catchup.bw_required,
-            catchup.bucket_to_metric,
-        )
-    }
+    //     Self::new_int(
+    //         cch,
+    //         catchup.fw_static_bound,
+    //         catchup.bw_static_bound,
+    //         catchup.fw_bucket_bounds,
+    //         catchup.bw_bucket_bounds,
+    //         catchup.fw_required,
+    //         catchup.bw_required,
+    //         catchup.bucket_to_metric,
+    //     )
+    // }
 }
 
-impl<'a> IntervalMinPotential<'a, LiveToPredictedBounds> {
-    pub fn new_for_live(
-        cch: &'a CCH,
-        mut catchup: customizable_contraction_hierarchy::customization::ftd_for_pot::PotData,
-        live_graph: &PessimisticLiveTDGraph,
-        t_live: Timestamp,
-    ) -> Self {
-        use crate::{
-            algo::customizable_contraction_hierarchy::customization::parallelization::SeperatorBasedParallelCustomization,
-            datastr::graph::floating_time_dependent::{
-                shortcut_source::{ShortcutSource, ShortcutSourceData, SourceCursor},
-                Timestamp as FlTimestamp,
-            },
-        };
-        use std::ops::Range;
+// impl<'a> IntervalMinPotential<'a, LiveToPredictedBounds> {
+//     pub fn new_for_live(
+//         cch: &'a CCH,
+//         mut catchup: customizable_contraction_hierarchy::customization::ftd_for_pot::PotData,
+//         live_graph: &PessimisticLiveTDGraph,
+//         t_live: Timestamp,
+//     ) -> Self {
+//         use crate::{
+//             algo::customizable_contraction_hierarchy::customization::parallelization::SeperatorBasedParallelCustomization,
+//             datastr::graph::floating_time_dependent::{
+//                 shortcut_source::{ShortcutSource, ShortcutSourceData, SourceCursor},
+//                 Timestamp as FlTimestamp,
+//             },
+//         };
+//         use std::ops::Range;
 
-        let longest_live = (0..live_graph.num_arcs())
-            .into_par_iter()
-            .map(|edge| live_graph.live_ended_at(edge as EdgeId))
-            .max()
-            .unwrap_or(0);
+//         let longest_live = (0..live_graph.num_arcs())
+//             .into_par_iter()
+//             .map(|edge| live_graph.live_ended_at(edge as EdgeId))
+//             .max()
+//             .unwrap_or(0);
 
-        let m = cch.num_arcs();
-        let mut fw_predicted_valid_from = vec![0; m];
-        let mut bw_predicted_valid_from = vec![0; m];
+//         let m = cch.num_arcs();
+//         let mut fw_predicted_valid_from = vec![0; m];
+//         let mut bw_predicted_valid_from = vec![0; m];
 
-        let set_prediction_validity_from_sources = |nodes: Range<usize>, edge_offset: usize, fw_validity: &mut [Timestamp], bw_validity: &mut [Timestamp]| {
-            for current_node in nodes {
-                let edges = cch.neighbor_edge_indices_usize(current_node as NodeId);
-                let (fw_validity_below, fw_validity) = fw_validity.split_at_mut(edges.start - edge_offset);
-                let (bw_validity_below, bw_validity) = bw_validity.split_at_mut(edges.start - edge_offset);
-                let set_validity_for_edges = |validities: &mut [Timestamp], first_source: &[u32], sources: &[(FlTimestamp, ShortcutSourceData)]| {
-                    for (validity, edge_idx) in validities.iter_mut().zip(edges.clone()) {
-                        let sources_idxs = first_source[edge_idx] as usize..first_source[edge_idx + 1] as usize;
-                        let sources = &sources[sources_idxs];
-                        if !sources.is_empty() {
-                            let mut cursor = SourceCursor::valid_at(sources, FlTimestamp::new(t_live as f64 / 1000.0));
-                            while cursor.cur().0.fuzzy_lt(FlTimestamp::new(longest_live as f64 / 1000.0)) {
-                                let source_live_until = match cursor.cur().1.into() {
-                                    ShortcutSource::Shortcut(down, up) => {
-                                        max(bw_validity_below[down as usize - edge_offset], fw_validity_below[up as usize - edge_offset])
-                                    }
-                                    ShortcutSource::OriginalEdge(edge) => live_graph.live_ended_at(edge),
-                                    _ => 0,
-                                };
-                                *validity = max(*validity, min(source_live_until, (f64::from(cursor.next().0) * 1000.0).ceil() as Timestamp));
-                                cursor.advance();
-                            }
-                        }
-                    }
-                };
-                set_validity_for_edges(&mut fw_validity[..edges.end - edges.start], &catchup.fw_first_source, &catchup.fw_sources);
-                set_validity_for_edges(&mut bw_validity[..edges.end - edges.start], &catchup.bw_first_source, &catchup.bw_sources);
-            }
-        };
+//         let set_prediction_validity_from_sources = |nodes: Range<usize>, edge_offset: usize, fw_validity: &mut [Timestamp], bw_validity: &mut [Timestamp]| {
+//             for current_node in nodes {
+//                 let edges = cch.neighbor_edge_indices_usize(current_node as NodeId);
+//                 let (fw_validity_below, fw_validity) = fw_validity.split_at_mut(edges.start - edge_offset);
+//                 let (bw_validity_below, bw_validity) = bw_validity.split_at_mut(edges.start - edge_offset);
+//                 let set_validity_for_edges = |validities: &mut [Timestamp], first_source: &[u32], sources: &[(FlTimestamp, ShortcutSourceData)]| {
+//                     for (validity, edge_idx) in validities.iter_mut().zip(edges.clone()) {
+//                         let sources_idxs = first_source[edge_idx] as usize..first_source[edge_idx + 1] as usize;
+//                         let sources = &sources[sources_idxs];
+//                         if !sources.is_empty() {
+//                             let mut cursor = SourceCursor::valid_at(sources, FlTimestamp::new(t_live as f64 / 1000.0));
+//                             while cursor.cur().0.fuzzy_lt(FlTimestamp::new(longest_live as f64 / 1000.0)) {
+//                                 let source_live_until = match cursor.cur().1.into() {
+//                                     ShortcutSource::Shortcut(down, up) => {
+//                                         max(bw_validity_below[down as usize - edge_offset], fw_validity_below[up as usize - edge_offset])
+//                                     }
+//                                     ShortcutSource::OriginalEdge(edge) => live_graph.live_ended_at(edge),
+//                                     _ => 0,
+//                                 };
+//                                 *validity = max(*validity, min(source_live_until, (f64::from(cursor.next().0) * 1000.0).ceil() as Timestamp));
+//                                 cursor.advance();
+//                             }
+//                         }
+//                     }
+//                 };
+//                 set_validity_for_edges(&mut fw_validity[..edges.end - edges.start], &catchup.fw_first_source, &catchup.fw_sources);
+//                 set_validity_for_edges(&mut bw_validity[..edges.end - edges.start], &catchup.bw_first_source, &catchup.bw_sources);
+//             }
+//         };
 
-        SeperatorBasedParallelCustomization::new_undirected(cch, set_prediction_validity_from_sources, set_prediction_validity_from_sources).customize(
-            &mut fw_predicted_valid_from,
-            &mut bw_predicted_valid_from,
-            |cb| cb(),
-        );
+//         SeperatorBasedParallelCustomization::new_undirected(cch, set_prediction_validity_from_sources, set_prediction_validity_from_sources).customize(
+//             &mut fw_predicted_valid_from,
+//             &mut bw_predicted_valid_from,
+//             |cb| cb(),
+//         );
 
-        let upper_bound = (0..live_graph.num_arcs() as EdgeId)
-            .map(|edge_id| live_graph.upper_bound(edge_id, t_live))
-            .collect::<Box<[Weight]>>();
-        let customized_live = {
-            let _blocked = block_reporting();
-            let mut customized = customize(
-                cch,
-                &FirstOutGraph::new(live_graph.graph().first_out(), live_graph.graph().head(), &upper_bound),
-            );
-            customization::customize_perfect_without_rebuild(&mut customized);
-            customized
-        };
+//         let upper_bound = (0..live_graph.num_arcs() as EdgeId)
+//             .map(|edge_id| live_graph.upper_bound(edge_id, t_live))
+//             .collect::<Box<[Weight]>>();
+//         let customized_live = {
+//             let _blocked = block_reporting();
+//             let mut customized = customize(
+//                 cch,
+//                 &FirstOutGraph::new(live_graph.graph().first_out(), live_graph.graph().head(), &upper_bound),
+//             );
+//             customization::customize_perfect_without_rebuild(&mut customized);
+//             customized
+//         };
 
-        let mut fw_predicted_upper_bounds: Vec<_> = catchup.fw_static_bound.iter().map(|&(_, u)| u).collect();
-        let mut bw_predicted_upper_bounds: Vec<_> = catchup.bw_static_bound.iter().map(|&(_, u)| u).collect();
+//         let mut fw_predicted_upper_bounds: Vec<_> = catchup.fw_static_bound.iter().map(|&(_, u)| u).collect();
+//         let mut bw_predicted_upper_bounds: Vec<_> = catchup.bw_static_bound.iter().map(|&(_, u)| u).collect();
 
-        customization::validity::customize_perfect_with_validity(
-            cch,
-            &mut fw_predicted_upper_bounds,
-            &mut bw_predicted_upper_bounds,
-            &mut fw_predicted_valid_from,
-            &mut bw_predicted_valid_from,
-        );
+//         customization::validity::customize_perfect_with_validity(
+//             cch,
+//             &mut fw_predicted_upper_bounds,
+//             &mut bw_predicted_upper_bounds,
+//             &mut fw_predicted_valid_from,
+//             &mut bw_predicted_valid_from,
+//         );
 
-        catchup
-            .fw_required
-            .par_iter_mut()
-            .zip(&fw_predicted_upper_bounds)
-            .zip(&catchup.fw_static_bound)
-            .zip(customized_live.forward_graph().weight())
-            .for_each(|(((required, pred_upper), (pred_lower, _)), live_upper)| {
-                debug_assert!(pred_upper <= live_upper);
-                if pred_lower > pred_upper {
-                    *required = false;
-                }
-            });
-        catchup
-            .bw_required
-            .par_iter_mut()
-            .zip(&bw_predicted_upper_bounds)
-            .zip(&catchup.bw_static_bound)
-            .zip(customized_live.backward_graph().weight())
-            .for_each(|(((required, pred_upper), (pred_lower, _)), live_upper)| {
-                debug_assert!(pred_upper <= live_upper);
-                if pred_lower > pred_upper {
-                    *required = false;
-                }
-            });
+//         catchup
+//             .fw_required
+//             .par_iter_mut()
+//             .zip(&fw_predicted_upper_bounds)
+//             .zip(&catchup.fw_static_bound)
+//             .zip(customized_live.forward_graph().weight())
+//             .for_each(|(((required, pred_upper), (pred_lower, _)), live_upper)| {
+//                 debug_assert!(pred_upper <= live_upper);
+//                 if pred_lower > pred_upper {
+//                     *required = false;
+//                 }
+//             });
+//         catchup
+//             .bw_required
+//             .par_iter_mut()
+//             .zip(&bw_predicted_upper_bounds)
+//             .zip(&catchup.bw_static_bound)
+//             .zip(customized_live.backward_graph().weight())
+//             .for_each(|(((required, pred_upper), (pred_lower, _)), live_upper)| {
+//                 debug_assert!(pred_upper <= live_upper);
+//                 if pred_lower > pred_upper {
+//                     *required = false;
+//                 }
+//             });
 
-        let disable_shortcuts_with_invalid_sources = |nodes: Range<usize>, edge_offset: usize, fw_required: &mut [bool], bw_required: &mut [bool]| {
-            for current_node in nodes {
-                let edges = cch.neighbor_edge_indices_usize(current_node as NodeId);
-                let (fw_required_below, fw_required) = fw_required.split_at_mut(edges.start - edge_offset);
-                let (bw_required_below, bw_required) = bw_required.split_at_mut(edges.start - edge_offset);
-                let process_edges = |requireds: &mut [bool], first_source: &[u32], sources: &[(FlTimestamp, ShortcutSourceData)]| {
-                    for (required, edge_idx) in requireds.iter_mut().zip(edges.clone()) {
-                        let sources_idxs = first_source[edge_idx] as usize..first_source[edge_idx + 1] as usize;
-                        let sources = &sources[sources_idxs];
-                        let any_required = sources.iter().map(|(_, s)| ShortcutSource::from(*s)).any(|source| match source {
-                            ShortcutSource::Shortcut(down, up) => {
-                                bw_required_below[down as usize - edge_offset] && fw_required_below[up as usize - edge_offset]
-                            }
-                            ShortcutSource::OriginalEdge(_) => true,
-                            _ => false,
-                        });
-                        if !any_required {
-                            *required = false;
-                        }
-                    }
-                };
-                process_edges(&mut fw_required[..edges.end - edges.start], &catchup.fw_first_source, &catchup.fw_sources);
-                process_edges(&mut bw_required[..edges.end - edges.start], &catchup.bw_first_source, &catchup.bw_sources);
-            }
-        };
+//         let disable_shortcuts_with_invalid_sources = |nodes: Range<usize>, edge_offset: usize, fw_required: &mut [bool], bw_required: &mut [bool]| {
+//             for current_node in nodes {
+//                 let edges = cch.neighbor_edge_indices_usize(current_node as NodeId);
+//                 let (fw_required_below, fw_required) = fw_required.split_at_mut(edges.start - edge_offset);
+//                 let (bw_required_below, bw_required) = bw_required.split_at_mut(edges.start - edge_offset);
+//                 let process_edges = |requireds: &mut [bool], first_source: &[u32], sources: &[(FlTimestamp, ShortcutSourceData)]| {
+//                     for (required, edge_idx) in requireds.iter_mut().zip(edges.clone()) {
+//                         let sources_idxs = first_source[edge_idx] as usize..first_source[edge_idx + 1] as usize;
+//                         let sources = &sources[sources_idxs];
+//                         let any_required = sources.iter().map(|(_, s)| ShortcutSource::from(*s)).any(|source| match source {
+//                             ShortcutSource::Shortcut(down, up) => {
+//                                 bw_required_below[down as usize - edge_offset] && fw_required_below[up as usize - edge_offset]
+//                             }
+//                             ShortcutSource::OriginalEdge(_) => true,
+//                             _ => false,
+//                         });
+//                         if !any_required {
+//                             *required = false;
+//                         }
+//                     }
+//                 };
+//                 process_edges(&mut fw_required[..edges.end - edges.start], &catchup.fw_first_source, &catchup.fw_sources);
+//                 process_edges(&mut bw_required[..edges.end - edges.start], &catchup.bw_first_source, &catchup.bw_sources);
+//             }
+//         };
 
-        SeperatorBasedParallelCustomization::new_undirected(cch, disable_shortcuts_with_invalid_sources, disable_shortcuts_with_invalid_sources).customize(
-            &mut catchup.fw_required,
-            &mut catchup.bw_required,
-            |cb| cb(),
-        );
+//         SeperatorBasedParallelCustomization::new_undirected(cch, disable_shortcuts_with_invalid_sources, disable_shortcuts_with_invalid_sources).customize(
+//             &mut catchup.fw_required,
+//             &mut catchup.bw_required,
+//             |cb| cb(),
+//         );
 
-        let fw_bounds = catchup
-            .fw_static_bound
-            .into_iter()
-            .map(|(l, _)| l)
-            .zip(fw_predicted_upper_bounds)
-            .zip(customized_live.forward_graph().weight())
-            .zip(fw_predicted_valid_from)
-            .map(|(((pred_l, pred_u), &live_u), pred_valid)| LiveToPredictedBounds {
-                lower: pred_l,
-                live_upper: live_u,
-                predicted_upper: pred_u,
-                predicted_valid_from: pred_valid,
-            })
-            .collect();
+//         let fw_bounds = catchup
+//             .fw_static_bound
+//             .into_iter()
+//             .map(|(l, _)| l)
+//             .zip(fw_predicted_upper_bounds)
+//             .zip(customized_live.forward_graph().weight())
+//             .zip(fw_predicted_valid_from)
+//             .map(|(((pred_l, pred_u), &live_u), pred_valid)| LiveToPredictedBounds {
+//                 lower: pred_l,
+//                 live_upper: live_u,
+//                 predicted_upper: pred_u,
+//                 predicted_valid_from: pred_valid,
+//             })
+//             .collect();
 
-        let bw_bounds = catchup
-            .bw_static_bound
-            .into_iter()
-            .map(|(l, _)| l)
-            .zip(bw_predicted_upper_bounds)
-            .zip(customized_live.backward_graph().weight())
-            .zip(bw_predicted_valid_from)
-            .map(|(((pred_l, pred_u), &live_u), pred_valid)| LiveToPredictedBounds {
-                lower: pred_l,
-                live_upper: live_u,
-                predicted_upper: pred_u,
-                predicted_valid_from: pred_valid,
-            })
-            .collect();
+//         let bw_bounds = catchup
+//             .bw_static_bound
+//             .into_iter()
+//             .map(|(l, _)| l)
+//             .zip(bw_predicted_upper_bounds)
+//             .zip(customized_live.backward_graph().weight())
+//             .zip(bw_predicted_valid_from)
+//             .map(|(((pred_l, pred_u), &live_u), pred_valid)| LiveToPredictedBounds {
+//                 lower: pred_l,
+//                 live_upper: live_u,
+//                 predicted_upper: pred_u,
+//                 predicted_valid_from: pred_valid,
+//             })
+//             .collect();
 
-        Self::new_int(
-            cch,
-            fw_bounds,
-            bw_bounds,
-            catchup.fw_bucket_bounds,
-            catchup.bw_bucket_bounds,
-            catchup.fw_required,
-            catchup.bw_required,
-            catchup.bucket_to_metric,
-        )
-    }
-}
+//         Self::new_int(
+//             cch,
+//             fw_bounds,
+//             bw_bounds,
+//             catchup.fw_bucket_bounds,
+//             catchup.bw_bucket_bounds,
+//             catchup.fw_required,
+//             catchup.bw_required,
+//             catchup.bucket_to_metric,
+//         )
+//     }
+// }
 
 impl<'a, W: TDBounds + Default + Send + Sync> IntervalMinPotential<'a, W> {
     fn new_int(
         cch: &'a CCH,
-        mut fw_static_bound: Vec<W>,
-        mut bw_static_bound: Vec<W>,
+        mut fw_static_bound: Vec<(W, Weight)>,
+        mut bw_static_bound: Vec<(W, Weight)>,
         mut fw_bucket_bounds: Vec<Weight>,
         mut bw_bucket_bounds: Vec<Weight>,
         fw_required: Vec<bool>,
         bw_required: Vec<bool>,
+        fw_smooth_required: Vec<bool>,
+        bw_smooth_required: Vec<bool>,
         bucket_to_metric: Vec<usize>,
     ) -> Self {
         let n = cch.num_nodes();
@@ -1121,12 +1095,12 @@ impl<'a, W: TDBounds + Default + Send + Sync> IntervalMinPotential<'a, W> {
                     local_count.0 = fw_static[local_edges.clone()]
                         .iter()
                         .zip(&fw_required[local_edges.clone()])
-                        .filter(|&(stat, req)| Self::keep(stat) && *req)
+                        .filter(|&(stat, req)| Self::keep(&stat.0) || *req)
                         .count();
                     local_count.1 = bw_static[local_edges.clone()]
                         .iter()
                         .zip(&bw_required[local_edges.clone()])
-                        .filter(|&(stat, req)| Self::keep(stat) && *req)
+                        .filter(|&(stat, req)| Self::keep(&stat.0) || *req)
                         .count();
                 });
             }
@@ -1184,7 +1158,7 @@ impl<'a, W: TDBounds + Default + Send + Sync> IntervalMinPotential<'a, W> {
                             .zip(&fw_static[edge_ids.clone()])
                             .zip(&fw_required[edge_ids.clone()])
                         {
-                            if Self::keep(stat) && *req {
+                            if Self::keep(&stat.0) || *req {
                                 local_fw_head[fw_edge_count] = *head;
                                 fw_edge_count += 1;
                             }
@@ -1194,7 +1168,7 @@ impl<'a, W: TDBounds + Default + Send + Sync> IntervalMinPotential<'a, W> {
                             .zip(&bw_static[edge_ids.clone()])
                             .zip(&bw_required[edge_ids.clone()])
                         {
-                            if Self::keep(stat) && *req {
+                            if Self::keep(&stat.0) || *req {
                                 local_bw_head[bw_edge_count] = *head;
                                 bw_edge_count += 1;
                             }
@@ -1242,14 +1216,14 @@ impl<'a, W: TDBounds + Default + Send + Sync> IntervalMinPotential<'a, W> {
                             let metric_offset = m * metric_idx;
                             let weights = &prev_fw_buckets[metric_offset + edge_ids.start..metric_offset + edge_ids.end];
                             for ((weight, stat), req) in weights.iter().zip(&fw_static[edge_ids.clone()]).zip(&fw_required[edge_ids.clone()]) {
-                                if Self::keep(stat) && *req {
+                                if Self::keep(&stat.0) || *req {
                                     local_fw_buckets[fw_edge_count] = *weight;
                                     fw_edge_count += 1;
                                 }
                             }
                             let weights = &prev_bw_buckets[metric_offset + edge_ids.start..metric_offset + edge_ids.end];
                             for ((weight, stat), req) in weights.iter().zip(&bw_static[edge_ids.clone()]).zip(&bw_required[edge_ids.clone()]) {
-                                if Self::keep(stat) && *req {
+                                if Self::keep(&stat.0) || *req {
                                     local_bw_buckets[bw_edge_count] = *weight;
                                     bw_edge_count += 1;
                                 }
@@ -1274,6 +1248,8 @@ impl<'a, W: TDBounds + Default + Send + Sync> IntervalMinPotential<'a, W> {
         rayon::scope(|s| {
             let fw_static = &fw_static_bound;
             let bw_static = &bw_static_bound;
+            let fw_smooth_required = &fw_smooth_required;
+            let bw_smooth_required = &bw_smooth_required;
 
             for i in 0..k {
                 let (local_count, rest_counts) = local_edge_counts.split_first_mut().unwrap();
@@ -1281,8 +1257,16 @@ impl<'a, W: TDBounds + Default + Send + Sync> IntervalMinPotential<'a, W> {
                 let local_nodes = first_node_of_chunk[i]..first_node_of_chunk[i + 1];
                 let local_edges = cch.first_out()[local_nodes.start] as usize..cch.first_out()[local_nodes.end] as usize;
                 s.spawn(move |_| {
-                    local_count.0 = fw_static[local_edges.clone()].iter().filter(|stat| Self::keep(stat)).count();
-                    local_count.1 = bw_static[local_edges.clone()].iter().filter(|stat| Self::keep(stat)).count();
+                    local_count.0 = fw_static[local_edges.clone()]
+                        .iter()
+                        .zip(&fw_smooth_required[local_edges.clone()])
+                        .filter(|(stat, &smooth_req)| Self::keep(&stat.0) || smooth_req)
+                        .count();
+                    local_count.1 = bw_static[local_edges.clone()]
+                        .iter()
+                        .zip(&bw_smooth_required[local_edges.clone()])
+                        .filter(|(stat, &smooth_req)| Self::keep(&stat.0) || smooth_req)
+                        .count();
                 });
             }
         });
@@ -1299,8 +1283,8 @@ impl<'a, W: TDBounds + Default + Send + Sync> IntervalMinPotential<'a, W> {
         let m_bw = edges_of_each_thread[k].1;
         let mut fw_head = vec![0; m_fw];
         let mut bw_head = vec![0; m_bw];
-        let mut fw_new_static = vec![W::default(); m_fw];
-        let mut bw_new_static = vec![W::default(); m_bw];
+        let mut fw_new_static = vec![(W::default(), INFINITY); m_fw];
+        let mut bw_new_static = vec![(W::default(), INFINITY); m_bw];
 
         rayon::scope(|s| {
             let mut forward_first_out = &mut fw_first_out[..];
@@ -1312,6 +1296,8 @@ impl<'a, W: TDBounds + Default + Send + Sync> IntervalMinPotential<'a, W> {
 
             let fw_static = &fw_static_bound;
             let bw_static = &bw_static_bound;
+            let fw_smooth_required = &fw_smooth_required;
+            let bw_smooth_required = &bw_smooth_required;
 
             for i in 0..k {
                 let local_nodes = first_node_of_chunk[i]..first_node_of_chunk[i + 1];
@@ -1340,15 +1326,23 @@ impl<'a, W: TDBounds + Default + Send + Sync> IntervalMinPotential<'a, W> {
                         local_bw_fo[local_node_idx] = (num_bw_edges_before + bw_edge_count) as EdgeId;
 
                         let edge_ids = cch.neighbor_edge_indices_usize(node as NodeId);
-                        for (head, stat) in cch.head()[edge_ids.clone()].iter().zip(&fw_static[edge_ids.clone()]) {
-                            if Self::keep(stat) {
+                        for ((head, stat), &smooth_req) in cch.head()[edge_ids.clone()]
+                            .iter()
+                            .zip(&fw_static[edge_ids.clone()])
+                            .zip(&fw_smooth_required[edge_ids.clone()])
+                        {
+                            if Self::keep(&stat.0) || smooth_req {
                                 local_fw_head[fw_edge_count] = *head;
                                 local_fw_static[fw_edge_count] = *stat;
                                 fw_edge_count += 1;
                             }
                         }
-                        for (head, stat) in cch.head()[edge_ids.clone()].iter().zip(&bw_static[edge_ids.clone()]) {
-                            if Self::keep(stat) {
+                        for ((head, stat), &smooth_req) in cch.head()[edge_ids.clone()]
+                            .iter()
+                            .zip(&bw_static[edge_ids.clone()])
+                            .zip(&bw_smooth_required[edge_ids.clone()])
+                        {
+                            if Self::keep(&stat.0) || smooth_req {
                                 local_bw_head[bw_edge_count] = *head;
                                 local_bw_static[bw_edge_count] = *stat;
                                 bw_edge_count += 1;
