@@ -549,3 +549,16 @@ impl ReconstructPrepared<PessimisticLiveTDGraph> for (String, Timestamp) {
         Ok(PessimisticLiveTDGraph::new(graph, live))
     }
 }
+
+impl EdgeIdGraph for PessimisticLiveTDGraph {
+    type IdxIter<'a> = impl Iterator<Item = EdgeIdT> + 'a where Self: 'a;
+
+    fn edge_indices(&self, from: NodeId, to: NodeId) -> Self::IdxIter<'_> {
+        self.graph.edge_indices(from, to)
+    }
+
+    #[inline(always)]
+    fn neighbor_edge_indices(&self, node: NodeId) -> Range<EdgeId> {
+        self.graph.neighbor_edge_indices(node)
+    }
+}
