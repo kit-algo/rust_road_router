@@ -156,22 +156,22 @@ pub struct HeuristicTDTrafficAwareServer<'a, P> {
     shortest_path: TDTopoDijkServer<TDGraph, BlockedDetoursDijkstra<TDDijkstraOps>, td_astar::TDRecyclingPotential<P>, true, true, true>,
 }
 
-impl<'a> HeuristicTDTrafficAwareServer<'a, BorrowedCCHPot<'a>> {
-    pub fn new(smooth_graph: BorrowedGraph<'a>, live_graph: &'a time_dependent::TDGraph, smooth_cch_pot: &'a CCHPotData, live_cch_pot: &'a CCHPotData) -> Self {
+impl<'a> HeuristicTDTrafficAwareServer<'a, BorrowedCCHPot<'a>> {}
+
+impl<'a, P: td_astar::TDPotential> HeuristicTDTrafficAwareServer<'a, P> {
+    pub fn new(smooth_graph: BorrowedGraph<'a>, live_graph: &'a time_dependent::TDGraph, smooth_cch_pot: &'a CCHPotData, live_cch_pot: P) -> Self {
         let n = live_graph.num_nodes();
         let _blocked = block_reporting();
         Self {
             ubs_checker: MinimalNonShortestSubPaths::new(smooth_cch_pot, smooth_graph),
             shortest_path: TDTopoDijkServer::new(
                 live_graph,
-                td_astar::TDRecyclingPotential::new(live_cch_pot.forward_potential()),
+                td_astar::TDRecyclingPotential::new(live_cch_pot),
                 BlockedDetoursDijkstra::new(n, TDDijkstraOps()),
             ),
         }
     }
-}
 
-impl<'a, P: td_astar::TDPotential> HeuristicTDTrafficAwareServer<'a, P> {
     pub fn query(&mut self, query: TDQuery<time_dependent::Timestamp>, epsilon: f64, mut path_cb: impl FnMut(&[NodeId])) -> Option<()> {
         let timer = Timer::new();
         report!("algo", "iterative_detour_blocking");
@@ -251,18 +251,16 @@ pub struct IterativePathFixing<'a, P> {
     live_graph: &'a TDGraph,
 }
 
-impl<'a> IterativePathFixing<'a, BorrowedCCHPot<'a>> {
-    pub fn new(smooth_graph: BorrowedGraph<'a>, live_graph: &'a TDGraph, smooth_cch_pot: &'a CCHPotData, live_cch_pot: &'a CCHPotData) -> Self {
+impl<'a, P: TDPotential> IterativePathFixing<'a, P> {
+    pub fn new(smooth_graph: BorrowedGraph<'a>, live_graph: &'a TDGraph, smooth_cch_pot: &'a CCHPotData, live_cch_pot: P) -> Self {
         let _blocked = block_reporting();
         Self {
             ubs_checker: MinimalNonShortestSubPaths::new(smooth_cch_pot, smooth_graph),
-            shortest_path: TDTopoDijkServer::new(live_graph, live_cch_pot.forward_potential(), TDDijkstraOps()),
+            shortest_path: TDTopoDijkServer::new(live_graph, live_cch_pot, TDDijkstraOps()),
             live_graph,
         }
     }
-}
 
-impl<'a, P: TDPotential> IterativePathFixing<'a, P> {
     pub fn query(&mut self, query: TDQuery<Timestamp>, epsilon: f64) -> Option<()> {
         report!("algo", "iterative_path_fixing");
 
@@ -306,18 +304,16 @@ pub struct SmoothPathBaseline<'a, P> {
     live_graph: &'a TDGraph,
 }
 
-impl<'a> SmoothPathBaseline<'a, BorrowedCCHPot<'a>> {
-    pub fn new(smooth_graph: BorrowedGraph<'a>, live_graph: &'a TDGraph, smooth_cch_pot: &'a CCHPotData, live_cch_pot: &'a CCHPotData) -> Self {
+impl<'a, P: TDPotential> SmoothPathBaseline<'a, P> {
+    pub fn new(smooth_graph: BorrowedGraph<'a>, live_graph: &'a TDGraph, smooth_cch_pot: &'a CCHPotData, live_cch_pot: P) -> Self {
         let _blocked = block_reporting();
         Self {
-            shortest_live_path: TDTopoDijkServer::new(live_graph, live_cch_pot.forward_potential(), TDDijkstraOps()),
+            shortest_live_path: TDTopoDijkServer::new(live_graph, live_cch_pot, TDDijkstraOps()),
             shortest_path_by_smooth: TopoDijkServer::new(&smooth_graph, smooth_cch_pot.forward_potential(), DefaultOps()),
             live_graph,
         }
     }
-}
 
-impl<'a, P: TDPotential> SmoothPathBaseline<'a, P> {
     pub fn query(&mut self, query: TDQuery<Timestamp>) -> Option<()> {
         report!("algo", "smooth_path_baseline");
 
