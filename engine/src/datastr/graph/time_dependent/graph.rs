@@ -404,6 +404,7 @@ impl PessimisticLiveTDGraph {
         let ttf = self.graph.travel_time_function(edge_id);
         std::cmp::max(
             ttf.upper_bound(),
+            // this line catches the case of an inf live value - the evaluated tt will be smaller than inf
             std::cmp::min(self.live[edge_id as usize].value().map(|(l, _)| l).unwrap_or(0), self.eval(edge_id, now)),
         )
     }
