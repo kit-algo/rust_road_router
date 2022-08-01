@@ -58,7 +58,7 @@ impl<'a> CCHPotData<'a> {
         )
     }
 
-    pub fn forward_path_potential(&self) -> CCHPotentialWithPathUnpacking {
+    pub fn forward_path_potential(&self) -> CCHPotentialWithPathUnpacking<false> {
         let n = self.customized.forward_graph().num_nodes();
         let m = self.customized.forward_graph().num_arcs();
 
@@ -78,7 +78,7 @@ impl<'a> CCHPotData<'a> {
         }
     }
 
-    pub fn backward_path_potential(&self) -> CCHPotentialWithPathUnpacking {
+    pub fn backward_path_potential(&self) -> CCHPotentialWithPathUnpacking<true> {
         let n = self.customized.forward_graph().num_nodes();
         let m = self.customized.forward_graph().num_arcs();
 
@@ -199,7 +199,7 @@ where
     }
 }
 
-pub struct CCHPotentialWithPathUnpacking<'a> {
+pub struct CCHPotentialWithPathUnpacking<'a, const FLIP_UNPACKING: bool> {
     cch: &'a CCH,
     stack: Vec<NodeId>,
     potentials: TimestampedVector<InRangeOption<Weight>>,
@@ -214,13 +214,13 @@ pub struct CCHPotentialWithPathUnpacking<'a> {
     forward_tail: &'a [NodeId],
 }
 
-impl<'a> CCHPotentialWithPathUnpacking<'a> {
+impl<'a, const FLIP_UNPACKING: bool> CCHPotentialWithPathUnpacking<'a, FLIP_UNPACKING> {
     pub fn num_pot_computations(&self) -> usize {
         self.num_pot_computations
     }
 }
 
-impl<'a> Potential for CCHPotentialWithPathUnpacking<'a> {
+impl<'a, const FLIP_UNPACKING: bool> Potential for CCHPotentialWithPathUnpacking<'a, FLIP_UNPACKING> {
     fn init(&mut self, target: NodeId) {
         self.path_unpacked.clear();
         self.potentials.reset();
@@ -269,7 +269,7 @@ impl<'a> Potential for CCHPotentialWithPathUnpacking<'a> {
     }
 }
 
-impl<'a> CCHPotentialWithPathUnpacking<'a> {
+impl<'a, const FLIP_UNPACKING: bool> CCHPotentialWithPathUnpacking<'a, FLIP_UNPACKING> {
     pub fn unpack_path(&mut self, NodeIdT(node): NodeIdT) {
         if self.path_unpacked.get(node as usize) {
             return;
@@ -285,9 +285,19 @@ impl<'a> CCHPotentialWithPathUnpacking<'a> {
 
         debug_assert!(self_dist >= parent_dist, "{:#?}", (node, parent, self_dist, parent_dist));
         let (down, up) = if parent > node {
-            self.forward_unpacking[edge as usize]
+            let (down, up) = self.forward_unpacking[edge as usize];
+            if FLIP_UNPACKING {
+                (up, down)
+            } else {
+                (down, up)
+            }
         } else {
-            self.backward_unpacking[edge as usize]
+            let (down, up) = self.backward_unpacking[edge as usize];
+            if FLIP_UNPACKING {
+                (up, down)
+            } else {
+                (down, up)
+            }
         };
         if let Some(down) = down.value() {
             let up = up.value().unwrap();

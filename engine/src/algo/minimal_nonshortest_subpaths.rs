@@ -9,8 +9,8 @@ use crate::{
 use std::{collections::BTreeMap, ops::Range};
 
 pub struct MinimalNonShortestSubPaths<'a> {
-    target_pot: CCHPotentialWithPathUnpacking<'a>,
-    source_pot: CCHPotentialWithPathUnpacking<'a>,
+    target_pot: CCHPotentialWithPathUnpacking<'a, false>,
+    source_pot: CCHPotentialWithPathUnpacking<'a, true>,
     path_parent_cache: Vec<InRangeOption<NodeId>>,
     path_ranks: Vec<InRangeOption<usize>>,
     smooth_graph: BorrowedGraph<'a>,
