@@ -37,13 +37,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     report!("queries", queries);
     let sources = Vec::<NodeId>::load_from(path.join(&queries).join("source"))?;
     let targets = Vec::<NodeId>::load_from(path.join(&queries).join("target"))?;
-    let departures = Vec::<Timestamp>::load_from(path.join(&queries).join("departure"))?;
     let mut ranks = Vec::<u32>::load_from(path.join(&queries).join("rank")).ok().map(Vec::into_iter);
     let num_queries = std::cmp::min(num_queries(), sources.len());
     let query_iter = sources
         .into_iter()
         .zip(targets)
-        .zip(departures)
+        .zip(std::iter::repeat(t_live))
         .map(|((from, to), at)| (from, to, at))
         .take(num_queries);
     let mut report_ranks = || {
