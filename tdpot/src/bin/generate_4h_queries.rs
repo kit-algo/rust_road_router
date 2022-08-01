@@ -49,7 +49,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    sources_1h.write_to(&path.join("queries/4h/source"))?;
+    sources_4h.write_to(&path.join("queries/4h/source"))?;
     targets_4h.write_to(&path.join("queries/4h/target"))?;
     departures_4h.write_to(&path.join("queries/4h/departure"))?;
 
