@@ -17,7 +17,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let pre_in = args.next().unwrap_or("customized_corridor_mins".to_string());
     let pot_out = args.next().unwrap_or("interval_min_pot".to_string());
 
-    let graph = time_dependent::TDGraph::reconstruct_from(&path)?;
+    let mut graph = time_dependent::TDGraph::reconstruct_from(&path)?;
+    graph.fix_zero_travel_times();
     let lower_bound: Vec<_> = (0..graph.num_arcs() as EdgeId).map(|e| graph.travel_time_function(e).lower_bound()).collect();
     let smooth_graph = BorrowedGraph::new(graph.first_out(), graph.head(), &lower_bound[..]);
     let order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm"))?);

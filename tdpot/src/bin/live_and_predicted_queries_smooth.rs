@@ -27,7 +27,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     report!("t_live", t_live);
     report!("live_data_file", live_data_file);
 
-    let live_graph = (live_data_file, t_live).reconstruct_from(&path)?;
+    let mut live_graph = (live_data_file, t_live).reconstruct_from(&path)?;
+    live_graph.fix_zero_travel_times();
     let graph = live_graph.graph();
 
     let queries = args.next().unwrap();

@@ -103,6 +103,12 @@ impl Graph {
             .count()
     }
 
+    pub fn fix_zero_travel_times(&mut self) {
+        for tt in &mut self.ipp_travel_time {
+            *tt = std::cmp::max(*tt, 1);
+        }
+    }
+
     pub fn line_graph(&self, mut turn_costs: impl FnMut(EdgeId, EdgeId) -> Option<Weight>) -> Self {
         let mut first_out = Vec::with_capacity(self.num_arcs() + 1);
         first_out.push(0);
@@ -441,6 +447,10 @@ impl PessimisticLiveTDGraph {
 
     pub fn graph(&self) -> &Graph {
         &self.graph
+    }
+
+    pub fn fix_zero_travel_times(&mut self) {
+        self.graph.fix_zero_travel_times()
     }
 }
 

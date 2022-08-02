@@ -20,7 +20,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let pre_in = args.next().unwrap_or("customized_corridor_mins".to_string());
     let pot_out = args.next().unwrap_or("interval_min_pot".to_string());
 
-    let live_graph = (live_data_file, t_live).reconstruct_from(&path)?;
+    let mut live_graph = (live_data_file, t_live).reconstruct_from(&path)?;
+    live_graph.fix_zero_travel_times();
     let order = NodeOrder::from_node_order(Vec::load_from(path.join("cch_perm"))?);
     let cch = CCH::fix_order_and_build(live_graph.graph(), order);
 
