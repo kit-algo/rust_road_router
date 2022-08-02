@@ -51,6 +51,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let graph = TDGraph::reconstruct_from(&path)?;
     let lower_bound: Vec<_> = (0..graph.num_arcs() as EdgeId).map(|e| graph.travel_time_function(e).lower_bound()).collect();
+    assert!(lower_bound.iter().all(|&l| l > 0));
     let smooth_graph = BorrowedGraph::new(graph.first_out(), graph.head(), &lower_bound[..]);
 
     let cch = {

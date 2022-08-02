@@ -8,10 +8,7 @@ use rust_road_router::{
         *,
     },
     cli::CliErr,
-    datastr::{
-        graph::{time_dependent::*, *},
-        node_order::*,
-    },
+    datastr::{graph::*, node_order::*},
     experiments::chpot::num_queries,
     io::*,
     report::*,
@@ -57,6 +54,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     report!("epsilon", epsilon);
 
     let lower_bound: Vec<_> = (0..graph.num_arcs() as EdgeId).map(|e| graph.travel_time_function(e).lower_bound()).collect();
+    assert!(lower_bound.iter().all(|&l| l > 0));
     let smooth_graph = BorrowedGraph::new(graph.first_out(), graph.head(), &lower_bound[..]);
 
     let cch = {
