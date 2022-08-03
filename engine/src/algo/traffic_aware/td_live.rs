@@ -345,10 +345,10 @@ impl<'a, P: TDPotential> SmoothPathBaseline<'a, P> {
 }
 
 pub fn path_dist_iter<'a>(path: &'a [NodeId], departure: Timestamp, graph: &'a PessimisticLiveTDGraph) -> impl Iterator<Item = Weight> + 'a {
-    std::iter::once(departure).chain(path.windows(2).scan(0, move |state, node_pair| {
+    std::iter::once(0).chain(path.windows(2).scan(0, move |state, node_pair| {
         let mut min_edge_weight = INFINITY;
         for EdgeIdT(edge_id) in graph.edge_indices(node_pair[0], node_pair[1]) {
-            min_edge_weight = std::cmp::min(min_edge_weight, graph.eval(edge_id, *state));
+            min_edge_weight = std::cmp::min(min_edge_weight, graph.eval(edge_id, *state + departure));
         }
         debug_assert_ne!(min_edge_weight, INFINITY);
 
