@@ -4,8 +4,8 @@ use super::*;
 
 /// A struct borrowing data of a single PLF and exposing some methods to work with it.
 pub struct PiecewiseLinearFunction<'a> {
-    departure_time: &'a [Timestamp],
-    travel_time: &'a [Weight],
+    pub departure_time: &'a [Timestamp],
+    pub travel_time: &'a [Weight],
 }
 
 impl<'a> PiecewiseLinearFunction<'a> {
