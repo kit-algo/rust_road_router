@@ -78,6 +78,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             let mut algo_runs_ctxt = push_collection_context("algo_runs");
             run_td_queries(query_iter, &mut server, Some(&mut algo_runs_ctxt), |_, _, _, _| report_ranks(), |_, _, _| None);
         }
+        Some("ch_potentials") => {
+            report!("potential", "ch_pot");
+            let potential = CHPotential::reconstruct_from(&path.join("lower_bound_ch"))?;
+            let mut server = without_reporting(|| Server::new(&graph, potential, TDDijkstraOps::default()));
+
+            let mut algo_runs_ctxt = push_collection_context("algo_runs");
+            run_td_queries(query_iter, &mut server, Some(&mut algo_runs_ctxt), |_, _, _, _| report_ranks(), |_, _, _| None);
+        }
         _ => {
             report!("potential", "lower_bound_cch_pot");
             let lower_bound = (0..graph.num_arcs() as EdgeId)
