@@ -452,6 +452,19 @@ impl PessimisticLiveTDGraph {
     pub fn fix_zero_travel_times(&mut self) {
         self.graph.fix_zero_travel_times()
     }
+
+    pub fn line_graph(&self, mut turn_costs: impl FnMut(EdgeId, EdgeId) -> Option<Weight>) -> Self {
+        let mut live = Vec::new();
+
+        let graph = self.graph.line_graph(|edge_id, next_link_id| {
+            turn_costs(edge_id, next_link_id).map(|turn_cost| {
+                live.push(InRangeOption::new(self.live[edge_id as usize].value().map(|(w, t)| (w + turn_cost, t))));
+                turn_cost
+            })
+        });
+
+        Self { graph, live }
+    }
 }
 
 impl crate::datastr::graph::Graph for PessimisticLiveTDGraph {
