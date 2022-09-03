@@ -11,7 +11,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = &args.next().ok_or(CliErr("No input directory arg given"))?;
     let path = Path::new(arg);
 
-    let graph = TDGraph::reconstruct_from(&path)?;
+    let graph = UnweightedOwnedGraph::reconstruct_from(&path)?;
     let n = graph.num_nodes();
 
     let mut rng = StdRng::from_entropy();
