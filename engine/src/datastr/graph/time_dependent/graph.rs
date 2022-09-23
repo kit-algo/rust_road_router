@@ -147,6 +147,14 @@ impl Graph {
             ipp_travel_time,
         }
     }
+
+    pub fn to_constant_lower(&mut self) {
+        self.ipp_travel_time = (0..self.num_arcs())
+            .map(|edge| self.travel_time_function(edge as EdgeId).lower_bound())
+            .collect();
+        self.first_ipp_of_arc = (0..(self.num_arcs() + 1) as u32).collect();
+        self.ipp_departure_time = std::iter::repeat(0).take(self.num_arcs()).collect();
+    }
 }
 
 impl GraphTrait for Graph {
@@ -445,6 +453,31 @@ impl PessimisticLiveTDGraph {
         })
     }
 
+    pub fn is_live_slower(&self, edge_id: EdgeId, now: Timestamp) -> Option<bool> {
+        self.live[edge_id as usize]
+            .value()
+            .filter(|&(l, _t)| self.graph.travel_time_function(edge_id).lower_bound() <= l)
+            .map(|(l, t)| self.graph.travel_time_function(edge_id).lower_bound_in_range(now..t) <= l)
+    }
+
+    pub fn check_global_lower(&self) {
+        for edge_id in 0..self.num_arcs() {
+            if let Some((tt, _)) = self.live[edge_id].value() {
+                assert!(tt >= self.graph.travel_time_function(edge_id as EdgeId).lower_bound());
+            }
+        }
+    }
+
+    pub fn remove_live_faster_than_global_lower(&mut self) {
+        for edge_id in 0..self.num_arcs() {
+            if let Some((tt, _)) = self.live[edge_id].value() {
+                if tt < self.graph.travel_time_function(edge_id as EdgeId).lower_bound() {
+                    self.live[edge_id] = InRangeOption::NONE
+                }
+            }
+        }
+    }
+
     pub fn graph(&self) -> &Graph {
         &self.graph
     }
@@ -464,6 +497,10 @@ impl PessimisticLiveTDGraph {
         });
 
         Self { graph, live }
+    }
+
+    pub fn to_constant_lower(&mut self) {
+        self.graph.to_constant_lower()
     }
 }
 
