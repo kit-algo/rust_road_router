@@ -29,11 +29,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // for target_set_size_exp in [10, 12, 14] {
     for target_set_size_exp in [14] {
-        // for ball_size_exp in 14..=24 {
-        for ball_size_exp in 20..=20 {
+        for ball_size_exp in 14..=24 {
             let _exp_ctx = exps_ctxt.push_collection_item();
 
-            report!("experiment", "lazy_rphast");
+            report!("experiment", "rphast");
             report!("target_set_size_exp", target_set_size_exp);
             report!("ball_size_exp", ball_size_exp);
 
@@ -49,27 +48,30 @@ fn main() -> Result<(), Box<dyn Error>> {
             let mut total_selection_time = Duration::zero();
 
             for (sources, targets) in &queries {
-                {
-                    let _alg_ctx = algos_ctxt.push_collection_item();
-                    report!("algo", "rphast_selection");
-                    let (_, time) = measure(|| {
-                        rphast.select(&sources);
-                    });
-                    report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
-                    total_selection_time = total_selection_time + time;
-                }
+                let (_, sel_time) = measure(|| {
+                    rphast.select(&sources);
+                });
+                total_selection_time = total_selection_time + sel_time;
                 for &target in targets.choose_multiple(&mut rng, num_queries) {
                     let _alg_ctx = algos_ctxt.push_collection_item();
                     report!("algo", "rphast_query");
                     let (_rphast_result, time) = measure(|| rphast_query.query(target, &rphast));
-                    report!("running_time_ms", time.to_std().unwrap().as_nanos() as f64 / 1_000_000.0);
+                    report!("selection_running_time_ms", sel_time.to_std().unwrap().as_secs_f64() * 1000.0);
+                    report!("query_running_time_ms", time.to_std().unwrap().as_secs_f64() * 1000.0);
+                    report!("running_time_ms", (time + sel_time).to_std().unwrap().as_secs_f64() * 1000.0);
                     total_query_time = total_query_time + time;
                 }
             }
 
             if num_queries > 0 {
-                eprintln!("Avg. selection time {}", total_selection_time / num_queries as i32);
-                eprintln!("Avg. query time {}", total_query_time / ((num_queries * num_queries) as i32));
+                eprintln!(
+                    "Avg. selection time {}ms",
+                    (total_selection_time.to_std().unwrap() / num_queries as u32).as_secs_f64() * 1000.0
+                );
+                eprintln!(
+                    "Avg. query time {}ms",
+                    (total_query_time.to_std().unwrap() / ((num_queries * num_queries) as u32)).as_secs_f64() * 1000.0
+                );
             };
         }
     }
