@@ -1,6 +1,5 @@
 #![feature(array_windows)]
 #![feature(slice_group_by)]
-#![feature(generic_associated_types)]
 #![feature(type_alias_impl_trait)]
 #![feature(binary_heap_retain)]
 #![allow(clippy::collapsible_if)]

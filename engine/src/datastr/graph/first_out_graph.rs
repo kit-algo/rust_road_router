@@ -420,7 +420,7 @@ where
     FirstOutContainer: AsRef<[EdgeId]>,
     HeadContainer: AsRef<[NodeId]>,
 {
-    type Iter<'a> = impl Iterator<Item = NodeIdT> where Self: 'a;
+    type Iter<'a> = impl Iterator<Item = NodeIdT> + 'a where Self: 'a;
 
     fn link_iter(&self, node: NodeId) -> Self::Iter<'_> {
         self.head()[self.neighbor_edge_indices_usize(node)].iter().copied().map(NodeIdT)
