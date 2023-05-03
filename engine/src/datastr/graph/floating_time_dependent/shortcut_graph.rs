@@ -1044,7 +1044,7 @@ impl<'a> ReconstructionGraph<'a> {
             debug_assert!(self.ttf_available(shortcut_id, start, end));
         }
         for waiting in state.awaited_by.drain(..) {
-            let mut waiting_state = waiting.get_mut_from(incoming_reconstruction_states, outgoing_reconstruction_states);
+            let waiting_state = waiting.get_mut_from(incoming_reconstruction_states, outgoing_reconstruction_states);
             waiting_state.missing_deps -= 1;
             if waiting_state.missing_deps == 0 && !waiting_state.requested_times.is_empty() {
                 let new_el = ReconstructionQueueElement {
@@ -1751,7 +1751,7 @@ impl<'a> PartialProfileGraphWrapper<'a> {
             debug_assert!(self.ttf_available(shortcut_id, start, end));
         }
         for waiting in state.awaited_by.drain(..) {
-            let mut waiting_state = waiting.get_mut_from(incoming_reconstruction_states, outgoing_reconstruction_states);
+            let waiting_state = waiting.get_mut_from(incoming_reconstruction_states, outgoing_reconstruction_states);
             waiting_state.missing_deps -= 1;
             if waiting_state.missing_deps == 0 && !waiting_state.requested_times.is_empty() {
                 let (lower_node, upper_node) = if self.delegate(waiting) {
