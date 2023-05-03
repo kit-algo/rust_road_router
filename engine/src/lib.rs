@@ -1,7 +1,7 @@
 #![feature(array_windows)]
 #![feature(slice_group_by)]
 #![feature(type_alias_impl_trait)]
-#![feature(binary_heap_retain)]
+#![feature(impl_trait_in_assoc_type)]
 #![allow(clippy::collapsible_if)]
 #![allow(clippy::redundant_closure_call)]
 #![allow(clippy::debug_assert_with_mut_call)]
