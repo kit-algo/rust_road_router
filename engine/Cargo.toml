@@ -27,7 +27,7 @@ report-allow-override = []
 detailed-stats = []
 
 [dependencies]
-rand = "^0.8.4"
+rand = "^0.9.3"
 serde = "^1.0.64"
 serde_json = "^1.0.64"
 rayon = "^1.5.1"
